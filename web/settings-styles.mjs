@@ -15,23 +15,25 @@ export const settingsStyles = `
 @media(prefers-reduced-motion:reduce) {
  #appUpdateNotice,#appUpdateNotice[inert] {transition:none;transform:none}
 }
-.app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
-.app-update-copy strong {display:block;padding-inline-end:2rem}
+.app-update-copy p {margin:.25em 0 0;color:var(--muted)}
+.app-update-copy strong {display:block}
 #appUpdateDetail {text-wrap:balance}
-#appUpdateDismiss {position:absolute;top:0;inset-inline-end:0}
-.app-update-actions {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm);margin-top:var(--space-sm)}
+.app-update-actions {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-xs);margin-top:var(--space-sm)}
+#appUpdateApply {padding-inline:var(--space-sm)}
+#appUpdateDismiss {padding-inline:var(--space-xs)}
 button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--ink))}
 [data-settings-section=general] .settings-actions {margin-top:0}
 [data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .app-version-card .settings-row-copy {flex:1 1 12rem}
-#appUpdateFence {max-width:min(29rem,calc(100vw - 2rem));padding:var(--space-xl);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
-#appUpdateFence h2 {margin:0;font-size:var(--type-section)}
-.app-update-title {display:flex;align-items:center;gap:var(--space-md)}
+#appUpdateFence {box-sizing:border-box;width:min(21rem,calc(100vw - 2rem));padding:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
+#appUpdateFence h2 {margin:0;font-size:var(--type-section);line-height:var(--leading-heading)}
+.app-update-title {display:flex;align-items:center;gap:var(--space-sm)}
 #appUpdateActivity {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
 #appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:wire-update-spin .9s linear infinite}
 @keyframes wire-update-spin {to {transform:rotate(1turn)}}
 @media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:none}}
-#appUpdateHint {margin:.25em 0 0;color:var(--muted)}
+#appUpdateHint {margin:.25em 0 0 calc(1.125em + var(--space-sm));color:var(--muted)}
+#appUpdateFence:has(#appUpdateActivity[hidden]) #appUpdateHint {margin-inline-start:0}
 #appUpdateFence[open] ~ #loading {visibility:hidden}
 #appUpdateRecover {margin-top:var(--space-md)}
 .assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}

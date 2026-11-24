@@ -164,7 +164,9 @@ test("full WIRE clone updates on the original address and reopens the same saved
     if (process.env.WIRE_UPDATE_BROWSER === "1") {
         await post("api/app-update/release-panel", {});
         const { chromium, expect } = await import("@playwright/test");
-        const browser = await chromium.launch();
+        const windows = process.platform === "win32";
+        const browser = await chromium.launch(windows ? { channel: "msedge", headless: false } : {});
+        t.diagnostic(`${windows ? "Microsoft Edge Stable" : "Chromium"} ${browser.version()}`);
         try {
             const browsing = await browser.newContext(), page = await browsing.newPage();
             page.on("requestfailed", req => {
@@ -187,17 +189,17 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await otherCheck.click();
             assert.equal((await (await completed).json()).phase, "current");
             await expect(otherCheck).toBeEnabled();
-            await other.close({ runBeforeUnload: true });
+            await page.bringToFront();
             await appendFile(path.join(origin, "web", "browser-entry.mjs"), '\ndocument.documentElement.dataset.wireFixtureBuild = "updated";\n');
             await git(origin, "commit", "-qam", "Fixture update from browser");
             const tip = await git(origin, "rev-parse", "HEAD");
             const checked = page.waitForResponse(response => response.url() === url + "api/app-update"
                 && response.request().postDataJSON().action === "check");
             await check.click();
+            await expect(status).toHaveText("Checking for updates");
             const offer = await (await checked).json();
             assert.equal(offer.installed, before.build); assert.equal(offer.candidate, tip);
             await expect(status).toHaveText("Update available.");
-            const applied = page.waitForRequest(request => request.url() === url + "api/app-update" && request.postDataJSON().action === "apply");
             const action = { name: "Update and restart", exact: true };
             await expect(page.locator("#appUpdateNotice").getByRole("button", action)).toBeVisible();
             await expect(check).toBeHidden();
@@ -205,6 +207,18 @@ test("full WIRE clone updates on the original address and reopens the same saved
                 await mkdir(process.env.WIRE_APP_UPDATE_PROOFS, { recursive: true });
                 await page.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, "windows-settings-offer.png"), animations: "disabled" });
             }
+            const refused = page.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "apply");
+            await page.locator("#appUpdateNotice").getByRole("button", action).click();
+            const refusal = await refused;
+            assert.equal(refusal.status(), 409);
+            const { error, code } = await refusal.json();
+            assert.equal(code, "wire_update_blocked");
+            await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
+            await expect(page.locator("#appUpdateDetail")).toHaveText(error);
+            await expect(status).toContainText(error);
+            assert.equal((await health()).build, before.build);
+            await other.close({ runBeforeUnload: true });
+            const applied = page.waitForRequest(request => request.url() === url + "api/app-update" && request.postDataJSON().action === "apply");
             await page.locator(".app-version-card").getByRole("button", action).click({ timeout: 30000 });
             assert.equal((await applied).postDataJSON().candidate, tip);
             await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });

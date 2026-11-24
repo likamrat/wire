@@ -73,7 +73,7 @@ contract rather than silently treating older readers as compatible.
 `npm run test:update-runtime` builds and updates a disposable clone using
 the platform's own Git, Node and npm, then reopens a saved report at the
 original address and verifies its bytes. It does not update your installation.
-With the project's Playwright Chromium installed, set `WIRE_UPDATE_BROWSER=1`
+With Microsoft Edge Stable installed on Windows (Playwright Chromium on WSL), set `WIRE_UPDATE_BROWSER=1`
 to exercise **Update and restart** in Settings and verify that the
 reloaded browser is executing the new build.
 

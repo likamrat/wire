@@ -5,6 +5,7 @@ const asset = value => typeof value === "string" && /^\/assets\/client\/[A-Za-z0
 const phases = ["current", "available", "unknown", "checking", "preparing", "restarting", "error", "manual"];
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const manualOnly = state => state && (!state.supported || state.phase === "manual");
+const checkingMessage = "Checking for updates";
 function decode(value) {
     if (!value || typeof value.supported !== "boolean" || typeof value.automatic !== "boolean"
         || !phases.includes(value.phase) || typeof value.message !== "string"
@@ -36,11 +37,13 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (!notice.inert) {
             $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
             const detail = $("appUpdateDetail");
-            detail.textContent = success || result || feedback || "Update and restart WIRE. Your saved data won’t change.";
-            $("appUpdateApply").hidden = !shown || Boolean(result || success);
+            const description = success || result || feedback || "Update and restart WIRE. Your saved data won’t change.";
+            if (detail.textContent !== description) detail.textContent = description;
+            $("appUpdateApply").hidden = !shown || Boolean(success);
         }
         $("settingsAppUpdate").hidden = !available;
-        for (const id of ["appUpdateApply", "settingsAppUpdate", "appUpdateDismiss"]) $(id).disabled = busy || Boolean(expected);
+        for (const id of ["appUpdateApply", "settingsAppUpdate"]) $(id).disabled = busy || Boolean(expected) || !panelVerified;
+        $("appUpdateDismiss").disabled = busy || Boolean(expected);
         const updating = ["preparing", "restarting", "checking"].includes(state?.phase);
         const manualMode = Boolean(manualOnly(state));
         manual.hidden = manualMode || available;
@@ -49,8 +52,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         manual.disabled = busy || Boolean(expected) || updating || manualMode;
         automatic.disabled = manual.disabled || !state?.supported;
         automatic.checked = !manualMode && (pendingPreference ?? state?.automatic === true);
-        const status = feedback || result || (available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
-        const lastCheck = available || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
+        const checking = feedback === checkingMessage || state?.phase === "checking";
+        const status = feedback || (result ? `Update not installed. ${result}` : checking ? checkingMessage
+            : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
+        const lastCheck = available || checking || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
         const summary = [status, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
         if (line.textContent !== summary) line.textContent = summary;
         line.hidden = !summary;
@@ -79,13 +84,16 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     async function run(action, fields) {
         if (busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
         const generation = lifetime;
-        busy = true; feedback = ["check", "auto-check"].includes(action) ? "Checking for updates…" : "";
+        const returnFocus = action === "check" && document.activeElement === manual;
+        const previousCandidate = state?.candidate;
+        busy = true; feedback = ["check", "auto-check"].includes(action) ? checkingMessage : "";
         if (action === "preferences") { pendingPreference = fields.enabled; feedback = "Saving update preferences…"; }
         clearTimeout(scheduleTimer); render();
         try {
             state = await post(action, fields);
             panelVerified = generation === lifetime;
-            success = result = "";
+            success = "";
+            if (!["auto-check", "status"].includes(action) || state.candidate !== previousCandidate) result = "";
         } catch (error) {
             // Reconcile preferences/dismissals by reading; never repeat a lost command.
             state = null;
@@ -94,30 +102,35 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             feedback = error.refused ? error.message : "Update status could not be confirmed. Check again when WIRE is available.";
         } finally {
             pendingPreference = undefined;
-            if (feedback === "Checking for updates…" || feedback === "Saving update preferences…") feedback = "";
+            if (feedback === checkingMessage || feedback === "Saving update preferences…") feedback = "";
             busy = false;
             if (restoring) { restoring = false; state = null; void run("status"); }
-            else { render(); schedule(); }
+            else {
+                render(); schedule();
+                if (returnFocus && document.activeElement === document.body) {
+                    const target = manual.hidden ? $("settingsAppUpdate") : manual;
+                    if (target.checkVisibility() && !target.disabled) target.focus({ preventScroll: true });
+                }
+            }
         }
     }
     function fence(message, retry = false) {
-        if ($("appUpdateProgress").textContent !== message) $("appUpdateProgress").textContent = message;
+        const heading = retry ? "Restart not confirmed" : message;
+        const hint = retry ? message : "This tab reloads automatically.";
+        if ($("appUpdateFenceTitle").textContent !== heading) $("appUpdateFenceTitle").textContent = heading;
+        if ($("appUpdateHint").textContent !== hint) $("appUpdateHint").textContent = hint;
         $("appUpdateRecover").hidden = !retry;
         $("appUpdateActivity").hidden = retry;
-        $("appUpdateHint").hidden = retry || restoredReceipt;
         if (!dialog.open) { dialog.showModal(); $("appUpdateFenceTitle").focus(); }
     }
     function reconnecting() {
-        if (expected && dialog.open && $("appUpdateRecover").hidden) fence("Reconnecting to WIRE…");
+        if (expected && dialog.open && $("appUpdateRecover").hidden) fence("Reconnecting to WIRE");
     }
     function finish(message, completed = false) {
         clearTimeout(recoveryTimer); receipt(null); allowReload = false;
         if (dialog.open) dialog.close();
         if (completed) { success = message; result = feedback = ""; }
-        else {
-            feedback = message;
-            result = state?.phase === "available" ? "" : message;
-        }
+        else { result = message; success = feedback = ""; }
         busy = false; render(); schedule();
     }
     // A replacement is verified in the fresh document, never by the old page that requested it.
@@ -125,8 +138,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (!expected || checkingRestart) return;
         const generation = lifetime, wanted = expected;
         checkingRestart = true; clearTimeout(recoveryTimer);
-        if (restoredReceipt) fence("Checking the running version…");
-        else if (attempt === 0) fence(state?.phase === "preparing" ? "Preparing the update…" : "Checking update status…");
+        if (restoredReceipt) fence("Checking version");
+        else if (attempt === 0) fence(state?.phase === "preparing" ? "Preparing update" : "Checking update status");
         try {
             const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
             const health = response.ok && await response.json();
@@ -156,7 +169,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                 const file = await fetch(health.clientEntry, { ...fixed, signal: AbortSignal.timeout(4000) });
                 if (file.ok && /(?:java|ecma)script/i.test(file.headers.get("Content-Type") || "")) {
                     receipt({ ...wanted, entry: health.clientEntry, targetRuntime: health.runtimeId });
-                    fence("Opening the updated WIRE…");
+                    fence("Opening WIRE");
                     allowReload = true; location.reload(); return;
                 }
             }
@@ -167,7 +180,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             }
             const next = await post("status");
             state = next;
-            if (next.phase === "restarting") fence("Restarting WIRE…");
+            if (next.phase === "restarting") fence("Restarting WIRE");
             if (next.supported && wire && health.runtimeId === runtimeId && health.build === wanted.previous && next.installed === wanted.previous
                 && (["error", "manual"].includes(next.phase) || (refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))) {
                 finish(refusal || (manualRead && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
@@ -185,19 +198,19 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     async function apply() {
         if (busy || expected || !panelVerified || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
         const candidate = state.candidate, hold = reason();
-        if (hold || unfinishedAtSuspension) { feedback = hold || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
+        if (hold || unfinishedAtSuspension) { result = hold || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
         if (!uuid(runtimeId) || !sha(state.installed) || entry.origin !== location.origin || !asset(entry.pathname)) {
-            feedback = "This panel cannot verify its installed build. Reopen WIRE at its original address before updating."; render(); return;
+            result = "This panel cannot verify its installed build. Reopen WIRE at its original address before updating."; render(); return;
         }
-        busy = true; clearTimeout(scheduleTimer);
+        busy = true; feedback = result = ""; clearTimeout(scheduleTimer);
         try {
             if (!storageAvailable) throw new Error();
             restoredReceipt = false;
             receipt({ candidate, previous: state.installed, runtimeId, origin: location.origin });
         } catch {
-            busy = false; feedback = "Allow session storage so WIRE can verify the restart. Nothing was started."; render(); schedule(); return;
+            busy = false; result = "Allow session storage so WIRE can verify the restart. Nothing was started."; render(); schedule(); return;
         }
-        fence("Starting the update…"); render();
+        fence("Starting update"); render();
         // Opening a modal moves focus synchronously. Recheck after blur/change handlers have run.
         const lastMinute = reason();
         if (lastMinute) { finish(lastMinute); return; }
@@ -242,7 +255,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     $("settingsAppUpdate").addEventListener("click", apply);
     $("appUpdateRecover").addEventListener("click", () => void recover(0, "", true));
     $("appUpdateDismiss").addEventListener("click", () => {
-        if (success || result) { success = result = ""; render(); }
+        if (success || result && state?.phase !== "available") { success = result = ""; render(); }
         else if (state?.candidate) void run("dismiss", { candidate: state.candidate }).then(() => {
             if (notice.inert && document.activeElement === document.body) {
                 ($("settingsAppUpdate").checkVisibility() ? $("settingsAppUpdate") : $("pageTitle")).focus({ preventScroll: true });

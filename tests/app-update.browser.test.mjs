@@ -18,7 +18,7 @@ const origin = "http://127.0.0.1:48197", capability = "c".repeat(64);
 const old = "1".repeat(40), next = "2".repeat(40);
 const originalRuntime = UNBOUND_FIXTURE_BOOTSTRAP.runtimeId, replacement = "00000000-0000-4000-8000-000000000002";
 async function workspace(t, { renderer = "react", automatic = false, supported = true, manual = !supported, offer = next, pending, open = "/settings" } = {}) {
-    const assets = await loadBrowserAssets({ renderer }), browser = await chromium.launch();
+    const assets = await loadBrowserAssets({ renderer }), browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(6000);
     const actions = [], releases = [], errors = [], healthReads = [], pages = [];
@@ -320,7 +320,8 @@ test("Settings and the notice offer the same restart; dismissing leaves the Sett
             const notice = await page.locator("#appUpdateNotice").boundingBox(), search = await page.locator("#settingsSearch").boundingBox();
             assert.ok(notice.x + notice.width <= search.x);
             const dismiss = await page.locator("#appUpdateDismiss").boundingBox();
-            assert.ok(dismiss.y < (await popup.boundingBox()).y);
+            assert.equal(dismiss.y, (await popup.boundingBox()).y);
+            await expect(page.locator("#appUpdateDismiss")).toHaveText("Dismiss");
         } else {
             const search = page.locator("#settingsSearch");
             await search.scrollIntoViewIfNeeded();
@@ -357,6 +358,7 @@ test("Settings and the notice offer the same restart; dismissing leaves the Sett
     await expect(install).toBeVisible(); await expect(check).toBeHidden();
     assert.equal(await fill(install), availableFill);
     await install.click();
+    await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
     await expect(page.locator("#appUpdateStatus")).toContainText("Close the other WIRE panel first.");
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }]);
     Object.assign(state, { phase: "current", candidate: null, message: "Up to date." });
@@ -424,6 +426,7 @@ test("unfinished settings and report selection block activation from the normal 
     await page.locator('#settingsCategoryNav [data-category="source-access"]').click();
     await page.locator("#reviewSource,#editSource").filter({ visible: true }).first().click();
     await apply.click();
+    await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
     await expect(page.locator("#appUpdateDetail")).toContainText("Settings changes");
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
     assert.deepEqual(actions, [{ action: "status" }]); assert.deepEqual(releases, []);
@@ -497,12 +500,12 @@ test("single activation stays fenced through transport loss until the authentica
     setup.apply = async route => { await hold.promise; await route.abort("connectionreset"); };
     await apply.click(); await expect(modal).toBeVisible();
     const activity = page.locator("#appUpdateActivity");
-    await expect(page.locator("#appUpdateHint")).toHaveText("Keep this tab open. It will reload automatically.");
+    await expect(page.locator("#appUpdateHint")).toHaveText("This tab reloads automatically.");
     const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);
     const start = await rotation();
     await expect.poll(rotation).not.toBe(start);
     await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
-    await expect(page.locator("#appUpdateProgress")).toHaveAttribute("role", "status");
+    await expect(modal.getByRole("status")).toContainText("Starting update");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
         document.querySelector('[data-category="themes"]').click();
@@ -512,28 +515,28 @@ test("single activation stays fenced through transport loss until the authentica
     hold.resolve(); await expect.poll(() => healthReads.length).toBeGreaterThan(0);
     assert.equal(pages.length, 1); await expect(modal).toBeVisible();
     setup.health = { ...setup.health, build: next, runtimeId: replacement, clientEntry: "/assets/client/newbuild-12345678.js" };
-    await expect(page.locator("#appUpdateProgress")).toContainText("runtime identity", { timeout: 12000 });
+    await expect(page.locator("#appUpdateHint")).toContainText("runtime identity", { timeout: 12000 });
     await expect(modal).toBeVisible();
     setup.capability = "d".repeat(64); setup.runtimeId = replacement;
     // The shell still names the stale entry: an available JS file is not loaded-client proof.
     await page.reload();
-    await expect(page.locator("#appUpdateProgress")).toContainText("different browser build", { timeout: 12000 });
+    await expect(page.locator("#appUpdateHint")).toContainText("different browser build", { timeout: 12000 });
     await expect(activity).toBeHidden(); await expect(page.locator("#appUpdateRecover")).toBeVisible();
     await expect(modal).toBeVisible();
     setup.entry = setup.health.clientEntry;
     setup.status = route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Page permission expired." } });
     await page.reload();
-    await expect(page.locator("#appUpdateProgress")).toContainText("could not verify");
+    await expect(page.locator("#appUpdateHint")).toContainText("could not verify");
     await expect(modal).toBeVisible(); await expect(page.locator("#appUpdateHeading")).not.toHaveText("WIRE updated");
     setup.status = route => route.abort("connectionreset");
     await page.locator("#appUpdateRecover").click();
-    await expect(page.locator("#appUpdateProgress")).toContainText("could not verify"); await expect(modal).toBeVisible();
+    await expect(page.locator("#appUpdateHint")).toContainText("could not verify"); await expect(modal).toBeVisible();
     setup.status = null; state.phase = "current"; state.clientEntry = setup.entry;
     await page.locator("#appUpdateRecover").click();
-    await expect(page.locator("#appUpdateProgress")).toContainText("does not confirm"); await expect(modal).toBeVisible();
+    await expect(page.locator("#appUpdateHint")).toContainText("does not confirm"); await expect(modal).toBeVisible();
     state.installed = next; state.clientEntry = "/assets/client/wrong-12345678.js";
     await page.locator("#appUpdateRecover").click();
-    await expect(page.locator("#appUpdateProgress")).toContainText("does not confirm"); await expect(modal).toBeVisible();
+    await expect(page.locator("#appUpdateHint")).toContainText("does not confirm"); await expect(modal).toBeVisible();
     state.clientEntry = setup.entry;
     await page.locator("#appUpdateRecover").click(); await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated");
     await expect(modal).not.toBeVisible();
@@ -551,12 +554,11 @@ test("the replacement shell shows recovery before its module loads and stops on 
     await page.route(origin + setup.entry, async route => { await hold.promise; await route.abort("failed"); });
     try {
         await page.reload({ waitUntil: "commit" });
-        await expect(page.getByRole("dialog", { name: "Updating WIRE" })).toBeVisible();
-        await expect(page.locator("#appUpdateProgress")).toHaveText("Checking the running version…");
+        await expect(page.getByRole("dialog", { name: "Checking version" })).toBeVisible();
         await expect(page.locator("#loading")).toBeHidden();
         await expect(page.locator("#appUpdateActivity")).toBeVisible();
     } finally { hold.resolve(); }
-    await expect(page.locator("#appUpdateProgress")).toContainText("Reload this tab to check the restart");
+    await expect(page.locator("#appUpdateHint")).toContainText("Reload this tab to check the restart");
     await expect(page.locator("#appUpdateActivity")).toBeHidden();
     assert.ok(!actions.some(a => a.action === "apply"));
 });
