@@ -199,7 +199,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const activity = sections.add("activity", countedTitle || "Recorded activity", { key: key("activity"), collapsible: false });
         const replies = sections.add("response", replyTitle, { key: key("response"), collapsible: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: false });
-        const usage = sections.add("usage", "Token & cost breakdown", { key: key("usage"), collapsible: false });
+        const usage = sections.add("usage", "Token usage", { key: key("usage"), collapsible: false });
         usage.body.textContent = "No token counts were recorded for this conversation.";
         const updatesSection = updates.length ? sections.add("updates", "Recorded updates", { key: key("updates") }) : null;
         const emptyMessages = !updates.length && !conversation.messages.length;

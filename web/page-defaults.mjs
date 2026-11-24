@@ -8,7 +8,7 @@ export const pageDefaultSpecs = {
     analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
     analyzeSort: { id: "defaultAnalyzeSort", label: "Default interaction sort", help: "Applies when you open a fresh Analyze view.", initial: "recent",
-        choices: [["recent", "Most recent"], ["cost", "Highest est. cost"], ["tokens", "Most tokens"]] },
+        choices: [["recent", "Most recent"], ["tokens", "Most tokens"]] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     analyzeLayout: { id: "analyzeLayout", ordered: true, label: "Homepage layout",
@@ -56,7 +56,7 @@ export function createPageDefaults(specs, host = window) {
                     if (stored.length === previous.length && previous.every(id => stored.includes(id)))
                         value = stored.every((id, i) => id === previous[i]) ? [...specs[key].initial] : [...stored, "usage"];
                 }
-                value ??= valid(key, key === "guideStart" && stored === "index" ? "outcomes" : stored);
+                value ??= valid(key, key === "guideStart" && stored === "index" ? "outcomes" : key === "analyzeSort" && stored === "cost" ? "tokens" : stored);
             }
             catch (error) { if (!(error instanceof SyntaxError)) throw error; }
         }

@@ -421,7 +421,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: ordinal !== undefined });
         if (completed) root.append(activity.element);
         else {
-            const usage = sections.add("usage", "Token & cost breakdown", { key: key("usage"), collapsible: false });
+            const usage = sections.add("usage", "Token usage", { key: key("usage"), collapsible: false });
             usage.body.textContent = "No token counts were recorded for this conversation.";
             root.append(prompt.element, activity.element, context.element, usage.element, source.element);
         }

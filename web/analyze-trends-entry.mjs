@@ -2,7 +2,7 @@
 export function createAnalyzeTrendsEntry({ time, results, authorship, categories }) {
     const subjects = {
         rhythm: "Tool calls", problems: "Errors & failures", tools: "Tool usage",
-        authors: "Prompt authors", models: "Response models", services: "Services", usage: "Tokens & estimated cost",
+        authors: "Prompt authors", models: "Response models", services: "Services", usage: "Token usage",
     };
     function project(family, { scope, route, revision, hasSearch, includesNative, hasEarlier, otherSources, supportedTools }) {
         if (!Object.hasOwn(subjects, family)) throw new RangeError("Unknown Analyze widget.");

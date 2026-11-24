@@ -7,7 +7,7 @@ import { defaultField } from "./page-defaults.mjs";
 function pageSettings(id, title, purpose, fields) {
     return `<section class="settings-section" data-settings-section="${id}" aria-labelledby="${id}SettingsTitle" hidden>
       <h2 id="${id}SettingsTitle" tabindex="-1">${title}</h2><p class="settings-intro">${purpose}</p>
-      ${fields.map(key => defaultField(key, uxIcons)).join("")}${id === "reports" ? '<section id="costRateReference" tabindex="-1"></section>' : ""}</section>`;
+      ${fields.map(key => defaultField(key, uxIcons)).join("")}</section>`;
 }
 
 export const settingsMarkup = `
