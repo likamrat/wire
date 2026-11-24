@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { frontendRecords } from "./frontend-fixture.mjs";
-import { chooseTheme, fulfillFixtureUpdateStatus } from "./helpers.mjs";
+import { chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 
 const proof = process.env.WIRE_ANALYZE_HOMEPAGE_PROOFS;
@@ -93,6 +93,36 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const settingsOrder = () => field.locator("li").evaluateAll(nodes => nodes.map(node => node.dataset.section));
     const preview = field.locator("figure");
     const previewColumns = new Map();
+    async function steadyMove(stage, control, action) {
+        await page.evaluate(() => document.fonts.ready);
+        await field.evaluate(field => {
+            function frame() {
+                const boxes = {};
+                for (const selector of ["#analyzeSettingsTitle",".settings-rail",".analyze-layout-editor",
+                    "#analyzeLayout ol",".layout-preview","[data-restore]",".analyze-layout-actions a","#analyzeLayout + .page-default-field"]) {
+                    const {x,y,width,height} = document.querySelector(selector).getBoundingClientRect();
+                    boxes[selector] = [x,y,width,height];
+                }
+                return { boxes, scrollY, focus: document.activeElement.getAttribute("aria-label") || document.activeElement.id };
+            }
+            const frames = window.moveFrames = [];
+            field.addEventListener("click", () => {
+                frames.push(frame());
+                requestAnimationFrame(() => {
+                    frames.push(frame());
+                    requestAnimationFrame(() => frames.push(frame()));
+                });
+            }, { capture:true, once:true });
+        });
+        await action(control);
+        await page.waitForFunction(() => window.moveFrames.length === 3);
+        const frames = await page.evaluate(() => window.moveFrames);
+        if (proof) await writeFile(path.join(proof,`${frontend}-${width}-${stage}-frames.json`),JSON.stringify(frames,null,2));
+        for (const after of frames.slice(1)) {
+            assert.deepEqual(after.boxes,frames[0].boxes,"reordering must leave the Settings editor and defaults in place");
+            assert.equal(after.scrollY,frames[0].scrollY);
+        }
+    }
     async function samplePreview(stage) {
         await expect(preview).toBeVisible();
         const tiles = await preview.locator("[data-tile]").evaluateAll(nodes => nodes.map(node => {
@@ -135,7 +165,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const standard = await settingsOrder();
     await samplePreview("standard");
     const reads = snapshots.length;
-    await up("Interactions").focus(); await page.keyboard.press("Enter"); await expect(up("Interactions")).toBeFocused();
+    await steadyMove("unpair",up("Interactions"), control => control.press("Enter")); await expect(up("Interactions")).toBeFocused();
     const intermediate = await samplePreview("one-move");
     if (width===1440) assert.ok(intermediate[2].width > intermediate[0].width*2-1,"Interactions spans both preview columns");
     await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
@@ -143,9 +173,20 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     await field.getByRole("link",{name:"View Analyze"}).tap();
     await observe("one-move");
     await page.goto(settings);
-    while (await up("Interactions").isEnabled()) await up("Interactions").press("Enter");
-    for (let i=standard.indexOf("authors"); i>1; i--) await up("Prompt authors").tap();
-    await up("Tokens & estimated cost").tap();
+    await up("Interactions").press("Enter");
+    if (width===390) await page.evaluate(() => {document.documentElement.style.fontSize = "200%";});
+    await steadyMove("pair",up("Interactions"), control => control.press("Enter"));
+    await expect(field.getByRole("button",{name:"Move Interactions down"})).toBeFocused();
+    if (width===390) {
+        assert.ok(await field.evaluate(node => [...node.querySelectorAll("button,a,[data-tile]")].every(item => {
+            const rect = item.getBoundingClientRect();
+            return rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth && item.scrollWidth <= item.clientWidth + 1;
+        })),"enlarged labels, tiles and actions must fit");
+        await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
+    }
+    const authorIndex = (await settingsOrder()).indexOf("authors");
+    for (let i=1; i<authorIndex; i++) await up("Prompt authors").tap();
+    await steadyMove("usage-tile",up("Tokens & estimated cost"), control => control.tap());
     const chosen = await settingsOrder();
     assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
     await samplePreview("chosen");
@@ -154,8 +195,31 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     await field.getByRole("link",{name:"View Analyze"}).tap();
     await observe("chosen"); await page.reload(); await observe("reloaded");
     await page.goto(settings);
-    await field.getByRole("button",{name:"Restore WIRE layout"}).tap();
+    await selectActivityOption(page,"defaultGuideStart","last");
+    const restore = field.getByRole("button",{name:"Restore Wired Default Layout",exact:true}), tip = page.getByRole("tooltip");
+    if (width===1440) {
+        // This pane crosses the breakpoint where the standard and custom previews
+        // no longer use the same column count.
+        await page.setViewportSize({width:frontend==="react" ? 1120 : 1240,height:960});
+        await restore.scrollIntoViewIfNeeded();
+        const rect = await restore.boundingBox(), fill = () => restore.evaluate(n => getComputedStyle(n,"::before").backgroundColor);
+        await page.mouse.move(0,0); const rest = await fill();
+        await restore.hover({position:{x:2,y:rect.height/2}});
+        await expect(tip).toHaveText("Return the Analyze homepage sections to their original order.");
+        const hover = await fill(); assert.notEqual(hover,rest);
+        await page.mouse.down(); assert.notEqual(await fill(),hover);
+        assert.deepEqual(await restore.boundingBox(),rect);
+        await page.mouse.move(rect.x-1,rect.y+rect.height/2); await page.mouse.up();
+        await page.mouse.move(0,0);
+        await field.getByRole("link",{name:"View Analyze"}).focus();
+        await page.keyboard.press("Shift+Tab"); await expect(restore).toBeFocused();
+        await expect(restore).toHaveAccessibleDescription("Return the Analyze homepage sections to their original order.");
+    }
+    await steadyMove("restore",restore, control => width===390 ? control.tap() : frontend==="bundled" ? control.click() : control.press("Enter"));
+    await expect(restore).toBeFocused();
+    await expect(page.locator("#defaultGuideStart")).toHaveValue("last");
     assert.deepEqual(await settingsOrder(),standard);
+    if (width===1440) await page.setViewportSize({width,height:960});
     await samplePreview("restored"); await expect(preview.locator("[data-moved]")).toHaveCount(0);
     await field.getByRole("link",{name:"View Analyze"}).tap(); await observe("restored");
     await page.reload(); await observe("restored-reload");

@@ -5994,12 +5994,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const dismiss = button("Close", () => dialog.close(), "quiet");
         head.append(title, dismiss);
         const list = hiddenCards.entries();
-        body.append(visibilityButton(`Restore all (${count(list.length)})`, "reset", () => setCardVisibility(null, list.map(v => v.ref))));
+        const rows = el("ul", "hidden-card-list");
+        body.append(rows);
         for (const entry of list) {
-            const row = el("div", "hidden-card-row"), identity = el("div");
+            const row = el("li", "hidden-card-row"), identity = el("div");
             identity.append(el("span", "", entry.order ? `Hidden card ${entry.order}` : "Hidden card"));
-            if (entry.at && Number.isFinite(new Date(entry.at).getTime())) identity.append(el("small", "muted", "Hidden " + timestamp(new Date(entry.at).toISOString())));
-            row.append(identity, visibilityButton("Restore", "read", () => setCardVisibility(null, [entry.ref]))); body.append(row);
+            if (entry.at && Number.isFinite(new Date(entry.at).getTime())) {
+                const instant = new Date(entry.at).toISOString();
+                const when = el("time", "muted", time.formatMoment(instant, workspaceState.scope?.timeContext || viewerTime));
+                when.dateTime = instant; identity.append(when);
+            }
+            row.append(identity, visibilityButton("Restore", "read", () => setCardVisibility(null, [entry.ref]))); rows.append(row);
+        }
+        if (list.length > 1) {
+            const footer = el("div", "hidden-card-actions");
+            footer.append(visibilityButton(`Restore all (${count(list.length)})`, "reset", () => setCardVisibility(null, list.map(v => v.ref))));
+            body.append(footer);
         }
         dialog.append(head, body); document.body.append(dialog);
         dialog.addEventListener("close", () => {

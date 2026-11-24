@@ -7,7 +7,7 @@ import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import path from "node:path";
 
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
-const managed = process.connected && process.env.WIRE_UPDATE_LAUNCHER === "1";
+const managed = process.env.WIRE_UPDATE_LAUNCHER === "1";
 let finishChild, getStoreIdentity, startupMayOwnStorage = false;
 function releaseChild(state) {
     if (!finishChild) return;
@@ -95,6 +95,7 @@ if (managed) process.on("message", message => {
 });
 try {
     if (managed) {
+        if (!process.connected) throw Object.assign(new Error("The original launcher disconnected before its child could start."), { code: "WIRE_LAUNCH" });
         const { claimChild, storeIdentity, canonicalStore } = await import("../lib/update-launch-state.mjs");
         finishChild = claimChild(process.env.WIRE_UPDATE_DIRECTORY, process.env.WIRE_UPDATE_CHILD);
         const dataDir = process.env.WORKIQ_EVIDENCE_DATA_DIR;
@@ -109,6 +110,10 @@ try {
     startupMayOwnStorage = true;
     runtime = await startServer(context, createExportController(context), {
         port: options.port,
+        ...(finishChild?.recovery && { recoverLaunch: async initialize => {
+            const { recoverLaunch } = await import("../lib/update-launch-recovery.mjs");
+            return recoverLaunch(context, finishChild, initialize, () => !stopping && process.connected);
+        } }),
         frontend: options.frontend,
         exactRecords: options.exactRecords === true,
         sourcePolicy: options.developmentMicrosoft ? "microsoft-incubation" : "copilot-only",
@@ -165,7 +170,7 @@ try {
         clean = false;
         console.error(`${PRODUCT_NAME} source cleanup is incomplete.`);
     });
-    console.error(["WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
+    console.error(["WIRE_LAUNCH", "WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
         ? "The requested port is already owned. No second evidence writer was started. Choose an unused port for an independent store, or verify the existing owner before using it."
         : `${PRODUCT_NAME} could not start. Check the private data directory, source configuration and runtime installation.`);
     process.exitCode = 1;

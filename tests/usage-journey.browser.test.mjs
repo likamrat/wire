@@ -165,7 +165,7 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await launch.getByRole("button",{name:"Hide",exact:true}).click();
     await expect(cards).toHaveCount(7);
     await page.getByRole("button",{name:"Hidden cards (1)"}).click();
-    await page.getByRole("button",{name:"Restore all (1)"}).click();
+    await page.getByRole("dialog",{name:"Hidden cards"}).getByRole("button",{name:"Restore",exact:true}).click();
     await expect(launch.locator(".usage-chip")).toContainText("30K tok");
     await page.goto(new URL("/settings?section=reports",runtime.url).href);
     await expect(page.locator("#costRateReference")).toContainText("preview-model");

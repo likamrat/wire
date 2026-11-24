@@ -58,6 +58,45 @@ The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
 
+**Interrupted managed writer (Windows or WSL).** A dead PID or free port does
+not make the last child receipt a clean close. Ordinary startup still refuses
+a child marked `running`. Do not remove its journals or collector leases, move
+the data, or use a development launch to get around that refusal.
+
+If the installation owner can identify the interrupted runtime and its store,
+the recovery-capable launcher supports an explicit restart on the same address:
+
+```text
+npm start -- --recover-launch "<absolute path to reviewed custody JSON>" --port <original port>
+```
+
+Use the original clean standalone `main` clone, OS user and data directory.
+The private JSON record has `version: 1`, the canonical `installation` path,
+`interruptedBuild` and approved `targetBuild` (full commits), the original
+launcher `store` fingerprint, numeric `port`, `launcherPid` and `writerPid`.
+Use original custody evidence for those values and the separately qualified
+commit for `targetBuild`. Keep the record private. No historical child nonce,
+lease token or assertion that all browser views were clear is required.
+
+Recovery requires an unchanged base activation with no staged slot or update
+in progress. If changing code, separately authorize a compatible fast-forward
+in that clone and build it before invoking recovery. The target must contain
+the recovery launcher **and** child; older builds cannot consume this handoff.
+WIRE locks both installation journals, fences the current child nonce,
+reserves the original port and pins both current lease tokens under their
+recovery locks. Both must belong to the recorded writer PID on this host.
+It checks for unfinished store operations and unaccounted-for exports before
+admitting the new writer. Empty folders left by a completed report deletion
+are preserved only when both its receipt and deletion marker agree.
+A successful admission records the fenced child as **interrupted**, not as
+cleanly closed. It does not recover an unsaved edit, resume an Apply, or retry
+an operation. Old panel capabilities are not renewed. Keep original views
+and check their original results; a restart cannot certify browser-local work.
+After the new runtime actually closes cleanly, a separately qualified older
+reader can use its genuine close receipt; never roll back data. Without the
+required evidence, or if an operation, lease or transition is unresolved,
+leave the installation stopped.
+
 Store read/write protocol 2 includes the explicit agent-authored origin. The
 managed updater refuses a protocol-1/protocol-2 transition before stopping
 the current writer. Qualify both the primary and fallback for the new retained
@@ -228,7 +267,7 @@ For Analyze homepage ordering, build the browser assets and run
 `node --test tests/analyze-layout.qualification.mjs`. Playwright uses the Settings
 arrows to visit all 40,320 arrangements in both renderers and checks the preview
 against wide and narrow Analyze tabs. It then restarts Chromium on the same
-disposable profile to verify both a custom order and **Restore WIRE layout**.
+disposable profile to verify both a custom order and **Restore Wired Default Layout**.
 This longer check uses invented records and no mocked network responses.
 
 For changes to native report selection, saving or recovery, run `npm run build`

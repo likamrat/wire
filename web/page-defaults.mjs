@@ -157,11 +157,18 @@ function layoutPreview() {
     const labels = { time:"Activity over time", tools:"Tool calls", services:"Services" };
     const marks = { time:columns, outcomes:ring, interactions:entries,
         usage:'<path d="M2 4h15v6H2zm23 0h12v6H25zM2 18h9v4H2zm11 0h20v4H13zm22 0h9v4h-9z"/>' };
-    const tiles = pageDefaultSpecs.analyzeLayout.choices.map(([key,name]) => {
+    const items = pageDefaultSpecs.analyzeLayout.choices.map(([key,name]) => [key,labels[key] ?? name]);
+    const tiles = items.map(([key,label]) => {
         const box = key === "interactions" ? 'viewBox="0 0 60 26" preserveAspectRatio="none"' : 'viewBox="0 0 46 26"';
-        return `<div data-tile="${key}"><span>${labels[key] ?? name}</span><svg ${box} aria-hidden="true" focusable="false">${marks[key] ?? bars}</svg></div>`;
+        return `<div data-tile="${key}"><span>${label}</span><svg ${box} aria-hidden="true" focusable="false">${marks[key] ?? bars}</svg></div>`;
     });
-    return `<figure class="layout-preview" aria-hidden="true"><figcaption>Layout preview</figcaption><div class="layout-preview-grid">${tiles.join("")}</div></figure>`;
+    // Size the miniature independently of its current order. The longest label
+    // at column width and a split pair on either side of Interactions must fit.
+    const names = items.map(([,label]) => `<span>${label}</span>`).join("");
+    const rows = Math.min(tiles.length, Math.floor((tiles.length - 1) / 2) + 2);
+    return `<figure class="layout-preview" aria-hidden="true" style="--paired-rows:${rows};--stacked-rows:${tiles.length}"><figcaption>Layout preview</figcaption>
+      <div class="layout-preview-size"><div><div class="layout-preview-labels">${names}</div><svg></svg></div></div>
+      <div class="layout-preview-grid">${tiles.join("")}</div></figure>`;
 }
 
 export function defaultField(key, icons) {
@@ -172,7 +179,7 @@ export function defaultField(key, icons) {
       <legend>${label}</legend>${hint}<div class="analyze-layout-editor"><ol>${choices.map(([k, name]) => `<li data-section="${k}"><div><span>${name}</span>
         <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["chart-collapse"]}</button>
         <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons.chevron}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
-      <div class="analyze-layout-actions"><button type="button" class="quiet" data-restore>Restore WIRE layout</button>
+      <div class="analyze-layout-actions"><button type="button" id="restoreAnalyzeLayout" data-restore>Restore Wired Default Layout</button>
       <a href="/" data-nav="analyze">View Analyze</a></div><p class="visually-hidden" role="status" id="${id}Announcement"></p>${status}</fieldset>`;
     if (Array.isArray(initial)) return `<fieldset id="${id}" class="page-default-field" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="page-default-formats">${choices.map(([v, text]) =>
