@@ -293,19 +293,26 @@ test("departure cancels pending help and removal or destroy releases pending and
 
 test("scroll and reflow do not turn stale hover into a new visit or extend departure", async t => {
     const page = await fixture(t), action = page.locator("#action");
-    await controlledClock(page);
     await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
-    await action.hover(); await page.clock.runFor(180); await visibleTooltip(page);
-    await page.evaluate(() => { document.querySelector("main").style.marginTop = "300px"; });
-    // Hit testing runs on native compositor frames, not Playwright's JavaScript clock.
-    await page.waitForTimeout(50);
-    await page.clock.runFor(140);
+    // Use the renderer's clock for this test: compositor hit testing is not
+    // advanced by Playwright's fake clock. The timer-only cases bound departure.
+    const tooltip = page.getByRole("tooltip");
+    await action.hover(); await tooltip.waitFor(); await visibleTooltip(page);
+    assert.ok(await action.evaluate(node => {
+        const box = node.getBoundingClientRect(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+        if (!node.contains(document.elementFromPoint(x, y))) return false;
+        document.querySelector("main").style.marginTop = "300px";
+        return !node.contains(document.elementFromPoint(x, y));
+    }), "The stationary pointer is no longer over its original target");
+    await tooltip.waitFor({ state: "hidden" });
     await noTooltip(page);
-    await action.hover(); await page.clock.runFor(180); await visibleTooltip(page);
+    await action.hover(); await tooltip.waitFor(); await visibleTooltip(page);
     await page.mouse.wheel(0, 300);
     await page.waitForFunction(() => window.scrollY > 0);
-    await page.clock.runFor(140); await noTooltip(page);
-    await page.clock.runFor(1000); await noTooltip(page);
+    await tooltip.waitFor({ state: "hidden" }); await noTooltip(page);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForFunction(() => window.scrollY === 0);
+    await page.waitForTimeout(250); await noTooltip(page);
 });
 
 test("navigation, disabled wrappers, info and copy share departure while wrapped selects need no duplicate help", async t => {
