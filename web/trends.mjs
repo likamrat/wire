@@ -830,13 +830,13 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         card.summary.hidden = !card.legend.childElementCount;
         card.body.hidden = unavailable && (!missingUsage || card.summary.hidden);
         card.body.dataset.summary = String(!card.summary.hidden);
-        const limits = [];
+        const limits = [], captions = [];
         if (id === "usage") {
             const u = totals.usagePopulation ?? totals.values.usage[0];
-            if (!missingUsage) limits.push(`${valueText(u, card)} · ${usageCoverage(u)}`);
+            if (!unavailable) (allCharts ? limits : captions).push(`Period total: ${valueText(u, card)} · ${usageCoverage(u)}`);
             if (source.usageQuestion === "all" && !unavailable && source.days.some(day=>day.calls && !day.usagePopulation.metered && day.values.usage[0].total === null))
-                limits.push("A dash marks activity with no token reading for that day");
-            if (u.cacheReadShare !== null) limits.push(`${rate(100*u.cacheReadShare)} of input read from cache`);
+                limits.push("Dash: activity without a daily token count");
+            if (source.usageQuestion === "model" && u.cacheReadShare !== null) limits.push(`${rate(100*u.cacheReadShare)} of input read from cache`);
             if (source.usageQuestion === "tool") {
                 if (u.unranked) limits.push(`${number(u.unranked)} without a token count`);
                 if (totals.values.usage.reduce((n,g)=>n+g.metered,0) > u.metered) limits.push("An interaction can appear under several tools");
@@ -861,7 +861,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const population = unitIsInteraction ? totals.interactions : totals.calls;
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${quantity(totals.calls,"call")} timed`
             : quantity(population,unitIsInteraction ? "originating interaction" : "dated call");
-        const captions = id === "usage" ? [] : [summary + " in this period"];
+        if (id !== "usage") captions.push(summary + " in this period");
         if (seriesSubset) captions.push(seriesSubset);
         if (id === "timing") captions.push("milliseconds");
         if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${quantity(totals.missingServices,"call")}`);
@@ -936,7 +936,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             if (selected) {
                 if (card.id === "usage") measure = selected.total === null ? missingTokens(day,selected) : `${valueText(selected, card)} · ${usageCoverage(selected)}`;
                 else if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${quantity(day.calls,"call")} timed`;
-                else if (card.mode === "count") measure = quantity(selected.count,unit);
+                else if (card.mode === "count") measure = quantity(selected.count,card.id === "problems" ? "affected interaction" : unit);
                 else {
                     const reach = card.mode === "reach", share = reach ? selected.reach : selected.percent;
                     measure = `${rate(share)} (${number(reach ? selected.interactions : selected.count)} of ${quantity(reach ? selected.reachEligible : selected.eligible,unit)})`;
@@ -944,7 +944,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                 }
             }
             card.pointDate.textContent = axisDate(day.date);
-            card.pointText.textContent = [selected?.label ?? "Shown series", measure,
+            const subject = card.id === "rhythm" || selected?.id === "usage" || card.id === "problems" && card.mode === "count" ? null : selected?.label;
+            card.pointText.textContent = [subject, measure,
                 selected && card.hidden.has(selected.id) ? "Hidden in chart" : ""].filter(Boolean).join(" · ");
             card.evidence.firstChild.textContent = `View ${number(ids.size)} ${ids.size === 1 ? "call" : "calls"}`;
             card.evidence.disabled = ids.size === 0;
@@ -1052,6 +1053,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls))); body.append(row);
         }
         target.append(table);
+        if (family === "usage" && source.usageQuestion !== "model" && source.totals.usagePopulation.cacheReadShare != null)
+            target.append(el("p","muted",`Input read from cache this period: ${rate(100*source.totals.usagePopulation.cacheReadShare)}.`));
         if (family === "usage" && source.usageQuestion && source.usageQuestion !== "all") {
             const groups = el("table","exact-data-table"), head = groups.createTHead().insertRow();
             groups.append(el("caption","","Usage in the entire period"));

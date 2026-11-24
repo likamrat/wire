@@ -450,7 +450,8 @@ test("daily tokens distinguish zero and missing, and lead back to the contributi
     const {page,index} = await setup(t,false,{records});
     await index.getByRole("button",{name:"Token usage"}).click();
     const card = panelOf(page,"usage");
-    await expect(card.locator(".trends-limits")).toContainText("4,000 tokens · 3 of 4 interactions metered");
+    await expect(card.locator(".trends-heading")).toContainText("4,000 tokens · 3 of 4 interactions metered");
+    await expect(card).not.toContainText("input read from cache",{ignoreCase:true});
     const point = card.locator(".trends-plot").getByRole("button",{name:/Nov 16.*4,000 tokens/});
     await point.press("Enter");
     await expect(card.locator(".trends-point")).toContainText("2 of 3 interactions metered");
@@ -467,6 +468,7 @@ test("daily tokens distinguish zero and missing, and lead back to the contributi
     await page.goBack(); await expect(calls).toBeFocused(); await expect(point).toHaveAttribute("aria-pressed","true");
     await card.getByRole("button",{name:"View daily values"}).click();
     const rows = page.getByRole("dialog",{name:"Daily values"}).getByRole("row");
+    await expect(page.getByRole("dialog",{name:"Daily values"})).toContainText("Input read from cache this period: 0%");
     await expect(rows.filter({hasText:"Nov 16, 2026"}).getByRole("cell")).toHaveText(["4,000 tokens","2 of 3","3","4"]);
     await expect(rows.filter({hasText:"Nov 17, 2026"})).toContainText("No matching calls");
     await expect(rows.filter({hasText:"Nov 18, 2026"})).toContainText("0 tokens");
