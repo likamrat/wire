@@ -148,6 +148,7 @@ test("normal literal fragments and exact anchors open all types and restore Back
         items: typedStatus.items }));
     for (const [index, kind] of ["html", "json", "markdown", "pdf"].entries()) {
         const row = page.locator(`#wireSearchResults button[data-search-bundle="${bundles[index].bundleId}"]`);
+        const hitId = await row.getAttribute("data-search-id");
         await row.click();
         const dialog = page.locator("#savedReportReader");
         await expect(dialog).toBeVisible();
@@ -158,10 +159,13 @@ test("normal literal fragments and exact anchors open all types and restore Back
             await expect(dialog.locator(".saved-pdf-pages")).toHaveAttribute("aria-busy", "false");
             const download = page.waitForEvent("download");
             await dialog.getByRole("button", { name: "Download", exact: true }).click();
-            assert.equal((await download).suggestedFilename(), "product-report.pdf");
+            const file = await download;
+            assert.equal(file.suggestedFilename(), "product-report.pdf");
+            assert.ok((await readFile(await file.path())).equals(await readFile(bundles[index].files["product-report.pdf"])));
         }
         await dialog.getByRole("button", { name: "Back to search" }).click();
         await expect(page.locator("#wireSearchResults button")).toHaveCount(4);
+        await expect(row.and(page.locator(`[data-search-id="${hitId}"]`))).toBeFocused();
     }
     await find(page, preview.title, "comparison");
     await page.locator("#wireSearchResults button").first().click();

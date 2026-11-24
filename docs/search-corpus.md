@@ -59,6 +59,11 @@ checks. Result-text copies retain their saved representation, coverage,
 membership and interpretation. Missing facts stay unavailable.
 Extraction never rewrites saved bytes.
 
+Typing or returning from a saved file does not reparse an unchanged PDF.
+Search rereads and verifies the registered file and manifest, then reuses its
+extracted text only within the same accepted corpus and artifact revision.
+Invalidating or closing that corpus discards the extraction.
+
 The selected file's size limit remains 32 MiB. PDF.js runs in a short-lived
 owned Node child using `--disallow-code-generation-from-strings` and a minimal
 system/temp environment. Preloads, debugger/NODE_OPTIONS/provider/data-dir
