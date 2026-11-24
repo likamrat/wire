@@ -61,7 +61,10 @@ for (const scenario of ["current", "expired", ...(process.platform === "win32" ?
         const response = await route.fetch(), profile = await response.json();
         // Shorten the actual lease, keeping the ordinary client/scheduler/image path.
         profile.identity.checkedAt = Date.now();
-        profile.identity.expiresAt = profile.refreshAt = Date.now() + 2000;
+        // A scheduled refresh and hard expiry are different boundaries. Only the expiry case
+        // shortens the real authorization lifetime; a slow helper is not evidence of revocation.
+        profile.refreshAt = Date.now() + 2000;
+        if (expires) profile.identity.expiresAt = profile.refreshAt;
         if (++profileReads === 2) { renewStarted.resolve(); await releaseRenew.promise; }
         await route.fulfill({ response, json: profile });
     });

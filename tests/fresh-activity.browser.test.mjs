@@ -478,7 +478,7 @@ test("Connection Refresh publishes eligible source changes and separates partial
     await expect(page.locator("#freshCoverageAnnouncement")).toContainText("1 Copilot chat unavailable");
     await expect(page.locator("#settingsRefreshDetails")).toHaveCount(0);
     await expect(page.locator("#freshCheckDetails")).toContainText("Checked 2 of 2");
-    await expect(page.locator("#freshCheckDetails")).toContainText("1 Copilot chat unavailable");
+    await expect(page.locator("#freshCheckDetails")).toContainText("1 history unavailable");
     assert.doesNotMatch(await page.locator("#freshActivity").innerText(), /working-memory|cannot recreate|No reason breakdown/);
     assert.ok((await page.locator("#freshActivity").innerText()).split(/\s+/).length <= 90, "The result stays concise; detailed reasons belong to Collection status");
     const originalEvidence = await readFile(path.join(app.context.dataDir, "private-evidence", first.evidenceFile));
@@ -511,7 +511,7 @@ test("Connection Refresh publishes eligible source changes and separates partial
     assert.deepEqual((await loadBoardState(app.context)).evidence, second.evidence);
     await page.locator("#settingsStatusLink a").click();
     await expect(page.locator("#collectionStatusView")).toBeVisible();
-    await expect(page.locator("#collectionIssueCounts")).toContainText("1 Copilot chat unavailable");
+    await expect(page.locator("#collectionIssueCounts")).toContainText("1 unavailable");
     await page.locator("#freshHelp>summary").click();
     await expect(page.locator("#freshCoverageDetails")).toContainText("cannot recreate an absent file");
     assert.deepEqual(await readFile(configFile), configBefore);

@@ -193,8 +193,11 @@ test("consequences appear before independent confirmation; cancel never changes 
         await page.locator("#recollectActivity").click();
         await expect(page.locator("#recollectSources input[type=checkbox]").first()).toBeVisible();
         await page.locator("#recollectSources input[type=checkbox]").first().check();
-        await page.locator("#recollectFrom").fill(new Date(Date.now() - 86400000).toISOString().slice(0, 10));
-        await page.locator("#recollectTo").fill(new Date().toISOString().slice(0, 10));
+        // The calendar's last approved day uses the display timezone, not the UTC date.
+        const day = await page.locator("#recollectTo").getAttribute("max");
+        assert.match(day, /^\d{4}-\d{2}-\d{2}$/);
+        await page.locator("#recollectFrom").fill(day);
+        await page.locator("#recollectTo").fill(day);
         await page.locator("#recollectPreview").click();
         await expect(page.locator("#recollectConfirmation")).toBeVisible();
         await expect(page.locator("#recollectPreserved")).toContainText("Saved reports");

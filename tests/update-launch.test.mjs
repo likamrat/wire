@@ -161,7 +161,10 @@ async function fixture(t, host) {
     return { original, root, store, origin, commit, launch, events, git, stageLog };
 }
 async function request(url, action, args) {
-    const response = await fetch(url + "api/app-update", { method: "POST", body: JSON.stringify({ action, ...args }), signal: AbortSignal.timeout(2000) });
+    // Status polling can abandon one read. A real check/apply may be waiting on
+    // the local Git/IPC operation: its original result belongs to the enclosing lifecycle test.
+    const response = await fetch(url + "api/app-update", { method: "POST", body: JSON.stringify({ action, ...args }),
+        ...(action === "status" ? { signal: AbortSignal.timeout(2000) } : {}) });
     return response.json();
 }
 const phase = (url, expected) => eventually(() => request(url, "status"), state => state.phase === expected);
