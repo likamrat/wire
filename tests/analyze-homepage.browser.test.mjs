@@ -11,13 +11,24 @@ import { palettes } from "../web/theme.mjs";
 const proof = process.env.WIRE_ANALYZE_HOMEPAGE_PROOFS;
 async function setup(t, frontend = "react", options = {}) {
     const records = frontendRecords(12);
-    const { runtime } = await searchFixture(t, { frontend, reply:false, records });
-    const browser = await chromium.launch(), page = await browser.newPage({viewport:{width:1280,height:960}, ...options});
-    const errors = [], snapshots = [];
+    const cleanups = [], errors = [], snapshots = [];
+    let browser;
+    t.after(async () => {
+        // Disconnect the client before asking its runtime to drain.
+        try { await browser?.close(); }
+        finally { for (const cleanup of cleanups) await cleanup(); }
+        assert.deepEqual(errors, []);
+    });
+    const { runtime } = await searchFixture({ after: fn => cleanups.push(fn) }, { frontend, reply:false, records });
+    browser = await chromium.launch();
+    const page = await browser.newPage({viewport:{width:1280,height:960}, ...options});
     page.on("pageerror", e => errors.push(e.message));
-    await page.route("**/api/app-update", route => fulfillFixtureUpdateStatus(route, new URL(runtime.url).origin));
+    await page.route("**/api/app-update", async route => {
+        if (await fulfillFixtureUpdateStatus(route, new URL(runtime.url).origin)) return;
+        errors.push("Unexpected app-update request");
+        await route.abort();
+    });
     page.on("request", request => { if (new URL(request.url()).pathname === "/api/snapshot") snapshots.push(request); });
-    t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
     return {page, url:runtime.url, snapshots, total:records.reduce((n,r)=>n+r.toolCalls.length,0)};
 }
 async function sampleEntry(page, total) {
