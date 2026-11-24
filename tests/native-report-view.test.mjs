@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createExportController, takeNativeSaveRefusal, writeBundle } from "../lib/export.mjs";
 import { createNativeRetainedViews } from "../lib/native-retained-views.mjs";
-import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { committedNativeReportFixture } from "./native-report-controller-fixture.mjs";
 import { chatFixture, coworkFixture } from "./native-read-model-fixtures.mjs";
 import { fixture } from "./helpers.mjs";
@@ -95,12 +95,20 @@ test("prepared reports keep their original source after its collection receipt i
     const reviewed = await controller.review(app.owner, preview.previewId, true, undefined, services);
     const added = chatFixture();
     for (const row of added) row.scope.conversationId += "-after-prepared-archive-proof";
-    for (let cycle = 0; cycle < 129; cycle++) {
-        const begun = await app.persistence.beginSegmented({ operationId: randomUUID() }, app.services.nativeReportAdmission);
-        const receipt = await app.persistence.commitSegmented(begun.ticket, cycle === 0 ? [...envelopes, ...added] : []);
-        assert.equal(receipt.status, "committed");
-        await app.persistence.retire(begun.ticket);
-    }
+    const advanced = await app.persistence.beginSegmented({ operationId: randomUUID() }, app.services.nativeReportAdmission);
+    assert.equal((await app.persistence.commitSegmented(advanced.ticket, [...envelopes, ...added])).status, "committed");
+    await app.persistence.retire(advanced.ticket);
+    // Only the intervening history is fixture data. The original receipt, successor root,
+    // archival transaction and subsequent status lookup all come from the real writer.
+    await updateBoardState(app.context, state => {
+        const retention = state.nativeRetention;
+        const successor = retention.receipts.find(receipt => receipt.operationId === advanced.ticket.operationId);
+        assert.equal(successor.status, "committed");
+        while (retention.receipts.length < 128) retention.receipts.push({ ...structuredClone(successor), operationId: randomUUID() });
+    });
+    const rollover = await app.persistence.beginSegmented({ operationId: randomUUID() }, app.services.nativeReportAdmission);
+    assert.equal((await app.persistence.commitSegmented(rollover.ticket, [])).status, "committed");
+    await app.persistence.retire(rollover.ticket);
     const current = await loadBoardState(app.context);
     assert.ok(current.nativeRetention.receiptArchive);
     assert.equal(current.nativeRetention.receipts.some(receipt => receipt.operationId === operationId), false);
