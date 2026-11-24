@@ -410,7 +410,7 @@ test("compact footer keeps account and Settings independent through identity, ra
                 await capture(page, `compact-${theme}-${width}-${scale}x-${mode}`);
             }
             if (width < 700) {
-                await page.keyboard.press("Escape");
+                await page.getByRole("button", { name: "Close navigation", exact: true }).click();
                 await expect(page.locator("#navigationToggle")).toBeFocused();
             }
         }

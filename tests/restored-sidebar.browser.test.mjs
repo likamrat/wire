@@ -130,7 +130,7 @@ test("sidebar groups remain scroll-reachable without overlap at narrow and 200% 
             measurements.push({ width, height, scale, theme, ...layout });
             await capture(page, `grouping-${theme}-${width}-${scale}x-settings`);
             if (width < 700) {
-                await page.keyboard.press("Escape");
+                await page.getByRole("button", { name: "Close navigation", exact: true }).click();
                 await expect(page.locator("#navigationToggle")).toBeFocused();
             }
         }

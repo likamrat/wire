@@ -149,10 +149,11 @@ for (const theme of ["light", "dark"]) test(`all destinations fit enlarged narro
         assert.ok(measured.height >= 44 && measured.x >= 0 && measured.right <= 390 && measured.top >= 0 && measured.bottom <= 600 && measured.visible,
             `${selector}: ${JSON.stringify(measured)}`);
     }
+    const analyze = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Analyze", exact: true });
+    await analyze.focus();
+    await expect(analyze).toBeFocused();
+    await expect(page.getByRole("tooltip")).toBeHidden();
     if (process.env.WIRE_SIDEBAR_DESTINATION_PROOFS) {
-        await page.locator('nav [data-nav="analyze"]').focus();
-        await page.locator('nav [data-nav="analyze"]').scrollIntoViewIfNeeded();
-        await expect(page.locator("#evidence-tooltip")).not.toBeVisible();
         await page.screenshot({ path: path.join(process.env.WIRE_SIDEBAR_DESTINATION_PROOFS, `drawer-${theme}-390-200.png`) });
     }
     await page.keyboard.press("Escape");
