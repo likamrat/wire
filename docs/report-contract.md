@@ -403,6 +403,10 @@ only fully priced interactions. A pricing snapshot and all dollar fields are
 omitted for token-only output. Per-interaction rows use the report's projected
 interaction references and never carry source call IDs or extra prompt text.
 Earlier snapshots without `usageFacts` gain no usage section when reopened.
+Readers predating `usageFacts` display a new frozen HTML report as saved.
+For a JSON-only report those readers can verify the original JSON, but their
+HTML reading omits the unknown usage section. Open the JSON in a current
+reader to see the frozen figures; no recollection or regeneration is needed.
 
 Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
 finding-first reading. Version 2 changes the explanation of the counts, not

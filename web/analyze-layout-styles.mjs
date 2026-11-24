@@ -9,11 +9,6 @@ export const analyzeLayoutStyles = `
  #activityView>#activityListContext:has(.usage-sort){grid-template-columns:minmax(0,1fr) auto auto;align-items:center}
  #activityListContext>.usage-sort {grid-column:3;grid-row:1}
 }
-.compare-usage {margin-block:var(--space-lg);font-variant-numeric:tabular-nums}
-.compare-usage .period-comparison-table {margin-block:8px 16px}
-.compare-usage table {width:100%;table-layout:fixed}.compare-usage :is(td,th){overflow-wrap:anywhere}
-.compare-usage :is(td,th):not(:first-child){text-align:end}
-.compare-usage :is(td,th):first-child{width:34%;text-align:start}
 #costRateReference{margin-top:var(--space-lg);padding-top:var(--space-md);border-top:1px solid var(--rule)}
 .usage-model,.usage-reading,#costRateReference {font-variant-numeric:tabular-nums}
 .usage-model {display:grid;min-width:0;overflow-wrap:anywhere;gap:3px;margin-block:12px}.usage-model>span {color:var(--muted);font-size:var(--type-small)}

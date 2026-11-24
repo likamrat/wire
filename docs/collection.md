@@ -217,7 +217,13 @@ For token usage, WIRE reads numeric `session.usage_record` receipts during
 ordinary approved collection. A call needs an exact model/API-call match to a
 response linked to the originating message or a directly linked interaction
 receipt, with a complete root response boundary. WIRE subtracts recorded cache
-reads and writes from inclusive input. Missing cache counts still allow an
+reads and writes from inclusive input. A root completion receipt can establish
+the exchange boundary even without saved reply text, latency, a logical
+message ID, or a model name on the reply: the usage receipt identifies the
+model. WIRE still requires a prompt-to-run or prompt-to-message link, at least
+one matching Work IQ tool request, and receipts for every linked response
+call. Nested activity, a competing owner, or an incomplete window cannot
+establish a whole-interaction total. Missing cache counts still allow an
 exact input/output total, but not an estimated cost. It does not sum `session.usage_checkpoint`, reason from chat
 order alone, subscribe to live SDK events, or start a backfill. Conflicting,
 partial, or unsupported receipts do not establish a whole-interaction count.

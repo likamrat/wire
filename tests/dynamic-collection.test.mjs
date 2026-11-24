@@ -93,6 +93,41 @@ const managedSchema = `CREATE TABLE session_managed_mcp_event_display_names(
     session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT NOT NULL,
     PRIMARY KEY(session_id,event_id));`;
 
+test("history compatibility: an explicit closed run meters without a prompt message ID, response model, reply text or timing", async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID();
+    const tool = call("lookup"), turnId = "turn", apiCallId = "direct-api";
+    const p = event("user.message", { interactionId, content: "Find the invented review notes." });
+    const a = event("assistant.message", { interactionId, turnId, apiCallId, toolRequests: [{toolCallId:"lookup"}] });
+    const end = event("assistant.turn_end", {turnId});
+    const receipt = event("session.usage_record", {usage:{interactionId, apiCallId, model:"gpt-4.1",
+        inputTokens:100, cacheReadTokens:20, cacheWriteTokens:0, outputTokens:5}});
+    const close = event("session.completion_receipt", { schemaVersion:1, attempt:1, stopReason:"natural",
+        eventRange:{startEventId:p.id, endEventId:end.id}, sourceEventId:end.id, successfulToolCount:1, failedToolCount:0 });
+    const missing = event("assistant.message", {interactionId, turnId, apiCallId:"second-api", toolRequests:[]});
+    tool.data.turnId = turnId;
+    const batch = [p, a, tool, event("tool.execution_complete",{interactionId,toolCallId:"lookup",success:true,result:{content:"abcd"}}),
+        missing, receipt, end, close];
+    batch.forEach((e,i)=>{e.timestamp=new Date(Date.now()-10000+i*100).toISOString();});
+    const file = await logFor(app,id,batch);
+    let collector=await createCollector(app.context,{timers:false}); app.cleanup.push(()=>collector.close());
+    await collector.configure({...app.config,approved:true,enabled:false,windowDays:30,pollSeconds:5});
+    const read=async()=>(await currentStatePayload(app.context,await loadBoardState(app.context))).scenarios[0];
+    await collector.collectNow();
+    assert.equal((await read()).usage,null,"missing a receipt is not a whole-interaction total");
+    await collector.close(); collector=await createCollector(app.context,{timers:false});
+    await appendFile(file,JSON.stringify(event("session.usage_record",{usage:{...receipt.data.usage,apiCallId:"second-api",outputTokens:10}}))+"\n");
+    await collector.collectNow();
+    const complete=await read();
+    assert.equal(complete.usage?.total,215);
+    assert.equal(complete.usage?.steps.length,2);
+    assert.notEqual(complete.responseTiming?.status,"measured");
+    assert.deepEqual(complete.originalModel.models,[]);
+    assert.equal(complete.toolCalls[0].promptLink,undefined,"usage evidence must not rewrite historical prompt authorship");
+    await appendFile(file,JSON.stringify(event("user.message",{interactionId,content:"A rival prompt claimed this run."}))+"\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage,null,"a rival claim withdraws previously verified usage");
+});
+
 test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {
     const app = await installation(t), id = app.session(), start = call("metered-fetch");
     const model = "claude-sonnet-5-5", messageId = "metered-prompt", interactionId = "interaction-one";

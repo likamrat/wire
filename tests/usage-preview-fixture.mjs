@@ -33,9 +33,11 @@ export async function usagePreview(t) {
             const time = midnight.getTime() - (21-day)*86400000 + (10+index)*3600000;
             const event=(type,data)=>events.push({ type,data,id:randomUUID(),timestamp:new Date(time+events.length*100).toISOString() });
             db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,'chat')").run(id,title);
-            event("session.start",{sessionId:id,version:1}); event("user.message",{content:title,messageId,interactionId,...(actor?{source:actor==="agent"?"agent-invented":actor}: {})});
+            const direct = index === 2;
+            event("session.start",{sessionId:id,version:1}); event("user.message",{content:title,...(direct?{}:{messageId}),interactionId,...(actor?{source:actor==="agent"?"agent-invented":actor}: {})});
+            const promptId=events.at(-1).id, link=direct?{interactionId}:{model,originatingMessageId:messageId};
             const turnId=randomUUID(), apiCallId=randomUUID(), toolIds=tools.map(()=>randomUUID());
-            event("assistant.message",{model,originatingMessageId:messageId,apiCallId,turnId,toolRequests:toolIds.map(toolCallId=>({toolCallId}))});
+            event("assistant.message",{...link,apiCallId,turnId,toolRequests:toolIds.map(toolCallId=>({toolCallId}))});
             if(calls.length) receipts.push(apiCallId);
             tools.forEach((tool,i)=>{
                 event("tool.execution_start",{toolName:`workiq-${tool}`,mcpToolName:tool,mcpServerName:"workiq",toolCallId:toolIds[i],turnId,
@@ -44,8 +46,10 @@ export async function usagePreview(t) {
             });
             const finalId=calls.length>1?randomUUID():apiCallId;
             if(calls.length>1) receipts.push(finalId);
-            event("assistant.message",{model,originatingMessageId:messageId,apiCallId:finalId,turnId,phase:"final_answer",content:"Invented completion.",toolRequests:[]});
+            event("assistant.message",{...link,apiCallId:finalId,turnId,...(direct?{}:{phase:"final_answer",content:"Invented completion."}),toolRequests:[]});
             event("assistant.turn_end",{turnId});
+            if(direct){const end=events.at(-1).id;event("session.completion_receipt",{schemaVersion:1,attempt:1,stopReason:"natural",
+                eventRange:{startEventId:promptId,endEventId:end},sourceEventId:end,successfulToolCount:tools.length,failedToolCount:0});}
             for(const [i,[fresh,read,write,out]] of calls.entries()) event("session.usage_record",{usage:{apiCallId:receipts[i],interactionId,model,
                 inputTokens:fresh+read+write,cacheReadTokens:read,cacheWriteTokens:write,outputTokens:out,
                 accounting:{sourceSessionId:id,sequence:i+1,usageId:receipts[i]}}});

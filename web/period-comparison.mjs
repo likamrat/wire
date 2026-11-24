@@ -604,6 +604,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         table.tHead.before(columns);
         return table;
     }
+    function periodReadings(caption, headers, rows) {
+        const readings = dataTable(caption, headers, rows);
+        readings.className = "compare-period-readings";
+        return alignOutcomeReadings(readings);
+    }
     const signed = value => value === null ? "Not comparable" : `${value > 0 ? "+" : ""}${number(value)}`;
     const duration = value => assessmentFactories.timing.duration(value);
     const durationChange = value => assessmentFactories.createReportComparison().formatChange(value, "ms");
@@ -763,9 +768,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             detail.append(ux.icon("forward"));
             return [detail, ...cells, change];
         });
-        const readings = dataTable("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows);
-        readings.className = "compare-period-readings";
-        node.append(alignOutcomeReadings(readings));
+        node.append(periodReadings("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows));
         return node;
     }
     function numbersPanel(value, sides, names) {
@@ -1246,24 +1249,29 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             content.append(chart);
         }
         if (a.usage && b.usage && (a.usage.metered || b.usage.metered)) {
-            const section = el("section", undefined, "compare-usage"), periods = [a.usage,b.usage];
+            const section = panel("Tokens & estimated cost", "compare-usage"), periods = [a.usage,b.usage];
             const dollars = n => n === null ? "No priced usage" : n > 0 && n < .01 ? "<$0.01" : `~$${n.toFixed(2)}`;
+            const costChange = (a, b) => {
+                const delta = b - a;
+                return delta === 0 ? "$0.00" : Math.abs(delta) < .01 ? `${delta < 0 ? "Decrease" : "Increase"} <$0.01`
+                    : `${delta < 0 ? "−" : "+"}$${Math.abs(delta).toFixed(2)}`;
+            };
             const compatible = a.usage.rateDate === b.usage.rateDate;
-            section.append(el("h3", "Tokens & estimated cost"), table("Whole interactions with matching records",
+            section.append(periodReadings("Whole interactions with matching records",
                 ["Measure", "Baseline", "Selected", "Change"], [
                     ["Metered tokens", ...periods.map(p => p.total === null ? "Not recorded" : number(p.total)),
                         periods.every(p => p.total !== null) ? signed(b.usage.total-a.usage.total) : "—"],
                     ["Est. retail cost", ...periods.map(p => dollars(p.usd)), compatible && periods.every(p=>p.usd !== null)
-                        ? `${b.usage.usd<a.usage.usd?"−":"+"}${dollars(Math.abs(b.usage.usd-a.usage.usd))}` : "—"],
+                        ? costChange(a.usage.usd,b.usage.usd) : "—"],
                     ["Metered / eligible", ...periods.map(p=>`${p.metered} / ${p.eligible}`), "—"],
                     ["Priced / metered", ...periods.map(p=>`${p.priced} / ${p.metered}`), "—"],
                     ["Input read from cache", ...periods.map(p=>p.cacheReadShare===null?"Not recorded":`${number(p.cacheReadShare*100)}%`), "—"],
                 ]));
             const models = [...new Set(periods.flatMap(p=>p.models.map(m=>m.model)))];
-            section.append(el("h3", "Why estimated cost changed"), table("Why estimated cost changed", ["Model","Baseline","Selected","Change"], models.map(name=>{
+            section.append(el("h3", "Why estimated cost changed"), periodReadings("Why estimated cost changed", ["Model","Baseline","Selected","Change"], models.map(name=>{
                 const pair = periods.map(p=>p.models.find(m=>m.model===name));
                 return [name,...pair.map(m=>m?`${dollars(m.usd)} (${counted(m.interactions,"interaction")})`:"No interactions"),
-                    compatible && pair.every(m=>m?.usd != null) ? `${pair[1].usd<pair[0].usd?"−":"+"}${dollars(Math.abs(pair[1].usd-pair[0].usd))}` : "—"];
+                    compatible && pair.every(m=>m?.usd != null) ? costChange(pair[0].usd,pair[1].usd) : "—"];
             })), el("p", compatible ? `Both periods use ${a.usage.rateDate} retail rates. Whole-interaction estimates, not billed Copilot spend.`
                 : `Different rate dates (${a.usage.rateDate} and ${b.usage.rateDate}); no cost delta.`, "compare-caption"));
             content.append(section);
@@ -1861,6 +1869,13 @@ export const periodComparisonStyles = `
 .comparison-chart{margin-top:var(--space-md)}
 .compare-outcome-readings{display:grid;gap:var(--space-md);align-items:start}
 .compare-outcome-readings>.compare-changes{margin:0}
+.compare-usage.compare-panel{padding-inline:0;margin-top:var(--space-md);background:none}
+.compare-usage table+h3{margin-top:var(--space-lg)}
+@container comparison-panel (max-width:26rem){
+ .compare-usage colgroup{display:none}
+ .compare-usage tr>td:last-child{grid-column:1/-1;color:var(--muted)}
+ .compare-usage tr>td:last-child::before{content:attr(data-label) ": "}
+}
 .compare-changes tbody tr:last-child,.compare-changes tbody tr:last-child>*{border-bottom:0}
 .compare-result-pair{align-items:baseline}
 .compare-result-pair>.compare-outcome-row{margin:0;padding-inline:.5rem;text-align:center;min-width:0}

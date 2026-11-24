@@ -18,6 +18,7 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await expect(cards.first()).toContainText("Draft next steps");await expect(cards.last()).toContainText("Search for notes");
     await selectActivityOption(page,"activityUsageSort","cost");
     await expect(cards.nth(6)).toContainText("Unpriced");
+    await expect(cards.filter({hasText:"Find review owners"}).locator(".usage-chip")).toHaveText("33K tok · ~$0.05");
     await page.getByRole("button",{name:"Token & $ share",exact:true}).click();
     await expect(page.locator(".usage-model").first()).toBeVisible();
     await expect(page.locator("[data-breakdown=models]")).toContainText("7 of 8 interactions metered; 6 priced");
@@ -48,6 +49,19 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await page.goto(new URL("/compare",runtime.url).href);
     await expect(page.getByRole("table",{name:"Whole interactions with matching records"})).toContainText("342,000");
     await expect(page.getByRole("table",{name:"Why estimated cost changed"})).toContainText("claude-opus-5-5");
+    await page.setViewportSize({width:1320,height:900});
+    const day=daysAgo=>new Date(Date.now()-daysAgo*86400000).toISOString().slice(0,10);
+    await page.goto(new URL(`/compare?aFrom=${day(4)}&aTo=${day(3)}&bFrom=${day(2)}&bTo=${day(1)}`,runtime.url).href);
+    const usageTable=page.getByRole("table",{name:"Whole interactions with matching records"});
+    await expect(usageTable.getByRole("row",{name:/Metered tokens/})).toContainText("207,000");
+    await expect(usageTable.getByRole("row",{name:/Metered tokens/})).toContainText("135,000");
+    const tracks=await page.locator(".compare-changes .compare-period-readings,.compare-usage table").evaluateAll(tables=>
+        tables.map(t=>[...t.tBodies[0].rows[0].cells].map(c=>{const b=c.getBoundingClientRect();return b.left+b.width/2;})));
+    assert.equal(tracks.length,3);
+    for(const centers of tracks.slice(1)) assert.ok(centers.every((x,i)=>Math.abs(x-tracks[0][i])<1),"All Compare readings use the same column centers");
+    await page.setViewportSize({width:390,height:844});
+    const narrow=await usageTable.locator("tbody tr").first().evaluate(row=>[...row.cells].map(c=>c.getBoundingClientRect().top));
+    assert.ok(narrow[0]<narrow[1] && narrow[1]===narrow[2] && narrow[2]<narrow[3],"Row label, period pair, then change");
     await page.setViewportSize({width:1320,height:900});
     await page.goto(new URL("/reports",runtime.url).href);
     const prepare = async action => {
