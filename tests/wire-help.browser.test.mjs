@@ -35,8 +35,7 @@ test("sidebar Help reads topics and returns to the exact workspace without chang
         await topic.focus(); await page.keyboard.press("Enter");
         await expect(topic).toHaveAttribute("aria-current", "page");
         await expect(page.getByRole("heading", { level: 2, name: "Understand activity counts" })).toBeVisible();
-        await expect(page.getByRole("heading", { name: "Tokens and estimated cost", exact: true })).toBeVisible();
-        await expect(page.locator("#wireHelpView article:visible")).toContainText("Settings → Reports → Retail rates");
+        await expect(page.getByRole("heading", { name: "Token usage", exact: true })).toBeVisible();
         await page.goBack(); await expect(nav.getByRole("link", { name: "Prepare a report" })).toHaveAttribute("aria-current", "page");
         await page.goForward(); await expect(topic).toHaveAttribute("aria-current", "page");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));

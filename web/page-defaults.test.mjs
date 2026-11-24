@@ -9,6 +9,9 @@ test("only valid defaults survive reload; an unavailable write applies to this p
     }, addEventListener() {} };
     const load = () => createPageDefaults(pageDefaultSpecs, host);
     const prefs = load();
+    values.set("wire.page-defaults.v1.analyzeSort", '"cost"');
+    assert.equal(load().get("analyzeSort"),"tokens");
+    assert.equal(load().message("analyzeSort"),"");
     prefs.set("reportFormats", ["markdown", "pdf"]);
     assert.deepEqual(load().get("reportFormats"), ["pdf", "markdown"]);
     const original = pageDefaultSpecs.analyzeLayout.initial, reverse = original.toReversed();

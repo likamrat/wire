@@ -197,7 +197,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         })),"enlarged labels, tiles and actions must fit");
         await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     }
-    await steadyMove("usage-tile",field.getByRole("button",{name:"Move Tokens & estimated cost down",exact:true}), control => control.tap());
+    await steadyMove("usage-tile",field.getByRole("button",{name:"Move Token usage down",exact:true}), control => control.tap());
     const authorIndex = (await settingsOrder()).indexOf("authors");
     for (let i=3; i<authorIndex; i++) await up("Prompt authors").tap();
     const chosen = await settingsOrder();

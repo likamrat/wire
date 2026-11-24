@@ -177,8 +177,8 @@ test("history compatibility: two explicitly linked usage receipts survive restar
     const partialCache = (await read()).usage;
     assert.equal(partialCache.total, 51000, "A directly linked receipt does not need a separate message chunk.");
     assert.equal(partialCache.tokens.cacheRead, null); assert.equal(partialCache.tokens.freshInput, null);
-    assert.equal(partialCache.tokens.output, 3000); assert.equal(partialCache.usd, null);
-    assert.equal(partialCache.steps.at(-1).reason, "cache-split-missing");
+    assert.equal(partialCache.tokens.output, 3000);
+    assert.equal(partialCache.steps.at(-1).tokens.input, 16000);
     await appendFile(file, JSON.stringify({ ...r1, id: randomUUID(), data: { usage: { ...r1.data.usage, outputTokens: 1500 } } }) + "\n");
     await collector.collectNow();
     assert.equal((await read()).usage, null);

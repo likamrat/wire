@@ -14,7 +14,7 @@ export const pageDefaultSpecs = {
     analyzeLayout: { id: "analyzeLayout", ordered: true, label: "Homepage layout",
         help: "Move a section to see where it will appear in Analyze.",
         initial: ["time", "outcomes", "usage", "interactions", "tools", "services", "models", "authors"],
-        choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["usage", "Tokens & estimated cost"], ["interactions", "Interactions"],
+        choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["usage", "Token usage"], ["interactions", "Interactions"],
             ["tools", "Work IQ tool calls"], ["services", "Services and operations"], ["models", "Response models"], ["authors", "Prompt authors"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "Choose the chart to show on a fresh visit.", initial: "problems",
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"], ["usage", "Token usage"]] },

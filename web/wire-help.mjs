@@ -11,7 +11,7 @@ const topics = [
         <h3>Missing text in Search</h3><p>Search looks in saved activity and reports. It can’t find reply text that wasn’t retained.</p>`],
     ["counts", "Understand activity counts", `<p>One interaction can include several calls. Not every saved call identifies the prompt that started it.</p>
         <h3>Example</h3><p>If the records link three matching calls to the same originating prompt, Analyze counts <strong>1 interaction</strong> and <strong>3 matching tool calls</strong>. The totals include matches across all pages.</p>
-        <h3>Tokens and estimated cost</h3><p>Tokens cover the whole interaction. <strong>Unpriced</strong> means WIRE has a token count but lacks a model rate or a cache count needed to estimate cost. See <strong>Settings → Reports → Retail rates</strong> for the prices WIRE uses.</p>
+        <h3>Token usage</h3><p>Open a card to see its token breakdown. The Analyze total counts each matching interaction once, even if it used several tools. Interactions without a recorded token count stay out of the total.</p>
         <h3>Reading a particular chart</h3><p>Use <strong>Guide</strong> in Analyze or Trends for the measure, its scope and a worked example.</p>`],
     ["results", "Read tool results", `<p>A completed call means the tool reported success. It does not establish that the whole task finished or that the answer was correct.</p>
         <h3>If a call failed</h3><p>Open the interaction and expand the affected call to read the recorded reason, if available. A call with no recorded result is not a failed call.</p>

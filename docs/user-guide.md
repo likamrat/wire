@@ -339,14 +339,16 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
 
-To find a high-usage interaction, choose **Most tokens** or **Highest est. cost**
-above the Analyze list. Only cards with complete token counts have a usage
-chip. Open the interaction to see fresh input, cache reads, cache writes and
+Choose **Most tokens** above the Analyze list to find the interactions that
+used the most. Each metered card shows its total. Open it for fresh input, cache reads, cache writes and
 output. The reader separately estimates how many tokens Work IQ returned
 from the size of the tool responses.
-In **Response models**, choose **Token & $ share** to compare token volume with
-the cost share of fully priced interactions. Find the offline rates in
-**Settings → Reports**.
+In **Response models**, choose **Token share** to compare each model's share
+of the recorded tokens.
+
+For a report on one interaction, choose **Add to report** on its card and add
+it to a new draft. Open that draft in Reports to save the same total. Adding
+more interactions gives you their combined total and how many had token counts.
 
 In **Interactions** mode, choose a model to show its cards. Open **Filters** to
 see or remove that model under **Applied filters**. This narrows the card list;

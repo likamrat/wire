@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { usagePreview } from "./usage-preview-fixture.mjs";
-import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters, navigateMain } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: scoped usage questions from homepage to frozen report (${width}px)`, async t => {
@@ -23,11 +23,11 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     if (width < 500) await chooseTheme(page,"dark");
     await expect(widget).toContainText("342,000");
     await expect(widget).toContainText("7 of 8 interactions");
-    await expect(widget.locator(".usage-overview-facts>div").filter({hasText:"Est. retail cost"})).toContainText("6 of 8 interactions");
+    await expect(widget).not.toContainText(/cost|price|\$/i);
     await capture("home",widget);
     const models=page.locator('[data-percentage-card="models"]');
     const interactions=models.getByRole("button",{name:"Interactions",exact:true});
-    const shares=models.getByRole("button",{name:"Token & $ share",exact:true});
+    const shares=models.getByRole("button",{name:"Token share",exact:true});
     await expect(interactions).toHaveAttribute("aria-pressed","true");
     await expect(interactions).toHaveCSS("text-decoration-line","none");
     const widthBefore=(await interactions.boundingBox()).width;
@@ -64,7 +64,6 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     const day=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
     await page.goto(new URL(`/?range=custom&from=${day(2)}&to=${day(2)}`,runtime.url).href);
     await expect(widget).toContainText("30,500"); await expect(widget).toContainText("1 of 2 interactions");
-    await expect(widget).toContainText("0 of 2 interactions"); await expect(widget).not.toContainText("$0.00");
     await widget.getByRole("link",{name:/View trend/}).click();
     const periodUsage = page.locator(".trends-panel[data-family=usage]");
     await expect(periodUsage).toContainText("30,500 tokens");
@@ -85,13 +84,14 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await page.keyboard.press("Escape"); await expect(missing.locator(".request-card-open").first()).toBeFocused();
     await expect(page.locator("#activityUsageSort")).toHaveValue("recent");
     await page.reload(); await expect(cards.first()).toContainText("Draft next steps");
-    const unpriced=cards.filter({hasText:"Meeting outline"});
-    await unpriced.locator(".request-card-open").first().click();
+    const outline=cards.filter({hasText:"Meeting outline"});
+    await expect(outline.locator(".usage-chip")).toHaveText("30,500 tokens");
+    await outline.locator(".request-card-open").first().click();
     const reader=page.locator("[data-reader-section=usage]");
-    await expect(reader).toContainText("30,500 tokens"); await expect(reader).toContainText("No retail rate for preview-model");
-    await capture("reader-unpriced",reader);
+    await expect(reader).toContainText("30,500 tokens"); await expect(reader).toContainText("preview-model");
+    await capture("reader-tokens",reader);
     await page.keyboard.press("Escape");
-    await expect(unpriced.locator(".request-card-open").first()).toBeFocused();
+    await expect(outline.locator(".request-card-open").first()).toBeFocused();
     const direct = cards.filter({hasText:"Find review owners"}).locator(".request-card-open").first();
     await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("~8,500 tokens returned");
     await expect(reader.locator(".usage-context")).toHaveCount(0);
@@ -122,8 +122,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     const compared=page.getByRole("table",{name:"Recorded tokens by group"}).getByRole("row",{name:/Human/});
     await expect(compared).toContainText("63,000"); await expect(compared).toContainText("12,000");
     await capture("compare-author",compared);
-    await selectActivityOption(page,"compareUsageunit","usd");
-    await expect(page.getByRole("table",{name:"Estimated retail cost by group"})).toContainText("~$");
+    await expect(page.locator(".compare-usage")).not.toContainText(/cost|price|\$/i);
     const paired=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
     await page.locator("#createPeriodReport").click();
     const pairedResponse=await paired, pair=await pairedResponse.json();
@@ -150,9 +149,10 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await capture("report",page.getByRole("button",{name:"Save report",exact:true}));
     const updated = page.waitForResponse(r=>r.url().endsWith("/api/preview"));
     await page.getByRole("button",{name:"Change what's included",exact:true}).click();
-    await page.locator("#usageDollars").uncheck();
+    await page.locator("#usageRows").check();
     const tokenOnly = await (await updated).json();
     assert.deepEqual(tokenOnly.snapshot.records.map(r=>r.scenarioId), result.snapshot.records.map(r=>r.scenarioId));
+    assert.deepEqual(tokenOnly.snapshot.usageFacts.cohorts.selected.rows.map(r=>r.total),[92500,62000]);
     assert.doesNotMatch(JSON.stringify(tokenOnly.snapshot.usageFacts),/"usd"|"pricing"|"priced"/);
     await page.keyboard.press("Escape");
     await page.getByRole("button",{name:"Save report",exact:true}).click();
@@ -174,7 +174,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     assert.deepEqual(errors,[]);
 });
 
-test("normal React entry exposes one quiet usage chip, scoped shares, reader, Trends and rates", async t => {
+test("normal React entry exposes exact interaction tokens, scoped shares, reader and Trends", async t => {
     const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
     const {runtime}=await usagePreview({after:f=>cleanup.push(f)});
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
@@ -185,12 +185,10 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await expect(cards).toHaveCount(8); await expect(page.locator(".usage-chip")).toHaveCount(7);
     await selectActivityOption(page,"activityUsageSort","tokens");
     await expect(cards.first()).toContainText("Draft next steps");await expect(cards.last()).toContainText("Search for notes");
-    await selectActivityOption(page,"activityUsageSort","cost");
-    await expect(cards.nth(6)).toContainText("Unpriced");
-    await expect(cards.filter({hasText:"Find review owners"}).locator(".usage-chip")).toHaveText("33K tok · ~$0.05");
-    await page.getByRole("button",{name:"Token & $ share",exact:true}).click();
+    await expect(cards.filter({hasText:"Find review owners"}).locator(".usage-chip")).toHaveText("33,000 tokens");
+    await page.getByRole("button",{name:"Token share",exact:true}).click();
     await expect(page.locator(".usage-model").first()).toBeVisible();
-    await expect(page.locator("[data-breakdown=models]")).toContainText("7 of 8 interactions metered; 6 priced");
+    await expect(page.locator("[data-breakdown=models]")).toContainText("7 of 8 interactions metered");
     const launch=cards.filter({hasText:"Launch notes"}), open=launch.locator(".request-card-open").first();
     await open.click();const reading=page.locator("[data-reader-section=usage]");
     await expect(reading).toContainText("30,000 tokens · 2 model calls");
@@ -203,10 +201,9 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await expect(cards).toHaveCount(7);
     await page.getByRole("button",{name:"Hidden cards (1)"}).click();
     await page.getByRole("dialog",{name:"Hidden cards"}).getByRole("button",{name:"Restore",exact:true}).click();
-    await expect(launch.locator(".usage-chip")).toContainText("30K tok");
+    await expect(launch.locator(".usage-chip")).toHaveText("30,000 tokens");
     await page.goto(new URL("/settings?section=reports",runtime.url).href);
-    await expect(page.locator("#costRateReference")).toContainText("preview-model");
-    await expect(page.locator("#costRateReference input,#costRateReference button")).toHaveCount(0);
+    await expect(page.locator("#costRateReference")).toHaveCount(0);
     await page.goto(new URL("/trends?section=charts",runtime.url).href);
     await page.getByRole("navigation",{name:"Trend measures"}).getByRole("button",{name:"Token usage",exact:true}).click();
     const panel=page.locator('.trends-panel[data-family="usage"]');
@@ -216,7 +213,7 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await expect(page.locator(".trends-panel-pair")).toContainText("Token usage");
     await page.goto(new URL("/compare",runtime.url).href);
     await expect(page.getByRole("table",{name:"Whole interactions with matching records"})).toContainText("342,000");
-    await expect(page.getByRole("table",{name:"Why estimated cost changed"})).toContainText("claude-opus-5-5");
+    await expect(page.getByRole("table",{name:"Tokens by model"})).toContainText("claude-opus-5-5");
     await page.setViewportSize({width:1320,height:900});
     const day=daysAgo=>new Date(Date.now()-daysAgo*86400000).toISOString().slice(0,10);
     await page.goto(new URL(`/compare?aFrom=${day(4)}&aTo=${day(3)}&bFrom=${day(2)}&bTo=${day(1)}`,runtime.url).href);
@@ -243,8 +240,35 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     assert.equal(initial.snapshot.usageFacts.cohorts.selected.total,342000);
     await page.getByRole("button",{name:"Change what's included",exact:true}).click();
     await expect(page.locator("#usageRows")).not.toBeChecked();
-    const noUsd=await prepare(()=>page.locator("#usageDollars").uncheck());
-    assert.equal(noUsd.snapshot.usageFacts.pricing,undefined);
-    assert.equal(noUsd.snapshot.usageFacts.cohorts.selected.usd,undefined);
+    const withoutTokens=await prepare(()=>page.locator("#usageTokens").uncheck());
+    assert.equal(withoutTokens.snapshot.usageFacts,undefined);
     assert.deepEqual(errors,[]);
+});
+
+test("save the same single interaction total seen on its card and reader", async t => {
+    const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)});
+    const browser=await chromium.launch(); cleanup.push(()=>browser.close());
+    const page=await browser.newPage(); await page.goto(runtime.url);
+    const card=page.locator("#activityList article").filter({hasText:"Launch notes"});
+    await expect(card.locator(".usage-chip")).toHaveText("30,000 tokens");
+    await card.locator(".request-card-open").first().click();
+    await expect(page.locator("[data-reader-section=usage]")).toContainText("30,000 tokens · 2 model calls");
+    await page.keyboard.press("Escape"); await expect(card.locator(".request-card-open").first()).toBeFocused();
+    await card.getByRole("button",{name:"Add to report",exact:true}).click();
+    const picker=page.getByRole("dialog",{name:"Report drafts",exact:true});
+    await picker.getByRole("button",{name:"New draft",exact:true}).click();
+    await picker.getByLabel("Draft name").fill("Launch notes review");
+    await picker.getByRole("button",{name:"Create draft and add"}).click();
+    await expect(card.locator(".report-draft-trigger")).toContainText("Launch notes review");
+    await navigateMain(page,"reports");
+    await page.getByRole("combobox",{name:"Report draft",exact:true}).click();
+    await page.getByRole("option",{name:"Launch notes review",exact:true}).click();
+    const read=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
+    await page.locator("#prepareReportPreview").click();
+    const snapshot=(await (await read).json()).snapshot;
+    assert.deepEqual([snapshot.records.length,snapshot.usageFacts.cohorts.selected.eligible,snapshot.usageFacts.cohorts.selected.total],[1,1,30000]);
+    await page.getByRole("button",{name:"Save report",exact:true}).click();
+    await page.getByRole("button",{name:"Open saved report",exact:true}).click();
+    await expect(page.locator("#savedReportReader .saved-brief")).toContainText("30,000 tokens across 1 interaction");
 });

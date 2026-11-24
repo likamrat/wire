@@ -227,7 +227,7 @@ may be `user` for a model request carrying a prompt or `agent` for the next
 request after a tool result. Neither proves prompt authorship or request
 ownership. Nested activity, a competing owner, or an incomplete window cannot
 establish a whole-interaction total. Missing cache counts still allow an
-exact input/output total, but not an estimated cost. It does not sum `session.usage_checkpoint`, reason from chat
+exact input/output total. WIRE does not sum `session.usage_checkpoint`, reason from chat
 order alone, subscribe to live SDK events, or start a backfill. Conflicting,
 partial, or unsupported receipts do not establish a whole-interaction count.
 These optional fields use the existing evidence snapshot; no store conversion
@@ -246,9 +246,6 @@ has 120 distinct call receipts but only 21 assistant message call IDs. An
 explicit interaction reference can bind additional receipts; message count
 alone is not model-call count. A redacted example does not prove a particular
 installed source has all the required fields.
-WIRE uses independently implemented arithmetic and a dated local
-[rate reference](../lib/retail-pricing.json) with provider sources for every
-model. No rates are fetched at runtime.
 
 | Fact | Preserve |
 | --- | --- |

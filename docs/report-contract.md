@@ -398,9 +398,8 @@ or corrupted payloads block preparation.
 
 New reports can include `usageFacts` version 1. The optional breakdown counts
 each originating interaction once, separately in each period for a period
-report. Model token shares include all metered interactions; cost shares use
-only fully priced interactions. A pricing snapshot and all dollar fields are
-omitted for token-only output. Per-interaction rows use the report's projected
+report. Model token shares include all metered interactions.
+Per-interaction rows use the report's projected
 interaction references and never carry source call IDs or extra prompt text.
 Question-led reports freeze their cohort rows and coverage with the same
 manifest hash. An author or tool filter and a high-usage threshold narrow an
@@ -408,15 +407,13 @@ interaction report before disclosure; changing the cohort requires a new
 preparation. A fixed two-period report retains its accepted evidence, with
 the question applied separately inside each period. Tool groups can overlap,
 but repeated uses of a tool never multiply an interaction's tokens. Model
-groups use the model on each receipt; partially priced interactions stay out
-of every dollar amount. A missing return size is never counted as zero.
-`usageFacts.readingVersion: 2` uses a shorter summary. Without that marker,
-the JSON reader keeps the original wording.
+groups use the model on each receipt. A missing return size is never counted
+as zero. New reports freeze token counts and coverage (`readingVersion: 3`).
+Earlier reports retain their originally saved fields and wording.
 Earlier snapshots without `usageFacts` gain no usage section when reopened.
-Readers predating `usageFacts` display a new frozen HTML report as saved.
-For a JSON-only report those readers can verify the original JSON, but their
-HTML reading omits the unknown usage section. Open the JSON in a current
-reader to see the frozen figures; no recollection or regeneration is needed.
+Use a current reader for newly saved JSON-only reports. Older readers that
+require the retired field on timing metrics may refuse the newer snapshot.
+Opening an earlier file in the current reader does not rewrite it.
 
 Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
 finding-first reading. Version 2 changes the explanation of the counts, not
