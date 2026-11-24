@@ -4,7 +4,7 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         rhythm: "Tool calls", problems: "Errors & failures", tools: "Tool usage",
         authors: "Prompt authors", models: "Response models", services: "Services", usage: "Token usage",
     };
-    function project(family, { scope, route, revision, hasSearch, includesNative, hasEarlier, otherSources, supportedTools, usageDays }, selectedDay) {
+    function project(family, { scope, route, revision, hasSearch, includesNative, hasEarlier, otherSources, supportedTools, usageCalendar }, selectedDay) {
         if (!Object.hasOwn(subjects, family)) throw new RangeError("Unknown Analyze widget.");
         const f = scope.filters, zone = scope.timeContext.timeZone, filters = {}, changes = [];
         if (family === "problems") changes.push("Analyze counts recorded outcomes. Errors & failures counts affected interactions, not failed calls; a completed call can contain an API error.");
@@ -44,10 +44,9 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         if (f.from && f.to) {
             range = { from: civil(f.from) ? f.from : time.day(f.from, zone), to: civil(f.to) ? f.to : time.day(f.to, zone) };
             if (!civil(f.from) || !civil(f.to)) changes.push("Trends includes whole calendar days, not partial days.");
-        } else if (family === "usage" && usageDays?.some(d => d.date)) {
-            const dates = usageDays.map(d => d.date).filter(Boolean).sort();
-            period = "custom"; range = {from:f.from ? civil(f.from) ? f.from : time.day(f.from,zone) : dates[0],
-                to:f.to ? civil(f.to) ? f.to : time.day(f.to,zone) : dates.at(-1)};
+        } else if (family === "usage" && usageCalendar?.range) {
+            period = "custom"; range = {from:f.from ? civil(f.from) ? f.from : time.day(f.from,zone) : usageCalendar.range.from,
+                to:f.to ? civil(f.to) ? f.to : time.day(f.to,zone) : usageCalendar.range.to};
             if (f.from && !civil(f.from) || f.to && !civil(f.to)) changes.push("Trends includes whole calendar days, not partial days.");
         } else {
             period = "7"; range = time.preset(period, zone);
@@ -75,7 +74,7 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
                     announce("Open this link in the current tab to carry the widget’s scope.", "info"); return;
                 }
                 const context = getContext(family);
-                if (!context || day && !context.usageDays?.some(d => d.date === day && d.metered)) { announce("Wait for a current Analyze view before opening this trend.", "stale"); return; }
+                if (!context || day && !context.usageCalendar?.days.some(d => d.date === day && d.metered)) { announce("Wait for a current Analyze view before opening this trend.", "stale"); return; }
                 const { changes, entry } = project(family, context,day);
                 if (!changes.length) { open(entry, node); return; }
                 dismiss?.();

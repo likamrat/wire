@@ -103,7 +103,15 @@ function modelShareReading(el, host, s, nativeCount) {
 function usageCalendar(scenarios,rows,identity,dayOf) {
     const records = new Map(scenarios.filter(s => s.recordKind !== "native-conversation").map(s => [s.scenarioId,s]));
     const origins = new Map([...records].map(([id,s]) => [id,identity(s)]));
-    const first = firstUsageDays(rows.map(r => ({originId:origins.get(r.scenarioId),date:r.startedAt && dayOf(r.startedAt)})));
+    const dated = rows.filter(r => origins.has(r.scenarioId) && r.startedAt)
+        .map(r => ({originId:origins.get(r.scenarioId),date:dayOf(r.startedAt)}));
+    const first = firstUsageDays(dated);
+    let range = null;
+    for (const {date} of dated) {
+        if (!range) range = {from:date,to:date};
+        else if (date < range.from) range.from = date;
+        else if (date > range.to) range.to = date;
+    }
     const usage = new Map([...records.values()].map(s => [origins.get(s.scenarioId),s.usage]));
     const days = new Map();
     for (const [origin,u] of usage) {
@@ -113,7 +121,7 @@ function usageCalendar(scenarios,rows,identity,dayOf) {
         if (u) { d.total+=u.total; d.metered++; }
         days.set(date,d);
     }
-    return [...days.values()].sort((a,b) => (b.date ?? "").localeCompare(a.date ?? ""));
+    return {range,days:[...days.values()].sort((a,b) => (b.date ?? "").localeCompare(a.date ?? ""))};
 }
 function homepageUsage(el, host, summary, nativeCount, days, dateLink) {
     const {eligible,metered,total,tokens} = summary, population = eligible + nativeCount;

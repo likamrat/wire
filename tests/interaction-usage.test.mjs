@@ -1,9 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recordedUsage, usageSummary, usageQuestionGroups } from "../lib/interaction-usage.mjs";
+import { firstUsageDays, recordedUsage, usageSummary, usageQuestionGroups } from "../lib/interaction-usage.mjs";
+import { createUsageReading } from "../web/usage-reading.mjs";
 import { modelRequestKey, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
 import { retainInteractionModelMetadata } from "../lib/interaction-model.mjs";
 import { qualifiedResultPaths } from "../lib/history.mjs";
+
+test("Analyze attributes a multi-day interaction once but keeps its later calls inside View by day",()=>{
+    const {usageCalendar} = createUsageReading({firstUsageDays});
+    const list = [{scenarioId:"a",origin:"one",usage:{total:40}},{scenarioId:"b",origin:"one",usage:{total:40}},
+        {scenarioId:"c",origin:"two",usage:{total:0}},{scenarioId:"d",origin:"three",usage:null}];
+    const calendar=usageCalendar(list,[
+        {scenarioId:"a",startedAt:"2026-10-17"},{scenarioId:"b",startedAt:"2026-10-14"},
+        {scenarioId:"c",startedAt:"2026-10-15"},{scenarioId:"d",startedAt:"2026-10-15"},
+        {scenarioId:"out-of-scope",startedAt:"2026-10-20"},
+    ],s=>s.origin,v=>v);
+    assert.deepEqual(calendar,{range:{from:"2026-10-14",to:"2026-10-17"},days:[
+        {date:"2026-10-15",total:0,metered:1,eligible:2},{date:"2026-10-14",total:40,metered:1,eligible:1},
+    ]});
+});
 
 test("a tool operation needs its own original completion and a consistent provider meter", () => {
     const start = {id:"s",type:"tool.execution_start",timestamp:"2026-10-01T00:00:00Z",data:{toolCallId:"c",toolName:"workiq-fetch"}};

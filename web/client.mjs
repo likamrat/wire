@@ -360,7 +360,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const githubOnly = scope.filters.sources?.length === 1 && scope.filters.sources[0] === "github-copilot";
             return { scope, route, snapshot, revision: snapshot.revision, hasSearch: Boolean(route.search?.trim() || semanticQuery),
                 supportedTools: retainedTrendTools(snapshot), searchMembership: semanticMembership,
-                ...(family === "usage" ? {usageDays:usageCalendar()} : {}),
+                ...(family === "usage" ? {usageCalendar:usageCalendar()} : {}),
                 includesNative: !githubOnly && (boundedIncludesMicrosoft() && hasMicrosoftSource() || snapshot.scenarios.some(nativeActivity.isNative)),
                 otherSources: !githubOnly && snapshot.scenarios.some(s => s.recordKind !== "native-conversation" && !["copilot-app", "copilot-app-chat"].includes(s.sourceHost)),
                 hasEarlier: snapshot.scenarios.some(s => s.isLegacy || s.collectionInactive) };
@@ -5663,7 +5663,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const breakdown = percentages.referenceModel();
         const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
         assessmentFactories.homepageUsage(el, $("analyzeUsageContent"), breakdown.models.usage, breakdown.authors.nativeConversations,
-            breakdown.models.usage.metered ? usageCalendar() : [], day => offersTrends
+            breakdown.models.usage.metered ? usageCalendar().days : [], day => offersTrends
                 ? analyzeTrends.link("usage",day,date(day,true)) : el("span","",date(day,true)));
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
