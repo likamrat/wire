@@ -347,6 +347,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             const list = el("div", undefined, "guide-example-calls");
             cases.forEach(([tool, result, detail], i) => {
                 const entry = el("details"), summary = el("summary");
+                summary.dataset.viewKey = `guide-example:${topic}:${tool}`;
                 summary.append(el("span", `Call ${i + 1} · ${tool}`, "guide-example-caption"), el("span", result), ux.icon("next"));
                 entry.append(summary, el("p", detail)); list.append(entry);
             });
@@ -515,7 +516,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         }
         if (topic === "outcomes" && context.mode === "analyze" && context.layer === "tool" && !context.nativeOnly) {
             const related = el("details", undefined, "chart-reference-related");
-            related.append(el("summary", "Returned API entries"), el("p", help.layers["reported-api"]),
+            const summary = el("summary", "Returned API entries");
+            summary.dataset.viewKey = "guide-outcomes:returned-entries";
+            related.append(summary, el("p", help.layers["reported-api"]),
                 el("p", "A retained entry with no usable status is still an entry. A call with no returned entries adds nothing to that total. A recorder connection failure without a response is a separate HTTP record."));
             reading.append(related);
         }
@@ -642,7 +645,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (context.mode === "analyze" && view === "guide") lastAnalyzeTopic = topic;
         const key = JSON.stringify([context.key, view, topic, context.notice, context.qualification, context.qualificationParts,
             context.coverage, context.available, context.canOpenData, rowQuery]);
-        const focus = activeFocus();
+        const focused = doc.activeElement, focus = activeFocus();
         if (key !== renderKey) {
             paint();
             if (!currentView(token)) return false;
@@ -682,7 +685,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                 : view === "index" ? $("chartReferenceTopics").querySelector(`[data-reference-topic="${topic}"]`) || $("chartReferenceIndexTitle")
                     : previous.view === "data" ? $("chartReferenceShowData") : $("chartReferenceTopicTitle");
             target.focus({ preventScroll: true });
-        } else if (focus) {
+        } else if (focus && (!focused.isConnected || !focused.checkVisibility())) {
             const target = findFocus(focus) || (view === "data" ? $("chartReferenceDataTitle") : $("chartReferenceTopicTitle"));
             target.focus({ preventScroll: true });
             keepFocusVisible();
