@@ -71,13 +71,12 @@ returns to the interaction list.
 
 <a id="analyze-homepage-layout"></a>
 
-In **Settings > Analyze > Homepage layout**, use the up or down arrow to move a widget
-or the entire **Interactions** list. For example, move Interactions above the two charts,
-or put Prompt authors first. The preview shows where each section will go as you move
-it, without showing any saved activity. Choose **View Analyze** to open the homepage. The order stays
-in this browser after reload. **Restore WIRE layout** puts the time chart first, then
-Tool call results, the Interactions list, and the tool, service, model and prompt-author
-breakdowns. It doesn’t change filters or collected activity.
+In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
+**Interactions** list. The preview outlines the section you moved and shows which
+widgets share a row. It uses sample charts instead of your saved activity.
+Your browser remembers each move. Choose **View Analyze** to open the homepage.
+**Restore WIRE layout** puts the time chart first, tool call results second, and
+Interactions third, before the four breakdowns. Your filters and activity stay the same.
 
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
