@@ -298,7 +298,9 @@ icon, with 4px of space inside the track border. Disabled
 inputs retain their state, with a dashed boundary; pending copy stays with
 the setting. A reply-saving draft previews the requested choice. From submission
 until confirmation the switch shows the last confirmed setting; an unknown
-outcome is not a rejection. A list option, radio, disclosure or section link
+outcome is not a rejection. After Save, the switch shows the confirmed choice
+but stays disabled until WIRE rereads the source and its reply-saving settings.
+A list option, radio, disclosure or section link
 is not a switch.
 
 Toolbar buttons, selects and numeric fields use a compact painted face inside
