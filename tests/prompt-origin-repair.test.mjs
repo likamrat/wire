@@ -857,6 +857,49 @@ test("source mapping drift after preparation refuses the write and the same jour
     for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
 });
 
+test("a complete named scan can disprove a false kickoff guard without marking a real first message Human", async t => {
+    const f = await setup(t, "guarded-first"), scope = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const index = JSON.parse(await readFile(f.indexFile));
+    delete index.sources[f.app.child].firstPromptEventId;
+    index.sources[f.app.child].promptStartObserved = false;
+    await atomicJson(f.indexFile, index);
+    // Two direct-looking messages in one agent-created chat, first-event checkpoint absent.
+    const human = f.app.cases.find(r => r.name === "human"), records = structuredClone(f.state.evidence);
+    const earlier = { actor: "unknown", basis: "missing-source" };
+    for (const r of records) for (const p of [r.userPrompt, ...(r.followUpPrompts ?? [])]) if (p.sourceEventId === human.promptId) {
+        p.authorship = earlier; p.authorshipVersion = 10;
+    }
+    const ck = JSON.parse(await readFile(f.checkpointFile));
+    Object.assign(ck.events.find(e => e.id === human.promptId).data, { wirePromptAuthorship: earlier, wirePromptAuthorshipVersion: 10 });
+    await atomicJson(f.checkpointFile, ck);
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const result = await reviewPromptOriginClass({ ...scope, batch });
+    assert.deepEqual(result.targets.map(t => [t.prompt.sourceEventId, t.prompt.authorship]), [[human.promptId, { actor: "user", basis: "host-direct-input" }]]);
+    assert.deepEqual(result.unresolved.map(u => [u.sourceEventId, u.observation.firstPromptGuard]), [[f.target.prompt.sourceEventId, true]]);
+    const [target] = result.targets, origin = { sourceSessionId: target.sourceSessionId, sourceEventId: human.promptId,
+        sourceEvent: target.sourceEvent, olderRetained: false };
+    const proof = target.sourceEvent.earlierOriginal;
+    assert.ok(proof && proof.firstRef !== hash(human.promptId));
+    const forged = { ...origin, sourceEvent: { ...origin.sourceEvent, earlierOriginal: { ...proof, seal: "0".repeat(64) } } };
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: scope.dataDir, origins: [forged] }), /earlier-original proof/);
+    const noProof = structuredClone(origin); delete noProof.sourceEvent.earlierOriginal;
+    assert.deepEqual((await inspectPromptOriginRepair({ dataDir: scope.dataDir, origins: [noProof] })).targets, []);
+    const verified = await inspectPromptOriginRepair({ dataDir: scope.dataDir, origins: [origin] });
+    assert.deepEqual(verified.targets[0].prompt.authorship, target.prompt.authorship);
+    Object.assign(f.plan, { targets: result.targets, source: result.source, stateGuardSha256: result.stateGuardSha256 });
+    await writeFile(f.options.planFile, JSON.stringify(f.plan)); f.options.planSha256 = digest(f.plan);
+    const prep = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prep.reviewSha256 });
+    const newIndex = JSON.parse(await readFile(f.indexFile));
+    assert.deepEqual(newIndex.sources, index.sources, "A sealed not-first witness does not rewrite collector progress.");
+    await f.app.restart(); await f.app.runtime().collector.collectNow();
+    const after = await loadBoardState(f.app.context), actual = after.evidence.find(r => r.userPrompt.sourceEventId === human.promptId);
+    assert.deepEqual(actual.userPrompt.authorship, target.prompt.authorship);
+    assert.deepEqual(actual.toolCalls, records.find(r => r.scenarioId === actual.scenarioId).toolCalls);
+    for (const frozen of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(scope.dataDir, frozen.path))), frozen.sha256);
+});
+
 test("a direct-looking first original can inspect an already retained creator match without opening the parent journal or proposing an author", async t => {
     const f = await setup(t, "guarded-first");
     await rename(f.app.sourceFiles[0], f.app.sourceFiles[0] + ".away");

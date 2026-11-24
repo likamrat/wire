@@ -513,6 +513,12 @@ binds page continuations and new proposals; Prepare and Apply still perform
 their own original and checkpoint checks.
 
 The final `targets` are the corrections the original records actually support.
+If an agent-created chat lacks its saved first-prompt ID, a completed review
+can still prove a selected direct input was **not** its kickoff. It seals
+the earlier first event's digest to this store, source mapping, complete
+journal and exact selected region. An unsealed flag, a nearby timestamp or
+the first event itself cannot remove that guard. Prepare and Apply verify
+the same seal and original; neither edits the collector's first-event pointer.
 They may be human **or** agent prompts. `unresolved` explains why other
 candidates stay unverified. Listing, reviewing and installing a new reader
 do not write these changes. For an approved correction, use the returned
