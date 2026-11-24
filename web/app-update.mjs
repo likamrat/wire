@@ -1,5 +1,5 @@
 const day = 24 * 60 * 60 * 1000;
-const receiptKey = "wire.app-update.expected";
+export const receiptKey = "wire.app-update.expected";
 const sha = value => typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 const asset = value => typeof value === "string" && /^\/assets\/client\/[A-Za-z0-9_-]+-[A-Za-z0-9_-]{8,}\.js$/.test(value);
 const phases = ["current", "available", "unknown", "checking", "preparing", "restarting", "error", "manual"];
@@ -36,8 +36,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (!notice.inert) {
             $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
             const detail = $("appUpdateDetail");
-            detail.textContent = success || result || feedback;
-            detail.hidden = !detail.textContent;
+            detail.textContent = success || result || feedback || "Update and restart WIRE. Your saved data won’t change.";
             $("appUpdateApply").hidden = !shown || Boolean(result || success);
         }
         $("settingsAppUpdate").hidden = !available;
@@ -104,7 +103,12 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     function fence(message, retry = false) {
         if ($("appUpdateProgress").textContent !== message) $("appUpdateProgress").textContent = message;
         $("appUpdateRecover").hidden = !retry;
+        $("appUpdateActivity").hidden = retry;
+        $("appUpdateHint").hidden = retry || restoredReceipt;
         if (!dialog.open) { dialog.showModal(); $("appUpdateFenceTitle").focus(); }
+    }
+    function reconnecting() {
+        if (expected && dialog.open && $("appUpdateRecover").hidden) fence("Reconnecting to WIRE…");
     }
     function finish(message, completed = false) {
         clearTimeout(recoveryTimer); receipt(null); allowReload = false;
@@ -121,8 +125,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (!expected || checkingRestart) return;
         const generation = lifetime, wanted = expected;
         checkingRestart = true; clearTimeout(recoveryTimer);
-        fence(state?.phase === "preparing" ? "Preparing the selected build. Keep this panel open."
-            : "Waiting for the updated WIRE build. The update will not be repeated.");
+        if (restoredReceipt) fence("Checking the running version…");
+        else if (attempt === 0) fence(state?.phase === "preparing" ? "Preparing the update…" : "Checking update status…");
         try {
             const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
             const health = response.ok && await response.json();
@@ -152,6 +156,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                 const file = await fetch(health.clientEntry, { ...fixed, signal: AbortSignal.timeout(4000) });
                 if (file.ok && /(?:java|ecma)script/i.test(file.headers.get("Content-Type") || "")) {
                     receipt({ ...wanted, entry: health.clientEntry, targetRuntime: health.runtimeId });
+                    fence("Opening the updated WIRE…");
                     allowReload = true; location.reload(); return;
                 }
             }
@@ -162,12 +167,13 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             }
             const next = await post("status");
             state = next;
+            if (next.phase === "restarting") fence("Restarting WIRE…");
             if (next.supported && wire && health.runtimeId === runtimeId && health.build === wanted.previous && next.installed === wanted.previous
                 && (["error", "manual"].includes(next.phase) || (refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))) {
                 finish(refusal || (manualRead && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
                 return;
             }
-        } catch { /* The old panel capability may be gone; use health without renewing it. */ }
+        } catch { reconnecting(); } // Keep checking health without renewing the old panel capability.
         finally { checkingRestart = false; }
         if (attempt < 45) recoveryTimer = setTimeout(() => void recover(attempt + 1, refusal), Math.min(5000, (attempt + 1) * 1000));
         else fence("The restart is not confirmed. Check the original update’s status; do not run Update again.", true);
@@ -191,7 +197,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         } catch {
             busy = false; feedback = "Allow session storage so WIRE can verify the restart. Nothing was started."; render(); schedule(); return;
         }
-        fence("Preparing the update. Editing is paused until WIRE finishes."); render();
+        fence("Starting the update…"); render();
         // Opening a modal moves focus synchronously. Recheck after blur/change handlers have run.
         const lastMinute = reason();
         if (lastMinute) { finish(lastMinute); return; }
@@ -254,11 +260,15 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         }
     } catch { storageAvailable = false; }
     if (expected) void recover();
-    else void run("status").then(() => {
-        if (state?.supported && state.automatic) void run("auto-check");
-    });
+    else {
+        if (dialog.open) dialog.close();
+        void run("status").then(() => {
+            if (state?.supported && state.automatic) void run("auto-check");
+        });
+    }
     return {
         render,
+        reconnecting,
         locked: () => Boolean(expected),
         beforeOwnerRetirement() { unfinishedAtSuspension ||= Boolean(reason()); },
     };

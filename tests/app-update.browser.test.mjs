@@ -357,7 +357,7 @@ test("Settings and the notice offer the same restart; dismissing leaves the Sett
     assert.equal(actions.filter(a => a.action === "check").length, 4);
 });
 
-test("the bottom-right offer glides without moving General or taking focus; reduced motion stays still", async t => {
+test("the offer glides above the account without moving General or taking focus; reduced motion stays still", async t => {
     const { page, state } = await workspace(t, { offer: null });
     const notice = page.locator("#appUpdateNotice"), card = page.locator(".app-version-card");
     for (const reduced of [false, true]) {
@@ -380,12 +380,11 @@ test("the bottom-right offer glides without moving General or taking focus; redu
         await page.waitForFunction(() => document.querySelector("#appUpdateNotice").getAnimations().length === 0);
         const corner = await notice.boundingBox(), beforeDismiss = await card.boundingBox();
         assert.equal(beforeDismiss.y, top);
-        const anchored = await notice.evaluate(n => ({ takesFocus: n.contains(document.activeElement),
-            right: innerWidth - n.getBoundingClientRect().right, bottom: innerHeight - n.getBoundingClientRect().bottom }));
-        assert.ok(!anchored.takesFocus && anchored.right >= 15 && anchored.right < 36
-            && anchored.bottom >= 15 && anchored.bottom < 36, JSON.stringify(anchored));
+        const anchor = await notice.evaluate(n => ({ takesFocus: n.contains(document.activeElement),
+            accountGap: document.querySelector(".navigation-footer").getBoundingClientRect().top - n.getBoundingClientRect().bottom }));
+        assert.ok(!anchor.takesFocus && anchor.accountGap > 0 && corner.x === 10, JSON.stringify({anchor, corner}));
         await page.locator("#navigationCollapse").click();
-        assert.deepEqual(await notice.boundingBox(), corner);
+        await expect.poll(() => notice.evaluate(n => Math.round(n.getBoundingClientRect().left - document.querySelector("#sidebar").getBoundingClientRect().right))).toBe(8);
         await page.locator("#navigationCollapse").click();
         await expect.poll(() => card.boundingBox()).toEqual(beforeDismiss);
         await page.locator("#appUpdateDismiss").click();
@@ -478,6 +477,13 @@ test("single activation stays fenced through transport loss until the authentica
     const hold = Promise.withResolvers();
     setup.apply = async route => { await hold.promise; await route.abort("connectionreset"); };
     await apply.click(); await expect(modal).toBeVisible();
+    const activity = page.locator("#appUpdateActivity");
+    await expect(page.locator("#appUpdateHint")).toHaveText("Keep this tab open. It will reload automatically.");
+    const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);
+    const start = await rotation();
+    await expect.poll(rotation).not.toBe(start);
+    await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
+    await expect(page.locator("#appUpdateProgress")).toHaveAttribute("role", "status");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
         document.querySelector('[data-category="themes"]').click();
@@ -493,6 +499,7 @@ test("single activation stays fenced through transport loss until the authentica
     // The shell still names the stale entry: an available JS file is not loaded-client proof.
     await page.reload();
     await expect(page.locator("#appUpdateProgress")).toContainText("different browser build", { timeout: 12000 });
+    await expect(activity).toBeHidden(); await expect(page.locator("#appUpdateRecover")).toBeVisible();
     await expect(modal).toBeVisible();
     setup.entry = setup.health.clientEntry;
     setup.status = route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Page permission expired." } });
@@ -513,6 +520,26 @@ test("single activation stays fenced through transport loss until the authentica
     await expect(modal).not.toBeVisible();
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }, { action: "apply", candidate: next }]);
     assert.equal(actions.filter(a => a.action === "preferences").length, 0);
+});
+
+test("the replacement shell shows recovery before its module loads and stops on a failed entry", async t => {
+    const { page, setup, actions } = await workspace(t);
+    await page.evaluate(receipt => sessionStorage.setItem("wire.app-update.expected", JSON.stringify(receipt)), {
+        previous: old, candidate: next, runtimeId: originalRuntime, targetRuntime: replacement, entry: setup.entry, origin,
+    });
+    setup.runtimeId = replacement;
+    const hold = Promise.withResolvers();
+    await page.route(origin + setup.entry, async route => { await hold.promise; await route.abort("failed"); });
+    try {
+        await page.reload({ waitUntil: "commit" });
+        await expect(page.getByRole("dialog", { name: "Updating WIRE" })).toBeVisible();
+        await expect(page.locator("#appUpdateProgress")).toHaveText("Checking the running version…");
+        await expect(page.locator("#loading")).toBeHidden();
+        await expect(page.locator("#appUpdateActivity")).toBeVisible();
+    } finally { hold.resolve(); }
+    await expect(page.locator("#appUpdateProgress")).toContainText("Reload this tab to check the restart");
+    await expect(page.locator("#appUpdateActivity")).toBeHidden();
+    assert.ok(!actions.some(a => a.action === "apply"));
 });
 
 test("expired original permission on bfcache restore cannot release an unverified page interlock", async t => {

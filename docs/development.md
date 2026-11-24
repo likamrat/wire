@@ -27,7 +27,7 @@ Use `npm start` with the usual port and data folder, without development flags.
 Automatic checks are on by default. To check now, open **Settings > General**
 and choose **Check for updates**. This works even if you turned automatic checks
 off. When WIRE offers a build, choose **Update and restart** in General or in the
-bottom-right notification. **Dismiss** hides the notification; the update stays
+notification above the account on desktop. **Dismiss** hides the notification; the update stays
 available in General.
 
 For a clean official `main` clone, use the manual path on macOS or standalone

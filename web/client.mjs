@@ -11719,10 +11719,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else node.removeAttribute("aria-current");
         }
         const connectionFeedback = accountUI?.unavailableConnectionFeedback() || "";
+        const awaitingUpdate = value.reason === "connection-unavailable" && value.state?.wire !== "signed-out" && appUpdate?.locked();
+        if (awaitingUpdate) appUpdate.reconnecting();
         $("message").textContent = value.state?.wire === "signed-out"
             ? "WIRE is signed out. Collection is stopped and saved activity is hidden. Use WIRE account to sign in."
             : value.reason === "connection-unavailable"
-                ? ["WIRE is not responding.", connectionFeedback, "Saved activity is hidden until access can be checked."].filter(Boolean).join(" ")
+                ? [awaitingUpdate ? "Waiting for WIRE to reconnect." : "WIRE is not responding.", connectionFeedback, "Saved activity is hidden until access can be checked."].filter(Boolean).join(" ")
                 : [connectionFeedback, "Checking WIRE access before showing saved activity."].filter(Boolean).join(" ");
         $("message").hidden = false;
         $("message").setAttribute("role", "status");

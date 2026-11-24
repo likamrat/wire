@@ -744,7 +744,7 @@ Settings opens in **General**. One card shows the running package version,
 the update result and the time of the last successful check when known.
 **Check for updates** sits beside the result; the automatic-check switch is below it.
 When an update is available, **Update and restart** replaces Check and matches the
-action in the bottom-right notification. The notification glides in without moving
+action in the notification above the account on desktop. The notification glides in without moving
 the page or taking focus. Dismiss hides only the notification. With reduced motion
 it appears and disappears without sliding. Below updates,
 show the current theme with a miniature WIRE screen, its name and mode,

@@ -167,6 +167,9 @@ test("full WIRE clone updates on the original address and reopens the same saved
         const browser = await chromium.launch();
         try {
             const browsing = await browser.newContext(), page = await browsing.newPage();
+            page.on("requestfailed", req => {
+                if (req.resourceType() === "script") t.diagnostic(`Script request failed: ${new URL(req.url()).pathname} (${req.failure()?.errorText})`);
+            });
             await browsing.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin
                 ? route.continue() : route.abort());
             await page.goto(url + "settings?section=general");

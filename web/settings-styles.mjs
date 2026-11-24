@@ -1,10 +1,13 @@
 export const settingsStyles = `
-#appUpdateNotice {position:fixed;z-index:var(--layer-header);right:max(var(--space-lg),env(safe-area-inset-right));bottom:max(var(--space-lg),env(safe-area-inset-bottom));
+#appUpdateNotice {position:absolute;z-index:var(--layer-header);
  box-sizing:border-box;width:max-content;max-width:min(23rem,calc(100vw - 2 * var(--space-lg)));padding:var(--space-lg);
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
-#appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(calc(100% + max(var(--space-lg),env(safe-area-inset-bottom))));transition-duration:180ms}
-body:has(#contextSidebar[open]) #appUpdateNotice {visibility:hidden;transition:none}
+#appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(1.25rem);transition-duration:180ms}
+@media(min-width:64rem) {
+ #appUpdateNotice {position:fixed;inset-inline-start:10px;inset-block-end:7.5rem;width:clamp(12rem,calc(var(--app-sidebar-width,216px) - 20px),19rem);padding:var(--space-md)}
+ :root[data-navigation=collapsed] #appUpdateNotice {inset-inline-start:calc(var(--app-sidebar-width,64px) + 8px);width:16rem}
+}
 @media(prefers-reduced-motion:reduce) {
  #appUpdateNotice,#appUpdateNotice[inert] {transition:none;transform:none}
 }
@@ -16,6 +19,13 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .app-version-card .settings-row-copy {flex:1 1 12rem}
 #appUpdateFence {max-width:min(29rem,calc(100vw - 2rem));padding:var(--space-xl);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
 #appUpdateFence h2 {margin:0;font-size:var(--type-section)}
+.app-update-title {display:flex;align-items:center;gap:var(--space-md)}
+#appUpdateActivity {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
+#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:wire-update-spin .9s linear infinite}
+@keyframes wire-update-spin {to {transform:rotate(1turn)}}
+@media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:none}}
+#appUpdateHint {margin:.25em 0 0;color:var(--muted)}
+#appUpdateFence[open] ~ #loading {visibility:hidden}
 #appUpdateRecover {margin-top:var(--space-md)}
 .assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
