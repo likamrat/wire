@@ -485,14 +485,18 @@ test("native chart keyboard links, modified clicks and Back retain exact scoped 
 });
 
 test("relocated launchers use native records, reference, comparison and update destinations", { timeout: 30000 }, async t => {
-    const { page, snapshots, snapshot, olderDay, newerDay } = await setup(t);
+    const { page, snapshots, olderDay, newerDay } = await setup(t);
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill(olderDay); await page.locator("#toFilter").fill(newerDay);
+    const applying = page.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.ok()
+        && r.request().postDataJSON().filters.from === olderDay && r.request().postDataJSON().filters.to === newerDay);
     await page.locator("#applyDates").click(); await ready(page);
+    const applied = await applying;
     await closeAnalyzeFilters(page);
-    const before = structuredClone(snapshot().analytics.rows.map(row => row.id).sort());
-    const filters = structuredClone(snapshots.at(-1).filters);
+    const before = (await applied.json()).analytics.rows.map(row => row.id).sort();
+    const filters = applied.request().postDataJSON().filters;
+    assert.deepEqual(filters.services, ["Files"]);
     const reads = snapshots.length;
     await revealAnalyzeRecords(page);
     const focus = page.locator("#activityView :focus");
@@ -541,9 +545,12 @@ test("relocated launchers use native records, reference, comparison and update d
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".compare-inspection h2")).toBeFocused();
     assert.equal(pairedReads, 0, "The footer reveals the accepted selected roster without another paired read");
+    const returning = page.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.ok());
     await page.locator('.primary-navigation [data-nav="analyze"]').click(); await ready(page);
-    assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), before);
-    assert.deepEqual(snapshots.at(-1).filters, filters);
+    const returned = await returning;
+    assert.deepEqual(returned.request().postDataJSON().filters, filters);
+    assert.deepEqual((await returned.json()).analytics.rows.map(row => row.id).sort(), before);
+    await expect(page.locator("#activityCount")).toHaveText(String(before.length));
     assert.equal(await page.locator("#filters").evaluate(node => node.closest("dialog")?.id), "analyzeFilterDialog");
     const updateReads = snapshots.length;
     await expect(page.locator("#activityUpdateToggle")).toHaveCount(0);

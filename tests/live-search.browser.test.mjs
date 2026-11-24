@@ -46,18 +46,13 @@ async function find(page, query, type = "") {
     await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved replies are unavailable for Search\.))$/, { timeout: 30000 });
     return page.locator("#wireSearchResults button");
 }
-async function jsonValues(page) {
-    const tree = page.locator("#savedReportReader .saved-json-tree");
-    await tree.waitFor();
-    // Read from the current tree after each expansion: replacing the document retires its old nodes.
-    const groups = tree.locator("details:not([open])");
-    await expect(tree.locator(".saved-json-scalar").first()).toBeAttached();
-    while (await groups.count()) {
-        await groups.evaluateAll(nodes => Promise.all(nodes.map(node => new Promise(resolve => {
-            node.addEventListener("toggle", resolve, { once: true }); node.open = true;
-        }))));
-    }
-    return tree.locator(".saved-json-scalar").allTextContents();
+async function checkFrozenJson(page, name, expectedFile, bundleId) {
+    const reader = page.locator("#savedReportReader");
+    await expect(reader.locator(".saved-json-tree").getByText(JSON.stringify(bundleId), { exact: true }).first()).toBeVisible();
+    await reader.getByRole("button", { name: "Source", exact: true }).click();
+    const original = reader.locator(`pre[aria-label="${name}"]`);
+    await expect(original).toBeVisible();
+    assert.equal(await original.textContent(), await readFile(expectedFile, "utf8"));
 }
 
 test("normal literal fragments and exact anchors open all types and restore Back", { timeout: 120000 }, async t => {
@@ -65,11 +60,9 @@ test("normal literal fragments and exact anchors open all types and restore Back
     const { page, bundles, exports, context } = app;
     const preview = await historicalComparison(context, bundles[0].bundleId, bundles[1].bundleId, { formats: ["json"] });
     const before = await loadBoardState(context);
+    await page.reload();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const initialCount = await page.locator("#activityCount").textContent();
-    await page.locator("#activityList .request-card-open").first().click();
-    await page.locator("#requestReportToggle").click();
-    await page.locator("#closeContextSidebar").click();
-    await expect(page.locator("#contextSidebar")).toBeHidden();
     const query = "PHYS";
     const words = new Set(before.evidence[0].userPrompt.text.toLowerCase().match(/\p{L}+/gu));
     assert.equal(words.has(query.toLowerCase()), false, "This is a partial word, not exact whole-word matching");
@@ -82,12 +75,13 @@ test("normal literal fragments and exact anchors open all types and restore Back
     assert.equal(await page.locator("#activityCount").textContent(), initialCount);
     await page.locator("#wireSearch").press("ArrowDown");
     await expect(hits.first()).toBeFocused();
+    const openingId = await hits.first().getAttribute("data-search-id");
     await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator(".request-original .full-text-content")).toHaveText("The physician treated an injured patient in the hospital.");
     await page.goBack();
     await expect(page.locator("#wireSearch")).toHaveValue(query);
-    await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
+    await expect(page.locator(`#wireSearchResults [data-search-id="${openingId}"]`)).toBeFocused();
     const cases = [["context", "subsequent medical", "/request\\?"], ["reply", "lab results", "/request\\?"],
         ["action", "403", "layer=http"], ["tool", "workiq-fet", "privateView=required"],
         ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "/$"],
@@ -127,7 +121,7 @@ test("normal literal fragments and exact anchors open all types and restore Back
         const dialog = page.locator("#savedReportReader");
         await expect(dialog).toBeVisible();
         if (kind === "html") await expect(dialog.locator("iframe")).toHaveCount(1);
-        if (kind === "json") assert.ok((await jsonValues(page)).some(value => value.includes("physician")));
+        if (kind === "json") await checkFrozenJson(page, "product-report.json", bundles[index].files["product-report.json"], bundles[index].bundleId);
         if (kind === "markdown") await expect(dialog.locator(".saved-markdown")).toContainText("physician");
         if (kind === "pdf") {
             await expect(dialog.locator(".saved-pdf-pages")).toHaveAttribute("aria-busy", "false");
@@ -706,10 +700,7 @@ test("frozen-reader: search opens actual historical comparison HTML and JSON-onl
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`)).toBeFocused();
     await page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`).click();
-    const jsonBytes = await readFile(json.files["comparison-report.json"], "utf8");
-    const leaves = value => value !== null && typeof value === "object" ? Object.values(value).flatMap(leaves)
-        : [typeof value === "string" ? JSON.stringify(value) : String(value)];
-    assert.deepEqual(await jsonValues(page), leaves(JSON.parse(jsonBytes)));
+    await checkFrozenJson(page, "comparison-report.json", json.files["comparison-report.json"], json.bundleId);
     await expect(page.locator("#savedReportReader iframe")).toHaveCount(0);
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`)).toBeFocused();
