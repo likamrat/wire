@@ -32,7 +32,7 @@ async function manifest(root) {
     await visit();
     return { root, files, sourceIdentity: digest(files) };
 }
-async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1 } = {}) {
+async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1, originalFields } = {}) {
     const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
     const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair", senderPair = variant === "v12-sender-pair";
     const app = await promptInstallation(t), item = app.cases.find(row => row.name === (legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
@@ -43,7 +43,24 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
         const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
         events.find(event => event.id === item.promptId).data.agentMode = "shell";
         events.find(event => event.id === marked.promptId).data.agentAuthored = true;
-        await writeFile(app.sourceFiles[1], events.map(event => JSON.stringify(event) + "\n").join(""));
+        const lines = events.map(event => {
+            let line = JSON.stringify(event);
+            if (originalFields && event.id === marked.promptId) {
+                // Ordinary but noncanonical JSON beyond the completion projector's 16 KiB limit.
+                line = line.replace(',"data":', ", " + " ".repeat(18000) + '"data":');
+                if (originalFields === "selected") line = line.replace('"agentAuthored":true', '"agentAuthored":false,"agentAuthored":true');
+            }
+            return line;
+        });
+        if (originalFields) {
+            let line = JSON.stringify({ id: randomUUID(), type: "session.info", timestamp: events[0].timestamp,
+                data: { n: 1, message: "Invented payload, not an origin." } });
+            line = line.replace('"n":1', '"n":12345678901234567890123456,"n":1');
+            if (originalFields === "hidden id") line = line.replace('{"id":', `{"\\u0069d":"${marked.promptId}","id":`);
+            if (originalFields === "hidden type") line = line.replace('"type":', '"\\u0074ype":"user.message","type":');
+            lines.splice(1, 0, line);
+        }
+        await writeFile(app.sourceFiles[1], lines.join("\n") + "\n");
     }
     if (variant === "mixed-review") repairItems.push(...app.cases.filter(row => ["enveloped-agent", "legacy", "conflict"].includes(row.name)));
     if (variant === "paged-review") {
@@ -470,6 +487,7 @@ test("origin-case inventory joins all canonical unknowns to exact bounded review
         text: "Invented follow-up without a call", status: "full", sourceEventId: extra, sourceTimestamp: f.target.prompt.sourceTimestamp,
         authorship: { actor: "unknown", basis: "missing-source" }, authorshipVersion: 12,
     });
+
     await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
     const ordinary = await reviewPromptOriginClass(scope), input = { ...scope, originatingOnly: true };
     const inventory = await reviewPromptOriginClass(input);
@@ -500,6 +518,21 @@ test("origin-case inventory joins all canonical unknowns to exact bounded review
     assert.notEqual(fresh.batches[0].batch, b.batch);
     assert.deepEqual(fresh.cases.map(c => c.caseRef), inventory.cases.map(c => c.caseRef));
     await assert.rejects(reviewPromptOriginClass({ ...input, batch: b.batch }), /stale or unavailable/);
+});
+
+for (const originalFields of ["unrelated", "selected", "hidden id", "hidden type"]) test(`original review proves envelope identity separately from payload: ${originalFields}`, async t => {
+    const f = await setup(t, "v12-sender-pair", { originalFields }), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+    const review = reviewPromptOriginClass({ ...input, batch });
+    if (originalFields.startsWith("hidden")) await assert.rejects(review, /source event identity or startup fields are ambiguous/);
+    else {
+        const result = await review;
+        assert.deepEqual(result.targets.map(t => t.prompt.authorship.basis).sort(), originalFields === "selected"
+            ? ["host-direct-input"] : ["host-agent-authored", "host-direct-input"]);
+        assert.deepEqual(result.unresolved.map(r => r.reason), originalFields === "selected" ? ["unverified-original-fields"] : []);
+        assert.ok(result.targets.every(t => t.sourceEvent.bytes && t.sourceEvent.sha256 && t.sourceEvent.sourceStampSha256));
+    }
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
 });
 
 test("later pages locate a candidate and disqualify a competing original; source drift invalidates the review", async t => {

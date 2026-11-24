@@ -476,6 +476,12 @@ new page separate from the one you're reading. Pages cannot be mixed across
 batches or changed sources. No proposal is made until the full journal has
 been checked for competing event identities. An unreadable, oversized or
 ambiguous source region prevents a complete review; it is not an empty batch.
+Every ordinary entry must establish an unambiguous outer event ID and type,
+including escaped JSON keys. Noncanonical or duplicate fields inside an
+unselected payload do not establish or disprove a sender. Startup and each
+proposed original still need full-field verification. An ambiguous selected
+payload with a unique envelope stays unresolved; an ambiguous envelope can
+hide another selected ID and blocks the whole page.
 If the metadata database changes during a named review read, the selected-chat
 reader can take one fresh transaction. Only its fully fenced result is used.
 The physical database, schema, complete selected mapping (including managed
