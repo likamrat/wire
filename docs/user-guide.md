@@ -452,8 +452,10 @@ settings**. Matching destinations appear under their categories.
 On [supported installations](development.md#updating-wire), automatic checks
 are on by default. You can turn them off and still choose **Check for updates**.
 Choose **Update and restart** in General or in the update notification. Leave
-your tabs open: WIRE shows its progress and reloads the views of this installation
-at the same address. If a view has an unfinished edit, finish it there first.
+your tabs open: each participating window shows **WIRE is updating**, then
+reloads its own page. If a window has an unfinished edit, save or cancel it
+there before updating. If a window doesn't confirm it's ready, WIRE stops
+before restarting. That message alone doesn't mean you left an edit unfinished.
 Dismissing the notification leaves the update available in General. If your copy can't check for updates,
 General links to **Update instructions** instead.
 

@@ -527,7 +527,7 @@ test("single activation stays fenced through transport loss until the authentica
     const start = await rotation();
     await expect.poll(rotation).not.toBe(start);
     await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
-    await expect(modal.getByRole("status")).toContainText("Starting update");
+    await expect(modal.getByRole("status")).toContainText("WIRE is updating");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
         document.querySelector('[data-category="themes"]').click();
