@@ -449,7 +449,8 @@ settings**. Matching destinations appear under their categories.
 On [supported installations](development.md#updating-wire), automatic checks
 are on by default. You can turn them off and still choose **Check for updates**.
 Choose **Update and restart** in General or in the update notification. Leave
-the tab open: WIRE shows its progress, restarts, then reloads the same address.
+your tabs open: WIRE shows its progress and reloads the views of this installation
+at the same address. If a view has an unfinished edit, finish it there first.
 Dismissing the notification leaves the update available in General. If your copy can't check for updates,
 General links to **Update instructions** instead.
 

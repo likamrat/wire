@@ -43,13 +43,17 @@ even if the package version stays the same. Changes to contributor docs,
 tests or CI alone do not create an update notice. Git uses the current
 user's repository access; no source approval or Copilot sign-in is requested.
 
-Finish any report, close other WIRE panels, and resolve unconfirmed saves or
-deletions before updating. Keep the terminal open while WIRE prepares its
+Start the update from any browser view of the installation. WIRE coordinates
+the open views on its configured address and port; you do not need to close clean
+tabs. Finish an unsaved report or Settings edit in its original view, and resolve
+unconfirmed saves or deletions before updating. Keep the terminal open while WIRE prepares its
 replacement. App versions and the activation record stay inside this clone’s
 Git directory, separate from evidence. A failed check is not “up to date.”
 On Windows, WIRE enables Git long paths in the new stage only. It verifies
 the fetched `main` revision and checks out the exact commit you chose.
-On restart, return to the same address and reopen an old canvas if needed.
+On restart, participating browser views reload at the same address. A canvas
+tool connection pinned to the old runtime must be reopened before using its tools.
+Another installation on a different port and store is not updated.
 The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.

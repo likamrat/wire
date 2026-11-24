@@ -12025,11 +12025,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked, blocked() {
         const report = reportJourney?.snapshot();
         if (collectionSettings?.hasDraft() || sourceSettings?.hasDraft() || assessmentUI?.hasUnfinishedChange()) {
-            return "Save or cancel your Settings changes and resolve any unconfirmed changes before updating.";
+            return { kind: "settings", message: "Save or cancel your Settings changes and resolve any unconfirmed changes before updating." };
         }
         if (exportWriting || pendingSaveOwner || reportPreparing || report?.saveUnconfirmed || report?.phase === "scanning"
             || !report?.completed && (report?.hasPreview || hasReportDraftChoices())) {
-            return "Finish or discard your report draft and resolve any unconfirmed save before updating.";
+            return { kind: "report", message: "Finish or discard your report draft and resolve any unconfirmed save before updating." };
         }
         const reread = recollectionUI?.snapshot(), refresh = fresh.snapshot();
         if (collectionSettings?.isBusy() || sourceSettings?.isBusy() || collectionSettings?.hasUnconfirmedChange()
@@ -12037,11 +12037,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || recorderUI?.hasUnfinishedChange() || deletionUI?.hasUnfinishedChange() || reread?.busy || reread?.needsReceipt || reread?.hasReceipt
             || nativeCollectIntent || sourcePending || githubRecoveryPending || refresh.sourceUnknown || refresh.sourceBlocked || artifactRefreshRequired || collection?.assessment?.pendingCleanup
             || refreshWorking() || fresh.busy() || workspaceState.loading || collectionBusy) {
-            return "Finish the current operation or check its original result before updating.";
+            return { kind: "operation", message: "Finish the current operation or check its original result before updating." };
         }
         if (workspaceState.dateDraft || document.querySelector("dialog[open]:not(#appUpdateFence),.select-popup:not([hidden])")) {
-            return "Finish the open edit or dialog before updating.";
+            return { kind: "operation", message: "Finish the open edit or dialog before updating." };
         }
-        return "";
+        return null;
     } });
 }

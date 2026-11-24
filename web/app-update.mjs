@@ -26,6 +26,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     let state, busy = false, expected, checkingRestart = false, allowReload = false, storageAvailable = true;
     let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "";
     let manualChecking = false, endCheckFeedback;
+    let coordination = false, peerWatch, peerTimer;
     let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
     function receipt(value) {
         if (value) sessionStorage.setItem(receiptKey, JSON.stringify(value));
@@ -83,6 +84,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     function schedule() {
         clearTimeout(scheduleTimer);
         if (!state?.supported || expected || manualOnly(state)) return;
+        if (coordination) watchPeers();
         if (["checking", "preparing", "restarting"].includes(state.phase)) scheduleTimer = setTimeout(() => void run("status"), 2500);
         else if (state.automatic) scheduleTimer = setTimeout(() => void run("auto-check"), day);
     }
@@ -104,6 +106,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             if (minimum) await minimum;
             if (generation !== lifetime) return;
             state = next;
+            coordination ||= next.coordinated === true;
             panelVerified = true;
             success = "";
             if (!["auto-check", "status"].includes(action) || state.candidate !== previousCandidate) result = "";
@@ -127,7 +130,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             if (restoring) { restoring = false; state = null; void run("status"); }
             else if (generation === lifetime) {
                 render(); schedule();
-                if (returnFocus && document.activeElement === document.body) {
+                if (!expected && returnFocus && document.activeElement === document.body) {
                     const target = manual.hidden ? $("settingsAppUpdate") : manual;
                     if (target.checkVisibility() && !target.disabled) target.focus({ preventScroll: true });
                 }
@@ -145,6 +148,53 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function reconnecting() {
         if (expected && dialog.open && $("appUpdateRecover").hidden) fence("Reconnecting to WIRE");
+    }
+    async function peerRequest(path, body, signal) {
+        const response = await fetch("/api/app-update/" + path, { ...fixed, method: "POST", signal,
+            headers: { "Content-Type": "application/json", "X-Board-Capability": capability }, body: JSON.stringify(body) });
+        if (!response.ok) throw Object.assign(new Error("Update coordination is unavailable."), { status: response.status });
+        return response.json();
+    }
+    async function watchPeers() {
+        if (peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
+        const controller = new AbortController(), generation = lifetime;
+        peerWatch = controller;
+        let wait = 0;
+        try {
+            const { candidate, operation } = await peerRequest("watch", {}, AbortSignal.any([controller.signal, AbortSignal.timeout(26000)]));
+            if (!candidate || expected || generation !== lifetime || controller.signal.aborted) return;
+            if (!sha(candidate) || !uuid(operation) || !sha(state?.installed) || !uuid(runtimeId) || entry.origin !== location.origin || !asset(entry.pathname)) return;
+            const ready = () => {
+                const hold = reason();
+                if (hold) return hold.kind;
+                return !storageAvailable || unfinishedAtSuspension || busy && !manualChecking ? "operation" : "";
+            };
+            let hold = ready();
+            if (!hold) {
+                try { receipt({ candidate, previous: state.installed, runtimeId, origin: location.origin, peer: true }); }
+                catch { hold = "operation"; }
+            }
+            if (!hold) {
+                clearTimeout(scheduleTimer); restoredReceipt = false;
+                fence("Preparing to restart"); render();
+                hold = ready();
+            }
+            try { await peerRequest("readiness", { operation, candidate, hold }, AbortSignal.timeout(5000)); }
+            catch { if (expected) { await recover(); return; } throw new Error("Readiness was not confirmed."); }
+            if (hold) {
+                if (expected) finish("Finish the pending work before updating.");
+                wait = 1000; return;
+            }
+            await recover();
+        } catch (error) {
+            if (error.status === 403) coordination = false;
+            wait = 1500;
+        } finally {
+            if (peerWatch === controller) peerWatch = null;
+            if (!expected && generation === lifetime && coordination && !controller.signal.aborted) {
+                peerTimer = setTimeout(() => { peerTimer = undefined; void watchPeers(); }, wait);
+            }
+        }
     }
     function finish(message, completed = false) {
         clearTimeout(recoveryTimer); receipt(null); allowReload = false;
@@ -182,7 +232,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                         || confirmed.clientEntry !== health.clientEntry || !["current", "available"].includes(confirmed.phase)) {
                         fence("Update status does not confirm the running build. Check restart status before continuing.", true); return;
                     }
-                    state = confirmed; panelVerified = true;
+                    state = confirmed; panelVerified = true; coordination ||= confirmed.coordinated === true;
                     finish(confirmed.packageVersion ? `WIRE v${confirmed.packageVersion} is running.` : "Restart complete.", true);
                     return;
                 }
@@ -201,9 +251,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             const next = await post("status");
             state = next;
             if (next.phase === "restarting") fence("Restarting WIRE");
+            if (next.phase === "preparing" && wanted.peer) fence(next.awaitingViews ? "Preparing to restart" : "WIRE is updating");
             if (next.supported && wire && health.runtimeId === runtimeId && health.build === wanted.previous && next.installed === wanted.previous
-                && (["error", "manual"].includes(next.phase) || (refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))) {
-                finish(refusal || (manualRead && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
+                && (["error", "manual"].includes(next.phase) || (wanted.peer || refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))) {
+                finish(refusal || ((manualRead || wanted.peer) && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
                 return;
             }
         } catch { reconnecting(); } // Keep checking health without renewing the old panel capability.
@@ -213,12 +264,12 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function reason() {
         try { return blocked(); }
-        catch { return "WIRE could not verify that this panel is ready. Resolve unfinished work before updating."; }
+        catch { return { kind: "operation", message: "WIRE could not verify that this panel is ready. Resolve unfinished work before updating." }; }
     }
     async function apply() {
         if (busy || expected || !panelVerified || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
         const candidate = state.candidate, hold = reason();
-        if (hold || unfinishedAtSuspension) { result = hold || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
+        if (hold || unfinishedAtSuspension) { result = hold?.message || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
         if (!uuid(runtimeId) || !sha(state.installed) || entry.origin !== location.origin || !asset(entry.pathname)) {
             result = "This panel cannot verify its installed build. Reopen WIRE at its original address before updating."; render(); return;
         }
@@ -233,7 +284,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         fence("Starting update"); render();
         // Opening a modal moves focus synchronously. Recheck after blur/change handlers have run.
         const lastMinute = reason();
-        if (lastMinute) { finish(lastMinute); return; }
+        if (lastMinute) { finish(lastMinute.message); return; }
         try {
             state = await post("apply", { candidate });
             if (["manual", "error"].includes(state.phase) || state.phase === "available") { finish(state.message); return; }
@@ -255,8 +306,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     window.addEventListener("pagehide", event => {
         lifetime++;
         endCheckFeedback?.();
+        peerWatch?.abort(); clearTimeout(peerTimer); peerTimer = undefined;
         clearTimeout(scheduleTimer);
-        const unfinished = Boolean(busy || expected || reason());
+        const hold = reason();
+        const unfinished = Boolean(busy && !manualChecking && feedback !== checkingMessage || expected || hold);
         if (event.persisted) { unfinishedAtSuspension ||= unfinished; panelVerified = false; return; }
         if (!panelVerified || !state || !uuid(runtimeId) || !storageAvailable || unfinished || unfinishedAtSuspension) return;
         // A manual installation has no updater interlock to release.
