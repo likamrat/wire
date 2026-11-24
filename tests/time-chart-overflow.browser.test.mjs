@@ -524,6 +524,9 @@ test("native overflow appears only when needed and resize keeps all date targets
         assert.equal(geometry.overflowing, String(overflow));
         assert.equal(geometry.scrollbarHeight > 0, overflow, "Real native scrolling, not hidden/clipped overflow");
         assert.equal(Boolean(geometry.description), overflow);
+        const range = page.locator("#chartFooter .chart-size-note");
+        if (overflow) await expect(range).toHaveText(/Feb 2.*Mar 22, 2026.*Scroll/);
+        else await expect(range).toBeHidden();
         assert.deepEqual(await links(), original);
         await expect(page.locator("#activityCount")).toHaveText(String(total));
         for (let index = 0; index < counts.length; index++) {
@@ -558,12 +561,11 @@ test("native overflow appears only when needed and resize keeps all date targets
         await expect(page.locator("#activityCount")).toHaveText(String(total));
         await expect(page.locator("#periodResult")).toContainText("All dates");
     }
-    const identity = row => {
-        const [view, query] = row.href.split("?");
-        const parameters = new URLSearchParams(query); parameters.sort();
-        return { ...row, href: view + "?" + parameters };
-    };
-    assert.deepEqual((await links()).map(identity), original.map(row => identity({ ...row, href: row.href + "&chart=time" })));
+    assert.deepEqual(await links(), original);
+    await closeAnalyzeFilters(page);
+    await page.locator(".time-column").first().press("Enter"); await ready(page);
+    await expect(page.locator("#periodResult")).toHaveText("12 Work IQ tool calls (Feb 2–8, 2026)");
+    assert.equal(new URL(page.url()).search, "");
 });
 
 test("genuinely dense time bins keep a native scroller and the final column at wide and enlarged narrow widths", async t => {
