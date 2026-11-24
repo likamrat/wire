@@ -678,7 +678,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     await expect(row.locator(".request-card-source")).toHaveCount(0);
     await expect(page.locator("#activityList .request-card-author").filter({hasText:"Agent prompt"}).first()).toBeVisible();
     const partial = page.locator("#activityList .activity-card").filter({hasText:"Part of the prompt was retained."});
-    const resultOnly = page.locator("#activityList .activity-card").filter({has:page.locator(".request-card-author").filter({hasText:"Author unverified"})})
+    const resultOnly = page.locator("#activityList .activity-card").filter({has:page.locator(".request-card-author").filter({hasText:"Sender unclear"})})
         .filter({has:page.locator(".returned-issue-ink")});
     await expect(resultOnly).toHaveCount(1); await expect(resultOnly.locator(".card-failure")).toHaveCount(0);
     await expect(resultOnly.locator(".card-orientation .result-tone-success")).toContainText("1 tool call completed");

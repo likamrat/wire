@@ -423,7 +423,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                 section.append(el("p", `${number(total)} matching ${total === 1 ? "interaction" : "interactions"}. Each belongs to one author category.`));
                 host.append(section);
                 if (context.canOpenData && context.model.authors.unverifiedReasons.length) {
-                    const summary = el("section"), heading = el("h4", "Why authors are unverified");
+                    const summary = el("section"), heading = el("h4", "Why the sender is unclear");
                     heading.id = "guideAuthorReasonsTitle"; summary.setAttribute("aria-labelledby", heading.id);
                     const reasons = el("dl", undefined, "chart-reference-definitions");
                     for (const { reason, count, version } of context.model.authors.unverifiedReasons) {
@@ -434,9 +434,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                     host.append(summary);
                 }
             }
-            list.append(definition("Human prompts", "Recorded user origin, not verified account identity."),
-                definition("Agent prompts", "Recorded agent origin, including qualified automatic continuations."),
-                definition("Author unverified", "The saved record does not establish a human or agent sender. These interactions still count. Filter to Author unverified to read the reason on each card."),
+            list.append(definition("Human prompts", "A person sent the prompt."),
+                definition("Agent prompts", "An agent sent the prompt or continued automatically."),
+                definition("Sender unclear", "WIRE can't tell from the saved record whether a person or an agent sent the prompt. The card shows why."),
                 definition("Missing prompt text", "Text availability does not determine authorship. Stored aliases count once."));
         } else if (topic === "tools") {
             list.append(definition("Discovery / preparation", "API, schema or agent lookup, not data-service execution."),

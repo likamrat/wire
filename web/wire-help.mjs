@@ -14,7 +14,7 @@ const topics = [
     ["results", "Read tool results", `<p>A completed call means the tool reported success. It does not establish that the whole task finished or that the answer was correct.</p>
         <h3>If a call failed</h3><p>Open the interaction and expand the affected call to read the recorded reason, if available. A call with no recorded result is not a failed call.</p>
         <h3>Which app did Copilot use?</h3><p>Look for <strong>Target</strong> on the call. A prompt can mention Calendar without Copilot using it. <strong>Asked Copilot</strong> tells you there was a request. It doesn’t tell you which apps Copilot used.</p>
-        <h3>Who sent the prompt?</h3><p>WIRE checks who sent the message. The tool that ran the call doesn’t tell you who asked. If sender details are missing or disagree, you’ll see <strong>Author unverified</strong>.</p>`],
+        <h3>Who sent the prompt?</h3><p>A <strong>Human prompt</strong> came from a person. An <strong>Agent prompt</strong> came from an agent. <strong>Sender unclear</strong> means the saved record doesn't tell WIRE which one sent it. The card shows why.</p>`],
 ];
 
 export const wireHelpMarkup = `<section id="wireHelpView" class="wire-help" aria-labelledby="pageTitle" hidden>

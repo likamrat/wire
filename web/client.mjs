@@ -176,7 +176,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const time = createTimeContext();
     const pageDefaults = assessmentFactories.createPageDefaults();
     const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token) });
-    const authorship = createPromptAuthorship();
+    const authorship = createPromptAuthorship({ screen: true });
     const requestTiming = createRequestTiming(time, authorship);
     let appUpdate;
     const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch, { updates: Boolean(assessmentFactories.mountAppUpdate) });
@@ -2176,7 +2176,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("clearResultFilter").append(ux.icon("close"));
     ux.tooltip($("clearResultFilter"), "Cancel the pending Outcome change and keep all recorded results. Other filters stay applied.");
     $("clearPromptAuthorFilter").append(ux.icon("close"));
-    ux.tooltip($("clearPromptAuthorFilter"), "Cancel the pending Author change and keep all authors, including unverified. Other filters stay applied.");
+    ux.tooltip($("clearPromptAuthorFilter"), "Cancel the pending change and include all prompts. Other filters stay applied.");
     function date(value, full = false) {
         return time.formatDate(value, workspaceState.scope?.timeContext || viewerTime, full);
     }
@@ -6251,7 +6251,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const description = textAccess.describePrompt(scenario.userPrompt);
         const actor = authorship.read(scenario.userPrompt).actor;
-        const authorLabel = actor === "unknown" && !description.automatic ? "Author unverified" : description.label;
+        const authorLabel = actor === "unknown" && !description.automatic ? authorship.unknownLabel : description.label;
         const moment = requestTiming.entry(scenario, workspaceState.scope.timeContext);
         const openPrompt = text => open(text, "prompt", target, "request-card-open recognition-row");
         const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, { openPrompt, home: !reportPicker }) : el("p", "request-card-prompt");

@@ -470,7 +470,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             let origin = "";
             if (authorship && ["interaction", "context"].includes(hit.type) && hit.coverage?.authorBasis) {
                 const actor = authorship.read({ authorship: { actor: hit.coverage.author, basis: hit.coverage.authorBasis } }).actor;
-                origin = actor === "unknown" ? "Author unverified" : authorship.label({ authorship: { actor, basis: hit.coverage.authorBasis } });
+                origin = actor === "unknown" ? authorship.unknownLabel : authorship.label({ authorship: { actor, basis: hit.coverage.authorBasis } });
                 const cue = el("span", origin, "author-option-value");
                 cue.dataset.promptActor = actor;
                 cue.prepend(ux.icon("author-" + actor));

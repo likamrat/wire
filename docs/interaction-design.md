@@ -78,7 +78,7 @@ Reduced motion and assistive technology get the final values without counting th
 
 Prompt authors is a compact breakdown of canonical originating
 interactions across the complete accepted slice, before paging. Human prompts,
-Agent prompts and Author unverified use the shared author vocabulary and screen
+Agent prompts and Sender unclear use the shared author vocabulary and screen
 colors; all three remain visible when the population is nonempty, including
 known zeros. The chart's accessible description names the total matching
 interactions, not calls, without repeating it on a separate visible line.

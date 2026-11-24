@@ -54,7 +54,7 @@ test("filter naming exposes real category, context and evidence-layer distinctio
     for (const category of ["Discovery", "Multiple workloads", "Unknown"]) {
         assert.equal(await page.locator(`#serviceFilter option[value="${category}"]`).innerText(), serviceCategories.display(category).label);
     }
-    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Author unverified"]);
+    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Sender unclear"]);
     await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
     assert.equal(await page.locator("#serviceFilter-control").innerText(), "Mail");
     await selectActivityOption(page, "serviceFilter", "all"); await ready(page);

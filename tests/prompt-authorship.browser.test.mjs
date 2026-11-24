@@ -35,7 +35,7 @@ async function setup(t, { reports = false } = {}) {
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const card = (page, id) => page.locator(`article[data-view-key="request:${id}"]`);
 const nextPage = page => page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
-const label = item => ({ user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" })[item.actor]
+const label = item => ({ user: "Human prompt", agent: "Agent prompt", unknown: "Sender unclear" })[item.actor]
     + (item.data.isAutopilotContinuation || item.data.source === "autopilot" ? " (automatic continuation)" : "");
 
 async function inspectOriginal(page, item, name) {
@@ -56,9 +56,9 @@ test("collecting the original event repairs an unverified human prompt without r
     await page.goto(app.runtime().url); await ready(page);
     if (!await card(page, human.scenarioId).count()) await nextPage(page);
     const row = card(page, human.scenarioId);
-    await expect(row.locator(".request-card-author")).toHaveText("Author unverified");
+    await expect(row.locator(".request-card-author")).toHaveText("Sender unclear");
     await row.locator(".request-card-open").press("Enter");
-    await inspectOriginal(page, human, "Author unverified");
+    await inspectOriginal(page, human, "Sender unclear");
     await expect(page.locator(".request-original .reader-state")).toHaveText("Recorded sender details could not be verified");
     await app.runtime().collector.collectNow();
     await page.goto(app.runtime().url); await ready(page);
@@ -188,7 +188,7 @@ test("marked agent kickoffs and incremental shell inputs survive the compact che
     const checkpoint = JSON.parse(await readFile(path.join(dir, index.fingerprint, app.child + ".json"), "utf8"));
     const page = await browser.newPage(); await page.goto(app.runtime().url); await ready(page);
     for (const [e, actor, basis, label] of [[agent, "agent", "host-agent-authored", "Agent prompt"],
-        [human, "user", "host-direct-input", "Human prompt"], [disputed, "unknown", "conflicting-source", "Author unverified"]]) {
+        [human, "user", "host-direct-input", "Human prompt"], [disputed, "unknown", "conflicting-source", "Sender unclear"]]) {
         const record = state.evidence.find(r => r.sourceSessionId === app.child && r.userPrompt.sourceEventId === e.id);
         assert.deepEqual(record.userPrompt.authorship, { actor, basis });
         const compact = checkpoint.events.find(row => row.id === e.id).data;

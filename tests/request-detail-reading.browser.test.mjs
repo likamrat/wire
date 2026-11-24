@@ -642,7 +642,7 @@ test("a retained-evidence detail error cannot leave the response falsely busy or
 
 test("composed author helpers give truthful readable source and actor cues on the normal detail page", { timeout: 60000 }, async t => {
     const colors = {};
-    for (const [actor, label] of [["user", "Human prompt"], ["agent", "Agent prompt"], ["unknown", "Author unverified"]]) {
+    for (const [actor, label] of [["user", "Human prompt"], ["agent", "Agent prompt"], ["unknown", "Sender unclear"]]) {
         const { page } = await setup(t, { actor });
         const heading = section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]");
         assert.equal(await heading.textContent(), label);
@@ -669,7 +669,7 @@ test("composed author helpers give truthful readable source and actor cues on th
     }
     for (const [theme, values] of Object.entries(colors)) assert.equal(new Set(Object.values(values).map(value => value.label)).size, 3, `${theme}: explicit role words distinguish user, agent and unknown without inventing color meaning`);
     const { page } = await setup(t, { chatOrigin: false });
-    assert.equal(await section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]").textContent(), "Author unverified");
+    assert.equal(await section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]").textContent(), "Sender unclear");
     assert.match(await (await openSource(page)).innerText(), /No project associated/);
 });
 
