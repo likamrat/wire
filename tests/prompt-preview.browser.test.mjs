@@ -282,6 +282,7 @@ test("Search opens the full long prompt and Back preserves the literal result an
     await expect(hit.locator("mark")).toHaveText("violet-lantern");
     await hit.focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-long");
     await expect(promptToggle(page)).toHaveAttribute("aria-expanded", "true");
     assert.equal(await content(page).textContent(), exactPrompt);
     const expanded = await geometry(page);
