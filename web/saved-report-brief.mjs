@@ -115,7 +115,8 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         : g.signal || g.operation;
     function caseLink(id) { return jump(titleOf(interactions, id), "search-interaction", { type: "interaction", id }); }
     const frozenFinding = main.dataset.findingVersion === "1" ? main.querySelector(":scope>#finding") : null;
-    const usageFinding = main.querySelector(":scope>#usage-selected[data-usage-question]");
+    const usageSection = main.querySelector(":scope>#usage-selected");
+    const usageFinding = usageSection?.hasAttribute("data-usage-question") ? usageSection : null;
     function callLink(id) { return jump(titleOf(calls, id), frozenFinding ? "forward" : "search-tool", { type: "call", id }); }
     function facts(parent, pairs) {
         const dl = el("dl", undefined, "brief-facts");
@@ -274,6 +275,10 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
             }
             const metadata = new Map(elements(main, "#coverage .report-facts>div,main>.report-facts>div").map(row => [text(row, "dt"), text(row, "dd")]));
             if (metadata.size) { const s = section("Saved scope"); facts(s, metadata); panel.append(s); }
+        }
+        if (type === "findings" && !usageFinding && usageSection?.hasAttribute("data-token-summary")) {
+            const lead = panel.querySelector("h2");
+            lead.after(el("p",text(usageSection,":scope>p"),"brief-meta"));
         }
         if (focus) panel.querySelector("h2").focus({ preventScroll: true });
     }

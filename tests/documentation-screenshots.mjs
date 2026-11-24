@@ -386,10 +386,10 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     await capture("trends-overview", { top: true });
     await sections.getByRole("button", { name: "Charts" }).click();
-    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
-    await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts" }).click();
+    await page.getByRole("button", { name: "Show or hide charts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Show or hide charts" }).getByRole("button", { name: "Open all charts" }).click();
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await capture("trends-collapsed", { top: true });
 
     await page.locator('nav [data-nav=settings]').click();

@@ -8,16 +8,16 @@ export const pageDefaultSpecs = {
     analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
     analyzeSort: { id: "defaultAnalyzeSort", label: "Default interaction sort", help: "Applies when you open a fresh Analyze view.", initial: "recent",
-        choices: [["recent", "Most recent"], ["cost", "Highest est. cost"], ["tokens", "Most tokens"]] },
+        choices: [["recent", "Most recent"], ["tokens", "Most tokens"]] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     analyzeLayout: { id: "analyzeLayout", ordered: true, label: "Homepage layout",
         help: "Move a section to see where it will appear in Analyze.",
         initial: ["time", "outcomes", "usage", "interactions", "tools", "services", "models", "authors"],
-        choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["usage", "Tokens & estimated cost"], ["interactions", "Interactions"],
+        choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["usage", "Token usage"], ["interactions", "Interactions"],
             ["tools", "Work IQ tool calls"], ["services", "Services and operations"], ["models", "Response models"], ["authors", "Prompt authors"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "Choose the chart to show on a fresh visit.", initial: "problems",
-        choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"], ["usage", "Tokens &amp; est. cost"]] },
+        choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"], ["usage", "Token usage"]] },
     reportFormats: { id: "defaultReportFormats", label: "Default formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
     reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Ends today.", initial: "7",
@@ -56,7 +56,7 @@ export function createPageDefaults(specs, host = window) {
                     if (stored.length === previous.length && previous.every(id => stored.includes(id)))
                         value = stored.every((id, i) => id === previous[i]) ? [...specs[key].initial] : [...stored, "usage"];
                 }
-                value ??= valid(key, key === "guideStart" && stored === "index" ? "outcomes" : stored);
+                value ??= valid(key, key === "guideStart" && stored === "index" ? "outcomes" : key === "analyzeSort" && stored === "cost" ? "tokens" : stored);
             }
             catch (error) { if (!(error instanceof SyntaxError)) throw error; }
         }

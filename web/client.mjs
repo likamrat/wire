@@ -1824,8 +1824,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsNavigation() {
         const section = workspaceState.route.view === "settings" ? settingsNavigation.resolve(workspaceState.route).section : "connection";
-        if (section === "reports" && !clearingAccess && api.publicationToken()) assessmentFactories.rateReference(el, $("costRateReference"), workspaceState.evidence?.scenarios ?? []);
-        else $("costRateReference").replaceChildren();
         $("settingsGeneralBack").hidden = workspaceState.route.view !== "settings"
             || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
@@ -2666,7 +2664,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!sameDraft) applyReportDefaults();
             reportBaseExplicit = true; reportScope = "selected"; reportDates = {range:"custom",...range};
             for (const id of scenarioIds) selected.add(id);
-            draft.change({usageOptions:{ tokens:true,dollars:true,rows:false,...(sameDraft ? original : {}),question,
+            draft.change({usageOptions:{ tokens:true,rows:false,...(sameDraft ? original : {}),question,
                 ...(question === "tool" ? {threshold} : {}), ...(filters.author ? {author:filters.author} : {}), ...(filters.tool ? {tool:filters.tool} : {}) }});
             if (await navigate({view:"reports",search:"",analysisQuery:null}) && api.isCurrent(publication)) await chooseReportPreset("all");
         },
@@ -2741,7 +2739,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             for (const id of ids) selected.add(id);
             draft.clearSelection();
             draft.change({ saveMode: "local", ...(usageChoice?.question && usageChoice.question !== "all" ? { usageOptions:{
-                tokens:true, dollars:true, rows:false, question:usageChoice.question,
+                tokens:true, rows:false, question:usageChoice.question,
                 ...(usageChoice.question === "tool" ? {threshold:usageChoice.threshold} : {}),
             } } : {}) });
             reportBaseExplicit = true;
@@ -6085,8 +6083,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (widget) scenarios = group?.interactionIds ? scenarios.filter(record => members.delete(percentageMath.interactionIdentity(record))) : [];
         const orphaned = widget ? [] : selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
         let ordered = presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId);
-        if (usageSort !== "recent") {
-            const score = s => s.usage ? usageSort === "tokens" ? s.usage.total : s.usage.usd ?? -1 : -2;
+        if (usageSort === "tokens") {
+            const score = s => s.usage?.total ?? -1;
             ordered = scenarios.toSorted((a, b) => score(b) - score(a));
         }
         const allItems = [...ordered
@@ -6844,7 +6842,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const sectionKey = name => JSON.stringify(["reader", workspaceState.route.request, name]);
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
         const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
-        const usageSection = sections.add("usage", "Token & cost breakdown", { key: sectionKey("usage"), collapsible: false });
+        const usageSection = sections.add("usage", "Token usage", { key: sectionKey("usage"), collapsible: false });
         assessmentFactories.usageReading(el, usageSection.body, context.groups.find(group => group.relation === "selected").scenario,
             at => time.formatTime(at, workspaceState.scope.timeContext));
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
@@ -8035,12 +8033,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelectorAll("[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
         $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
-        const usageOptions = draft.options().usageOptions ?? { tokens: true, dollars: true, rows: false };
+        const usageOptions = draft.options().usageOptions ?? { tokens: true, rows: false };
         $("usageTokens").checked = usageOptions.tokens;
-        $("usageDollars").checked = usageOptions.tokens && usageOptions.dollars;
         $("usageRows").checked = usageOptions.tokens && usageOptions.rows;
         $("usageTokens").disabled = exportWriting;
-        $("usageDollars").disabled = $("usageRows").disabled = exportWriting || !usageOptions.tokens;
+        $("usageRows").disabled = exportWriting || !usageOptions.tokens;
         $("reportResultText").checked = draft.options().resultText === true;
         $("reportResultText").disabled = exportWriting;
         $("reportRecordedContextHelp").hidden = !$("reportRecordedContext").checked && draft.options().promptMode !== "none";
@@ -11411,9 +11408,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (prepared || activePreview || reportRebuildFrom) updateReportContent({ hide: true, prepare: prepared });
         updateSelection({ refreshingPairedCopies: prepared });
     }));
-    for (const [id, key] of [["usageTokens", "tokens"], ["usageDollars", "dollars"], ["usageRows", "rows"]]) $(id).addEventListener("change", () => {
+    for (const [id, key] of [["usageTokens", "tokens"], ["usageRows", "rows"]]) $(id).addEventListener("change", () => {
         if (exportWriting || clearingAccess || !api.publicationToken()) return;
-        draft.change({ usageOptions: { tokens: true, dollars: true, rows: false, ...draft.options().usageOptions, [key]: $(id).checked } });
+        draft.change({ usageOptions: { tokens: true, rows: false, ...draft.options().usageOptions, [key]: $(id).checked } });
         updateReportContent({ hide: true }); render();
     });
     $("reportRecordedContext").addEventListener("change", () => {
@@ -11662,7 +11659,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         questionControls: assessmentFactories.questionControls,
         changeUsage: (key, value) => {
             if (exportWriting || reportJourney.snapshot().saveUnconfirmed || clearingAccess || !api.publicationToken()) return;
-            const options = { tokens:true, dollars:true, rows:false, ...draft.options().usageOptions };
+            const options = { tokens:true, rows:false, ...draft.options().usageOptions };
             if (value === "" || key === "question" && value === "all") delete options[key]; else options[key] = value;
             if (key === "question") {
                 if (value !== "tool") delete options.threshold;
@@ -11845,7 +11842,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     collectionSettings.hasDraft = () => githubHasDraft() || sourceSettings.hasDraft();
     firstConnection = assessmentFactories.mountFirstConnection({ api, ux, reviewSource: reviewFirstConnection, collectionStatus: historyStatus });
     const privateContentIds = [
-        "activityList", "activityListSummary", "activityListScope", "activityPager", "analyzeUsageContent", "costRateReference", "sessionAnalysis", "homeInsights", "homeFindings",
+        "activityList", "activityListSummary", "activityListScope", "activityPager", "analyzeUsageContent", "sessionAnalysis", "homeInsights", "homeFindings",
         "requestContent", "contextSidebarFooter", "contextSidebarTitle", "savedReportReader", "bundleList", "savedReportCount",
         "detail", "reportList", "reportReviewBody", "reportSaveBody", "reportMatchingContext", "scopeExclusions",
         "pageTitle", "pageIdentity", "pageIntro", "pageProject", "breadcrumbs", "viewingContext", "serviceEvidenceSummary",

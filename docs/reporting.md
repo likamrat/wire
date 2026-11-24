@@ -168,11 +168,9 @@ GitHub interaction report. Trends measures interactions with matching dated
 tool calls. Its **Preview this report** action carries that selection into
 Reports and leaves an unrelated unfinished report alone.
 
-Under **Change what's included**, token and cache counts and retail cost
-estimates start on. Turn off **Include retail API-equivalent USD estimates**
-for a tokens-only report. The optional per-interaction table starts off.
-The preview and saved files use the same membership and rates; reopening a
-saved report does not apply today's prices.
+Token and cache counts start on. To see each interaction beside the total,
+choose **Change what's included → Include per-interaction table**. The saved
+report keeps the same counts as the preview.
 
 The report shows its period, scope and recorded patterns. An error report
 can say, for example, that 4 of 12 interactions contained a recorded error.

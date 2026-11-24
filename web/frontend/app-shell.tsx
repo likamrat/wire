@@ -83,7 +83,7 @@ function Analyze() {
             <section className="analyze-outcome-summary" aria-label="Recorded outcomes"><div id="outcomeChart" /></section>
         </div>
         <section id="analyzeUsage" className="percentage-card analyze-usage" data-breakdown="usage" aria-labelledby="analyzeUsageTitle">
-            <div className="percentage-card-heading"><h3 id="analyzeUsageTitle">Tokens &amp; estimated cost</h3></div>
+            <div className="percentage-card-heading"><h3 id="analyzeUsageTitle">Token usage</h3></div>
             <div id="analyzeUsageContent" />
         </section>
     </div>;

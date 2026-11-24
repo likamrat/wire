@@ -195,12 +195,12 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 Choose **Trends** in the sidebar. By default, **Overview** shows how many
 interactions had a recorded error or failure each day. A cross at zero means no matching
 dated calls; a circle at zero means there was activity but no recorded error.
-**Charts** lists eight measures. **Tokens & est. cost** switches between measured
-tokens and the retail cost estimate. Narrow by prompt author or tool to read
-whole interactions that match, not tokens charged to a particular tool.
+**Charts** lists eight measures. **Token usage** shows how many tokens the
+metered interactions used. Narrow by prompt author or tool to see the
+whole interactions that match.
 Choose **Usage question** to chart Human, Agent and unverified prompts, tools in
 interactions with at least 30,000 or 60,000 tokens, or the models that read
-from cache. **Data table** shows daily readings and coverage. Tool groups
+from cache. **View daily values** shows daily readings and coverage. Tool groups
 overlap: an interaction that used both fetch and retrieve appears in both,
 but its tokens count only once in the period total.
 **Chart guide** explains the units.
@@ -228,7 +228,7 @@ selections stay in the original visit.
 If WIRE cannot restore a private selection, reopen the result from its original
 tab. To continue without that selection, choose **Open this view without the
 private selection**. Neither action deletes saved activity.
-Every civil day is available in **Data table**. Long single-series charts
+Every civil day is available in **View daily values**. Long single-series charts
 space out date labels to show more of the period at once. If the chart
 scrolls, the dates in view are shown below it; the index initially shows
 the span with the most calls. Custom ranges over 90 days page through
@@ -265,7 +265,9 @@ individual calls. **Compare periods** instead compares this period with the
 preceding period of equal length. Review the dates and scope before opening
 Compare; **Back to Trends** returns to the pair and selected day.
 On grouped columns, one zero under a date means all **shown** series are zero.
-Unavailable measurements use a dash instead. On an individual chart, **Data table** includes daily numbers and period
+Unavailable measurements use a dash instead. If none of the matching interactions has a token count, WIRE shows the coverage instead of an empty plot.
+To investigate a high-use day, select it on **Token usage**. Open a matching call
+to see the token count for its whole interaction. **View daily values** includes daily numbers and period
 totals, including series hidden in the chart.
 
 | Chart | Measure |
@@ -277,6 +279,7 @@ totals, including series hidden in the chart.
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |
 | Call duration | Recorded tool-call intervals in milliseconds, summarized as Median and 95th percentile. The coverage note identifies how many matching calls have qualified timing. |
+| Token usage | Each matching interaction contributes its tokens once, on its first matching call date in the period. The coverage count shows how many interactions have a token reading. |
 
 Prompt authors counts interactions with activity that day, not every message
 sent in Copilot. One interaction can appear on several days but counts once in
@@ -302,12 +305,18 @@ to the supporting-calls action; reopening the list returns to the call you were 
 Changing the scope retires that return position. Hiding the selected series does
 not change its evidence. The list's title and Close stay available while it scrolls.
 
-Choose **Data table** below the chart. On a narrow screen, scroll within
+Choose **View daily values** below the chart. On a narrow screen, scroll within
 the table; keyboard users can focus it
 and use the arrow keys. Dates and column headers stay attached to the values.
 
-For the full-width stack choose **Arrange charts → All charts**. In that
-workspace, **Back to overview** returns to the same place. Collapse or restore charts
+To read several separate charts for the same dates, choose **Show or hide charts**
+above the chart, check the ones to show below it and choose **Apply**.
+Uncheck them all to keep just the current chart. Choosing another measure in
+the index starts with that chart alone. These extra charts are not saved on reload.
+
+For the full-width stack choose **Show or hide charts → Open all charts**.
+**Back to selected charts** returns to your selection. From a maximized chart,
+**Back to all charts** returns to its row. Collapse or restore charts
 without losing their measure, series choices or horizontal reading position.
 Collapsed widgets show their names and applied dates. Click anywhere on a collapsed row to
 open it, or the open widget's header to close it. The arrow button does the same
@@ -330,14 +339,16 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
 
-To find a high-usage interaction, choose **Most tokens** or **Highest est. cost**
-above the Analyze list. Only cards with complete token counts have a usage
-chip. Open the interaction to see fresh input, cache reads, cache writes and
+Choose **Most tokens** above the Analyze list to find the interactions that
+used the most. Each metered card shows its total. Open it for fresh input, cache reads, cache writes and
 output. The reader separately estimates how many tokens Work IQ returned
 from the size of the tool responses.
-In **Response models**, choose **Token & $ share** to compare token volume with
-the cost share of fully priced interactions. Find the offline rates in
-**Settings → Reports**.
+In **Response models**, choose **Token share** to compare each model's share
+of the recorded tokens.
+
+For a report on one interaction, choose **Add to report** on its card and add
+it to a new draft. Open that draft in Reports to save the same total. Adding
+more interactions gives you their combined total and how many had token counts.
 
 In **Interactions** mode, choose a model to show its cards. Open **Filters** to
 see or remove that model under **Applied filters**. This narrows the card list;
