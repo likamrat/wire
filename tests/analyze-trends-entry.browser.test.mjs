@@ -189,7 +189,7 @@ for (const frontend of ["react", "bundled"]) {
         await page.goBack(); await ready(page);
         await expect(page.locator("#contextSidebar")).not.toBeVisible();
         const home = page.url(), link = page.locator("#analyze-trend-tools"), count = reads.length;
-        await expect(page.locator("a.analyze-trend-link:visible")).toHaveCount(6);
+        await expect(page.locator("a.analyze-trend-link:visible")).toHaveCount(7);
         await expect(link).toHaveAttribute("href", "/trends");
         await link.evaluate(node => node.scrollIntoView({ block: "center" }));
         await link.focus(); await frames(page);
@@ -220,7 +220,7 @@ for (const frontend of ["react", "bundled"]) {
     });
 }
 for (const frontend of ["react", "bundled"]) {
-    test(`${frontend}: all six Analyze widgets open their own daily evidence and return to the exact activating link`, async t => {
+    test(`${frontend}: six call and interaction widgets open their own daily evidence and return to the exact activating link`, async t => {
         const { page, url, reads } = await setup(t, frontend, records());
         await page.goto(`${url}/?range=custom&from=${day}&to=${day}&source=github-copilot`); await ready(page);
         const origin = page.url();
@@ -281,7 +281,7 @@ for (const frontend of ["react", "bundled"]) {
         const { page, url } = await setup(t, frontend, records());
         await page.goto(`${url}/?range=custom&from=${day}&to=${day}&source=github-copilot`); await ready(page);
         const links = page.locator("a.analyze-trend-link:visible"), proof = process.env.WIRE_TRENDS_PROOFS, checks = [], issues = [];
-        await expect(links).toHaveCount(6);
+        await expect(links).toHaveCount(7);
         for (const [width, scale] of [[1600,1],[900,1],[390,2]]) {
             await page.setViewportSize({width,height:900});
             await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; },scale);

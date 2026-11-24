@@ -13,7 +13,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed, deleteNamed }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, changeUsage, questionControls, viewUsageTrend, openDeskActivity, closePreview, current, createCalendar, selectNamed, deleteNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity"], ["errors", "Errors & failures"],
@@ -213,6 +213,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
     const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Formats", formatGroup);
     draftChoices.append(compactLabel, datesRow);
+    const usageChoices = questionControls(doc, "report", changeUsage, { filters:true });
+    const trendQuestion = button("View in Trends",viewUsageTrend);
+    draftChoices.append(usageChoices.host,trendQuestion);
     const activityRow = optionsRow("Activity source", scopeChoice), draftMembership = el("span", "report-draft-membership");
     activityRow.append(draftMembership);
     outlineChoices.append(activityRow, fileRow);
@@ -321,6 +324,12 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         }
         namedSelect.value = value.namedReport?.id ?? "";
         toolbar.hidden = !value.prepared;
+        const usageHost = value.prepared ? byId("reportUsageOptions") : draftChoices;
+        if (usageChoices.host.parentElement !== usageHost) usageHost.append(usageChoices.host);
+        usageChoices.host.hidden = value.nativeScope && !value.paired;
+        usageChoices.sync(value.options.usageOptions, value.locked || value.saved || value.options.usageOptions?.tokens === false, value.paired || value.nativeScope);
+        trendQuestion.hidden = !value.options.usageOptions?.question || value.prepared || value.paired || value.explicitScope || value.namedReport
+            || value.nativeScope || deskFocus !== "all" || !value.dates?.from || !value.dates?.to;
         gallery.hidden = value.paired && value.prepared;
         if (privacyGroup.parentElement !== choices) choices.append(privacyGroup);
         const privacyHost = value.prepared ? privacy : treatment;
@@ -422,6 +431,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {
+            usageChoices.sync({},true); trendQuestion.hidden = true;
             optionSignature = undefined; namedSelect.replaceChildren(); namedRow.hidden = true;
             draftMembership.textContent = "";
             replacePrompt?.remove(); replacePrompt = null;

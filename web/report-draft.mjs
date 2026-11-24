@@ -153,7 +153,7 @@ export function createReportDraft({ contextSelector } = {}) {
     return {
         options: () => structuredClone(options),
         hasUnsavedChoices: (initialFormats = ["html"]) => Boolean(nativePicks || options.title || options.resultText || options.reportFocus || options.reportNotes?.length
-            || options.usageOptions && (!options.usageOptions.tokens || !options.usageOptions.dollars || options.usageOptions.rows)
+            || options.usageOptions && (!options.usageOptions.tokens || !options.usageOptions.dollars || options.usageOptions.rows || options.usageOptions.question)
             || options.recordedContext || options.manualTerms.length || options.overrides.length || options.promptMode !== "masked"
             || options.formats.length !== initialFormats.length || initialFormats.some(format => !options.formats.includes(format))),
         token: () => version,

@@ -123,9 +123,12 @@ test("history compatibility: an explicit closed run meters without a prompt mess
     assert.notEqual(complete.responseTiming?.status,"measured");
     assert.deepEqual(complete.originalModel.models,[]);
     assert.equal(complete.toolCalls[0].promptLink,undefined,"usage evidence must not rewrite historical prompt authorship");
+    assert.equal(complete.toolCalls[0].usageContextLinked,true,"the sized result has an explicit tool request in the same closed run");
     await appendFile(file,JSON.stringify(event("user.message",{interactionId,content:"A rival prompt claimed this run."}))+"\n");
     await collector.collectNow();
-    assert.equal((await read()).usage,null,"a rival claim withdraws previously verified usage");
+    const disputed = await read();
+    assert.equal(disputed.usage,null,"a rival claim withdraws previously verified usage");
+    assert.equal(disputed.toolCalls[0].usageContextLinked,undefined);
 });
 
 test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {

@@ -78,7 +78,10 @@ In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or 
 widgets share a row. It uses sample charts instead of your saved activity.
 Your browser remembers each move. Choose **View Analyze** to open the homepage.
 **Restore WIRE layout** puts the time chart first, tool call results second, and
-Interactions third, before the four breakdowns. Your filters and activity stay the same.
+**Tokens & estimated cost** third, then Interactions and the four breakdowns.
+An older custom layout keeps its order and adds the usage widget at the end.
+**Default interaction sort** sets the starting order; sorting above the list
+changes this visit only. Neither setting changes your filters or activity.
 
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
@@ -195,6 +198,11 @@ dated calls; a circle at zero means there was activity but no recorded error.
 **Charts** lists eight measures. **Tokens & est. cost** switches between measured
 tokens and the retail cost estimate. Narrow by prompt author or tool to read
 whole interactions that match, not tokens charged to a particular tool.
+Choose **Usage question** to chart Human, Agent and unverified prompts, tools in
+interactions with at least 30,000 or 60,000 tokens, or the models that read
+from cache. **Data table** shows daily readings and coverage. Tool groups
+overlap: an interaction that used both fetch and retrieve appears in both,
+but its tokens count only once in the period total.
 **Chart guide** explains the units.
 On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From

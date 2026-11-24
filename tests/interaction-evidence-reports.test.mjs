@@ -29,11 +29,15 @@ test("token choices freeze across files and verified JSON-only reopening", async
     a.usageCalls = [call]; unpriced.usageCalls = [{ ...call, model:"private-model-name" }];
     const {context} = await privateFixture(t,[a,unmetered,unpriced]), controller=createExportController(context);
     for (const dollars of [true,false]) {
-        const options={tokens:true,dollars,rows:true}, bundle=await buildSanitizedBundle([a,unmetered,unpriced],key,{
+        const options={tokens:true,dollars,rows:true,question:"model"}, bundle=await buildSanitizedBundle([a,unmetered,unpriced],key,{
             promptMode:"none", formats:["html","markdown","pdf","json"], usageOptions:options });
         const facts = bundle.snapshot.usageFacts.cohorts.selected;
         assert.deepEqual([facts.total,facts.metered,facts.eligible,facts.rows.length],[320000,2,3,3]);
         assert.equal(Object.hasOwn(facts,"usd"),dollars);
+        assert.deepEqual(facts.groups.map(g=>[g.label,g.total,g.cacheReadShare]),[
+            ["gpt-4.1",160000,2/3],["Unlisted model",160000,2/3],
+        ]);
+        assert.equal(Object.hasOwn(facts.groups[0],"usd"),dollars);
         assert.equal(Object.hasOwn(bundle.snapshot.usageFacts,"pricing"),dollars);
         const task=getDocument({data:new Uint8Array(bundle.files["product-report.pdf"])});
         let text="";
@@ -41,6 +45,7 @@ test("token choices freeze across files and verified JSON-only reopening", async
             text+=" "+(await (await doc.getPage(page)).getTextContent()).items.map(i=>i.str).join(" "); } finally { await task.destroy(); }
         for (const content of [text,bundle.previewHtml,bundle.files["product-report.html"],bundle.files["product-report.md"]]) {
             assert.match(content,/320,000 tokens/); assert.equal(content.includes("~$0.23"),dollars);
+            assert.match(content,/Usage by model/);
             assert.equal(/not\s+billed\s+Copilot\s+spend/i.test(content),dollars);
             assert.doesNotMatch(content,/private-model-name|private-receipt|private-call/);
         }
@@ -53,6 +58,7 @@ test("token choices freeze across files and verified JSON-only reopening", async
             pricingSnapshot.models["gpt-4.1"].output=1000;
             const opened=await readSavedReportView(context,await loadBoardState(context),saved.bundleId);
             assert.match(opened.text,/320,000 tokens/); assert.equal(opened.text.includes("~$0.23"),dollars);
+            assert.match(opened.text,/Usage by model/);
         } finally { pricingSnapshot.models["gpt-4.1"].output=before; }
     }
     const off=await buildSanitizedBundle([a],key,{formats:["json"],usageOptions:{tokens:false,dollars:true,rows:true}});

@@ -1,7 +1,35 @@
-export function createUsageReading({ formatUsd, tokenKinds, usageSummary, pricingSnapshot }) {
+export function createUsageReading({ formatUsd, tokenKinds, usageSummary, pricingSnapshot, usageQuestions, usageThresholds, usageTools }) {
 const number = new Intl.NumberFormat().format;
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format;
 const names = { freshInput: "Fresh input", cacheRead: "Cache reads", cacheWrite: "Cache writes", output: "Output" };
+function questionControls(doc, prefix, change, { filters = false, units = false } = {}) {
+    const host = doc.createElement("div"), controls = new Map();
+    host.className = "usage-question-controls";
+    function select(key, title, choices) {
+        const group = doc.createElement("div"), label = doc.createElement("label"), field = doc.createElement("select");
+        group.className = "report-form-field";
+        label.textContent = title; field.id = `${prefix}Usage${key}`; label.htmlFor = field.id;
+        for (const [value,text] of choices) field.add(new Option(text, value));
+        field.addEventListener("change", () => change(key, key === "threshold" ? Number(field.value) : field.value));
+        group.append(label,field); host.append(group); controls.set(key,{group,field});
+    }
+    select("question", "Usage question", Object.entries(usageQuestions));
+    select("threshold", "High usage means", usageThresholds.map(n => [n, `At least ${number(n)} tokens`]));
+    if (filters) {
+        select("author", "Prompt author", [["","All authors"],["user","Human"],["agent","Agent"],["unknown","Author unverified"]]);
+        select("tool", "Interaction used", [["","All Work IQ tools"], ...usageTools.map(k => [k,k.replace(/^workiq-/,"")])]);
+    }
+    if (units) select("unit", "Measure", [["tokens","Tokens"],["usd","Est. USD"]]);
+    function sync(options = {}, disabled = false, fixedScope = false) {
+        for (const [key,{field,group}] of controls) {
+            field.value = String(options[key] ?? ({question:"all",threshold:30000,unit:"tokens"})[key] ?? "");
+            group.hidden = key === "threshold" && options.question !== "tool" || ["author","tool","unit"].includes(key) && (!options.question || options.question === "all")
+                || fixedScope && ["author","tool"].includes(key);
+            field.disabled = disabled || group.hidden;
+        }
+    }
+    sync(); return { host, sync };
+}
 const usageChip = u => `${compact(u.total)} tok · ${formatUsd(u.usd)}`;
 function usageReading(el, host, scenario, formatTime) {
     const u = scenario?.usage;
@@ -36,10 +64,10 @@ function usageReading(el, host, scenario, formatTime) {
         if (unlisted.length) host.append(el("p", "muted", `No verified retail rate for ${unlisted.join(", ")} in the ${u.rateDate} snapshot.`));
         if (u.steps.some(s=>s.reason === "cache-split-missing")) host.append(el("p", "muted", "Total input and output were recorded, but a cache count is missing. WIRE cannot price that call without guessing."));
     }
-    const tools = scenario.toolCalls ?? [], sized = tools.filter(c => Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0
-        && c.promptLink && c.promptLink.promptEventId === scenario.userPrompt?.sourceEventId);
+    const tools = scenario.toolCalls ?? [], sized = tools.filter(c => c.usageContextLinked && Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0);
     const footprint = Math.round(sized.reduce((n, c) => n + c.returnedTextBytes, 0) / 4);
     host.append(el("p", "usage-context", sized.length ? `Work IQ context footprint: ~${number(footprint)} tokens returned by ${sized.length} of ${tools.length} calls. Estimated from returned text size, not a separate charge.`
+        : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Work IQ context footprint: a returned text size was recorded, but no call with a size is linked to this prompt."
         : "Work IQ context footprint: returned text size was not recorded."));
     const steps = [...u.steps.map(s => ({ at: s.at, label: `Model · ${s.model}`, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out · ${formatUsd(s.usd)}` })),
         ...sized.map(c => ({ at: c.completedAt, label: `Work IQ · ${c.tool.replace(/^workiq-/, "")}`, detail: `~${number(Math.round(c.returnedTextBytes / 4))} context tokens returned` }))];
@@ -111,5 +139,5 @@ function rateReference(el, host, scenarios) {
     const unknown = [...new Set(scenarios.flatMap(s => s.usage?.steps.filter(x => x.reason === "model-not-listed").map(x => x.model) ?? []))];
     if (unknown.length) host.append(el("p", "", `Not in the bundled rate list: ${unknown.join(", ")}. Shown as Unpriced.`));
 }
-return { usageChip, usageReading, rateReference, modelShareReading, homepageUsage, usageSummary, formatUsd };
+return { usageChip, usageReading, rateReference, modelShareReading, homepageUsage, usageSummary, formatUsd, questionControls };
 }

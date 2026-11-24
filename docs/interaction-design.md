@@ -70,7 +70,7 @@ Lead with accepted recorded outcomes and activity patterns. The outcome ring
 and right-side legend share a row when the widget has sufficient width; small
 layouts stack without squeezing values. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
-The two charts, four breakdowns and Interactions can each move in **Settings >
+The time chart, tool results, token and cost widget, four breakdowns and Interactions can each move in **Settings >
 Analyze**. The original layout is the default. Follow the chosen order in both
 the painted layout and keyboard navigation; Interactions always occupies its own row.
 The entrance build presents accepted numbers only, not acquisition progress.

@@ -195,7 +195,14 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const tickWidth = Math.max(...labels.map(label => context.measureText(label).width));
         const dayWidth = pair ? Math.max(40 * scale, tickWidth + 12 * scale) : compact ? Math.max(24 * scale, labelWidth) : Math.max(tickWidth,
             definitions.length * Math.max(labelWidth, 20 * scale)) + 16 * scale;
-        const left = (pair || family === "timing" ? 78 : 56) * scale;
+        const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
+        const step = Math.max(minimum, [1, 2, 5, 10].find(value => value * magnitude >= maximum / 4) * magnitude);
+        const max = shares ? 100 : Math.ceil(maximum / step) * step;
+        const axisText = value => `${unitFor(family, mode) === "USD" ? "$" + Number(value.toPrecision(3)) : number(value)}${shares ? "%" : ""}`;
+        const ticks = shares ? 4 : Math.round(max / step);
+        const usageWidth = family === "usage" || family === "pair-tokens" || family === "pair-usd"
+            ? Math.max(...Array.from({length:ticks+1}, (_, i) => context.measureText(axisText(max*i/ticks)).width)) + 20*scale : 0;
+        const left = Math.max((pair || family === "timing" ? 78 : 56) * scale, usageWidth);
         // Native focus and scrollIntoView must treat the pinned scale as occluding the plot.
         root.style.scrollPaddingLeft = `${left}px`;
         const minimumWidth = data.days.length * dayWidth + left + 12 * scale, top = 26 * scale;
@@ -209,9 +216,6 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             };
             placements.push(update); update(); return node;
         }
-        const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
-        const step = Math.max(minimum, [1, 2, 5, 10].find(value => value * magnitude >= maximum / 4) * magnitude);
-        const max = shares ? 100 : Math.ceil(maximum / step) * step;
         scene.maximum = max;
         const x = index => left + pitch * (index + .5), y = value => bottom - value * (bottom - top) / max;
         const svg = place(svgNode("svg", { role: "group", "aria-label": `Daily ${bars ? "columns" : "lines"} · ${shares ? "percent" : ["timing", "pair-ms"].includes(family) ? "milliseconds" : unitFor(family, mode)}`,
@@ -244,13 +248,12 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const axis = svgNode("g", { class: "trends-y-axis", "pointer-events": "none" });
         axis.append(place(svgNode("rect", { x: 0, y: top - 12 * scale, width: left - 5 * scale, fill: "var(--paper)" }),
             () => ({ height: bottom - top + 24 * scale })));
-        const ticks = shares ? 4 : Math.round(max / step);
         for (let index = 0; index <= ticks; index++) {
             const value = max * index / ticks;
             if (!shares && unitFor(family, mode) !== "USD" && !Number.isInteger(value)) continue;
             svg.append(place(svgNode("line", { x1: left, class: index ? "trends-grid" : "trends-grid trends-baseline" }),
                 () => ({ x2: width - 16 * scale, y1: y(value), y2: y(value) })));
-            axis.append(place(svgNode("text", { x: left - 14 * scale, "text-anchor": "end" }, `${unitFor(family, mode) === "USD" ? "$" + Number(value.toPrecision(3)) : number(value)}${shares ? "%" : ""}`),
+            axis.append(place(svgNode("text", { x: left - 14 * scale, "text-anchor": "end" }, axisText(value)),
                 () => ({ y: y(value) + 4 * scale })));
         }
         const slotWidth = () => Math.min(Math.max(48 * scale, labelWidth), (pitch - (compact ? 4 : 12) * scale) / series.length);

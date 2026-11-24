@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { priceUsage, usageSummary, pricingSnapshot, formatUsd } from "../lib/interaction-usage.mjs";
+import { priceUsage, usageSummary, pricingSnapshot, formatUsd, usageQuestionGroups } from "../lib/interaction-usage.mjs";
 
 test("cache buckets, exact aliases and the long-context boundary apply per request", () => {
     const haiku = { model: "claude-haiku-5.5", tokens: { freshInput: 10000, cacheRead: 89000, cacheWrite: 1000, output: 5000 } };
@@ -18,4 +18,16 @@ test("cache buckets, exact aliases and the long-context boundary apply per reque
     changed.models["claude-haiku-5-5"].output *= 2;
     assert.notEqual(priceUsage([haiku], changed).usd, u.steps[0].usd);
     assert.equal(usageSummary([null]).total, null); assert.equal(usageSummary([mixed]).usd, null);
+});
+
+test("model cohorts split a mixed receipt, preserve measured zero and exclude partially priced parents", () => {
+    const sample = (model, n) => ({model,tokens:{freshInput:n,cacheRead:0,cacheWrite:0,output:0}});
+    const member = usage => ({usage,actor:"user",calls:new Map()});
+    const mixed = member(priceUsage([sample("gpt-4.1",12),sample("new-private-model",3)])), zero = member(priceUsage([sample("gpt-4.1",0)]));
+    const {groups,selected} = usageQuestionGroups([mixed,zero,member(null)],"model");
+    assert.equal(selected.length,3);
+    assert.deepEqual(groups.map(({label,summary:s})=>[label,s.total,s.metered,s.priced,s.usd]),[
+        ["gpt-4.1",12,2,1,0],["new-private-model",3,1,0,null],
+    ]);
+    assert.equal(usageSummary([zero.usage]).total,0); assert.equal(formatUsd(zero.usage.usd),"~$0.00");
 });

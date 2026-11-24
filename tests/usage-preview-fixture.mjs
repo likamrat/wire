@@ -9,7 +9,7 @@ import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createProfileSource } from "./source-profile-fixture.mjs";
 
 // One source installation and one independent WIRE store; all text is invented.
-export async function usagePreview(t) {
+export async function usagePreview(t, frontend = "react") {
     const root = await mkdtemp(path.join(tmpdir(), "wire-token-preview-"));
     t.after(() => rm(root, {recursive:true,force:true}));
     const config = { appDbPath: path.join(root,"data.db"), sessionRoot: path.join(root,"session-state") };
@@ -64,7 +64,7 @@ export async function usagePreview(t) {
     } finally {await collector.close();}
     const access=await createCopilotRuntimeAccess(context);
     t.after(()=>access.close());
-    const runtime=await startServer(context,createExportController(context),{port:0,frontend:"react",access,collector:{timers:false},
+    const runtime=await startServer(context,createExportController(context),{port:0,frontend,access,collector:{timers:false},
         githubProfile:{fetch(){throw Error("No network profile requests in the usage fixture.");}},
         evaluation:{evaluatorFactory(){throw Error("No providers in the usage fixture.");}}});
     t.after(()=>runtime.close());

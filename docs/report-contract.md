@@ -402,6 +402,14 @@ report. Model token shares include all metered interactions; cost shares use
 only fully priced interactions. A pricing snapshot and all dollar fields are
 omitted for token-only output. Per-interaction rows use the report's projected
 interaction references and never carry source call IDs or extra prompt text.
+Question-led reports freeze their cohort rows and coverage with the same
+manifest hash. An author or tool filter and a high-usage threshold narrow an
+interaction report before disclosure; changing the cohort requires a new
+preparation. A fixed two-period report retains its accepted evidence, with
+the question applied separately inside each period. Tool groups can overlap,
+but repeated uses of a tool never multiply an interaction's tokens. Model
+groups use the model on each receipt; partially priced interactions stay out
+of every dollar amount. A missing return size is never counted as zero.
 Earlier snapshots without `usageFacts` gain no usage section when reopened.
 Readers predating `usageFacts` display a new frozen HTML report as saved.
 For a JSON-only report those readers can verify the original JSON, but their

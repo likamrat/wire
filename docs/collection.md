@@ -230,6 +230,10 @@ partial, or unsupported receipts do not establish a whole-interaction count.
 These optional fields use the existing evidence snapshot; no store conversion
 is necessary. A matched Work IQ completion may retain its returned text byte
 count (roughly four UTF-8 bytes per token), not its body.
+When there is no message-level prompt link, an explicitly owned model request
+in the verified run can link its tool ID to one exact start. WIRE can then
+include that call's returned text size without changing prompt authorship.
+Older receipts without that link are not rewritten.
 
 The journal mapping follows the
 [public Copilot reader](https://github.com/markrussinovich/agent-session-insights/blob/d65c0119b31cea27743e4f4ec21be158977e06aa/sources.py)

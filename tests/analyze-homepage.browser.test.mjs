@@ -137,13 +137,15 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const reads = snapshots.length;
     await up("Interactions").focus(); await page.keyboard.press("Enter"); await expect(up("Interactions")).toBeFocused();
     const intermediate = await samplePreview("one-move");
-    if (width===1440) assert.equal(intermediate[0].width,intermediate[1].width,"a chart alone before Interactions spans the preview");
+    if (width===1440) assert.ok(intermediate[2].width > intermediate[0].width*2-1,"Interactions spans both preview columns");
     await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
     assert.equal(snapshots.length,reads,"moving a section does not read evidence");
     await field.getByRole("link",{name:"View Analyze"}).tap();
     await observe("one-move");
-    await page.goto(settings); await up("Interactions").press("Enter");
-    for (let i=0; i<5; i++) await up("Prompt authors").tap();
+    await page.goto(settings);
+    while (await up("Interactions").isEnabled()) await up("Interactions").press("Enter");
+    for (let i=standard.indexOf("authors"); i>1; i--) await up("Prompt authors").tap();
+    await up("Tokens & estimated cost").tap();
     const chosen = await settingsOrder();
     assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
     await samplePreview("chosen");

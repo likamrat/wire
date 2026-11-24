@@ -2629,6 +2629,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     periodBackToTrends.prepend(ux.icon("back")); periodBackToTrends.hidden = true;
     $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
+        questionControls: assessmentFactories.questionControls,
         root: $("trendsView"), api, time, ux, authorship,
         hiddenInteraction: id => hiddenCards.has(id),
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
@@ -2637,7 +2638,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             routeScope: trendRouteScope(underlyingRoute()),
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
         onScopeChange: rememberTrendScope,
-        onComparePeriods: (dates, filters) => {
+        onComparePeriods: (dates, filters, usageChoice) => {
             const publication = api.publicationToken();
             if (workspaceState.route.view !== "trends" || !publication || workspaceState.stale || workspaceState.loading) return;
             const target = { view: "analyze", compare: "periods", layer: "tool", scope: "all", source: "github-copilot",
@@ -2646,7 +2647,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ...(filters.service === "Discovery" ? { service: "Discovery" } : filters.service && filters.service !== "missing"
                     ? { services: filters.service, includeMissingService: false } : {}) };
             trendPeriodVisit = { publication, destination: historyPosition + 1, target: readingKey(target) };
+            periodComparisonUI.startUsage(usageChoice);
             navigate(target);
+        },
+        onUsageReport: async ({revision, range, filters, question, threshold, scenarioIds}) => {
+            const publication = api.publicationToken();
+            if (!publication || workspaceState.route.view !== "trends" || revision !== workspaceState.evidence?.revision || workspaceState.stale || workspaceState.loading) return;
+            const original = boundTrend(workspaceState.route)?.reportVisit && draft.options().usageOptions;
+            const sameDraft = original && !reportBaseExplicit && !namedReport && question === original.question && filters.author === original.author && filters.tool === original.tool && !filters.service
+                && (question !== "tool" || threshold === (original.threshold ?? 30000))
+                && range.from === effectiveReportDates().from && range.to === effectiveReportDates().to;
+            if ((!sameDraft && hasReportDraftChoices()) || reportPreparing || exportWriting || reportJourney.snapshot().saveUnconfirmed) {
+                announce("Your current report is still open. Finish it in Reports before preparing another question.", "stale"); return;
+            }
+            const catalog = new Set(workspaceState.evidence.exportCatalog.requests.map(r=>r.scenarioId));
+            if (!scenarioIds.length || scenarioIds.some(id=>!catalog.has(id) || hiddenCards.has(id))) {
+                announce("Some chart interactions are hidden or unavailable for a report. Review the selection in Analyze.", "stale"); return;
+            }
+            if (!sameDraft) applyReportDefaults();
+            reportBaseExplicit = true; reportScope = "selected"; reportDates = {range:"custom",...range};
+            for (const id of scenarioIds) selected.add(id);
+            draft.change({usageOptions:{ tokens:true,dollars:true,rows:false,...(sameDraft ? original : {}),question,
+                ...(question === "tool" ? {threshold} : {}), ...(filters.author ? {author:filters.author} : {}), ...(filters.tool ? {tool:filters.tool} : {}) }});
+            if (await navigate({view:"reports",search:"",analysisQuery:null}) && api.isCurrent(publication)) await chooseReportPreset("all");
         },
         onSectionChange: (section, measure) => {
             const route = workspaceState.route;
@@ -2708,7 +2731,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         openSearch: () => liveSearchUI.analysisScope(),
         syncFilters: () => selectControls?.sync(),
         onAccepted: restorePeriodComparisonReading,
-        createReport: function createPeriodReport(value, semanticSelection) {
+        createReport: function createPeriodReport(value, semanticSelection, usageChoice) {
             if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
             if (exportWriting || workspaceState.loading || workspaceState.stale) return;
             const ids = [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))];
@@ -2718,7 +2741,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             periodReportInvalid = false;
             for (const id of ids) selected.add(id);
             draft.clearSelection();
-            draft.change({ saveMode: "local" });
+            draft.change({ saveMode: "local", ...(usageChoice?.question && usageChoice.question !== "all" ? { usageOptions:{
+                tokens:true, dollars:true, rows:false, question:usageChoice.question,
+                ...(usageChoice.question === "tool" ? {threshold:usageChoice.threshold} : {}),
+            } } : {}) });
             reportBaseExplicit = true;
             go("reports", { task: "create", request: undefined });
             updateSelection(); void previewExport();
@@ -11586,6 +11612,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (await moved && api.isCurrent(publication) && navigation === workspaceState.navigationGeneration && workspaceState.route.view === "reports") revealAddedDraft(ref);
     }
     reportExperience = assessmentFactories.createReportExperience({
+        viewUsageTrend: () => {
+            if (!api.publicationToken() || reportSelectionBlock() || reportBaseExplicit || namedReport) return;
+            const {question,threshold=30000,author,tool} = draft.options().usageOptions ?? {};
+            const {from,to} = effectiveReportDates();
+            if (!question || !from || !to) return;
+            const key = crypto.randomUUID();
+            trendEntries.set(key,{reportVisit:true,scope:{family:"usage",period:"custom",range:{from,to},filters:{...(author ? {author} : {}),...(tool ? {tool} : {})},
+                usageChoice:{question,threshold}},publication:api.publicationToken(),revision:workspaceState.evidence.revision,timeZone:viewerTime.timeZone});
+            navigate({view:"trends",trendSection:"charts",trendEntry:key,search:"",analysisQuery:null});
+        },
+        questionControls: assessmentFactories.questionControls,
+        changeUsage: (key, value) => {
+            if (exportWriting || reportJourney.snapshot().saveUnconfirmed || clearingAccess || !api.publicationToken()) return;
+            const options = { tokens:true, dollars:true, rows:false, ...draft.options().usageOptions };
+            if (value === "" || key === "question" && value === "all") delete options[key]; else options[key] = value;
+            if (key === "question") {
+                if (value !== "tool") delete options.threshold;
+                if (value === "all") { delete options.author; delete options.tool; }
+            }
+            const prepared = assessmentFactories.reportWorkspacePresentation(workspaceState.route, reportJourney.snapshot()).prepared;
+            // A different cohort must prepare from the original selection, never broaden an inherited preview.
+            if (activePreview || reportRebuildFrom) invalidatePreview("", {preserveFileView:true});
+            draft.change({usageOptions:options});
+            if (prepared) updateReportContent({hide:true,prepare:true});
+            updateSelection();
+        },
         root: $("reportsView"), time, ux,
         current: () => !clearingAccess && Boolean(api.publicationToken()),
         selectNamed: selectNamedReport, deleteNamed: deleteNamedReport,
