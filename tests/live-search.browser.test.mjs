@@ -96,8 +96,20 @@ test("normal literal fragments and exact anchors open all types and restore Back
         ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "/$"],
         ["setting", "Color palette", "section=themes&setting=palette"]];
     for (const [type, query, destination] of cases) {
+        if (type === "reply") {
+            // Replace the context query while its reader is leaving, not after Back has settled.
+            const field = page.locator("#wireSearch");
+            await field.fill(query);
+            await page.locator("#contextSidebar").evaluate(panel => {
+                const exit = panel.getAnimations()[0];
+                if (exit?.playState !== "paused" || !panel.inert) throw Error("Expected an in-flight context return");
+                exit.finish();
+            });
+            await expect(page.locator("#contextSidebar")).toBeHidden();
+            await expect(field, "Back from conversation context must not replace the newer reply query").toHaveValue(query);
+        }
         const rows = await find(page, query, type);
-        await expect(rows.first()).toBeVisible();
+        await expect(rows.first(), `${type}: expected a literal match for ${query}`).toBeVisible();
         await rows.first().click();
         await expect(page.locator("#wireSearchPanel")).toBeHidden();
         await expect(page).toHaveURL(new RegExp(destination));
@@ -108,6 +120,16 @@ test("normal literal fragments and exact anchors open all types and restore Back
         }
         if (type === "action") await expect(page.locator("#selectedCall")).toBeVisible();
         if (type === "setting") await expect(page.locator("#palette-petrol")).toBeFocused();
+        if (type === "context") await page.evaluate(() => {
+            const panel = document.querySelector("#contextSidebar");
+            const animate = panel.animate;
+            panel.animate = function (...args) {
+                panel.animate = animate;
+                const effect = animate.apply(this, args);
+                queueMicrotask(() => { effect.pause(); effect.currentTime = effect.effect.getTiming().duration / 2; });
+                return effect;
+            };
+        });
         await page.goBack();
         await expect(page.locator("#wireSearch")).toHaveValue(query);
     }
