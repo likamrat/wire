@@ -313,7 +313,8 @@ test("a host agent-authored mark identifies the sender, not the user role or the
 
 test("an unresolved original review explains the classifier's actual predicate without source strings or prompt text", () => {
     const timestamp = "2026-10-06T12:00:00Z", content = "PRIVATE_INVENTED_BODY";
-    const base = { content, messageId: randomUUID(), delivery: "idle", transformedContent: `<current_datetime>${timestamp}</current_datetime>\n\n${content}` };
+    const stamp = `<current_datetime>${timestamp}</current_datetime>\n\n`;
+    const base = { content, messageId: randomUUID(), delivery: "idle", transformedContent: stamp + content };
     for (const [extra, expected, context] of [
         [{ messageId: undefined }, ["invalid-source", "logical-message-id-absent", "not-recorded"]],
         [{ delivery: "PRIVATE_DELIVERY" }, ["invalid-source", "delivery-unsupported", "not-recorded"]],
@@ -323,6 +324,11 @@ test("an unresolved original review explains the classifier's actual predicate w
         [{ source: "PRIVATE_SOURCE" }, ["unsupported-source", "direct", "unrecognized-string"]],
         [{ source: "skill-PRIVATE_SKILL", transformedContent: undefined }, ["unsupported-source", "not-recorded", "skill-source-family"]],
         [{ source: "user", agentAuthored: true }, ["conflicting-source", "direct", "user"]],
+        [{ transformedContent: stamp + content + "\n\n<canvas-context>unclosed" }, ["unsupported-source", "canvas-close-unverified", "not-recorded"]],
+        [{ transformedContent: stamp + content + "\n\n<canvas-context>invented</canvas-context>\n\nPRIVATE_TAIL" },
+            ["unsupported-source", "canvas-tail-unrecognized", "not-recorded"]],
+        [{ transformedContent: " ".repeat(66000) + content, causalDependencies: [randomUUID()] },
+            ["unsupported-source", "host-prefix-over-bound", "not-recorded"]],
     ]) {
         const e = { type: "user.message", timestamp, data: { ...base, ...extra } };
         const { authorship, observation } = promptAuthorship.reviewEvent(e, context);
