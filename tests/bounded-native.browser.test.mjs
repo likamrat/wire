@@ -529,10 +529,31 @@ test("opening and cancelling a native filter reads only its dimension and exact 
         await closeAnalyzeFilters(page);
         const detailResponse = predicate => page.waitForResponse(response => response.url().endsWith("/api/retained/microsoft/detail")
             && predicate(response.request().postDataJSON()));
-        const firstPage = detailResponse(input => input.section === "calls" && input.conversationId === conversation.id);
-        await page.locator("#activityList .request-card-open").click();
-        await expect(page.locator("#contextSidebar")).toBeVisible();
-        const callResponse = await firstPage;
+        const arrived = Promise.withResolvers(), deliver = Promise.withResolvers();
+        await page.route("**/api/snapshot", async route => {
+            const response = await route.fetch();
+            arrived.resolve(response);
+            await deliver.promise;
+            await route.fulfill({response});
+        }, {times: 1});
+        try {
+            await page.getByRole("button", {name: "Refresh", exact: true}).click();
+            const refreshed = (await (await arrived.promise).json()).nativeRead;
+            assert.deepEqual([refreshed.sourceRevision, refreshed.revision, refreshed.page.items[0].id],
+                [nativeRead.sourceRevision, nativeRead.revision, conversation.id]);
+            const link = page.locator("#activityList .request-card-open");
+            await link.hover();
+            await page.mouse.down();
+            deliver.resolve();
+            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        } finally { deliver.resolve(); }
+        const [callResponse] = await Promise.all([
+            detailResponse(input => input.section === "calls" && input.conversationId === conversation.id),
+            (async () => {
+                await page.mouse.up();
+                await expect(page.locator("#contextSidebar"), "A press on the same authorized card survives a stored refresh").toBeVisible();
+            })(),
+        ]);
         assert.equal(callResponse.status(), 200);
         const cardDetail = await callResponse.json();
         assert.equal(cardDetail.revision, nativeRead.revision);

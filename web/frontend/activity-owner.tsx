@@ -10,6 +10,7 @@ type Options = {
     pager: HTMLElement;
     isCurrent: (authority: object) => boolean;
     release: (node: HTMLElement) => void;
+    reuseCard: (previous: HTMLElement, replacement: HTMLElement) => boolean;
     onError: (message: string) => void;
     render?: (content: ReactNode) => void;
 };
@@ -50,7 +51,7 @@ class ActivityBoundary extends Component<{ children: ReactNode; onFailure: (erro
     override render() { return this.state.failed ? null : this.props.children; }
 }
 
-export function mountReactActivity({ root, pager, isCurrent, release, onError, render }: Options) {
+export function mountReactActivity({ root, pager, isCurrent, release, reuseCard, onError, render }: Options) {
     const store = createPublicationStore<View>(isCurrent), stages = new Set<Stage>();
     const failureMessage = "Recorded activity could not be displayed safely. Reload this panel.";
     let epoch = 0, accepted: Stage | null = null, failed = false;
@@ -98,7 +99,7 @@ export function mountReactActivity({ root, pager, isCurrent, release, onError, r
                 release(card.node); erase(card.node);
             }
             return () => { card.node.remove(); };
-        }, [card, snapshot]);
+        }, [card.node]);
         return <div ref={host} className="frontend-record-slot" />;
     }
     function ActivityList() {
@@ -149,18 +150,29 @@ export function mountReactActivity({ root, pager, isCurrent, release, onError, r
                     if (stage.retired || epoch !== stage.epoch || isCurrent(authority) !== true || stage.retired) {
                         retire(stage); return false;
                     }
-                    stage.nodes = [...stage.host.children].map(node => {
+                    const previous = accepted;
+                    const retained = new Set<HTMLElement>();
+                    stage.nodes = [...stage.host.children].map((node, index) => {
                         if (!(node instanceof HTMLElement)) throw new TypeError("Activity rows must be owned HTML presentations.");
+                        const old = previous?.nodes[index];
+                        if (old?.isConnected && previous?.authority === authority && previous.scope === scope
+                            && reuseCard(old, node)) {
+                            retained.add(old);
+                            release(node); erase(node);
+                            return old;
+                        }
                         return node;
                     });
                     const cards = Object.freeze(stage.nodes.map((node, index) => Object.freeze({
                         key: node.dataset.viewKey ?? `status:${index}`, node,
                     })));
                     stage.nodes.push(stage.pager);
-                    const previous = accepted;
                     accepted = stage;
                     try {
-                        if (previous) retire(previous);
+                        if (previous) {
+                            previous.nodes = previous.nodes.filter(node => !retained.has(node));
+                            retire(previous);
+                        }
                         flushSync(() => {
                             committed = store.publish(authority, Object.freeze({ epoch: stage.epoch, cards,
                                 pager: Object.freeze({ key: "pager", node: stage.pager }) }));
