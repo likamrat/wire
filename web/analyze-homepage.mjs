@@ -1,7 +1,18 @@
+export function homepageRows(order) {
+    const rows = [];
+    for (const key of order) {
+        const last = rows.at(-1);
+        if (key !== "interactions" && last?.length === 1 && last[0] !== "interactions") last.push(key);
+        else rows.push([key]);
+    }
+    return rows;
+}
+
 // The layout moves the existing hosts. Rendering, navigation and access withdrawal
 // continue to operate on the same chart, card list and pager.
-export function mountAnalyzeHomepage({ prefs, standard, isCurrent }) {
+export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
     const dashboard = document.querySelector(".analyze-dashboard"), home = document.getElementById("homeView");
+    const packedBreakdowns = dashboard.querySelector(":scope > #percentageCharts");
     const grid = document.createElement("div");
     grid.className = "analyze-ordered-widgets";
     const slots = new Map(), reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -10,37 +21,41 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent }) {
         if (parent.moveBefore) parent.moveBefore(node, before);
         else parent.insertBefore(node, before);
     }
+    function mark(key, node) {
+        const marker = document.createComment(key);
+        node.before(marker); slots.set(key, { node, marker });
+    }
     function layout() {
         const order = prefs.get("analyzeLayout");
+        const custom = order.some((key, i) => key !== standard[i]);
         const signature = ordinary && !dashboard.hidden && !home.hidden && home.dataset.empty !== "true"
-            && order.some((key, i) => key !== standard[i]) ? order.join(",") : "";
+            && (custom || packedBreakdowns) ? order.join(",") : "";
         if (signature === applied) return;
-        if (!signature) {
-            for (const { node, marker } of slots.values()) {
-                move(marker.parentNode, node, marker);
-                marker.remove(); node.removeAttribute("data-home-section"); node.removeAttribute("data-full-row");
+        for (const { node, marker } of slots.values()) {
+            move(marker.parentNode, node, marker);
+            marker.remove(); node.removeAttribute("data-home-section"); node.removeAttribute("data-full-row");
+        }
+        slots.clear(); grid.remove(); delete dashboard.dataset.customOrder;
+        if (signature && !custom) {
+            // React already puts the list between charts and breakdowns. In the
+            // packed renderer the list shares that grid only on ordinary Results.
+            const list = document.getElementById("activityView");
+            mark("interactions", list);
+            move(dashboard, list, packedBreakdowns);
+        } else if (signature) {
+            for (const key of standard) {
+                const node = key === "time" ? dashboard.querySelector(".analyze-chart-main") :
+                    key === "outcomes" ? dashboard.querySelector(".analyze-outcome-summary") :
+                    key === "interactions" ? document.getElementById("activityView") :
+                    document.querySelector(`#percentageCharts [data-breakdown="${key}"]`);
+                mark(key, node);
+                node.dataset.homeSection = key;
             }
-            slots.clear(); grid.remove(); delete dashboard.dataset.customOrder;
-        } else {
-            if (!slots.size) {
-                for (const key of standard) {
-                    const node = key === "time" ? dashboard.querySelector(".analyze-chart-main") :
-                        key === "outcomes" ? dashboard.querySelector(".analyze-outcome-summary") :
-                        key === "interactions" ? document.getElementById("activityView") :
-                        document.querySelector(`#percentageCharts [data-breakdown="${key}"]`);
-                    const marker = document.createComment(key);
-                    node.before(marker); slots.set(key, { node, marker });
-                    node.dataset.homeSection = key;
-                }
-                dashboard.append(grid); dashboard.dataset.customOrder = "";
-            }
-            let column = 0;
-            for (const [i, key] of order.entries()) {
+            dashboard.append(grid); dashboard.dataset.customOrder = "";
+            for (const row of rowsFor(order)) for (const key of row) {
                 const { node } = slots.get(key);
-                const full = key === "interactions" || column === 0 && (i === order.length - 1 || order[i + 1] === "interactions");
-                node.toggleAttribute("data-full-row", full);
+                node.toggleAttribute("data-full-row", row.length === 1);
                 move(grid, node);
-                column = full ? 0 : 1 - column;
             }
         }
         applied = signature;

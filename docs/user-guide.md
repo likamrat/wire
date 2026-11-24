@@ -71,11 +71,12 @@ returns to the interaction list.
 
 <a id="analyze-homepage-layout"></a>
 
-In **Settings > Analyze > Homepage layout**, use the up or down arrow to move a widget
-or the entire **Interactions** list. For example, move Interactions above the two charts,
-or put Prompt authors first. Choose **View Analyze** to see the result. The order stays
-in this browser after reload; **Restore WIRE layout** puts every section back without
-changing filters or collected activity.
+In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
+**Interactions** list. The preview outlines the section you moved and shows which
+widgets share a row. It uses sample charts instead of your saved activity.
+Your browser remembers each move. Choose **View Analyze** to open the homepage.
+**Restore WIRE layout** puts the time chart first, tool call results second, and
+Interactions third, before the four breakdowns. Your filters and activity stay the same.
 
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
@@ -465,7 +466,7 @@ Under **WIRE defaults**, choose how views open and new reports and comparisons s
 
 | Category | What you can change |
 | --- | --- |
-| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
+| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. **View Analyze** and the sidebar use this range for a fresh view and keep any dates or filters you chose in an existing view. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
 | Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |

@@ -218,6 +218,13 @@ Use `npm run test:packaging` for the production-only installation check. It
 builds the browser assets, then checks the packaged browser and local Search
 against the same disposable install.
 
+For Analyze homepage ordering, build the browser assets and run
+`node --test tests/analyze-layout.qualification.mjs`. Playwright uses the Settings
+arrows to visit all 5,040 arrangements in both renderers and checks the preview
+against wide and narrow Analyze tabs. It then restarts Chromium on the same
+disposable profile to verify both a custom order and **Restore WIRE layout**.
+This longer check uses invented records and no mocked network responses.
+
 For changes to native report selection, saving or recovery, run `npm run build`
 followed by `node --test tests/native-report-save.qualification.mjs`. This
 browser check uses invented Microsoft activity and a disposable store. It

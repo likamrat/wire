@@ -10997,7 +10997,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else go(node.dataset.nav, { request: undefined, task: undefined });
     }
     if (assessmentFactories.bindNavigation) assessmentFactories.bindNavigation(activateNavigation);
-    else document.querySelectorAll("[data-nav]").forEach(node => node.addEventListener("click", event => activateNavigation(node, event)));
+    // The React shell owns its navigation clicks, but Settings uses native links in both renderers.
+    const nativeNavigationRoot = assessmentFactories.bindNavigation ? $("settingsView") : document;
+    nativeNavigationRoot.querySelectorAll("[data-nav]").forEach(node => node.addEventListener("click", event => activateNavigation(node, event)));
     for (const id of ["pageAction", "reportContextAction", "exploreLink", "reportLibraryLink", "reportCreateLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

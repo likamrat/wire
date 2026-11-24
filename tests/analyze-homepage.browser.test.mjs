@@ -48,8 +48,8 @@ async function sampleEntry(page, total) {
         requestAnimationFrame(sample);
     }, total);
 }
-test("ordinary Analyze entry paints intermediate counts and an accessible responsive donut", async t => {
-    const {page,url,snapshots,total} = await setup(t, "react", {reducedMotion:"no-preference", viewport:{width:638,height:1200}});
+for (const frontend of ["bundled", "react"]) test(`ordinary Analyze entry paints intermediate counts and an accessible responsive donut (${frontend})`, async t => {
+    const {page,url,snapshots,total} = await setup(t, frontend, {reducedMotion:"no-preference", viewport:{width:638,height:1200}});
     await sampleEntry(page,total); await page.goto(url);
     const result = page.locator("#outcomeChart"), center = result.locator(".percentage-total-value");
     await expect(result.locator(".percentage-total-link")).toHaveAccessibleName(`View all ${total} Work IQ tool calls`);
@@ -62,7 +62,7 @@ test("ordinary Analyze entry paints intermediate counts and an accessible respon
         await mkdir(proof, { recursive:true });
         const clip = await result.boundingBox();
         for (let i = 0; i < 3; i++) {
-            await page.screenshot({path:path.join(proof, `build-${i}.png`),clip});
+            await page.screenshot({path:path.join(proof, `${frontend}-build-${i}.png`),clip});
             await page.waitForTimeout(100);
         }
     }
@@ -73,8 +73,8 @@ test("ordinary Analyze entry paints intermediate counts and an accessible respon
     assert.equal(seen.at(-1),total);
     assert.equal(snapshots.length,requests);
     if (proof) {
-        await result.screenshot({path:path.join(proof,"settled.png")});
-        await writeFile(path.join(proof,"count-frames.json"),JSON.stringify(seen));
+        await result.screenshot({path:path.join(proof,`${frontend}-settled.png`)});
+        await writeFile(path.join(proof,`${frontend}-count-frames.json`),JSON.stringify(seen));
     }
     await chooseTheme(page,"dark");
     await page.setViewportSize({width:390,height:1000});
@@ -85,23 +85,95 @@ test("ordinary Analyze entry paints intermediate counts and an accessible respon
     await page.waitForFunction(n => window.countFrames.at(-1) === n,total);
     assert.deepEqual(await page.evaluate(()=>window.countFrames),[total]);
 });
-test("Analyze reads the chosen layout after reload and can restore its original order",async t=>{
-    const {page,url,total} = await setup(t,"react",{reducedMotion:"reduce",hasTouch:true});
-    await page.goto(new URL("/settings?section=analyze",url).href);
+for (const frontend of ["bundled", "react"]) for (const width of [1440, 390])
+test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (${frontend}, ${width}px)`,async t=>{
+    const {page,url,snapshots} = await setup(t,frontend,{reducedMotion:"reduce",hasTouch:true, viewport:{width,height:960}});
+    const settings = new URL("/settings?section=analyze",url).href, observations = [];
     const field = page.locator("#analyzeLayout"), up = name => field.getByRole("button",{ name:`Move ${name} up`,exact:true });
+    const settingsOrder = () => field.locator("li").evaluateAll(nodes => nodes.map(node => node.dataset.section));
+    const preview = field.locator("figure");
+    const previewColumns = new Map();
+    async function samplePreview(stage) {
+        await expect(preview).toBeVisible();
+        const tiles = await preview.locator("[data-tile]").evaluateAll(nodes => nodes.map(node => {
+            const { x, y, width, height } = node.getBoundingClientRect();
+            return { key:node.dataset.tile,x,y,width,height };
+        }).sort((a,b)=>a.y-b.y || a.x-b.x));
+        assert.deepEqual(tiles.map(tile=>tile.key),await settingsOrder(),`${stage}: preview updates in place`);
+        const left = Math.min(...tiles.map(tile=>tile.x)), right = Math.max(...tiles.map(tile=>tile.x+tile.width));
+        for (const tile of tiles.filter(tile=>width===390 || tile.key==="interactions")) {
+            assert.equal(tile.x,left); assert.ok(Math.abs(tile.x+tile.width-right)<=1,`${stage}: full-width ${tile.key}`);
+        }
+        previewColumns.set(stage,tiles.map(tile=>[tile.key,tile.x > left+1,tile.width >= right-left-1]));
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+        if (proof) await field.screenshot({ path:path.join(proof,`${frontend}-${width}-settings-${stage}.png`) });
+        return tiles;
+    }
+    async function observe(stage) {
+        await expect(page.locator("#activityList .activity-card")).toHaveCount(8);
+        await page.evaluate(async () => {
+            await document.fonts.ready;
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        });
+        const cards = await page.locator(".analyze-chart-main:visible,.analyze-outcome-summary:visible,#activityView:visible,"
+            + ".percentage-card[data-breakdown]:not([data-breakdown=outcomes]):visible").evaluateAll(nodes => nodes.map(node => {
+            const key = node.dataset.breakdown ?? (node.id === "activityView" ? "interactions"
+                : node.classList.contains("analyze-chart-main") ? "time" : "outcomes");
+            const { x, y, width, height } = node.getBoundingClientRect();
+            return { key, x, y, width, height };
+        }));
+        observations.push({stage,cards});
+        if (proof) {
+            await mkdir(proof,{recursive:true});
+            const file = path.join(proof,`${frontend}-${width}-${stage}`);
+            await writeFile(`${file}.json`,JSON.stringify(cards,null,2));
+            await page.screenshot({path:`${file}.png`,fullPage:true});
+        }
+    }
+    await page.goto(url); await observe("fresh");
+    await page.goto(settings);
+    const standard = await settingsOrder();
+    await samplePreview("standard");
+    const reads = snapshots.length;
     await up("Interactions").focus(); await page.keyboard.press("Enter"); await expect(up("Interactions")).toBeFocused();
-    await page.keyboard.press("Enter");
-    for (let i=0; i<5; i++) await up("Prompt authors").tap();
+    const intermediate = await samplePreview("one-move");
+    if (width===1440) assert.equal(intermediate[0].width,intermediate[1].width,"a chart alone before Interactions spans the preview");
+    await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
+    assert.equal(snapshots.length,reads,"moving a section does not read evidence");
     await field.getByRole("link",{name:"View Analyze"}).tap();
-    const headings = page.locator("#chartTitle:visible,#homeView .percentage-card h3:visible,#activityListSummary:visible,#frontendBreakdowns .percentage-card h3:visible");
-    const order = [`${total} interactions · ${total} matching tool calls`,"Prompt authors","Work IQ tool calls over time",
-        "Tool call results","Work IQ tool calls","Services and operations","Response models"];
-    await expect(headings).toHaveText(order);
-    await page.reload(); await expect(headings).toHaveText(order);
-    await page.goto(new URL("/settings?section=analyze",url).href);
+    await observe("one-move");
+    await page.goto(settings); await up("Interactions").press("Enter");
+    for (let i=0; i<5; i++) await up("Prompt authors").tap();
+    const chosen = await settingsOrder();
+    assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
+    await samplePreview("chosen");
+    if (width===1440) await chooseTheme(page,"dark");
+    await page.reload(); await samplePreview("persisted");
+    await field.getByRole("link",{name:"View Analyze"}).tap();
+    await observe("chosen"); await page.reload(); await observe("reloaded");
+    await page.goto(settings);
     await field.getByRole("button",{name:"Restore WIRE layout"}).tap();
-    await field.getByRole("link",{name:"View Analyze"}).tap(); await page.reload();
-    await expect(headings).toHaveText([order[2],order[3],order[0],order[4],order[5],order[6],order[1]]);
+    assert.deepEqual(await settingsOrder(),standard);
+    await samplePreview("restored"); await expect(preview.locator("[data-moved]")).toHaveCount(0);
+    await field.getByRole("link",{name:"View Analyze"}).tap(); await observe("restored");
+    await page.reload(); await observe("restored-reload");
+    for (const {stage,cards} of observations) {
+        const order = stage==="one-move" ? intermediate.map(tile=>tile.key) : ["chosen","reloaded"].includes(stage) ? chosen : standard;
+        const painted = cards.toSorted((a,b) => a.y-b.y || a.x-b.x);
+        assert.deepEqual(painted.map(card=>card.key),order,`${stage}: painted reading order`);
+        assert.deepEqual(cards.map(card=>card.key),order,`${stage}: document reading order`);
+        const left = Math.min(...cards.map(card=>card.x)), right = Math.max(...cards.map(card=>card.x+card.width));
+        const previewStage = {fresh:"standard","one-move":"one-move",chosen:"chosen",reloaded:"persisted",restored:"restored","restored-reload":"restored"}[stage];
+        assert.deepEqual(painted.map(card=>[card.key,card.x > left+1,card.x <= left+1 && card.x+card.width >= right-1]),
+            previewColumns.get(previewStage),`${stage}: each section occupies the column or full row shown in Settings`);
+        const list = cards.find(card=>card.key==="interactions");
+        for (const card of cards) if (card !== list) {
+            assert.ok(card.y+card.height <= list.y+1 || list.y+list.height <= card.y+1,`${stage}: Interactions has its own row`);
+        }
+        const [first,second] = painted.filter(card=>card!==list);
+        if (width===390) assert.ok(painted.every((card,i)=>!i || card.y>=painted[i-1].y+painted[i-1].height-1),`${stage}: stacked`);
+        else if (stage!=="one-move") assert.ok(second.x>=first.x+first.width-1 && Math.abs(second.y-first.y)<=1,`${stage}: side by side`);
+    }
 });
 test("moving the pointer tints just its stationary interaction in every appearance",async t=>{
     const {page,url} = await setup(t,"react",{reducedMotion:"reduce"});
