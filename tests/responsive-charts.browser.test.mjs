@@ -63,10 +63,9 @@ test("sparse, dense and empty time views reset sizing while enlarged labels and 
         assert.equal(await page.locator(".dimensional-time-labels > span").count(), length);
         assert.equal(await page.locator(".flat-time-column").count(), groups.filter(row => row.total).length);
         if (!length) continue;
-        const extent = Number(await page.locator(".flat-time-column").first().getAttribute("data-plot-height"));
-        assert.equal(extent, 200, "The time plot's extent stays independent of grouping and call magnitude");
         await page.locator(".time-column").last().focus();
-        for (const [width, text] of [[1200, 100], [280, 200]]) {
+        const extents = [];
+        for (const [width, text] of [[1200, 100], [280, 100], [280, 200]]) {
             await page.evaluate(({ width, text }) => {
                 document.querySelector("#host").style.width = width + "px";
                 document.documentElement.style.fontSize = text + "%";
@@ -80,8 +79,8 @@ test("sparse, dense and empty time views reset sizing while enlarged labels and 
                     focus: focused.classList.contains("time-column"), x: box.x, right: box.right, width: box.width, height: box.height,
                     left: clip.left, clipRight: clip.right, top: box.top, plotTop: plot.top,
                     marks: [...scroll.querySelectorAll(".flat-time-column")].map(node => ({
-                        total: Number(node.dataset.total), maximum: Number(node.dataset.maximum), extent: Number(node.dataset.plotHeight),
-                        height: Number(node.getAttribute("height")),
+                        total: Number(node.dataset.total), maximum: Number(node.dataset.maximum),
+                        extent: parseFloat(getComputedStyle(node).getPropertyValue("--time-height")), height: node.getBoundingClientRect().height,
                     })),
                 };
             });
@@ -89,10 +88,12 @@ test("sparse, dense and empty time views reset sizing while enlarged labels and 
             assert.ok(measured.x >= measured.left && measured.right <= measured.clipRight);
             assert.ok(measured.top >= measured.plotTop, "Measured headroom cannot clip enlarged count targets");
             for (const mark of measured.marks) {
-                assert.equal(mark.extent, extent);
-                assert.equal(mark.height, mark.total / mark.maximum * extent);
+                assert.equal(mark.extent, measured.marks[0].extent);
+                assert.ok(Math.abs(mark.height - mark.total / mark.maximum * mark.extent) < .03);
             }
+            extents.push(measured.marks[0].extent);
         }
+        if (length===7) assert.ok(extents[1] < extents[0], "Tighter date columns use a shorter plot, without changing the count scale");
     }
     await page.evaluate(() => window.charts.disposeView(document.querySelector(".dimensional-scroll")));
     assert.equal(await page.evaluate(() => window.observers.size), 0);

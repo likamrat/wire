@@ -419,6 +419,8 @@ async function measure(page) {
                 rootFont: getComputedStyle(document.documentElement).fontSize,
                 pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth },
             panel: rect(scroll.closest(".chart-panel")), scroll: rect(scroll), plot: rect(plot),
+            laneWidth: rect(plot.querySelector(".time-slot")).width,
+            plotExtent: parseFloat(getComputedStyle(plot).getPropertyValue("--time-height")),
             clientWidth: scroll.clientWidth, scrollWidth: scroll.scrollWidth, scrollLeft: scroll.scrollLeft,
             overflowX: style.overflowX, scrollbarHeight: scroll.offsetHeight - scroll.clientHeight,
             minimum: getComputedStyle(plot).minWidth, overflowing: scroll.dataset.overflow,
@@ -499,8 +501,9 @@ function assertChart(geometry, expected) {
     }
     for (const [index, mark] of geometry.marks.entries()) {
         assert.equal(mark.total, expected[index]);
-        assert.equal(mark.encodedHeight, expected[index] / Math.max(...expected) * 200);
-        assert.ok(Math.abs(mark.height - mark.encodedHeight) < 1 / 32, "Actual paint remains linear within layout rounding");
+        assert.equal(mark.encodedHeight, expected[index] / Math.max(...expected) * mark.extent);
+        assert.ok(Math.abs(mark.height - mark.total / Math.max(...expected) * geometry.plotExtent) < 1 / 32,
+            "Actual paint remains linear within layout rounding");
         assert.equal(mark.width, 84);
         assert.ok(mark.x >= geometry.plot.x && mark.right <= geometry.plot.right);
         assert.ok(Math.abs(mark.bottom - geometry.marks[0].bottom) < 1 / 32, "Columns share the zero baseline");
@@ -575,6 +578,8 @@ test("genuinely dense time bins keep a native scroller and the final column at w
         await ready(page);
         const geometry = await measure(page);
         assertChart(geometry, expected);
+        assert.ok(geometry.plotExtent <= geometry.laneWidth && geometry.plotExtent <= 110,
+            `A scrollable timeline must not reserve a tall fixed plot (${geometry.plotExtent}px for ${geometry.laneWidth}px date lanes)`);
         assert.ok(geometry.scrollWidth > geometry.clientWidth);
         assert.equal(geometry.overflowX, "auto");
         assert.ok(geometry.scrollbarHeight > 0);

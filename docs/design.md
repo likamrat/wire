@@ -138,7 +138,9 @@ and keeps its shorter reading measure. An adjacent identity key stacks below
 it in narrow columns. A tool failure and a separate returned issue each lead to
 their own evidence; routine rows need no four-state ledger.
 The time chart, tool call results and usage each span the workspace in their
-own row. Label dates and counts on the time chart; the selected date range
+own row. Size the time plot to its date columns, with a height cap on wide
+screens. Scrolling to a different day keeps the same linear scale.
+Label dates and counts on the time chart; the selected date range
 belongs above the widgets. The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.
 
