@@ -63,6 +63,11 @@ Lead with accepted recorded outcomes and activity patterns. The outcome ring
 and right-side legend share a row when the widget has sufficient width; small
 layouts stack without squeezing values. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
+The two charts, four breakdowns and Interactions can each move in **Settings >
+Analyze**. The original layout is the default. Follow the chosen order in both
+the painted layout and keyboard navigation; Interactions always occupies its own row.
+The entrance build presents accepted numbers only, not acquisition progress.
+Reduced motion and assistive technology get the final values without counting through them.
 
 Prompt authors is a compact breakdown of canonical originating
 interactions across the complete accepted slice, before paging. Human prompts,
@@ -319,6 +324,9 @@ cannot republish withdrawn data.
 ## Interaction cards and reading
 
 ### Cards
+
+A fine pointer tints just the interaction under it. The surface stays still;
+it is not a link. Its actions retain their own focus and hover cues.
 
 On Analyze, show the beginning of the request as a short wrapping excerpt.
 On a local interaction card the excerpt is selectable text. Choose **Prompt**

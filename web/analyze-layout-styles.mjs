@@ -1,4 +1,22 @@
 export const analyzeLayoutStyles = `
+@property --analyze-sweep {syntax:"<angle>";initial-value:360deg;inherits:false}
+#outcomeChart .percentage-ring[data-building] {mask-image:conic-gradient(black var(--analyze-sweep),transparent 0)}
+/* Keep the exact, accessible value and its width in place; only paint the temporary figure. */
+:is(.percentage-total-value,.percentage-value>*,.dimensional-count)[data-build-value] {-webkit-text-fill-color:transparent}
+:is(.percentage-total-value,.percentage-value>*)[data-build-value] {position:relative}
+:is(.percentage-total-value,.percentage-value>*,.dimensional-count)[data-build-value]::after {content:attr(data-build-value) / "";position:absolute;inset:0;pointer-events:none;-webkit-text-fill-color:currentColor;text-align:inherit;font:inherit;font-variant-numeric:tabular-nums}
+.dimensional-count[data-build-value]::after {display:grid;place-items:center}
+.analyze-dashboard[data-custom-order]:not([hidden]) {display:block!important}
+.analyze-dashboard[data-custom-order]>.analyze-chart-grid,.analyze-dashboard[data-custom-order]>#percentageCharts {display:none!important}
+.analyze-ordered-widgets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
+.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto!important;min-width:0;margin:0}
+.analyze-dashboard .analyze-ordered-widgets>[data-full-row] {grid-column:1/-1}
+.analyze-dashboard .analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary,.percentage-card) {border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
+.analyze-ordered-widgets>.percentage-card {padding:var(--widget-heading-inset) 16px 16px;background:var(--paper);container:breakdown-card / inline-size}
+@container analyze-view (max-width:60rem){.analyze-ordered-widgets {grid-template-columns:minmax(0,1fr)}}
+@media(hover:hover) and (pointer:fine) {
+    body.analyze-reading #activityView #activityList .activity-card:hover {background:color-mix(in srgb,var(--accent) 6%,var(--paper))}
+}
 .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {
  border:1px solid var(--surface-edge);border-radius:var(--radius);
  background:var(--paper);box-shadow:var(--panel-shadow);

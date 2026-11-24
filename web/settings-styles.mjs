@@ -153,6 +153,14 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .settings-view .page-default-field>.settings-help {margin:.35rem 0 .65rem}
 .page-default-field>.select-control {width:min(100%,22rem)}
+.analyze-layout-field ol {max-width:43rem;margin:0;padding-inline-start:2rem;border-block:1px solid var(--rule)}
+.analyze-layout-field li+li {border-top:1px solid var(--rule)}
+.analyze-layout-field li::marker {font-variant-numeric:tabular-nums;color:var(--muted);font-size:var(--type-small)}
+.analyze-layout-field li>div,.analyze-layout-actions {display:flex;align-items:center;gap:4px}
+.analyze-layout-field li span {flex:1;min-width:0}
+.analyze-layout-field li button {min-width:44px;min-height:44px}
+.analyze-layout-actions {justify-content:space-between;max-width:43rem;flex-wrap:wrap;margin-top:8px}
+.analyze-layout-actions a {display:inline-flex;align-items:center;min-height:44px}
 .page-default-formats {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));gap:0 .75rem}
 .page-default-formats label {display:flex;align-items:center;gap:.55rem;min-height:44px;cursor:pointer}
 .page-default-formats input[type=checkbox] {margin:0;min-height:0;width:1rem;height:1rem;accent-color:var(--toggle-on)}

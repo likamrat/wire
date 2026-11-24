@@ -40,6 +40,7 @@ import { createFreshActivity } from "./fresh-activity.mjs";
 import { createRefreshSources } from "./refresh-sources.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { mountDashboardLayout } from "./dashboard-layout.mjs";
+import { mountAnalyzeHomepage } from "./analyze-homepage.mjs";
 import { createRequestTiming } from "./request-timing.mjs";
 import { mountRecorderDiagnostics } from "./recorder-diagnostics.mjs";
 import { createDeletionFlow, mountDeletion } from "./deletion-flow.mjs";
@@ -95,6 +96,7 @@ function factories() {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
+        mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync),
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,

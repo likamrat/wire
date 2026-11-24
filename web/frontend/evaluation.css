@@ -139,20 +139,14 @@
         border-inline-start: 0;
         border-top: 1px solid var(--surface-divider);
     }
-    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) { display: block; }
-    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-visual { display: none; }
-    .wire-frontend-react #outcomeChart .percentage-card:has(> .percentage-content:not([data-unit-mode=separate])) .percentage-denominator {
-        position: static;
-        width: auto;
-        height: auto;
-        margin: 0;
-        overflow: visible;
-        clip-path: none;
-        white-space: normal;
-    }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend {
         grid-template-columns: minmax(0, 1fr);
         gap: 0;
+    }
+    .wire-frontend-react #outcomeChart { container: outcome-widget / inline-size; }
+    @container outcome-widget (max-width: 29rem) {
+        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+        .wire-frontend-react #outcomeChart .percentage-visual { max-width: min(100%, 10rem); }
     }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend-row {
         grid-template-columns: max-content minmax(0, 1fr) max-content;

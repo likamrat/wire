@@ -175,6 +175,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     const time = createTimeContext();
     const pageDefaults = assessmentFactories.createPageDefaults();
+    const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token) });
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
     let appUpdate;
@@ -8965,6 +8966,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("navigationPending").hidden = true;
         const requestRoute = workspaceState.route.view === "request" ? workspaceState.route : null;
         if (requestRoute?.bookmark && !requestRoute.request) {
+            homepage.leave();
             // Refusing a locator is not navigation to the full Analyze population.
             $("workspace").hidden = true;
             boundedNative.clearCards();
@@ -9011,6 +9013,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             publishAcceptedListScope(acceptedDescription);
             if (sourceCollection.active) renderBoundedAnalyze();
         }
+        homepage.present(workspaceState.route.view === "analyze" && !workspaceState.route.compare
+            && workspaceState.route.analyzeSection !== "guide" && (semanticQuery === null || semanticBound), publication, Boolean(requestRoute));
         if (workspaceState.route.view === "reports") renderReports();
         trendsUI.update();
         if (workspaceState.route.view === "settings" && workspaceState.route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
@@ -11444,6 +11448,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        homepage.leave();
         analyzeDatesPicker.close(false); analyzeDatesPicker.showRange("");
         analyzeCalendar.clear();
         namedDrafts.withdrawAccess(); namedReport = null;

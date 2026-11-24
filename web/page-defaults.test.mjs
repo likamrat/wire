@@ -11,6 +11,14 @@ test("only valid defaults survive reload; an unavailable write applies to this p
     const prefs = load();
     prefs.set("reportFormats", ["markdown", "pdf"]);
     assert.deepEqual(load().get("reportFormats"), ["pdf", "markdown"]);
+    const original = pageDefaultSpecs.analyzeLayout.initial, reverse = original.toReversed();
+    prefs.set("analyzeLayout", reverse);
+    assert.deepEqual(load().get("analyzeLayout"), reverse);
+    for (const invalid of [reverse.slice(1), [...reverse, "unknown"], reverse.map(() => "time")]) {
+        values.set("wire.page-defaults.v1.analyzeLayout", JSON.stringify(invalid));
+        assert.deepEqual(load().get("analyzeLayout"), original);
+        assert.match(load().message("analyzeLayout"), /invalid/i);
+    }
     prefs.set("reportFormats", []);
     assert.deepEqual(prefs.get("reportFormats"), ["pdf", "markdown"]);
     assert.match(prefs.message("reportFormats"), /at least one/i);
