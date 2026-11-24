@@ -189,7 +189,10 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 Choose **Trends** in the sidebar. By default, **Overview** shows how many
 interactions had a recorded error or failure each day. A cross at zero means no matching
 dated calls; a circle at zero means there was activity but no recorded error.
-**Charts** lists the seven measures. **Chart guide** explains their units.
+**Charts** lists eight measures. **Tokens & est. cost** switches between measured
+tokens and the retail cost estimate. Narrow by prompt author or tool to read
+whole interactions that match, not tokens charged to a particular tool.
+**Chart guide** explains the units.
 On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From
 **Tool call results**, WIRE asks before showing **Errors & failures**: that
@@ -314,6 +317,15 @@ measures over *one* period, stay in Trends. See [Compare two periods](reporting.
 for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
+
+To find a high-usage interaction, choose **Most tokens** or **Highest est. cost**
+above the Analyze list. Only cards with complete token counts have a usage
+chip. Open the interaction to see fresh input, cache reads, cache writes and
+output. **Work IQ context footprint** estimates the size of returned tool
+text; it is not part of the bill or an extra amount to add to the total.
+In **Response models**, choose **Token & $ share** to compare token volume with
+the cost share of fully priced interactions. Find the offline rates in
+**Settings → Reports**.
 
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage

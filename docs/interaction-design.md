@@ -187,7 +187,7 @@ Use the shared [chart encodings](design.md#chart-reading) for those facts.
 ## Trends
 
 Trends is a peer destination. Overview opens with the daily Errors & failures
-count. Charts lists Errors & failures first and keeps all seven measure names
+count. Charts lists Errors & failures first and keeps all eight measure names
 visible, including on narrow screens. Chart guide is an in-page destination.
 A contextual Analyze entry opens Charts on the corresponding
 measure with supported scope; related rather than equivalent views name the
@@ -202,7 +202,7 @@ rows; keep their checkbox and text inside the same hit target.
 Compare measures opens a free choice of two daily readings; examples preselect
 a pair but do not limit the available combinations. Distinguish selecting the
 second measure, hiding a chart and changing the population. In the optional
-**All charts** workspace the seven charts occupy full-width rows with sizing
+**All charts** workspace the charts occupy full-width rows with sizing
 controls. Short author/service labels stay whole rather than being squeezed.
 Empty Today does not discard useful earlier data or turn the screen into
 unavailable rows. Unknown and incomplete evidence stays explicit.
@@ -301,7 +301,7 @@ layout updates settle the selected-date geometry before the next interaction;
 unchanged parent renders do not remount a chart or dismiss its hover value.
 During sidebar motion, width changes update only mounted chart geometry.
 Reuse formatted labels, values and exact point membership; do not recreate all
-seven SVGs on every frame. Keep hit targets and selected outlines aligned with
+chart SVGs on every frame. Keep hit targets and selected outlines aligned with
 their marks, preserve horizontal reading, and retire stale hover during reflow.
 Reversing the sidebar must not turn a transient scroll clamp into a new reading
 position; deliberate wheel, touch or keyboard scrolling still takes precedence.

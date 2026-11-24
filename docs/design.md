@@ -53,7 +53,7 @@ or mismatch, or reviewing exact operation bounds or saved report metadata.
 | Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; account, Help, Feedback and Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
-| Trends | Seven visible measure names beside one daily chart; optional aligned charts share the accepted period |
+| Trends | Eight visible measure names beside one daily chart; optional aligned charts share the accepted period |
 | Right contextual surface | Interaction reader and prepared report preview; Close or Back returns to the original task |
 | Main workspace | Report setup, saved library and verified saved reading |
 

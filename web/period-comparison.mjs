@@ -1245,6 +1245,29 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             else chart.append(plottedPanel(value, sides, names));
             content.append(chart);
         }
+        if (a.usage && b.usage && (a.usage.metered || b.usage.metered)) {
+            const section = el("section", undefined, "compare-usage"), periods = [a.usage,b.usage];
+            const dollars = n => n === null ? "No priced usage" : n > 0 && n < .01 ? "<$0.01" : `~$${n.toFixed(2)}`;
+            const compatible = a.usage.rateDate === b.usage.rateDate;
+            section.append(el("h3", "Tokens & estimated cost"), table("Whole interactions with matching records",
+                ["Measure", "Baseline", "Selected", "Change"], [
+                    ["Metered tokens", ...periods.map(p => p.total === null ? "Not recorded" : number(p.total)),
+                        periods.every(p => p.total !== null) ? signed(b.usage.total-a.usage.total) : "—"],
+                    ["Est. retail cost", ...periods.map(p => dollars(p.usd)), compatible && periods.every(p=>p.usd !== null)
+                        ? `${b.usage.usd<a.usage.usd?"−":"+"}${dollars(Math.abs(b.usage.usd-a.usage.usd))}` : "—"],
+                    ["Metered / eligible", ...periods.map(p=>`${p.metered} / ${p.eligible}`), "—"],
+                    ["Priced / metered", ...periods.map(p=>`${p.priced} / ${p.metered}`), "—"],
+                    ["Input read from cache", ...periods.map(p=>p.cacheReadShare===null?"Not recorded":`${number(p.cacheReadShare*100)}%`), "—"],
+                ]));
+            const models = [...new Set(periods.flatMap(p=>p.models.map(m=>m.model)))];
+            section.append(el("h3", "Why estimated cost changed"), table("Why estimated cost changed", ["Model","Baseline","Selected","Change"], models.map(name=>{
+                const pair = periods.map(p=>p.models.find(m=>m.model===name));
+                return [name,...pair.map(m=>m?`${dollars(m.usd)} (${counted(m.interactions,"interaction")})`:"No interactions"),
+                    compatible && pair.every(m=>m?.usd != null) ? `${pair[1].usd<pair[0].usd?"−":"+"}${dollars(Math.abs(pair[1].usd-pair[0].usd))}` : "—"];
+            })), el("p", compatible ? `Both periods use ${a.usage.rateDate} retail rates. Whole-interaction estimates, not billed Copilot spend.`
+                : `Different rate dates (${a.usage.rateDate} and ${b.usage.rateDate}); no cost delta.`, "compare-caption"));
+            content.append(section);
+        }
         if (!readCurrent(started, publication)) return;
         syncOutcomeChoices(value);
         if (!readCurrent(started, publication)) return;

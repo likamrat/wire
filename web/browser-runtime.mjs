@@ -89,6 +89,8 @@ import { createCardVisibility } from "./card-visibility.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
 import { createReportDraftPicker } from "./report-draft-picker.mjs";
 import { normalizeSearchText } from "../lib/search-normalize.mjs";
+import { createUsageReading } from "./usage-reading.mjs";
+import * as usage from "../lib/interaction-usage.mjs";
 
 function factories() {
     const timing = createTimingPresentation(createActivityProjection(null, null, ["unknown"]).summarize, { compact: true });
@@ -97,7 +99,7 @@ function factories() {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
-        createCardVisibility,
+        createCardVisibility, ...createUsageReading(usage),
         mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync),
         mountAccountSettings: options => mountAccountSettingsPresentation({

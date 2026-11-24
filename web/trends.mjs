@@ -1,7 +1,9 @@
 export function mountTrends({ root, api, time, ux, authorship, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
-    const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models"];
+    const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models", "usage"];
     const families = {
+        usage: { label: "Tokens & est. cost", modes: [["usd", "Est. USD"], ["tokens", "Tokens"]],
+            help: "Each whole interaction counts once, on its first matching call date in this period. Later matching calls from that interaction do not add its tokens again. These are not per-tool charges." },
         authors: { label: "Prompt authors", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Each originating interaction counts once per day with a matching call. Unverified authors remain in the denominator. This is not a count of messages sent that day or who executed each call." },
         tools: { label: "Tool usage", modes: [["reach", "Interactions %"], ["share", "Calls %"], ["count", "Calls"]],
@@ -51,6 +53,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const colors = new Map(), tools = ["fetch", "retrieve", "ask", "get_schema", "call_function", "do_action",
         "search_paths", "fetch_blob", "create_entity", "update_entity", "delete_entity", "list_agents"];
     function color(id, family) {
+        if (family === "usage") return cards.get("usage")?.mode === "usd" ? "var(--usage-cost)" : "var(--accent)";
         if (family === "authors") return authorColors[id];
         if (family === "services") return `var(--chart-service-${id.toLowerCase()}-label)`;
         if (family === "problems") return "var(--chart-mark-high)";
@@ -119,12 +122,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         ["Filters and series", "Why did the total change?", "Filters change which calls are counted. Showing or hiding a line changes only the drawing.", "No matching calls gives a count of zero. With nothing to divide by, a percentage is unavailable."],
         ...order.map(id => [families[id].label, {
             problems:"How many interactions had a recorded error?",rhythm:"How many calls started each day?",tools:"How widely or often was a tool used?",
-            services:"Which services appeared in calls?",timing:"How long did measured calls take?",authors:"Who wrote the originating prompts?",models:"Which models were recorded?",
+            services:"Which services appeared in calls?",timing:"How long did measured calls take?",authors:"Who wrote the originating prompts?",models:"Which models were recorded?",usage:"How did token volume and estimated cost change?",
         }[id],families[id].help,{
             problems:"Two failed calls in one interaction count as one affected interaction that day.",rhythm:"Three calls on Monday and one on Tuesday make Monday’s share 75% if those were the week’s only matching calls.",
             tools:"Three uses of one tool in a single interaction count as three calls but one interaction reached.",services:"One call naming both Mail and Files contributes to both series, but is still one call.",
             timing:"With no qualified interval, the duration is unavailable, not zero milliseconds.",authors:"A human prompt followed by three calls counts as one originating interaction that day.",
             models:"An interaction with two recorded models contributes to both model series.",
+            usage:"Two matching tool calls from the same prompt do not double its tokens. Unpriced interactions add tokens but no dollar estimate.",
         }[id]])];
     function readTopic(i, focus=false) {
         const [label,question,reading,example]=guideTopics[i];
@@ -355,7 +359,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (id !== "timing") {
             const units = el("div", "trends-switch");
             units.setAttribute("role", "group"); units.setAttribute("aria-label", `${spec.label} units`);
-            for (const [value, label] of [["count", "Count"], ["share", id === "rhythm" ? "Share within week" : "Percentage"]]) {
+            for (const [value, label] of id === "usage" ? spec.modes : [["count", "Count"], ["share", id === "rhythm" ? "Share within week" : "Percentage"]]) {
                 const control = button(label, () => {
                     if (!current()) return;
                     card.mode = value === "share" && id === "tools" ? card.percentMode : value;
@@ -420,7 +424,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const card = { id, panel, title, periodLabel, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
             point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "", empty, emptyTitle, emptyDetail, showWeek, visibleDays,
             types, indexModes, indexScope, basis, comparison, numbers, actions, remove, fold, arrange, indexCollapsed:false, type: "columns", percentMode: "share",
-            mode: id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
+            mode: id === "usage" ? "usd" : id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         cards.set(id, card);
         panel.addEventListener("click", event => {
             // Painting can replace the clicked glyph before this event reaches the row.
@@ -649,6 +653,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     function valueText(value, card) {
         const amount = card.chart.metric(value, card.id, card.mode);
+        if (card.id === "usage") return amount === null ? "Unavailable" : card.mode === "usd" ? (amount > 0 && amount < .01 ? "<$0.01" : `~$${amount.toFixed(2)}`) : `${number(amount)} tokens`;
         return amount === null ? "Unavailable" : card.id === "timing" ? `${number(amount)} ms`
             : card.mode === "count" ? number(amount) : `${rate(amount)} (${number(card.id === "tools" && card.mode === "reach" ? value.interactions : value.count)})`;
     }
@@ -702,7 +707,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         card.types.hidden = allCharts;
         card.comparison.hidden = !allCharts && id !== activeMeasure;
         card.periodLabel.hidden = !allCharts;
-        const unit = mode === "count" ? "count" : "share";
+        const unit = id === "usage" ? mode : mode === "count" ? "count" : "share";
         for (const control of card.indexModes.querySelectorAll("[data-unit]")) control.setAttribute("aria-pressed", String(control.dataset.unit === unit));
         if (card.basis) { card.basis.host.hidden = mode === "count"; card.basis.field.value = mode === "reach" ? "reach" : "share"; }
         for (const control of card.types.children) control.setAttribute("aria-pressed", String(control.dataset.chartType === card.type));
@@ -755,6 +760,12 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         card.summary.hidden = !card.legend.childElementCount;
         card.body.dataset.summary = String(!card.summary.hidden);
         const limits = [];
+        if (id === "usage") {
+            const u = totals.values.usage[0];
+            limits.push(`${valueText(u, card)} · ${u.metered} of ${u.eligible} metered; ${u.unpriced} unpriced`);
+            if (u.cacheReadShare !== null) limits.push(`${rate(100*u.cacheReadShare)} of input read from cache`);
+            limits.push(`Retail API-equivalent estimate (${u.rateDate}); not billed Copilot spend.`);
+        }
         const shown = definitions.filter(definition => !hidden.has(definition.id)).length;
         const seriesSubset = shown < definitions.length ? `${shown} of ${definitions.length} series shown` : "";
         if (allCharts && seriesSubset) limits.push(seriesSubset);
@@ -803,7 +814,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         return source.days.find(day => day.date === card.selection?.date) ?? source.days.findLast(day => day.calls) ?? source.days.at(-1);
     }
     function evidenceValues(day, card) {
-        return day.values[card.id].filter(value => card.selection?.id ? value.id === card.selection.id : shown(value, card));
+        const visible = day.values[card.id].filter(value => card.selection?.id ? value.id === card.selection.id : shown(value, card));
+        return card.id === "usage" ? visible.map(v => ({...v,rowIds:card.mode === "usd" ? v.pricedRows : v.meteredRows})) : visible;
     }
     function shown(value, card) {
         return !card.hidden.has(value.id);
@@ -818,7 +830,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             detail: `${number(day.values.rhythm[0].eligible)} ${day.values.rhythm[0].eligible === 1 ? "call" : "calls"} on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
     }
     function dayScope(day, card) {
-        const scope = card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
+        const scope = card.id === "usage" ? `${day.values.usage[0].metered} of ${day.values.usage[0].eligible} interactions metered`
+            : card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
             : ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? `${day.interactions} interactions` : `${day.calls} calls`;
         const measure = card.id === "timing" ? "" : `${families[card.id].modes.find(([id]) => id === card.mode)[1]} · `;
         if (card.id === "rhythm" && card.mode === "share") {
@@ -840,7 +853,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             const unit = ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? "interactions" : "calls";
             let measure = `${number(ids.size)} matching calls`;
             if (selected) {
-                if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${number(day.calls)} calls timed`;
+                if (card.id === "usage") measure = `${valueText(selected, card)} · ${selected.metered} of ${selected.eligible} metered`;
+                else if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${number(day.calls)} calls timed`;
                 else if (card.mode === "count") measure = `${number(selected.count)} ${unit}`;
                 else {
                     const reach = card.mode === "reach", share = reach ? selected.reach : selected.percent;
@@ -1053,7 +1067,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         filtersButton.disabled = true; periodButton.disabled = true;
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = card.indexCollapsed = false;
-            card.mode = card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
+            card.mode = card.id === "usage" ? "usd" : card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
             card.pointKey = "";
             for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence.firstChild,
                 card.emptyTitle, card.emptyDetail, card.showWeek, card.visibleDays]) scrub(node);

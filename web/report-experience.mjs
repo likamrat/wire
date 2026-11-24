@@ -204,7 +204,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const service = select("reportService", "Service", [["", "All services"], ...read().services.map(value => [value, value])]);
     outcome.addEventListener("change", () => { if (current()) changeFocus({ outcome: outcome.value }); });
     service.addEventListener("change", () => { if (current()) changeFocus({ services: service.value ? [service.value] : [] }); });
-    refine.append(byId("reportResultText").closest("label"), byId("reportRecordedContext").closest("label"), byId("reportRecordedContextHelp"));
+    refine.append(byId("reportResultText").closest("label"), byId("reportRecordedContext").closest("label"), byId("reportRecordedContextHelp"), byId("reportUsageOptions"));
     const scope = button("Change activity selection", () => { refine.hidePopover(); showSelection(); });
     refine.append(scope); done(refine);
     const refineButton = opener("Change what's included", refine);

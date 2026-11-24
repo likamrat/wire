@@ -571,7 +571,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
     await dialog.getByRole("button", { name: "Cancel" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
     await services.getByRole("button", { name: "Arrange charts" }).click();
     for (const check of await choices.all()) await check.check();
-    await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await services.getByRole("button", { name: "Arrange charts" }).click();
     for (const check of await choices.all()) await check.uncheck();
     await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
@@ -737,7 +737,7 @@ test("compiled Trends is readable in all five palettes, both modes, narrow and e
         for (const label of ["Response models", "Services", "Call duration"]) {
             await index.getByRole("button", { name: label, exact: true }).click();
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: ${width}px @ ${scale}`);
-            await expect(index.getByRole("button")).toHaveCount(7);
+            await expect(index.getByRole("button")).toHaveCount(8);
             const geometry = await page.locator(".trends-panel:visible").evaluate(panel => ({
                 plot: panel.querySelector(".trends-plot").getBoundingClientRect().top,
                 title: panel.querySelector("h2").getBoundingClientRect().top, focus: document.activeElement.tagName, y: scrollY, h: innerHeight,

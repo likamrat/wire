@@ -1,0 +1,21 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { priceUsage, usageSummary, pricingSnapshot, formatUsd } from "../lib/interaction-usage.mjs";
+
+test("cache buckets, exact aliases and the long-context boundary apply per request", () => {
+    const haiku = { model: "claude-haiku-5.5", tokens: { freshInput: 10000, cacheRead: 89000, cacheWrite: 1000, output: 5000 } };
+    const longer = { ...haiku, tokens: { ...haiku.tokens, freshInput: 10001 } };
+    const u = priceUsage([haiku, longer]);
+    assert.equal(u.steps[0].usd, (10000 * .1 + 89000 * .01 + 1000 * .125 + 5000 * .5) / 1e6);
+    assert.ok(Math.abs(u.steps[1].usd - (u.steps[0].usd + .1 / 1e6) * 5) < 1e-12);
+    assert.equal(formatUsd(u.steps[0].usd), "<$0.01");
+    const mixed = priceUsage([haiku, { ...haiku, model: "claude-haiku-5.5-preview" }]);
+    assert.equal(mixed.usd, null);
+    const all = usageSummary([u, mixed, null]);
+    assert.deepEqual([all.metered, all.eligible, all.priced, all.unpriced], [2, 3, 1, 1]);
+    assert.equal(all.usd, u.usd); assert.equal(all.models[0].usd, u.usd);
+    const changed = structuredClone(pricingSnapshot);
+    changed.models["claude-haiku-5-5"].output *= 2;
+    assert.notEqual(priceUsage([haiku], changed).usd, u.steps[0].usd);
+    assert.equal(usageSummary([null]).total, null); assert.equal(usageSummary([mixed]).usd, null);
+});

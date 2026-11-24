@@ -326,6 +326,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, authorship, icons: dimensionalIcons,
+        modelShareReading: assessmentFactories.modelShareReading, usageSummary: assessmentFactories.usageSummary,
         createLink(kind, row) {
             const changes = Object.hasOwn(row, "nativeFilter") ? row.nativeFilter
                 : kind === "outcomes" ? workspaceState.scope.layer === "code-reference" ? { widget: "all" } : { result: row.id }
@@ -774,6 +775,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     let historyPosition = Number.isSafeInteger(history.state?.evidenceView?.position) ? history.state.evidenceView.position : 0;
     let search = workspaceState.route.search || "", activityPage = Math.max(0, Number.parseInt(workspaceState.route.page || "0", 10) || 0), restoring = false, mounted = false;
+    let usageSort = "recent";
     const pageSize = 8;
     const frontendActivity = assessmentFactories.mountActivityList?.({
         root: $("activityList"), pager: $("activityPager"), isCurrent: token => api.isCurrent(token),
@@ -1820,6 +1822,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsNavigation() {
         const section = workspaceState.route.view === "settings" ? settingsNavigation.resolve(workspaceState.route).section : "connection";
+        if (section === "reports" && !clearingAccess && api.publicationToken()) assessmentFactories.rateReference(el, $("costRateReference"), workspaceState.evidence?.scenarios ?? []);
+        else $("costRateReference").replaceChildren();
         $("settingsGeneralBack").hidden = workspaceState.route.view !== "settings"
             || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
@@ -5960,7 +5964,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const scope = frontendActivity
-            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage, hiddenCards.version()]) : "";
+            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage, hiddenCards.version(), usageSort]) : "";
         if (!workspaceState.evidence.nativeRead && frontendActivity?.retain(publication, workspaceState.evidence, scope)) return;
         const stage = frontendActivity?.begin(publication, workspaceState.evidence, scope);
         if (frontendActivity && !stage) return;
@@ -5981,7 +5985,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const members = new Set(group?.interactionIds ?? group?.drilldownIds);
         if (widget) scenarios = group?.interactionIds ? scenarios.filter(record => members.delete(percentageMath.interactionIdentity(record))) : [];
         const orphaned = widget ? [] : selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
-        const allItems = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
+        let ordered = presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId);
+        if (usageSort !== "recent") {
+            const score = s => s.usage ? usageSort === "tokens" ? s.usage.total : s.usage.usd ?? -1 : -2;
+            ordered = scenarios.toSorted((a, b) => score(b) - score(a));
+        }
+        const allItems = [...ordered
             .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record })),
             ...(widget && !group?.interactionIds ? selectionRows().filter(row => members.has(row.id)).map(match => ({ match })) : [])];
         const items = allItems.filter(item => !hiddenCards.has((item.scenario ?? item.match ?? item.record).scenarioId));
@@ -6008,6 +6017,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? selectionRows().length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, selectionRows().length)}`
             + (unlinked ? `. WIRE couldn’t link ${count(unlinked)} ${unlinked === 1 ? "record" : "records"} to an interaction. See the separate list below.` : "");
         $("activityListSummary").hidden = false;
+        if (!$("activityUsageSort")) {
+            const label = el("label", "usage-sort", "Sort: "), select = el("select"); select.id = "activityUsageSort";
+            for (const [key, text] of [["recent", "Most recent"], ["cost", "Highest est. cost"], ["tokens", "Most tokens"]]) {
+                const option = el("option", "", text); option.value = key; select.append(option);
+            }
+            select.addEventListener("change", () => {
+                if (!api.publicationToken() || clearingAccess) return;
+                usageSort = select.value; activityPage = 0;
+                if (workspaceState.route.page) navigate(routeFor(underlyingRoute().view, { page: undefined }), true);
+                else renderActivity();
+            });
+            label.append(select); $("activityListContext").append(label);
+        }
         host.replaceChildren();
         activityPage = roster.index;
         if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link widget-record-exit", { revealReferenceRecords: true }));
@@ -6374,6 +6396,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const facts = el("div", "request-card-summary");
         const header = ux.cardMetadata(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value),
             sourceIdentity && sharedNativeView()?.aggregates.conversations ? el("span", "request-card-source", `Source: ${sourceIdentity.label}`) : null);
+        if (scenario.usage && !reportPicker) header.append(el("span", "usage-chip", assessmentFactories.usageChip(scenario.usage)));
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         } else if (!reportPicker && outcome && summary[outcome.key] < summary.count) {
@@ -6721,6 +6744,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const sectionKey = name => JSON.stringify(["reader", workspaceState.route.request, name]);
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
         const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
+        const usageSection = sections.add("usage", "Token & cost breakdown", { key: sectionKey("usage"), collapsible: false });
+        assessmentFactories.usageReading(el, usageSection.body, context.groups.find(group => group.relation === "selected").scenario,
+            at => time.formatTime(at, workspaceState.scope.timeContext));
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         const jumps = el("nav", "wire-section-nav reader-section-jumps");
@@ -6750,7 +6776,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const id = workspaceState.route.request;
             jumps.append(visibilityButton("Hide", "hide", () => setCardVisibility(id)));
         }
-        body.append(jumps, promptSection.element, activitySection.element, sourceSection.element);
+        body.append(jumps, promptSection.element, activitySection.element, usageSection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
         promptSection.body.append(promptList);
         const journey = el("ol", "journey request-context-timeline");
@@ -7253,6 +7279,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length, omitCallKind: explainedBadRequest ? "http-400" : undefined });
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
+            if (Number.isSafeInteger(tool.returnedTextBytes)) heading.querySelector(".reader-tool-meta").append(el("span", "reader-call-duration",
+                `~${count(Math.round(tool.returnedTextBytes / 4))} returned context tokens`));
             item.append(heading);
             const explanations = [...heading.querySelectorAll('[data-interpretation="true"]')];
             explanations.forEach(node => node.remove());
@@ -7903,6 +7931,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelectorAll("[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
         $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
+        const usageOptions = draft.options().usageOptions ?? { tokens: true, dollars: true, rows: false };
+        $("usageTokens").checked = usageOptions.tokens;
+        $("usageDollars").checked = usageOptions.tokens && usageOptions.dollars;
+        $("usageRows").checked = usageOptions.tokens && usageOptions.rows;
+        $("usageTokens").disabled = exportWriting;
+        $("usageDollars").disabled = $("usageRows").disabled = exportWriting || !usageOptions.tokens;
         $("reportResultText").checked = draft.options().resultText === true;
         $("reportResultText").disabled = exportWriting;
         $("reportRecordedContextHelp").hidden = !$("reportRecordedContext").checked && draft.options().promptMode !== "none";
@@ -11262,6 +11296,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (prepared || activePreview || reportRebuildFrom) updateReportContent({ hide: true, prepare: prepared });
         updateSelection({ refreshingPairedCopies: prepared });
     }));
+    for (const [id, key] of [["usageTokens", "tokens"], ["usageDollars", "dollars"], ["usageRows", "rows"]]) $(id).addEventListener("change", () => {
+        if (exportWriting || clearingAccess || !api.publicationToken()) return;
+        draft.change({ usageOptions: { tokens: true, dollars: true, rows: false, ...draft.options().usageOptions, [key]: $(id).checked } });
+        updateReportContent({ hide: true }); render();
+    });
     $("reportRecordedContext").addEventListener("change", () => {
         if (exportWriting) return;
         draft.changeRecordedContext($("reportRecordedContext").checked);
@@ -11664,7 +11703,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     collectionSettings.hasDraft = () => githubHasDraft() || sourceSettings.hasDraft();
     firstConnection = assessmentFactories.mountFirstConnection({ api, ux, reviewSource: reviewFirstConnection, collectionStatus: historyStatus });
     const privateContentIds = [
-        "activityList", "activityListSummary", "activityListScope", "activityPager", "sessionAnalysis", "homeInsights", "homeFindings",
+        "activityList", "activityListSummary", "activityListScope", "activityPager", "costRateReference", "sessionAnalysis", "homeInsights", "homeFindings",
         "requestContent", "contextSidebarFooter", "contextSidebarTitle", "savedReportReader", "bundleList", "savedReportCount",
         "detail", "reportList", "reportReviewBody", "reportSaveBody", "reportMatchingContext", "scopeExclusions",
         "pageTitle", "pageIdentity", "pageIntro", "pageProject", "breadcrumbs", "viewingContext", "serviceEvidenceSummary",

@@ -1,4 +1,32 @@
 export const analyzeLayoutStyles = `
+:root {--usage-cost:var(--trends-series-11)}
+.usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
+.usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.usage-switch {margin-block:6px}
+.usage-switch [aria-pressed=true] {font-weight:var(--weight-strong);text-decoration:underline;text-underline-offset:4px}
+.usage-sort {justify-self:end}.usage-sort.select-field {display:inline-flex;flex-direction:row;align-items:center;gap:8px}
+@media(min-width:761px){
+ #activityView>#activityListContext:has(.usage-sort){grid-template-columns:minmax(0,1fr) auto auto;align-items:center}
+ #activityListContext>.usage-sort {grid-column:3;grid-row:1}
+}
+.compare-usage {margin-block:var(--space-lg);font-variant-numeric:tabular-nums}
+.compare-usage .period-comparison-table {margin-block:8px 16px}
+.compare-usage table {width:100%;table-layout:fixed}.compare-usage :is(td,th){overflow-wrap:anywhere}
+.compare-usage :is(td,th):not(:first-child){text-align:end}
+.compare-usage :is(td,th):first-child{width:34%;text-align:start}
+#costRateReference{margin-top:var(--space-lg);padding-top:var(--space-md);border-top:1px solid var(--rule)}
+.usage-model,.usage-reading,#costRateReference {font-variant-numeric:tabular-nums}
+.usage-model {display:grid;min-width:0;overflow-wrap:anywhere;gap:3px;margin-block:12px}.usage-model>span {color:var(--muted);font-size:var(--type-small)}
+.usage-share-track,.usage-bar {display:flex;background:var(--paper);height:6px;border-radius:4px;overflow:hidden}
+.usage-share-track span,.usage-bar [data-kind=freshInput]{background:var(--accent)}
+.usage-share-track [data-kind=usd],.usage-bar [data-kind=output]{background:var(--usage-cost)}
+.usage-bar [data-kind=cacheRead]{background:var(--trends-series-2)}.usage-bar [data-kind=cacheWrite]{background:var(--trends-series-4)}
+.usage-bar {height:10px;margin:8px 0}
+.usage-table-wrap {max-width:100%;overflow:auto}
+.usage-table {width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.usage-table :is(th,td){padding:6px;text-align:end;border-bottom:1px solid var(--rule)}.usage-table :first-child:is(th,td){text-align:start}
+.usage-context {padding:10px;background:var(--paper);border-radius:6px}
+.usage-timeline {padding-inline-start:1.5em;overflow-wrap:anywhere}.usage-timeline li {padding-block:5px}
+.usage-timeline li>span,.usage-timeline li>time{display:block}.usage-timeline time{font-size:var(--type-small)}
 @property --analyze-sweep {syntax:"<angle>";initial-value:360deg;inherits:false}
 #outcomeChart .percentage-ring[data-building] {mask-image:conic-gradient(black var(--analyze-sweep),transparent 0)}
 /* Keep the exact, accessible value and its width in place; only paint the temporary figure. */

@@ -155,6 +155,12 @@ text and report-author notes, and does not recommend next steps.
 
 ## Read and adjust
 
+Under **Change what's included**, token and cache counts and retail cost
+estimates start on. Turn off **Include retail API-equivalent USD estimates**
+for a tokens-only report. The optional per-interaction table starts off.
+The preview and saved files use the same membership and rates; reopening a
+saved report does not apply today's prices.
+
 The report shows its period, scope and recorded patterns. An error report
 can say, for example, that 4 of 12 interactions contained a recorded error.
 Only those 4 cases contribute prompt or diagnostic copies. The other

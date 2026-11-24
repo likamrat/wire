@@ -396,6 +396,14 @@ or corrupted payloads block preparation.
 
 ## Frozen files and saved reading
 
+New reports can include `usageFacts` version 1. The optional breakdown counts
+each originating interaction once, separately in each period for a period
+report. Model token shares include all metered interactions; cost shares use
+only fully priced interactions. A pricing snapshot and all dollar fields are
+omitted for token-only output. Per-interaction rows use the report's projected
+interaction references and never carry source call IDs or extra prompt text.
+Earlier snapshots without `usageFacts` gain no usage section when reopened.
+
 Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
 finding-first reading. Version 2 changes the explanation of the counts, not
 what is counted. Version 1 keeps its original wording when reopened from JSON.

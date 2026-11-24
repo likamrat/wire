@@ -7,7 +7,8 @@ export function createTrendPairModel() {
             const name = family === "rhythm" ? "Tool calls" : family === "timing" ? "Call duration" : label;
             const add = (mode, measure, basis) => result.push({ family, id, mode, basis,
                 key: JSON.stringify([family, id, mode]), label: `${name} · ${measure}` });
-            if (family === "timing") { add("median", "median", "ms"); add("p95", "95th percentile", "ms"); }
+            if (family === "usage") { add("usd", "Est. USD", "USD"); add("tokens", "Tokens", "tokens"); }
+            else if (family === "timing") { add("median", "median", "ms"); add("p95", "95th percentile", "ms"); }
             else {
                 add("count", interaction ? "interactions" : "calls", interaction ? "interactions" : "calls");
                 if (family === "tools") add("reach", "interaction reach", "daily interaction share");
@@ -21,6 +22,9 @@ export function createTrendPairModel() {
     function point(day, choice) {
         const v = day.values[choice.family].find(v => v.id === choice.id);
         const reach = choice.mode === "reach", timing = choice.family === "timing";
+        if (choice.family === "usage") return { amount: choice.mode === "usd" ? v.usd : v.total,
+            numerator: choice.mode === "usd" ? v.priced : v.metered, denominator: v.eligible,
+            rowIds: choice.mode === "usd" ? v.pricedRows : v.meteredRows };
         const amount = timing ? choice.mode === "p95" ? v.p95Ms : v.medianMs
             : choice.mode === "count" ? v.count : reach ? v.reach : v.percent;
         return { amount, numerator: reach ? v.interactions : v.count,
@@ -91,10 +95,11 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     const choiceAt = n => choices.find(c => c.key === (n ? b : a));
     const dayAt = () => data?.days.find(d => d.date === date);
     function amount(p, choice) {
-        return p.amount === null ? "Unavailable" : choice.basis === "ms" ? `${number(p.amount)} ms`
+        return p.amount === null ? "Unavailable" : choice.basis === "USD" ? p.amount > 0 && p.amount < .01 ? "<$0.01" : `~$${p.amount.toFixed(2)}` : choice.basis === "ms" ? `${number(p.amount)} ms`
             : choice.basis.endsWith("share") ? `${number(p.amount)}%` : `${number(p.amount)} ${choice.basis}`;
     }
     function detail(p, c, day) {
+        if (c.family === "usage") return `${number(p.numerator)} of ${number(p.denominator)} interactions ${c.mode === "usd" ? "priced" : "metered"}`;
         if (c.basis === "ms") return `${number(p.numerator)} of ${number(p.denominator)} calls timed`;
         if (!c.basis.endsWith("share")) return `${number(p.rowIds.length)} matching calls`;
         const unit = c.basis === "daily interaction share" ? "interaction" : "call";
@@ -172,7 +177,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
                 scene.name.textContent = list[0] ? (overlay ? list[0].basis : list[0].label) : "";
                 scene.plot.setAttribute("aria-label",list.filter(Boolean).map(c=>c.label).join(" and "));
                 if (scene.host.hidden || collapsed || folded[n]) { scene.chart.withdrawAccess(); continue; }
-                const basis = list[0].basis, family = `pair-${basis === "ms" ? "ms" : basis.includes("interaction") ? "interactions" : "calls"}`;
+                const basis = list[0].basis, family = `pair-${["ms","tokens","USD"].includes(basis) ? basis.toLowerCase() : basis.includes("interaction") ? "interactions" : "calls"}`;
                 const defs = list.map(c=>({id:c.key,label:c.label}));
                 const days = data.days.map(day=>({...day, values:{rhythm:day.values.rhythm,[family]:list.map(c=>{
                     const p = model.point(day,c); return { id:c.key,label:c.label,amount:p.amount,context:detail(p,c,day),secondary:c===second };
