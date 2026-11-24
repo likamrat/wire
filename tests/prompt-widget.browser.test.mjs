@@ -22,6 +22,7 @@ async function setup(t, { completeSearch = false, disputedOrigin = false, qualif
     if (disputedOrigin) records[1].userPrompt.sourceEventId = records[0].userPrompt.sourceEventId;
     if (qualifiedIssues) {
         records[14].userPrompt.authorship.issue = "body-boundary-v1";
+        records[14].userPrompt.authorshipVersion = 10;
         records[11].userPrompt.authorship.issue = "host-wrapper-v1";
     }
     if (mixedLinks) {
@@ -124,18 +125,29 @@ test("retained origin causes reach the reader without changing author shares or 
     await selectActivityOption(page, "promptAuthorFilter", "unknown");
     await closeAnalyzeFilters(page);
     await exact(page, widget, [0, 0, 6], 18);
+    await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="authors"]').click();
+    const summary = page.getByRole("region", { name: "Why authors are unverified" });
+    await expect(summary).toContainText("WIRE could not match the original prompt to a supported host message layout.");
+    await expect(summary).toContainText("1 interaction (saved rule v10)");
+    await expect(summary).toContainText(`View revision ${await page.locator("#promptAuthorSummary").getAttribute("data-revision")}`);
+    await page.locator("#analyzeResultsSection").click();
     for (const [index, reason, width, theme] of [
         [14, "WIRE could not match the original prompt to a supported host message layout.", 1440, "light"],
         [11, "WIRE does not recognize the host-added context before the original prompt.", 390, "dark"],
     ]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1100 });
-        await page.locator(`[data-view-key="request:prompt-widget-${index}"] .request-card-open`).click();
+        const card = page.locator(`[data-view-key="request:prompt-widget-${index}"]`);
+        await expect(card.getByText(reason, { exact: true })).toBeVisible();
+        await card.locator(".request-card-open").click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await expect(page.locator("#contextSidebar .reader-state")).toContainText(reason);
         const firstCall = page.locator("#contextSidebar .reader-call-toggle").first();
         await expect(firstCall).toContainText("Call #1");
         await expect(firstCall).toContainText(index === 14 ? "1 tool call completed" : "1 tool call failed");
+        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Source", exact: true }).click();
+        await expect(page.locator('[data-reader-section="source"]')).toContainText(index === 14 ? "Saved author rule v10" : "Author rule version unavailable");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await capture(page, `origin-issue-${index}-${width}`);
         await page.locator("#closeContextSidebar").click();

@@ -23,7 +23,9 @@ export function chartReferenceFacts(analytics, model) {
             }),
             models: freeze({ total: model.models.total,
                 coverage: freeze(Object.fromEntries(coverage.map(key => [key, model.models.coverage[key]]))) }),
-            ...(model.authors ? { authors: freeze({ total: model.authors.total }) } : {}),
+            ...(model.authors ? { authors: freeze({ total: model.authors.total,
+                unverifiedReasons: freeze(model.authors.unverifiedReasons.map(({ reason, version, count }) => freeze({ reason, version, count }))),
+            }) } : {}),
         }),
     });
 }
@@ -420,10 +422,21 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                 const total = context.model.authors.total;
                 section.append(el("p", `${number(total)} matching ${total === 1 ? "interaction" : "interactions"}. Each belongs to one author category.`));
                 host.append(section);
+                if (context.canOpenData && context.model.authors.unverifiedReasons.length) {
+                    const summary = el("section"), heading = el("h4", "Why authors are unverified");
+                    heading.id = "guideAuthorReasonsTitle"; summary.setAttribute("aria-labelledby", heading.id);
+                    const reasons = el("dl", undefined, "chart-reference-definitions");
+                    for (const { reason, count, version } of context.model.authors.unverifiedReasons) {
+                        const rule = version === null ? "rule version unavailable" : version === "mixed" ? "no single saved rule version" : `saved rule v${version}`;
+                        reasons.append(definition(reason, `${number(count)} ${count === 1 ? "interaction" : "interactions"} (${rule})`));
+                    }
+                    summary.append(heading, reasons, el("p", `View revision ${context.revision}`, "chart-reference-qualification"));
+                    host.append(summary);
+                }
             }
             list.append(definition("Human prompts", "Recorded user origin, not verified account identity."),
                 definition("Agent prompts", "Recorded agent origin, including qualified automatic continuations."),
-                definition("Author unverified", "The saved record does not establish a human or agent sender. These interactions still count. Filter to Author unverified and open an interaction to see its recorded reason."),
+                definition("Author unverified", "The saved record does not establish a human or agent sender. These interactions still count. Filter to Author unverified to read the reason on each card."),
                 definition("Missing prompt text", "Text availability does not determine authorship. Stored aliases count once."));
         } else if (topic === "tools") {
             list.append(definition("Discovery / preparation", "API, schema or agent lookup, not data-service execution."),
@@ -492,7 +505,8 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         const host = $("chartReferenceExplanation");
         const analyze = context.mode === "analyze";
         const title = el("h3", analyze ? readingTopic(topic)[1] : topicName(topic)); title.id = "chartReferenceTopicTitle"; title.tabIndex = -1;
-        host.replaceChildren(title);
+        clearPrivateContents(host);
+        host.append(title);
         if (analyze) {
             const chartName = el("p", undefined, "guide-chart-name");
             chartName.append(ux.icon("section-guide"), doc.createTextNode(topicName(topic))); title.before(chartName);

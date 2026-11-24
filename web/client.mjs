@@ -6384,7 +6384,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (description.hasText && description.notice) facts.append(el("span", "request-card-availability", description.notice));
         const body = el("div", "card-reading-body"), context = el("div", "card-request-context");
         const orientation = el("div", "card-orientation");
-        context.append(header, prompt, facts, orientation);
+        context.append(header);
+        if (!reportPicker && actor === "unknown") context.append(el("p", "request-card-origin-reason", authorship.unverifiedReason(scenario.userPrompt)));
+        context.append(prompt, facts, orientation);
         function inspectGap(entry, cue) {
             const exact = callInvestigation.firstToolCall(workspaceState.evidence.requestActivity,
                 workspaceState.evidence.scenarios, entry.rows, { ...target, layer }, workspaceState.evidence.revision,
@@ -7189,6 +7191,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ];
         const limits = el("div", "reader-record-limits");
         if (association) limits.append(el("p", "", association));
+        if (isSelected && authorship.read(original).actor === "unknown") {
+            const version = authorship.savedVersion(original);
+            limits.append(el("p", "", `${version === null ? "Author rule version unavailable" : `Saved author rule v${version}`} · View revision ${workspaceState.evidence.revision}`));
+        }
         if (coverage) limits.append(el("p", "", coverage));
         provenance.append(limits);
         support.append(provenance);

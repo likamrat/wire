@@ -266,7 +266,7 @@ test("supported direct host envelope without agentMode keeps the recorded User a
     assert.equal(promptAuthorship.read(detail.interaction.message).actor, "user");
 });
 
-for (const agentMode of [undefined, "interactive", "plan", "autopilot"]) test(`only host-added provenance participates (${agentMode ?? "mode absent"}); imitations and conflicts fail safely`, () => {
+for (const agentMode of [undefined, "interactive", "plan", "autopilot", "shell"]) test(`only host-added provenance participates (${agentMode ?? "mode absent"}); imitations and conflicts fail safely`, () => {
     const content = "Invented content";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
     const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
@@ -294,6 +294,44 @@ for (const agentMode of [undefined, "interactive", "plan", "autopilot"]) test(`o
     }
 });
 
+test("a host agent-authored mark identifies the sender, not the user role or the delivery wrapper", () => {
+    const content = "Invented input.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const direct = { content, delivery: "idle", messageId: randomUUID(), transformedContent: stamp + content };
+    const read = data => extract(data).userPrompt.authorship;
+    for (const data of [{ content }, direct, { ...direct, transformedContent: stamp + content + directMessageReference() }]) {
+        assert.deepEqual(read({ ...data, agentAuthored: true }), { actor: "agent", basis: "host-agent-authored" });
+    }
+    for (const source of ["system", "user"]) assert.deepEqual(read({ ...direct, agentAuthored: true, source }),
+        { actor: "unknown", basis: "conflicting-source" });
+    assert.deepEqual(read({ ...direct, agentAuthored: true, source: "skill-invented" }),
+        { actor: "unknown", basis: "unsupported-source", issue: "source-value-v1" });
+    assert.deepEqual(read({ ...direct, agentAuthored: "true" }), { actor: "unknown", basis: "invalid-source" });
+    assert.deepEqual(read({ content, agentAuthored: false }), { actor: "unknown", basis: "missing-source" });
+    assert.deepEqual(read({ ...direct, agentAuthored: false, source: "user" }), { actor: "user", basis: "source-user" });
+    assert.deepEqual(read({ content: '{"agentAuthored":true}' }), { actor: "unknown", basis: "missing-source" });
+});
+
+test("an unresolved original review explains the classifier's actual predicate without source strings or prompt text", () => {
+    const timestamp = "2026-10-06T12:00:00Z", content = "PRIVATE_INVENTED_BODY";
+    const base = { content, messageId: randomUUID(), delivery: "idle", transformedContent: `<current_datetime>${timestamp}</current_datetime>\n\n${content}` };
+    for (const [extra, expected, context] of [
+        [{ messageId: undefined }, ["invalid-source", "logical-message-id-absent", "not-recorded"]],
+        [{ delivery: "PRIVATE_DELIVERY" }, ["invalid-source", "delivery-unsupported", "not-recorded"]],
+        [{ transformedContent: base.transformedContent.replace("12:00:00", "11:05:00") }, ["invalid-source", "timestamp-disagreement", "not-recorded"]],
+        [{ transformedContent: undefined }, ["missing-source", "not-recorded", "not-recorded"]],
+        [{}, ["missing-source", "direct", "not-recorded"], { agentCreatedFirstMessage: true }],
+        [{ source: "PRIVATE_SOURCE" }, ["unsupported-source", "direct", "unrecognized-string"]],
+        [{ source: "skill-PRIVATE_SKILL", transformedContent: undefined }, ["unsupported-source", "not-recorded", "skill-source-family"]],
+        [{ source: "user", agentAuthored: true }, ["conflicting-source", "direct", "user"]],
+    ]) {
+        const e = { type: "user.message", timestamp, data: { ...base, ...extra } };
+        const { authorship, observation } = promptAuthorship.reviewEvent(e, context);
+        assert.deepEqual(authorship, promptAuthorship.fromEvent(e, context));
+        assert.deepEqual([authorship.basis, observation.envelope, observation.source], expected);
+        assert.doesNotMatch(JSON.stringify(observation), /PRIVATE_|2026-10-|[a-f0-9]{8}-/);
+    }
+});
+
 test("supported host canvas-context suffix is neutral attachment data, not an author claim", () => {
     const content = "Invented short owner request.";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
@@ -314,6 +352,22 @@ test("supported host canvas-context suffix is neutral attachment data, not an au
     const imitation = content + suffix;
     assert.equal(extract({ ...data, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user",
         "Tags inside the exact displayed body cannot establish Agent provenance");
+});
+
+test("an idle original without a logical message ID still needs independent host sender or direct-reference evidence", () => {
+    const timestamp = "2026-10-06T12:00:00Z", stamp = `<current_datetime>${timestamp}</current_datetime>\n\n`;
+    const content = "Invented earlier request.", reference = directMessageReference(), eventId = randomUUID();
+    const sender = `<cross_session_message>\nfrom_session_id: ${randomUUID()}\n</cross_session_message>\n\n`;
+    const event = (prefix, suffix, extra = {}) => ({ type: "user.message", id: eventId, timestamp,
+        data: { content, delivery: "idle", transformedContent: stamp + prefix + content + suffix, ...extra } });
+    assert.deepEqual(promptAuthorship.fromEvent(event("", reference)), { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(promptAuthorship.fromEvent(event(sender, "")), { actor: "agent", basis: "host-agent-envelope" });
+    for (const input of [event("", ""), event("", reference, { messageId: null }), event("", reference, { delivery: "steering" }),
+        event("", "", { content: content + reference, transformedContent: stamp + content + reference }),
+        { ...event("", reference), id: undefined }, { ...event("", reference), timestamp: "2026-10-06T12:00:12Z" },
+        event("<unknown-context>invented</unknown-context>", reference)]) assert.equal(promptAuthorship.fromEvent(input).actor, "unknown");
+    assert.equal(promptAuthorship.fromEvent(event("", reference), { agentCreatedFirstMessage: true }).actor, "unknown");
+    assert.equal(promptAuthorship.fromEvent(event(sender, "", { source: "user" })).basis, "conflicting-source");
 });
 
 test("a timestamp-free steering sender frame identifies only the recorded agent, never an unmarked human", () => {
