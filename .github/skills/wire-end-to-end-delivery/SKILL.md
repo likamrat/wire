@@ -1,6 +1,6 @@
 ---
 name: wire-end-to-end-delivery
-description: Diagnose a reported WIRE bug, fix a regression, implement a feature, or qualify a combined build. Follow the normal product entry and distinguish a source fix from a working delivery.
+description: Diagnose a WIRE bug, deliver a feature, audit regression coverage or qualify a combined build. Follow the normal product entry and distinguish a source fix from a working delivery.
 license: MIT
 ---
 
@@ -63,25 +63,35 @@ establishing why an earlier request failed.
 
 Reuse existing modules, tests and tooling. Start with the smallest command that
 covers the changed behavior and its coupled regressions. Expand only for a
-specific dependency, observed failure or acceptance requirement. A focused check
-must prove the right outcome, not weaken an assertion to fit the implementation.
+specific dependency, observed failure or acceptance requirement.
+
+When auditing tests, review passing cases too. Before dropping one, name the
+regression it catches and the retained case that would fail for the same reason,
+or show why the behavior is retired or the assertion proves nothing. Before adding
+a case, name the regression the existing tests miss. For an async UI action,
+check the result the user sees after the matching read completes. Search Back,
+for example, can restore the query before the matching row regains focus.
+
 For documentation or skill links, check exact-case paths, GitHub heading
 anchors and embedded images. When replacing screenshots or explaining a
 changed control, operate that path with invented data in the [documentation
 fixture](../../../docs/development.md#capture-documentation-screenshots). Keep the rest
 of the app out of the test unless it supplies a necessary step.
 
-Use invented records and disposable stores for mutation tests. Real collection,
+Use invented records and disposable stores for mutation tests. Register cleanup
+as each fixture acquires a resource so a failed setup or assertion releases
+pending requests and closes its browser and server. Real collection,
 private-data reads, authentication, disclosure and destructive operations retain
 their actual permission gates; this skill supplies none. Prove ordinary product
 entry when that is the acceptance criterion, rather than seeding backend state.
 
 Call a failure inherited only after reproducing it on the baseline with the same
 input and route. If a test opens a retired screen, move it to the supported
-entry and keep the behavior it protected. A failure there may still be a
-product defect. When a full suite is required, report its final exit on the
-combined revision; focused passes, interrupted runs and runs on another
-revision cannot supply it. Name separate qualification lanes as such.
+entry and keep the behavior it protected. If it exposes a product defect,
+keep the assertion and send the reproduction to the feature owner. When a
+full suite is required, report the unfiltered run's exit status on the exact
+combined revision. Report focused passes, interrupted runs and separate
+qualification lanes as such.
 
 **Ready:** the exact candidate satisfies the relevant behavior, error and
 preservation criteria; unrun real-data or UI criteria remain visibly pending.

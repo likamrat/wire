@@ -6,7 +6,7 @@ a skill by name, or let it select one that matches the task.
 | If the task is about... | Start here |
 | --- | --- |
 | Who owns a result, whether a handoff arrived, or what blocks integration | [wire-coordination](wire-coordination/SKILL.md) |
-| Reproducing a bug, delivering a feature through its normal entry, or qualifying a build | [wire-end-to-end-delivery](wire-end-to-end-delivery/SKILL.md) |
+| Reproducing a bug, delivering a feature, auditing regression coverage or qualifying a build | [wire-end-to-end-delivery](wire-end-to-end-delivery/SKILL.md) |
 | What a count, outcome, author, service or time interval actually measures | [wire-evidence-semantics](wire-evidence-semantics/SKILL.md) |
 | Finding retained text on-device, highlighting the match or opening that exact record | [wire-local-search](wire-local-search/SKILL.md) |
 | Which interactions a draft or report includes, what Save writes, or how a frozen file reopens | [wire-report-integrity](wire-report-integrity/SKILL.md) |
