@@ -564,6 +564,45 @@ test("later pages locate a candidate and disqualify a competing original; source
     assert.deepEqual(await loadBoardState(f.app.context), f.state);
 });
 
+test("origin-only continuation survives unrelated progress, not changed owner, selected cursor, checkpoint or retained cut", async t => {
+    const f = await setup(t, "paged-review"), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+    const page = await reviewPromptOriginClass({ ...input, batch });
+    assert.equal(page.status, "continue"); assert.equal(page.targets, undefined);
+    const indexBytes = await readFile(f.indexFile), checkpointBytes = await readFile(f.checkpointFile);
+    const resume = () => reviewPromptOriginClass({ ...input, batch, continuation: page.continuation });
+    for (const mutate of [
+        idx => { idx.sources[f.app.child].firstPromptEventId = "different"; },
+        idx => { idx.sources[f.app.child].cursor.anchor = "0".repeat(64); },
+        idx => { idx.ownerHost.machine = "1".repeat(64); },
+        idx => { idx.newAuthorityField = "unrecognized-and-must-stay-bound"; },
+        idx => { idx.metrics.newField = 1; },
+    ]) {
+        const index = JSON.parse(indexBytes); mutate(index);
+        await atomicJson(f.indexFile, index);
+        await assert.rejects(resume(), /stale or unavailable/);
+    }
+    await writeFile(f.indexFile, indexBytes);
+    await appendFile(f.checkpointFile, "\n");
+    await assert.rejects(resume(), /continuation is stale or invalid/);
+    await writeFile(f.checkpointFile, checkpointBytes);
+    const index = JSON.parse(indexBytes);
+    index.metrics.cycles++; index.sources[f.app.child].lastCheckedAt = new Date().toISOString();
+    const other = Object.keys(index.sources).find(id => id !== f.app.child && index.sources[id].cursor);
+    index.sources[other].cursor.offset++;
+    await atomicJson(f.indexFile, index);
+    const completed = await resume();
+    assert.equal(completed.status, "reviewed");
+    assert.deepEqual(completed.targets.map(t => t.prompt.authorship.basis), ["host-agent-envelope"]);
+    assert.deepEqual(completed.unresolved.map(r => r.reason), ["duplicate-original"]);
+    assert.equal(completed.source.indexSha256, hash(await readFile(f.indexFile)), "The proposal uses the fresh exact writer cut.");
+    assert.notEqual(completed.source.indexSha256, hash(indexBytes));
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    f.plan.targets = completed.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    await assert.rejects(runPromptOriginRepair({ ...f.options, planSha256: digest(f.plan), mode: "prepare" }), /Source configuration or index changed/);
+});
+
 for (const change of ["unrelated", "selected", "repeated", "review cut"]) test(`the named author review fences a concurrent metadata commit: ${change}`, async t => {
     const f = await setup(t), scope = { dataDir: f.app.context.dataDir };
     const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);

@@ -464,6 +464,13 @@ counted, but follow-up-only originals do not enter these batches. Use the
 same `--originating-only` and time/archive choices with `--mode review`;
 a general batch cannot be substituted. The list needs no journal or
 checkpoint read. It is not a proposal, permission or persistent index.
+Between pages of that exact source, a new check time, cycle counter or
+another chat's cursor alone does not invalidate already verified bytes.
+The selected source and cursor, compact checkpoint preimage, original
+journal, database identity and mapping, board/configuration, source
+membership, host owners and global guards must still match. Each invocation
+requires a stable control read; the final proposal seals the **current exact**
+index bytes. Prepare and Apply do not use this page-continuation exception.
 The default is the current window and active sources. To review older dates or
 archived local chats, explicitly add `--include-older` or `--include-archived`
 to both commands. These options do not change collection settings.
