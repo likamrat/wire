@@ -465,7 +465,9 @@ evidence, not what a new original lookup would find. The time/archive choices
 below affect review eligibility, not this all-retained denominator.
 Use `--mode list --originating-only` for a private case list on **one** verified
 retained revision. Each unverified canonical interaction has a store-bound
-case reference and either its batch/one-based position or an exclusion. A
+case reference and either its batch/one-based position or an exclusion. The
+saved call-to-prompt association is separate from who sent the message:
+message order alone cannot identify the initiating request. A
 listed source's `consumedBytes` is its retained fully consumed cursor (or
 null), not a live file check. Follow-up copies of selected originals are
 counted, but follow-up-only originals do not enter these batches. Use the

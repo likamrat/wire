@@ -499,6 +499,8 @@ test("reviewed v12 missing-sender and shell origins repair both actors, copies a
 test("origin-case inventory joins all canonical unknowns to exact bounded review slots without unrelated follow-ups", async t => {
     const f = await setup(t, "v12-sender-pair"), scope = { dataDir: f.app.context.dataDir, includeOlder: true };
     const records = structuredClone(f.state.evidence), extra = randomUUID();
+    const unlinked = records.find(r => r.userPrompt.authorship?.basis === "missing-source");
+    unlinked.promptAssociationEvidence = { version: 1, method: "unavailable" };
     records.find(r => r.sourceSessionId === f.app.child).followUpPrompts.push({
         text: "Invented follow-up without a call", status: "full", sourceEventId: extra, sourceTimestamp: f.target.prompt.sourceTimestamp,
         authorship: { actor: "unknown", basis: "missing-source" }, authorshipVersion: 12,
@@ -509,6 +511,8 @@ test("origin-case inventory joins all canonical unknowns to exact bounded review
     const inventory = await reviewPromptOriginClass(input);
     assert.deepEqual([inventory.interactions, inventory.calls, inventory.cases.length, inventory.authors.unknown], [10, 10, 5, 5]);
     assert.equal(new Set(inventory.cases.map(c => c.caseRef)).size, 5);
+    assert.ok(inventory.cases.some(c => c.qualifications.some(q => q.basis === "missing-source") && c.associations.includes("unavailable")));
+    assert.ok(inventory.cases.some(c => c.associations.includes("nearest-preceding")));
     assert.deepEqual(ordinary.batches.flatMap(b => b.origins).length, 3);
     assert.equal(inventory.batches.length, 1);
     const [b] = inventory.batches;
