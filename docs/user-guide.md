@@ -173,7 +173,8 @@ select the path or batch, then inspect the matching interaction. Read the target
 outcome on the individual call rather than inferring them from the interaction summary.
 
 The **Work IQ tool calls over time** chart shows individual calendar days by
-default, even with All dates or a long range. Long timelines show up to 90
+default, even with All dates or a long range. If the days don't fit across the
+chart, check its date range below the plot and scroll horizontally. Long timelines show up to 90
 intervals at a time, starting with the latest dates. Scroll within that window,
 or use **Earlier dates**, **Later dates**, **First dates** and **Latest dates**
 to reach the rest. The window names its dates; totals and filters still cover

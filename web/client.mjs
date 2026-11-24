@@ -5612,7 +5612,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderTime() {
         const series = workspaceState.analytics.timeSeries;
         const native = sharedNativeView(), nativePoints = native?.timeSeries.points ?? [];
-        renderTimelineWindow();
+        const pager = renderTimelineWindow();
         if (!series?.points?.length && !nativePoints.length) {
             $("chart").append(empty(series?.window || native?.timeSeries.window ? "No dated records in this window" : "Dates unavailable"));
             const missing = (series?.undatedCount ?? 0) + (native?.timeSeries.undatedRows ?? 0);
@@ -5636,9 +5636,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             viewKey(control, `chart:time:${point.chartSource}:${point.date}:${key || "total"}`);
             return ux.tooltip(control, tip);
         }
+        const guidance = pager ? null : el("span", "chart-size-note", `Chart dates: ${time.formatCivilRange(
+            dateInput(points[0].from), dateInput(points.at(-1).to), workspaceState.scope.timeContext)}. Scroll horizontally for more dates.`);
         const chart = dimensional.timeView({
             compact: Boolean(frontendActivity),
             points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
+            onOverflow: guidance ? overflowing => {
+                if (overflowing && !guidance.parentNode) $("chartFooter").prepend(guidance);
+                else if (!overflowing) guidance.remove();
+            } : undefined,
             unit: frontendActivity ? undefined : total => results.columnUnit(workspaceState.scope.layer, total),
             summary: point => `${mixed ? point.chartSource + ": " : ""}${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
             createAction: point => periodLink(point),
@@ -5690,6 +5696,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             control.id = "timeline-" + id; control.setAttribute("aria-disabled", String(!available)); host.append(control);
         }
         host.append(summary); $("chartFooter").append(host);
+        return host;
     }
     function drillTime(point) {
         go("activity", { range: "custom", from: point.from, to: point.to, timelineFrom: undefined, page: undefined });
