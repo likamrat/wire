@@ -21,7 +21,10 @@ const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
-    const origin = path.join(temp, "origin"), root = path.join(temp, "installed"), store = path.join(temp, "store");
+    const origin = path.join(temp, "origin"), store = path.join(temp, "store");
+    // A nested Windows install puts Git's pack-<hash>.keep beyond MAX_PATH in the stage.
+    const installName = process.platform === "win32" ? "installed".padEnd(159 - path.join(temp, ".git", "wire-updates").length - 1, "-") : "installed";
+    const root = path.join(temp, installName);
     const env = { ...process.env, COPILOT_HOME: path.join(temp, "empty-source"), GH_CONFIG_DIR: path.join(temp, "empty-gh"),
         WORKIQ_EVIDENCE_DATA_DIR: store, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: path.join(temp, "no-git-config"),
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1", npm_config_audit: "false", npm_config_fund: "false" };
@@ -185,21 +188,37 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await other.goto(url + "settings");
             const otherCheck = other.getByRole("button", { name: "Check for updates" });
             await expect(other.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+            await other.route("**/api/app-update", async route => {
+                if (route.request().postDataJSON()?.action !== "check") return route.fallback();
+                const response = await route.fetch();
+                await delay(4000);
+                await route.fulfill({ response });
+            });
             const completed = other.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "check");
             await otherCheck.click();
+            await other.emulateMedia({ reducedMotion: "reduce" });
+            await expect(other.locator("#appUpdateCheck .update-spinner")).toHaveCSS("animation-name", "none");
             assert.equal((await (await completed).json()).phase, "current");
-            await expect(otherCheck).toBeEnabled();
+            await expect(otherCheck).toBeEnabled({ timeout: 2000 });
             await page.bringToFront();
             await appendFile(path.join(origin, "web", "browser-entry.mjs"), '\ndocument.documentElement.dataset.wireFixtureBuild = "updated";\n');
             await git(origin, "commit", "-qam", "Fixture update from browser");
             const tip = await git(origin, "rev-parse", "HEAD");
             const checked = page.waitForResponse(response => response.url() === url + "api/app-update"
                 && response.request().postDataJSON().action === "check");
+            const checkBox = await check.boundingBox();
+            const checkStarted = performance.now();
             await check.click();
             await expect(status).toHaveText("Checking for updates");
+            const pending = page.getByRole("button", { name: "Checking", exact: true });
+            await expect(pending.locator(".update-spinner")).toBeVisible();
+            const rotation = () => pending.locator(".update-spinner").evaluate(n => getComputedStyle(n).transform);
+            await expect.poll(rotation).not.toBe(await rotation());
+            assert.deepEqual(await pending.boundingBox(), checkBox);
             const offer = await (await checked).json();
             assert.equal(offer.installed, before.build); assert.equal(offer.candidate, tip);
             await expect(status).toHaveText("Update available.");
+            assert.ok(performance.now() - checkStarted >= 3000);
             const action = { name: "Update and restart", exact: true };
             await expect(page.locator("#appUpdateNotice").getByRole("button", action)).toBeVisible();
             await expect(check).toBeHidden();
@@ -213,14 +232,15 @@ test("full WIRE clone updates on the original address and reopens the same saved
             assert.equal(refusal.status(), 409);
             const { error, code } = await refusal.json();
             assert.equal(code, "wire_update_blocked");
-            await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
-            await expect(page.locator("#appUpdateDetail")).toHaveText(error);
             await expect(status).toContainText(error);
+            await expect(page.locator("#appUpdateNotice")).toBeHidden();
             assert.equal((await health()).build, before.build);
             await other.close({ runBeforeUnload: true });
             const applied = page.waitForRequest(request => request.url() === url + "api/app-update" && request.postDataJSON().action === "apply");
             await page.locator(".app-version-card").getByRole("button", action).click({ timeout: 30000 });
             assert.equal((await applied).postDataJSON().candidate, tip);
+            await expect(page.locator("#appUpdateFence")).toBeVisible();
+            await expect(page.locator("#appUpdateNotice")).toBeHidden();
             await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });
             await expect(page.locator("#appUpdateDetail")).toHaveText(`WIRE v${pkg.version} is running.`);
             const after = await health();

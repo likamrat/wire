@@ -453,7 +453,9 @@ the tab open: WIRE shows its progress, restarts, then reloads the same address.
 Dismissing the notification leaves the update available in General. If your copy can't check for updates,
 General links to **Update instructions** instead.
 
-If WIRE says **Update not installed**, follow the reason shown before trying again.
+The Check button shows **Checking** while it looks for an update. If installation
+fails, General shows **Update not installed** and the reason. Away from General,
+look for the same message in the notification.
 
 Below updates, **Current theme** shows your palette name, Light or Dark mode,
 and a preview with its colors.

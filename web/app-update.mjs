@@ -6,6 +6,7 @@ const phases = ["current", "available", "unknown", "checking", "preparing", "res
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const manualOnly = state => state && (!state.supported || state.phase === "manual");
 const checkingMessage = "Checking for updates";
+const minManualCheckMs = 3000;
 function decode(value) {
     if (!value || typeof value.supported !== "boolean" || typeof value.automatic !== "boolean"
         || !phases.includes(value.phase) || typeof value.message !== "string"
@@ -24,6 +25,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     const fixed = { mode: "same-origin", credentials: "same-origin", redirect: "error", cache: "no-store" };
     let state, busy = false, expected, checkingRestart = false, allowReload = false, storageAvailable = true;
     let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "";
+    let manualChecking = false, endCheckFeedback;
     let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
     function receipt(value) {
         if (value) sessionStorage.setItem(receiptKey, JSON.stringify(value));
@@ -33,7 +35,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     function render() {
         const available = state?.supported && state.phase === "available" && sha(state.candidate) && state.candidate !== state.installed;
         const shown = available && state.candidate !== state.dismissed;
-        notice.inert = !shown && !success && !result;
+        notice.toggleAttribute("data-install-result", Boolean(result));
+        notice.inert = Boolean(expected) || !shown && !success && !result;
         if (!notice.inert) {
             $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
             const detail = $("appUpdateDetail");
@@ -53,6 +56,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         automatic.disabled = manual.disabled || !state?.supported;
         automatic.checked = !manualMode && (pendingPreference ?? state?.automatic === true);
         const checking = feedback === checkingMessage || state?.phase === "checking";
+        manual.setAttribute("aria-busy", String(manualChecking));
+        manual.querySelector(".check-action-pending").hidden = !manualChecking;
         const status = feedback || (result ? `Update not installed. ${result}` : checking ? checkingMessage
             : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
         const lastCheck = available || checking || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
@@ -86,26 +91,41 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const generation = lifetime;
         const returnFocus = action === "check" && document.activeElement === manual;
         const previousCandidate = state?.candidate;
+        manualChecking = action === "check";
         busy = true; feedback = ["check", "auto-check"].includes(action) ? checkingMessage : "";
         if (action === "preferences") { pendingPreference = fields.enabled; feedback = "Saving update preferences…"; }
         clearTimeout(scheduleTimer); render();
+        const minimum = manualChecking && new Promise(resolve => {
+            const timer = setTimeout(resolve, minManualCheckMs);
+            endCheckFeedback = () => { clearTimeout(timer); resolve(); };
+        });
         try {
-            state = await post(action, fields);
-            panelVerified = generation === lifetime;
+            const next = await post(action, fields);
+            if (minimum) await minimum;
+            if (generation !== lifetime) return;
+            state = next;
+            panelVerified = true;
             success = "";
             if (!["auto-check", "status"].includes(action) || state.candidate !== previousCandidate) result = "";
         } catch (error) {
+            if (minimum) await minimum;
+            if (generation !== lifetime) return;
             // Reconcile preferences/dismissals by reading; never repeat a lost command.
             state = null;
             panelVerified = false;
-            if (action !== "status") try { state = await post("status"); panelVerified = generation === lifetime; } catch { /* No usable current status. */ }
+            if (action !== "status") try {
+                const next = await post("status");
+                if (generation !== lifetime) return;
+                state = next; panelVerified = true;
+            } catch { /* No usable current status. */ }
             feedback = error.refused ? error.message : "Update status could not be confirmed. Check again when WIRE is available.";
         } finally {
             pendingPreference = undefined;
+            endCheckFeedback = undefined; manualChecking = false;
             if (feedback === checkingMessage || feedback === "Saving update preferences…") feedback = "";
             busy = false;
             if (restoring) { restoring = false; state = null; void run("status"); }
-            else {
+            else if (generation === lifetime) {
                 render(); schedule();
                 if (returnFocus && document.activeElement === document.body) {
                     const target = manual.hidden ? $("settingsAppUpdate") : manual;
@@ -234,6 +254,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     // release an unfinished panel, a bfcache entry or a replacement runtime's grant.
     window.addEventListener("pagehide", event => {
         lifetime++;
+        endCheckFeedback?.();
         clearTimeout(scheduleTimer);
         const unfinished = Boolean(busy || expected || reason());
         if (event.persisted) { unfinishedAtSuspension ||= unfinished; panelVerified = false; return; }
