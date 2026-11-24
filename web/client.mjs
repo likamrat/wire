@@ -7350,7 +7350,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length, omitCallKind: explainedBadRequest ? "http-400" : undefined });
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
-            if (Number.isSafeInteger(tool.returnedTextBytes)) heading.querySelector(".reader-tool-meta").append(el("span", "reader-call-duration",
+            if (!(scenario.usage && tool.usageContextLinked) && Number.isSafeInteger(tool.returnedTextBytes)) heading.querySelector(".reader-tool-meta").append(el("span", "reader-call-duration",
                 `~${count(Math.round(tool.returnedTextBytes / 4))} returned context tokens`));
             item.append(heading);
             const explanations = [...heading.querySelectorAll('[data-interpretation="true"]')];

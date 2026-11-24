@@ -67,9 +67,11 @@ function usageReading(el, host, scenario, formatTime) {
     }
     const tools = scenario.toolCalls ?? [], sized = tools.filter(c => c.usageContextLinked && Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0);
     const footprint = Math.round(sized.reduce((n, c) => n + c.returnedTextBytes, 0) / 4);
-    host.append(el("p", "usage-context", sized.length ? `Work IQ returned ~${number(footprint)} tokens${sized.length < tools.length ? ` (${sized.length} of ${tools.length} calls measured)` : ""}.`
-        : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
-        : "Work IQ return size was not recorded."));
+    if (sized.length !== 1 || tools.length !== 1) {
+        host.append(el("p", "usage-context", sized.length ? `Work IQ returned ~${number(footprint)} tokens${sized.length < tools.length ? ` (${sized.length} of ${tools.length} calls measured)` : ""}.`
+            : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
+            : "Work IQ return size was not recorded."));
+    }
     const steps = [...u.steps.map(s => ({ at: s.at, label: s.model, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out${s.usd === null ? "" : ` · ${formatUsd(s.usd)}`}` })),
         ...sized.map(c => ({ at: c.completedAt, label: c.tool, detail: `~${number(Math.round(c.returnedTextBytes / 4))} tokens returned` }))];
     const timeline = el("ol", "usage-timeline");

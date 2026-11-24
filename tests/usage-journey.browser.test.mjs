@@ -55,7 +55,8 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await page.keyboard.press("Escape");
     await expect(unpriced.locator(".request-card-open").first()).toBeFocused();
     const direct = cards.filter({hasText:"Find review owners"}).locator(".request-card-open").first();
-    await direct.click(); await expect(reader).toContainText("Work IQ returned ~8,500 tokens");
+    await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("~8,500 tokens returned");
+    await expect(reader.locator(".usage-context")).toHaveCount(0);
     await page.keyboard.press("Escape"); await expect(direct).toBeFocused();
     await widget.getByRole("link",{name:/View trend/}).press("Enter");
     const panel=page.locator(".trends-panel[data-family=usage]");
