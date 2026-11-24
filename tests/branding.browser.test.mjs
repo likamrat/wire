@@ -125,10 +125,15 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             await captureBrand(page, `brand-help-${theme}-${width}-${scale}x-${compact ? "compact" : "expanded"}`, geometry);
             await tip.hover(); await expect(tip).toBeVisible();
             await page.keyboard.press("Escape"); await expect(tip).toBeHidden();
+            if (width < 700) {
+                await settled(page);
+                await expect(page.locator("#navigationDrawer"), "Dismissing logo help does not dismiss its drawer").toBeVisible();
+            }
             await page.mouse.move(width - 5, 800);
-            await page.locator(width < 700 ? "#closeNavigation" : "#themePreference").focus();
-            await brand.focus(); await page.keyboard.press("Shift");
-            await expect(tip).toBeVisible(); await expect(brand).toBeFocused();
+            await brand.focus();
+            await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+            await expect(brand, `${theme}/${width}/${scale}/${compact}: keyboard return`).toBeFocused();
+            await expect(tip).toHaveText("Work IQ Request Explorer"); await expect(tip).toBeVisible();
             await page.keyboard.press("Escape"); await expect(tip).toBeHidden(); await expect(brand).toBeFocused();
             await brand.press("Enter"); await ready(page); await expect(tip).toBeHidden();
             await expect(page.locator('nav [data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
