@@ -125,6 +125,19 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     }
     async function samplePreview(stage) {
         await expect(preview).toBeVisible();
+        const rows = field.locator("li"), middle = rows.nth(1).getByRole("button");
+        const glyphs = await middle.locator("svg path").evaluateAll(paths => paths.map(path => {
+            const {width,height,y} = path.getBoundingClientRect();
+            return [width,height,y];
+        }));
+        assert.equal(glyphs.length,2);
+        assert.deepEqual(glyphs[0],glyphs[1],`${stage}: up and down glyphs match in size and vertical alignment`);
+        for (const [row,direction,column] of [[rows.first(),"down",1],[rows.last(),"up",0]]) {
+            const available = row.getByRole("button");
+            await expect(available).toHaveCount(1);
+            await expect(available).toHaveAccessibleName(new RegExp(` ${direction}$`));
+            assert.equal((await available.boundingBox()).x,(await middle.nth(column).boundingBox()).x);
+        }
         const tiles = await preview.locator("[data-tile]").evaluateAll(nodes => nodes.map(node => {
             const { x, y, width, height } = node.getBoundingClientRect();
             return { key:node.dataset.tile,x,y,width,height };
@@ -196,7 +209,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     await observe("chosen"); await page.reload(); await observe("reloaded");
     await page.goto(settings);
     await selectActivityOption(page,"defaultGuideStart","last");
-    const restore = field.getByRole("button",{name:"Restore Wired Default Layout",exact:true}), tip = page.getByRole("tooltip");
+    const restore = field.getByRole("button",{name:"Restore WIRE Default Layout",exact:true}), tip = page.getByRole("tooltip");
     if (width===1440) {
         // This pane crosses the breakpoint where the standard and custom previews
         // no longer use the same column count.

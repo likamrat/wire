@@ -177,9 +177,9 @@ export function defaultField(key, icons) {
     const status = `<p class="settings-help" role="status" id="${id}Status" hidden></p>`;
     if (pageDefaultSpecs[key].ordered) return `<fieldset class="page-default-field analyze-layout-field" id="${id}" tabindex="-1" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="analyze-layout-editor"><ol>${choices.map(([k, name]) => `<li data-section="${k}"><div><span>${name}</span>
-        <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["chart-collapse"]}</button>
-        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons.chevron}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
-      <div class="analyze-layout-actions"><button type="button" id="restoreAnalyzeLayout" data-restore>Restore Wired Default Layout</button>
+        <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["move-up"]}</button>
+        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons["move-down"]}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
+      <div class="analyze-layout-actions"><button type="button" id="restoreAnalyzeLayout" data-restore>Restore WIRE Default Layout</button>
       <a href="/" data-nav="analyze">View Analyze</a></div><p class="visually-hidden" role="status" id="${id}Announcement"></p>${status}</fieldset>`;
     if (Array.isArray(initial)) return `<fieldset id="${id}" class="page-default-field" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="page-default-formats">${choices.map(([v, text]) =>

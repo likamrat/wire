@@ -225,6 +225,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .analyze-layout-field li>div,.analyze-layout-actions {display:flex;align-items:center;gap:4px}
 .analyze-layout-field li span {flex:1;min-width:0}
 .analyze-layout-field li button {min-width:44px;min-height:44px}
+.analyze-layout-field li button:disabled {visibility:hidden}
 .analyze-layout-actions {justify-content:space-between;flex-wrap:wrap;margin-top:8px}
 .analyze-layout-actions a {display:inline-flex;align-items:center;min-height:44px}
 .page-default-formats {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));gap:0 .75rem}
