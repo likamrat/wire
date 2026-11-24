@@ -128,9 +128,10 @@ return-focus callbacks retain both original Search sequence and publication
 ownership, and check before their own effects.
 
 Back restores Search focus only after reader closure and underlying reading
-restoration settle. If focus has already moved to a Search result while the
-reader is closing, it stays there. Opening a prompt match expands and focuses
-that retained prompt.
+restoration settle. If you edit the query during that return, Search keeps
+your new query. If focus has already moved to a Search result while the reader
+is closing, it stays there. Opening a prompt match expands and focuses that
+retained prompt.
 
 ## Check a Search change
 
