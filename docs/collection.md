@@ -330,6 +330,8 @@ its prompt and assistant-request event references. A group-level link from
 an older record is not evidence for each call in it. Reading old records
 does not reopen history or assign a requester from a skill or system message.
 Two distinct retained starts for the same invocation cannot prove a direct link.
+New collection marks that conflict before trimming the checkpoint, so retaining
+only one start does not erase the conflict after restart.
 If copies of a single message name conflicting senders, the sender stays
 unclear even when the timestamp and original text agree.
 
@@ -486,7 +488,9 @@ one opaque reference per selected Analyze call. `same-origin` or
 logical message. `checkpointOriginRef` identifies that message without exposing
 its source ID; `retainedSender` describes only that message's saved checkpoint
 metadata. A missing start or request is a limit of the checkpoint, not proof
-that the journal lacks it. A disagreement with a board link is not resolved by
+that the journal lacks it. `fullSourceUniquenessChecked` is always false: an older
+checkpoint may already have discarded a competing start before it could be marked.
+A disagreement with a board link is not resolved by
 preferring either copy. The check cannot prepare, apply or authorize a repair.
 
 Between pages of that exact source, a new check time, cycle counter or
