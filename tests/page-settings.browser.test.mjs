@@ -55,8 +55,10 @@ for (const frontend of ["bundled", "react"]) test(`Analyze Filters accepts All d
         }).map(label => label.textContent);
     });
     assert.ok(onScreen.length > 0 && onScreen.length < 41);
-    await expect(page.locator("#chartFooter")).toHaveText(/Aug 20.*Sep 29, 2026.*Scroll/i);
-    await expect(page.locator("#chartFooter")).toBeVisible();
+    await expect(page.locator("#chartFooter")).toBeEmpty();
+    const newest = page.locator("#chart .time-column").last();
+    await newest.focus();
+    await expect(newest).toHaveAccessibleName(/Sep 29, 2026: 14 Work IQ tool calls/);
     assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /2026-08-20|workiq-fetch|search-0/);
     await page.reload();
     await expect(headline).toHaveText("15 Work IQ tool calls (All dates)");
