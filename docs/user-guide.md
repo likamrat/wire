@@ -69,7 +69,9 @@ by its tool or path. Its outcome describes the tool execution; returned entries
 keep their own statuses in the call reader. **Show all matching activity**
 returns to the interaction list.
 
-In **Settings > Analyze > Homepage layout**, use **Up** or **Down** to move a widget
+<a id="analyze-homepage-layout"></a>
+
+In **Settings > Analyze > Homepage layout**, use the up or down arrow to move a widget
 or the entire **Interactions** list. For example, move Interactions above the two charts,
 or put Prompt authors first. Choose **View Analyze** to see the result. The order stays
 in this browser after reload; **Restore WIRE layout** puts every section back without
@@ -317,7 +319,8 @@ The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
 
-On an Analyze card, select the outcome below the prompt preview to open
+Hover highlights the card, but the card itself is not a link.
+Select the outcome below the prompt preview to open
 the right-hand reader. Hover over its arrow or focus the link to see **View call details**.
 In the reader, choose **Prompt** to read and copy the retained original.
 **Human prompt**, **Agent prompt** or
@@ -374,7 +377,7 @@ Copy controls copy the exact retained original, unmasked. A saved Copilot reply
 is the assistant's text, not a tool result. Enabling reply saving does not
 restore previously omitted replies.
 
-Use **Add to report** at the bottom left of a card, or the same action after
+Use **Add to report** on the card, or the same action after
 **Source** in its reader. Choose a draft to add the entire interaction without
 leaving Analyze. Reopen the picker to add it to another draft or remove it from
 one. See [Keep interactions in a draft](reporting.md#keep-interactions-in-a-draft)
@@ -430,7 +433,7 @@ Under **WIRE defaults**, choose how views open and new reports and comparisons s
 
 | Category | What you can change |
 | --- | --- |
-| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. This filters saved activity. Guide can open to Recorded outcomes or the last topic you read in this tab. |
+| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
 | Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
