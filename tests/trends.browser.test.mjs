@@ -1875,7 +1875,7 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
         window.trendsBoundary.withdraw();
         return { held: text.data, labels: [...document.querySelectorAll(".trends-period-label")].map(node => node.textContent) };
     });
-    assert.deepEqual(cleared, { held: "", labels: ["", "", "", "", "", "", ""] });
+    assert.deepEqual(cleared, { held: "", labels: accepted.map(() => "") });
 });
 
 test("clicking an overview data point never maximizes or moves the workspace", { timeout: 30000 }, async t => {
