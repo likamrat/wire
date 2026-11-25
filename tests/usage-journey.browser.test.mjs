@@ -365,7 +365,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
     const {runtime}=await usagePreview({after:f=>cleanup.push(f)});
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
-    const page=await browser.newPage({viewport:{width:1320,height:900}}), errors=[];
+    const page=await browser.newPage({viewport:{width:1320,height:900},timezoneId:"UTC"}), errors=[];
     page.on("pageerror",e=>errors.push(e.message));page.setDefaultTimeout(7500);
     await page.goto(runtime.url);
     const cards=page.locator("#activityList article");
