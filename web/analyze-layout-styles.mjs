@@ -8,24 +8,26 @@ export const analyzeLayoutStyles = `
 .usage-question-controls>.report-form-field:not([hidden]) {display:grid;gap:4px;min-width:0;max-width:100%;color:var(--muted);font-size:var(--type-small)}
 .usage-question-controls :is(select,.select-trigger) {min-width:0;max-width:100%;min-height:44px;color:var(--ink)}
 .analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px var(--space-2xl);background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
+.analyze-usage:has(.token-history) {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
 .analyze-dashboard>.analyze-usage {grid-column:1/-1}
 .wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
 .token-history {display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:10px;color:var(--ink);font-variant-numeric:tabular-nums;font-size:var(--type-small)}
 .token-history-scale {display:grid;position:relative;height:var(--plot-height);color:var(--muted);text-align:end}
 .token-history-scale span {grid-area:1 / 1;position:relative;align-self:start;transform:translateY(-50%)}
 .token-history {--plot-height:clamp(8.5rem,11vw,11rem);position:relative}
-.token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;padding-bottom:8px}
 .token-history-strip {display:grid;width:max-content;min-width:100%}
 .token-history-plot {position:relative;height:var(--plot-height);min-width:0;cursor:default}
 .token-history-plot svg {width:100%;height:100%;display:block;overflow:visible}
 .token-history-scroll:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
 .token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--muted);stroke-width:1}
-.token-line,.token-point {stroke:var(--accent);stroke-width:2;fill:var(--paper)}
+.token-column {fill:var(--accent);transform-box:fill-box;transform:translateX(-50%)}
+.token-zero {fill:var(--accent)}
 .token-hover-point {fill:var(--paper);stroke:var(--accent);stroke-width:2;opacity:0}
 .token-history[data-inspecting] .token-hover-point {opacity:1}
 .usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
 .token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--muted)}
-.token-history-dates time {min-width:3.75em;padding-inline:.35em;box-sizing:border-box;text-align:center;white-space:nowrap;text-box:trim-end cap alphabetic}
+.token-history-dates time {min-width:3.75em;padding-inline:.35em;box-sizing:border-box;text-align:center;white-space:nowrap}
 .token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
 .token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;padding:6px 12px;background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);overflow-wrap:anywhere;opacity:0;pointer-events:none}
 .token-history[data-inspecting] .token-day-reading {opacity:1}
@@ -142,9 +144,11 @@ export const analyzeLayoutStyles = `
 .analyze-chart-main .view-switch {display:flex;flex-wrap:wrap;gap:4px}
 .analyze-chart-main .view-switch>button {flex:0 1 auto;overflow-wrap:normal}
 #homeView .analyze-chart-main .chart-panel {border:0;background:none;box-shadow:none;max-inline-size:none;padding:var(--widget-heading-inset) 20px var(--space-2xl);flex:1}
-#chart .dimensional-scroll {padding-block-end:0}
+/* Full date line boxes and the inner scroll clearance share the existing footer inset. */
+#homeView .analyze-chart-main:has(.dimensional-scroll) .chart-panel {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
+#chart .dimensional-scroll {padding-block-end:8px}
 #chart .dimensional-time-labels {min-height:0}
-#chart .dimensional-time-labels>* {padding-block-end:0;text-box:trim-end cap alphabetic}
+#chart .dimensional-time-labels>* {padding-block-end:0}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0 12px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}

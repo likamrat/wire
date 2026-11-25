@@ -216,7 +216,8 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 
 **Token usage** labels each day in the chosen range, including
 days without a count. Scroll along the date axis on narrow screens or long
-ranges; periods over 90 days have earlier and later windows. Hover over a point
+ranges; periods over 90 days have earlier and later windows. Each measured day
+has a vertical column. Hover over a column
 to see its date and token count beside the pointer. Tap a day or use the arrow
 keys to inspect it. A dot on zero is a measured zero. For a gap,
 the date reading distinguishes activity without a count from no matching activity.

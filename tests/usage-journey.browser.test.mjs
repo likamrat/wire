@@ -35,9 +35,9 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching activity/);
     await slider.press("Home");await expect(slider).toHaveAttribute("aria-valuetext",/200,000 tokens/);
     if(width>=500) {
-        const point=card.locator(".token-point");await point.scrollIntoViewIfNeeded();
+        const point=card.locator(".token-column");await point.scrollIntoViewIfNeeded();
         const b=await point.boundingBox();
-        await page.mouse.move(b.x+b.width/2,b.y+b.height/2+24);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
+        await page.mouse.move(b.x+b.width+24,b.y+b.height/2);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
         await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","1");
         await page.mouse.click(b.x+b.width/2,b.y+b.height/2);
     }
@@ -66,7 +66,7 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await expect(page.locator("#activityList article")).toContainText("Review calendar");
 });
 
-test("a metered zero is a token point on the baseline, not an unknown or an empty day",async t=>{
+test("a metered zero is a baseline marker, not an invented column, unknown or empty day",async t=>{
     const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
     const {runtime}=await usagePreview({after:f=>cleanup.push(f)},"react",{sparse:true,measuredZero:true});
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
@@ -74,7 +74,7 @@ test("a metered zero is a token point on the baseline, not an unknown or an empt
     const chart=page.locator("#analyzeUsage");
     await chart.getByRole("slider").press("End");await chart.getByRole("slider").press("ArrowLeft");
     await expect(chart.locator(".token-day-value")).toHaveText("0 tokens");
-    await expect(chart.locator(".token-point[cy='88%']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
+    await expect(chart.locator(".token-zero[cy='88%']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
     await chart.getByRole("slider").press("ArrowRight");
     await expect(chart.locator(".token-day-value")).toHaveText("Token count unavailable");
 });
@@ -85,14 +85,14 @@ for(const frontend of ["react","bundled"])test(`${frontend}: daily chart reading
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
     const page=await browser.newPage({timezoneId:"UTC",reducedMotion:"reduce"});await page.goto(runtime.url);
     const card=page.locator("#analyzeUsage"),plot=card.locator(".token-history-plot"),slider=plot.getByRole("slider");
-    await expect(plot.locator(".token-point")).toHaveCount(4);
+    await expect(plot.locator(".token-column")).toHaveCount(4);
     for(const [width,scale] of [[1440,1],[768,1],[390,1],[390,2],[320,1]]) {
         await page.setViewportSize({width,height:955});
         await page.evaluate(s=>{document.documentElement.style.fontSize=`${100*s}%`;},scale);
         await card.evaluate(c=>c.scrollIntoView({block:"center"}));await page.evaluate(()=>document.fonts.ready);
         for(let i=0;i<4;i++){
             const tick=card.locator(".token-history-dates time").nth(i);await tick.scrollIntoViewIfNeeded();
-            const point=await plot.locator(".token-point").nth(i).boundingBox(),x=point.x+point.width/2,y=point.y+point.height/2;
+            const point=await plot.locator(".token-column").nth(i).boundingBox(),x=point.x+point.width/2,y=point.y+point.height/2;
             await page.mouse.move(x,y);await expect(slider).toHaveValue(String(i));
             await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","1");
             assert.deepEqual(await card.evaluate((c,{x,y})=>{
@@ -141,6 +141,57 @@ test("the Analyze time axis names every selected day, including empty dates and 
         assert.ok(await chart.evaluate(c=>c.scrollWidth<=c.clientWidth+1));
         await slider.press("Escape");await expect(chart.locator(".token-day-reading")).toHaveCSS("opacity","0");
         await expect(chart).not.toContainText(/interactions measured/);
+    }
+});
+
+for(const frontend of ["bundled","react"])test(`${frontend}: both Analyze date axes clear real scrollbars and columns retain their dated scale`,async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend,{sparse:true,measuredZero:true});
+    const browser=await chromium.launch({channel:process.env.WIRE_FRONTEND_BROWSER,ignoreDefaultArgs:["--hide-scrollbars"],
+        args:["--disable-features=OverlayScrollbar,FluentOverlayScrollbar"]});
+    cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width:1440,height:1050},timezoneId:"UTC",reducedMotion:"reduce"});
+    await page.goto(runtime.url);await page.evaluate(()=>document.fonts.ready);
+    for(const [width,scale] of [[1440,1],[390,1],[768,2]]){
+        await page.setViewportSize({width,height:1050});
+        await page.evaluate(scale=>{document.documentElement.style.fontSize=`${scale*100}%`;},scale);
+        for(const selector of [".token-history-scroll","#chart .dimensional-scroll"]){
+            const scroll=page.locator(selector);await scroll.scrollIntoViewIfNeeded();
+            for(const fraction of [0,.5,1]){
+                await scroll.evaluate((node,fraction)=>{node.scrollLeft=fraction*(node.scrollWidth-node.clientWidth);},fraction);
+                const ink=await scroll.evaluate(node=>{
+                    const box=node.getBoundingClientRect(),bottom=box.top+node.clientTop+node.clientHeight;
+                    const rects=[...node.querySelectorAll(".token-history-dates time,.dimensional-time-labels>*")].flatMap(label=>{
+                        const range=document.createRange();range.selectNodeContents(label);
+                        return [...range.getClientRects()].filter(rect=>rect.left>=box.left && rect.right<=box.right);
+                    });
+                    return {count:rects.length,clearance:Math.min(...rects.map(rect=>bottom-rect.bottom)),
+                        verticalOverflow:node.scrollHeight-node.clientHeight,
+                        horizontalOverflow:node.scrollWidth-node.clientWidth,scrollbar:node.offsetHeight-node.clientHeight};
+                });
+                assert.ok(ink.count>0,`${selector}: readable dates at ${fraction}`);
+                assert.ok(ink.clearance>=8,`${selector}/${width}/${scale}: full date line box clears scroll viewport by ${ink.clearance}px`);
+                assert.ok(ink.verticalOverflow<=1,`${selector}: no hidden descenders or unintended vertical scroll`);
+                if(width===390){
+                    assert.ok(ink.horizontalOverflow>0,"long dates remain horizontally scrollable");
+                    if(process.env.WIRE_FRONTEND_BROWSER)assert.ok(ink.scrollbar>0,"qualification uses a non-overlay native scrollbar");
+                }
+            }
+            if(process.env.WIRE_USAGE_PROOFS)await page.locator(selector.startsWith(".token")?"#analyzeUsage":".analyze-chart-main")
+                .screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-${scale}-${selector.startsWith(".token")?"tokens":"activity"}-scrollbar.png`)});
+        }
+        const aligned=await page.locator("#analyzeUsage").evaluate(card=>{
+            const plot=card.querySelector(".token-history-plot").getBoundingClientRect();
+            return [...card.querySelectorAll("[data-measured-day]")].map(mark=>{
+                const rect=mark.getBoundingClientRect(),label=card.querySelector(`time[datetime="${mark.dataset.measuredDay}"]`).getBoundingClientRect();
+                return {centerDifference:Math.abs(rect.left+rect.width/2-label.left-label.width/2),
+                    baselineDifference:Math.abs((mark.matches("rect")?rect.bottom:rect.top+rect.height/2)-(plot.top+.88*plot.height)),
+                    zero:mark.classList.contains("token-zero")};
+            });
+        });
+        assert.equal(aligned.length,2,"only measured days have marks; missing days get no invented height");
+        assert.equal(aligned.filter(mark=>mark.zero).length,1);
+        for(const mark of aligned){assert.ok(mark.centerDifference<1);assert.ok(mark.baselineDifference<1);}
     }
 });
 
@@ -260,8 +311,8 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     const widget=page.locator("#analyzeUsage");
     if (width < 500) await chooseTheme(page,"dark");
     await expect(widget.getByRole("slider")).toHaveAccessibleDescription("342,000 tokens in this period. 7 of 8 interactions measured.");
-    await expect(widget.locator(".token-point")).toHaveCount(4);
-    await expect(widget.locator(".token-line")).toHaveCount(3);
+    await expect(widget.locator(".token-column")).toHaveCount(4);
+    await expect(widget.locator(".token-line")).toHaveCount(0);
     await widget.getByRole("slider").press("End");await expect(widget.locator(".token-day-value")).toContainText("104,500 tokens");
     await widget.getByRole("slider").press("ArrowLeft");await expect(widget.locator(".token-day-value")).toHaveText("30,500 tokens (partial)");
     await widget.getByRole("slider").press("Escape");

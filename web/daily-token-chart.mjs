@@ -39,14 +39,17 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
     function draw(i) {
         first=Math.floor(i/windowSize)*windowSize;count=Math.min(windowSize,span+1-first);
         labels.style.setProperty("--days",String(count));labels.replaceChildren();series.replaceChildren();
-        let last;
         for(let n=first;n<first+count;n++){
             const date=dateAt(n),d=days.get(date),label=el("time","",formatDate(date));
             label.dateTime=date;labels.append(label);
-            if(!d?.metered){last=null;continue;}
-            if(last)mark("line",{x1:x(n-1),y1:y(last.total),x2:x(n),y2:y(d.total),class:"token-line"},series);
-            mark("circle",{cx:x(n),cy:y(d.total),r:3.5,class:"token-point","data-measured-day":date},series);
-            last=d;
+            if(!d?.metered)continue;
+            if(d.total===0){
+                mark("circle",{cx:x(n),cy:y(0),r:3,class:"token-zero","data-measured-day":date},series);
+                continue;
+            }
+            const column=mark("rect",{x:x(n),y:y(d.total),height:`${76*d.total/ceiling}%`,
+                class:"token-column","data-measured-day":date},series);
+            column.style.width=`min(${56/count}%, 3rem)`;
         }
         earlier.disabled=first===0;later.disabled=first+count>span;
     }
@@ -68,13 +71,13 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         const tip=detail.getBoundingClientRect(), gap=12;
         const left=Math.max(4,view.left), right=Math.min(innerWidth-4,view.right);
         const header=document.querySelector(".app-header")?.getBoundingClientRect().bottom??0;
-        const top=Math.max(4,header+4), bottom=innerHeight-4;
+        const top=Math.max(4,header+4), bottom=Math.min(innerHeight-4,labels.getBoundingClientRect().top-6);
         const clamp=(n,min,max)=>Math.max(min,Math.min(n,max));
         const xs=[at.x+gap,at.x-gap-tip.width].map(n=>clamp(n,left,right-tip.width));
         const ys=[at.y-tip.height-gap,at.y+gap].map(n=>clamp(n,top,bottom-tip.height));
         const block=(x,y,p)=>p.x>=x-5 && p.x<=x+tip.width+5 && p.y>=y-5 && p.y<=y+tip.height+5;
         const candidates=ys.flatMap(y=>xs.map(x=>({x,y})));
-        const best=candidates.find(p=>!block(p.x,p.y,at) && (!d?.metered || !block(p.x,p.y,{x:pointX,y:pointY})))??candidates[0];
+        const best=candidates.find(p=>!block(p.x,p.y,at))??candidates[0];
         detail.style.left=`${best.x-view.left}px`;detail.style.top=`${best.y-owner.top}px`;
         highlight.setAttribute("visibility",d?.metered && pointX>=view.left && pointX<=view.right?"visible":"hidden");
     }
@@ -121,12 +124,9 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         const fraction=Math.max(0,Math.min(1,(e.clientX-bounds.left)/bounds.width));
         const local=Math.min(count-1,Math.floor(fraction*count)), i=first+local, d=days.get(dateAt(i));
         if(!allowDate) {
-            const dx=(fraction*count-local-.5)*bounds.width/count;
-            const py=n=>bounds.top+bounds.height*(.88-.76*n/ceiling);
-            const adjacent=local+(dx<0?-1:1);
-            const neighbor=adjacent>=0 && adjacent<count ? days.get(dateAt(first+adjacent)) : null;
-            const lineY=d?.metered && neighbor?.metered ? py(d.total)+(py(neighbor.total)-py(d.total))*Math.abs(dx)*count/bounds.width : null;
-            if(!d?.metered || (Math.hypot(dx,e.clientY-py(d.total))>10 && (lineY===null || Math.abs(e.clientY-lineY)>7))){
+            const column=series.querySelector(`[data-measured-day="${dateAt(i)}"]`)?.getBoundingClientRect();
+            if(!d?.metered || !column || e.clientX<column.left-7 || e.clientX>column.right+7
+                || e.clientY<column.top-7 || e.clientY>column.bottom+7){
                 const tip=detail.getBoundingClientRect();
                 if(inspecting && e.clientX>=tip.left && e.clientX<=tip.right && e.clientY>=tip.top && e.clientY<=tip.bottom){
                     clearTimeout(hideTimer);hideTimer=null;return false;
@@ -139,14 +139,24 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
     }
     // The keyboard range spans the whole period. Native range taps can scroll
     // its thumb before release, so let the visible strip own pointer input.
-    strip.addEventListener("pointermove",e=>{if(e.pointerType==="mouse")pointer(e,labels.contains(e.target));});
+    let gesture=null;
+    strip.addEventListener("pointerdown",e=>{
+        if(e.isPrimary && e.button===0)gesture={id:e.pointerId,x:e.clientX,y:e.clientY,scrollLeft:scroll.scrollLeft,moved:false};
+    });
+    strip.addEventListener("pointermove",e=>{
+        if(gesture?.id===e.pointerId && Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>8)gesture.moved=true;
+        if(e.pointerType==="mouse" && !gesture?.moved)pointer(e,labels.contains(e.target));
+    });
     strip.addEventListener("pointerup",e=>{
         if(!e.isPrimary || e.button!==0)return;
+        const dragged=gesture?.id===e.pointerId && (gesture.moved || scroll.scrollLeft!==gesture.scrollLeft);
+        gesture=null;
+        if(dragged){pinned=false;reveal(false);return;}
         pinned=pointer(e,e.pointerType!=="mouse" || labels.contains(e.target));
         if(pinned){slider.focus({preventScroll:true});reveal(true);}
         else reveal(false);
     });
-    strip.addEventListener("pointercancel",()=>{pinned=false;reveal(false);});
+    strip.addEventListener("pointercancel",()=>{gesture=null;pinned=false;reveal(false);});
     scroll.addEventListener("scroll",()=>{if(anchor && scroll.scrollLeft!==anchor.scrollLeft){pinned=false;reveal(false);}});
     detail.addEventListener("pointerenter",()=>{clearTimeout(hideTimer);hideTimer=null;});
     detail.addEventListener("pointerleave",leaveMark);

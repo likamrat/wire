@@ -17,6 +17,19 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
     const grid = document.createElement("div");
     grid.className = "analyze-ordered-widgets";
     const slots = new Map(), reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    const scrolls = new Set();
+    const scrollSize = new ResizeObserver(entries => {
+        for (const { target } of entries) {
+            if (!scrolls.has(target)) continue;
+            const card = target.closest(".analyze-chart-main,#analyzeUsage");
+            card.style.setProperty("--axis-scrollbar-size", `${target.offsetHeight - target.clientHeight}px`);
+        }
+    });
+    function trackScrollbars() {
+        const current = new Set(document.querySelectorAll("#chart .dimensional-scroll,#analyzeUsage .token-history-scroll"));
+        for (const node of scrolls) if (!current.has(node)) { scrollSize.unobserve(node); scrolls.delete(node); }
+        for (const node of current) if (!scrolls.has(node)) { scrolls.add(node); scrollSize.observe(node); }
+    }
     let applied = "", entered = false, frame, stopMotion, ordinary = false;
     function move(parent, node, before = null) {
         if (parent.moveBefore) parent.moveBefore(node, before);
@@ -124,11 +137,12 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
         present(active, token, readerOpen) {
             ordinary = active;
             layout();
+            trackScrollbars();
             if (!active || dashboard.hidden || home.dataset.empty === "true") { entered = false; finish(); return; }
             if (entered) return;
             entered = true;
             if (!readerOpen && !reduced.matches) start(token);
         },
-        leave() { ordinary = entered = false; finish(); layout(); },
+        leave() { ordinary = entered = false; finish(); layout(); scrollSize.disconnect(); scrolls.clear(); },
     };
 }
