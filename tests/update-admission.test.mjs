@@ -106,6 +106,36 @@ test("a late Settings hold supersedes readiness before dispatch and at final cut
     assert.match(prepare().error, /Settings edit/);
 });
 
+test("checking existing views reports unfinished work without preparing, releasing or restarting them", async t => {
+    const { page, post, calls, prepare } = await managedFixture(t);
+    const first = await page(), peer = await page();
+    assert.equal((await post("/api/app-update/check-views", { hold: "" }, first)).status, 409);
+    for (const cap of [first, peer]) await post("/api/app-update", { action: "status" }, cap);
+    const watching = post("/api/app-update/watch", {}, peer);
+    const checking = post("/api/app-update/check-views", { hold: "" }, first);
+    const { probe, candidate } = await (await watching).json();
+    assert.ok(probe);
+    assert.equal(candidate, undefined);
+    assert.equal((await post("/api/app-update/readiness", { probe, hold: "report" }, peer)).status, 200);
+    assert.match((await (await checking).json()).message, /open report/);
+    assert.equal((await post("/api/app-update/readiness", { probe, hold: "" }, peer)).status, 409);
+    assert.equal(prepare().ok, false);
+    assert.deepEqual(calls.map(c => c.action), ["status", "status"]);
+});
+
+test("a clean opening document may retire only its original live runtime grant", async t => {
+    const { page, post, apply, runtime } = await managedFixture(t);
+    const cap = await page(), current = await page();
+    assert.equal((await post("/api/app-update/release-panel", { startingRuntime: "different runtime" }, cap)).status, 403);
+    assert.equal((await post("/api/app-update/release-panel", { startingRuntime: runtime.runtimeId }, cap)).status, 200);
+    assert.equal((await post("/api/app-update", { action: "status" }, cap)).status, 403);
+    assert.equal((await apply(current)).status, 200);
+    const now = Date.now();
+    t.mock.method(Date, "now", () => now + 31 * 60000);
+    assert.equal((await post("/api/app-update/release-panel", { startingRuntime: runtime.runtimeId }, current)).status, 403);
+    assert.equal((await post("/api/app-update/release-panel", {}, current)).status, 200);
+});
+
 test("cutover refuses an expired ready page even before the periodic prune", async t => {
     const { page, apply, prepare } = await managedFixture(t, { sessionTtlMs: 60000 });
     assert.equal((await apply(await page())).status, 200);

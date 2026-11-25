@@ -466,6 +466,32 @@ test("a retained uncertain operation blocks activation even outside its Settings
     assert.deepEqual(actions, [{ action: "status" }]);
 });
 
+test("reloading before opening status returns does not release a page with an unresolved operation", async t => {
+    const { page, setup, state } = await workspace(t);
+    await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+    const waiting = Promise.withResolvers(), resume = Promise.withResolvers();
+    setup.status = async route => {
+        setup.status = null; waiting.resolve(); await resume.promise;
+        await route.fulfill({ json: state }).catch(() => {}); // The original document left.
+    };
+    await page.addInitScript(() => {
+        sessionStorage.setItem("workiq-evidence.source-check.v1", "pending");
+        const fetch = window.fetch;
+        window.fetch = (...args) => {
+            if (args[0] === "/api/app-update/release-panel") sessionStorage.setItem("fixture.release-attempted", "true");
+            return fetch(...args);
+        };
+    });
+    try {
+        await page.reload(); await waiting.promise;
+        await page.reload();
+    } finally { resume.resolve(); }
+    await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+    await page.locator("#appUpdateApply").click();
+    await expect(page.locator("#appUpdateDetail")).toContainText("original result");
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("fixture.release-attempted")), null);
+});
+
 test("a clean managed tab retains its capability for bfcache and releases only its original page on departure", async t => {
     const { page, releases, actions } = await workspace(t);
     await expect(page.locator("#appUpdateAuto")).toBeEnabled();
