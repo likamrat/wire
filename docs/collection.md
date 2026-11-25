@@ -376,6 +376,11 @@ does not reopen history or assign a requester from a skill or system message.
 Two distinct retained starts for the same invocation cannot prove a direct link.
 New collection marks that conflict before trimming the checkpoint, so retaining
 only one start does not erase the conflict after restart.
+If an original assistant request arrives after its tool call was saved as
+complete, WIRE can add a missing direct link to the same prompt without
+changing the sender, call or result. The prompt identity, text and time and
+all existing call facts must match. A request replayed from a checkpoint
+does not repair history.
 If copies of a single message name conflicting senders, the sender stays
 unclear even when the timestamp and original text agree.
 

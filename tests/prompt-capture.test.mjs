@@ -182,6 +182,34 @@ test("turn coincidence alone never links a late message", async t => {
     assert.equal(state.evidence[0].userPrompt.capture.reason, "unlinked");
 });
 
+test("only a newly consumed original request can link an already completed call on its existing prompt", async t => {
+    const app = await installation(t, [prompt("Synthetic system input.", { source: "system", messageId: "logical" }), start(),
+        event("done", "tool.execution_complete", { toolCallId: "call", success: true }, 1100)]);
+    const before = (await app.collect()).evidence[0], [call] = before.toolCalls;
+    assert.equal(call.promptLink, undefined);
+    await app.restart();
+    await app.append([event("late-request", "assistant.message", { originatingMessageId: "logical",
+        turnId: "turn-one", toolRequests: [{ toolCallId: "call" }] }, 900)]);
+    const after = (await app.collect()).evidence[0];
+    assert.deepEqual(after.toolCalls, [{ ...call, promptLink: { version: 1, promptEventId: "prompt", requestEventId: "late-request" } }]);
+    assert.deepEqual(after.userPrompt, before.userPrompt);
+    assert.equal(promptAuthorship.requestLink(after).association, "explicit-source-link");
+    await replaceEvidence(app.context, (_, importCoverage) => ({ records: [before], importCoverage }));
+    await app.append([event("unrelated", "assistant.message", {}, 1500)]);
+    assert.equal((await app.collect()).evidence[0].toolCalls[0].promptLink, undefined);
+});
+
+test("an assistant request replayed in the new tail is not a new original link", async t => {
+    const app = await installation(t, [prompt("Synthetic prompt", { messageId: "logical" }), start(),
+        event("done", "tool.execution_complete", { toolCallId: "call", success: true }, 1100)]);
+    const before = (await app.collect()).evidence[0];
+    await app.append([{ ...event("replay", "assistant.message", { originatingMessageId: "logical",
+        turnId: "turn-one", toolRequests: [{ toolCallId: "call" }] }, 900), checkpoint: true }]);
+    const after = (await app.collect()).evidence[0];
+    assert.deepEqual(after.toolCalls, before.toolCalls);
+    assert.deepEqual(after.userPrompt, before.userPrompt);
+});
+
 for (const [source, expected] of [["user", "user"], ["agent-invented", "agent"]]) {
     test(`a pending tool request still links to its ${expected} prompt across intervening skill input and restart`, async t => {
         const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "original",
