@@ -242,6 +242,8 @@ message ID, or a model name on the reply: the usage receipt identifies the
 model. WIRE still requires a prompt-to-run or prompt-to-message link, at least
 one matching Work IQ tool request, and receipts for every linked response
 call. Opaque model request and accounting IDs can contain `/`, `+` and `=`.
+IDs longer than 512 characters, up to 4,096, must use one base64 alphabet
+with padding only at the end; the producer documents no length bound.
 WIRE compares bounded, privacy-screened values by an internal digest without
 putting the raw opaque ID in new retained model metadata or in reports.
 The [SDK's `initiator`](https://github.com/github/copilot-sdk/blob/03056de9b9f21203c14037536097c0e1a8774822/nodejs/src/generated/session-events.ts)

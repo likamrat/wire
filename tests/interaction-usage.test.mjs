@@ -149,6 +149,42 @@ test("opaque request keys match old assistant metadata without admitting raw dig
     assert.equal(modelRequestKey({apiCallId:"a",apiCallRef:key}),null);
 });
 
+test("longer base64 provider request IDs join model and receipt sides without admitting malformed or rival keys", () => {
+    const long = (seed, pad = "") => (seed.repeat(129)).slice(0, 516 - pad.length) + pad;
+    const raw = long("Qz9+"), rival = long("Qz9/");
+    const project = apiCallId => ({version:1,model:"example",modelStatus:"recorded",originatingMessageId:"message",
+        ...retainInteractionModelMetadata({data:{apiCallId,model:"example"}})});
+    const receipt = (id, apiCallId, input) => ({...retainUsageReceipt({id,type:"session.usage_record",timestamp:new Date(1700000000000+input).toISOString(),
+        data:{usage:{apiCallId,model:"example",inputTokens:input,outputTokens:1,accounting:{usageId:apiCallId}}}})});
+    let ordinal = 0;
+    const e = (id, type, data) => ({id,type,timestamp:new Date(1700000000000 + ordinal++).toISOString(),data});
+    const prompt = e("prompt","user.message",{messageId:"message",wireUsageOrigin:"run"});
+    const events = [prompt,
+        e("request","assistant.message",{wireUsageOrigin:"run",originatingMessageId:"message",turnId:"turn",
+            hasToolRequests:true,wireToolRequestIds:["tool"],wireOriginalModel:project(raw)}),
+        e("start","tool.execution_start",{toolCallId:"tool"}), receipt("receipt-request",raw,10),
+        e("answer","assistant.message",{wireUsageOrigin:"run",originatingMessageId:"message",turnId:"turn",
+            finalAnswer:true,wireOriginalModel:project("short-answer-id")}), receipt("receipt-answer","short-answer-id",20),
+        e("end","assistant.turn_end",{turnId:"turn"})];
+    const record = {sourceSessionId:"source",userPrompt:{sourceEventId:prompt.id,sourceTimestamp:prompt.timestamp},
+        toolCalls:[{startEventId:"start",toolCallId:"tool"}]};
+    assert.equal(events[1].data.wireOriginalModel.apiCallId,null);
+    assert.equal(events[3].data.apiCallId,events[1].data.wireOriginalModel.apiCallRef);
+    assert.equal(events[3].data.accounting.id,events[3].data.apiCallId);
+    assert.equal(JSON.stringify(events).includes(raw),false,"The raw opaque ID is not retained");
+    assert.equal(recordedUsage(retainedUsage(events,record,false)).total,32);
+    const swapped = structuredClone(events);
+    swapped[3] = receipt("receipt-request",rival,10);
+    let refusal;
+    assert.equal(retainedUsage(swapped,record,false,reason=>{refusal=reason;return null;}),null);
+    assert.ok(refusal,"A different long ID never stands in for the owned request");
+    for (const valid of [long("Qz9-"),long("Qz9+","=="),long("Qz9_").slice(0,515)])
+        assert.match(modelRequestKey({apiCallId:valid}),/^![a-f0-9]{64}$/);
+    for (const invalid of [long("Qz9+").slice(0,513),long("a+-b"),long("Qz9+").slice(0,514)+"=A",long("Qz9+").slice(0,514)+"=",
+        "Qz9+".repeat(1025),long("Qz9-").slice(0,476)+"ghp_"+"x".repeat(36),long("Qz.9")])
+        assert.equal(modelRequestKey({apiCallId:invalid}),null);
+});
+
 test("model cohorts split multiple calls by recorded model and preserve measured zero", () => {
     const sample = (model, n) => ({model,tokens:{freshInput:n,cacheRead:0,cacheWrite:0,output:0}});
     const member = usage => ({usage,actor:"user",calls:new Map()});
