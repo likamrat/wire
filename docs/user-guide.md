@@ -93,12 +93,16 @@ list follows the same filters.
 Open **Filters** to narrow the view by Dates, Tool, Service involved, Outcome or
 Prompt author. **More filters** holds the additional choices.
 
-![Analyze Results with daily tool calls, recorded outcomes, daily token columns and collapse controls at the right of each chart heading.](images/analyze.png)
+![Nine days of tool calls above the results for all 23 calls: 17 completed and 6 failed. The bottom chart counts model tokens by day.](images/analyze.png)
 
 ### Read the charts
 
 When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
+
+Read a date for its daily count, or **Tool call results** for the whole period.
+In the example, November 19 had four calls. The six failures in the donut
+come from the full nine days.
 
 In **Tool call results**:
 
