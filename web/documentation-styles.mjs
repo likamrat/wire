@@ -20,13 +20,13 @@ export const documentationStyles = `
 .docs-left-toggle[open]>summary .docs-icon:last-child,.docs-outline-inline[open]>summary .docs-icon:last-child{transform:rotate(180deg)}
 .docs-left-toggle>summary:hover,.docs-outline-inline>summary:hover{background:var(--hover)}
 
-.docs-tree h2,.docs-outline>h2{font-size:var(--type-caption);font-weight:var(--weight-medium);color:var(--muted);margin:0 0 6px;padding:0 10px;letter-spacing:0}
+.docs-tree-group>h2,.docs-outline>h2{font-size:var(--type-section);line-height:var(--leading-section);font-weight:var(--weight-strong);color:var(--ink);margin:0 0 var(--space-xs);padding:0 10px}
 .docs-tree-group+.docs-tree-group{margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--docs-rule)}
 .docs-tree ul,.docs-outline ul{list-style:none;margin:0;padding:0}
 .docs-tree a,.docs-outline a{display:flex;align-items:center;gap:8px;min-block-size:30px;padding:5px 10px;border-radius:var(--radius-small);color:var(--muted);text-decoration:none;font-size:var(--type-small);line-height:1.35}
 .docs-tree a:hover,.docs-outline a:hover{color:var(--ink);background:var(--hover)}
 .docs-tree a:focus-visible,.docs-outline a:focus-visible,.docs-left-toggle>summary:focus-visible,.docs-outline-inline>summary:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
-.docs-tree-guide{color:var(--ink)!important}
+.docs-tree a.docs-tree-guide{color:var(--ink);font-weight:var(--weight-medium)}
 .docs-tree-guide[aria-current=page]{box-shadow:inset 2px 0 0 var(--ink);border-radius:0 var(--radius-small) var(--radius-small) 0;font-weight:var(--weight-medium)}
 .docs-tree-guide>span:first-child{min-width:0}
 .docs-tree-sections,.docs-outline-nested{margin:2px 0 6px 14px!important;border-inline-start:1px solid var(--docs-rule)}
