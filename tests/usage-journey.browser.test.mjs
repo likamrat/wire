@@ -1,35 +1,126 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { writeFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
+import { loadBoardState } from "../lib/store.mjs";
+import { readSavedArtifactFile, readSavedReportView } from "../lib/report-artifacts.mjs";
+import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { usagePreview } from "./usage-preview-fixture.mjs";
 import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters, navigateMain, navigateSettings } from "./helpers.mjs";
-import { prepareLandingReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport, chooseLandingReportDates } from "./report-journey-helpers.mjs";
 
-test("Token usage preset opens the existing frozen token reading with complete coverage", async t => {
+test("Token usage preset leads with frozen contributors and authors through JSON-only saved Open", {timeout:60000}, async t => {
     const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
-    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},"react");
+    const {runtime,context}=await usagePreview({after:f=>cleanup.push(f)},"react");
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
     const page=await browser.newPage({viewport:{width:1366,height:900},timezoneId:"UTC"});
     const requests=[];page.on("request",r=>{if(r.method()==="POST")requests.push(new URL(r.url()).pathname);});
     await page.goto(runtime.url+"reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await chooseTheme(page,"light");
     const response=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
     await page.locator("#reportPreset-tokens").click();
-    const prepared=await(await response).json(), facts=prepared.snapshot.usageFacts.cohorts.selected;
+    let prepared=await(await response).json();
+    const frozen=prepared.snapshot.usageFacts, facts=frozen.cohorts.selected;
     assert.equal(prepared.title,"Token usage");
     assert.equal(prepared.snapshot.reportPopulation.focus.preset,"all");
     assert.equal(facts.total,342000);
     assert.equal(facts.metered,7);assert.equal(facts.eligible,8);
     assert.equal(facts.rows.length,8);assert.equal(facts.rows.filter(r=>r.total===null).length,1);
+    assert.equal(frozen.readingVersion,4);
+    assert.deepEqual(facts.authors.map(g=>[g.label,g.metered,g.eligible,g.total]),
+        [["Agent",3,3,236500],["Human",3,4,75000],["Sender unclear",1,1,30500]]);
     const frame=page.frameLocator(".report-frame"), usage=frame.locator("#usage-selected");
     await expect(usage).toBeVisible();
-    await expect(usage).toContainText("342,000 tokens");
+    const finding="3 interactions account for 69.2% of recorded tokens";
+    await expect(usage.locator(":scope>h3")).toHaveText(finding);
+    await expect(usage).toContainText("236,500 of 342,000 recorded tokens");
+    await expect(usage).toContainText("7 of 8 interactions measured");
+    await expect(usage).toContainText("missing usage is not estimated");
+    await expect(usage.getByRole("row").filter({hasText:"Sender unclear"})).toContainText("30,500");
+    await expect(usage).toContainText("342,000 recorded tokens");
     await expect(usage).toContainText("Not recorded");
     await expect(usage.locator("xpath=..")).toHaveJSProperty("open",true);
     assert.equal(requests.filter(p=>p==="/api/preview").length,1);
     assert.equal(requests.filter(p=>p==="/api/export").length,0);
-    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-preset.png")});
+    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-preset.png"),animations:"disabled"});
+    await usage.getByRole("link",{name:"View ranked interactions",exact:true}).click();
+    const ranked=usage.locator("#usage-selected-interactions tbody tr");
+    for(const row of [ranked.first(),ranked.last()]) {
+        const link=row.getByRole("link"), ref=(await link.getAttribute("href")).split("#").at(-1);
+        await link.click();await expect(frame.locator(`[id="${ref}"]`)).toBeVisible();
+    }
+    await page.getByRole("button",{name:"Formats: HTML",exact:true}).click();
+    for(const format of ["json","markdown","pdf"]) {
+        const changed=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
+        await page.locator(`#formatOptions input[value=${format}]`).check();
+        prepared=await(await changed).json();assert.deepEqual(prepared.snapshot.usageFacts,frozen);
+    }
+    const pdf=(await pdfDocumentText(Buffer.from(prepared.files["product-report.pdf"].data,"base64"))).content.replace(/\s+/g," ");
+    for(const text of [prepared.files["product-report.html"],prepared.files["product-report.md"],pdf]) {
+        assert.ok(text.includes(finding));assert.ok(text.includes("236,500"));assert.ok(text.includes("Sender unclear"));
+    }
+    assert.ok(prepared.files["product-report.html"].indexOf('id="usage-selected"') < prepared.files["product-report.html"].indexOf('id="finding"'));
+    for(const format of ["html","markdown","pdf"]) {
+        const changed=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
+        await page.locator(`#formatOptions input[value=${format}]`).uncheck();
+        prepared=await(await changed).json();assert.deepEqual(prepared.snapshot.usageFacts,frozen);
+    }
+    await page.keyboard.press("Escape");
+    await page.getByRole("button",{name:"Save report",exact:true}).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase","saved");
+    const state=await loadBoardState(context);
+    assert.equal(state.exports.length,1);assert.deepEqual(state.exports[0].formats,["json"]);
+    const saved=await readSavedArtifactFile(context,state,prepared.bundleId,"report","json");
+    assert.deepEqual(JSON.parse(saved.bytes).usageFacts,frozen);
+    const readable=await readSavedReportView(context,state,prepared.bundleId);
+    assert.ok(readable.text.includes(finding));assert.ok(readable.text.includes("Sender unclear"));
+    await page.getByRole("button",{name:"Open saved report",exact:true}).click();
+    await expect(page.locator("#savedReportReader .saved-brief")).toHaveCount(0);
+    const savedUsage=page.frameLocator("#savedReportReader iframe").locator("#usage-selected");
+    await expect(savedUsage.locator(":scope>h3")).toHaveText(finding);
+    await expect(savedUsage.locator("xpath=..")).toHaveJSProperty("open",true);
+    if(process.env.WIRE_USAGE_PROOFS) {
+        await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-saved.png"),animations:"disabled"});
+        await writeFile(path.join(process.env.WIRE_USAGE_PROOFS,"token-report-snapshot.json"),saved.bytes);
+        const manifest=await readSavedArtifactFile(context,state,prepared.bundleId,"report","manifest");
+        await writeFile(path.join(process.env.WIRE_USAGE_PROOFS,"token-report-manifest.json"),manifest.bytes);
+        await writeFile(path.join(process.env.WIRE_USAGE_PROOFS,"token-report-binding.json"),JSON.stringify({bundleId:prepared.bundleId,manifestHash:saved.manifestHash}));
+    }
+    assert.equal(requests.filter(p=>p==="/api/export").length,1);
+});
+
+test("Token usage keeps recorded zero distinct from an unmeasured period", async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},"react",{sparse:true,measuredZero:true});
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width:390,height:900},timezoneId:"UTC"});
+    await page.goto(runtime.url+"reports");await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await chooseTheme(page,"dark");
+    const read=async()=>{
+        const response=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
+        await page.locator("#reportPreset-tokens").click();return(await response).json();
+    };
+    const zero=await read(), usage=page.frameLocator(".report-frame").locator("#usage-selected");
+    assert.deepEqual([zero.snapshot.usageFacts.cohorts.selected.total,zero.snapshot.usageFacts.cohorts.selected.metered,zero.snapshot.usageFacts.cohorts.selected.eligible],[0,1,2]);
+    await expect(usage.locator(":scope>h3")).toHaveText("The recorded token total is 0");
+    await expect(usage).toContainText("1 of 2 interactions measured");
+    assert.doesNotMatch(await usage.innerText(),/NaN|Infinity|100(?:\.0)?%/);
+    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-zero.png"),animations:"disabled"});
+    await page.locator("#reportLibraryLink").click();
+    await chooseLandingReportDates(page,"Custom dates");
+    const yesterday=new Date();yesterday.setUTCDate(yesterday.getUTCDate()-1);
+    const date=yesterday.toISOString().slice(0,10);
+    await page.locator("#reportDatefrom").fill(date);await page.locator("#reportDateto").fill(date);
+    await page.locator("#reportCustomDates").getByRole("button",{name:"Apply dates",exact:true}).click();
+    const missing=await read();
+    assert.deepEqual([missing.snapshot.usageFacts.cohorts.selected.total,missing.snapshot.usageFacts.cohorts.selected.metered,missing.snapshot.usageFacts.cohorts.selected.eligible],[null,0,1]);
+    await expect(usage.locator(":scope>h3")).toHaveText("No verified token counts");
+    await expect(usage).toContainText("0 of 1 interaction measured");
+    await expect(usage).toContainText("Not recorded");
+    assert.doesNotMatch(await usage.innerText(),/NaN|Infinity|account.*%/);
+    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-unmeasured.png"),animations:"disabled"});
 });
 
 for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${frontend}: Analyze explains sparse token usage and opens the actual measured day`,async t=>{

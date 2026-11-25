@@ -424,6 +424,11 @@ the question applied separately inside each period. Tool groups can overlap,
 but repeated uses of a tool never multiply an interaction's tokens. Model
 groups use the model on each receipt. A missing return size is never counted
 as zero. New reports freeze token counts and coverage (`readingVersion: 3`).
+Token-overview reports with per-interaction rows use `readingVersion: 4`.
+They freeze author totals over the same eligible members and derive the leading
+contributor share only from frozen positive ranked rows and the recorded total.
+Unmeasured and measured-zero cohorts have no concentration percentage. This
+overview leads in each saved format; earlier readings keep their interpretation.
 Earlier reports retain their originally saved fields and wording.
 Earlier snapshots without `usageFacts` gain no usage section when reopened.
 Use a current reader for newly saved JSON-only reports. Older readers that

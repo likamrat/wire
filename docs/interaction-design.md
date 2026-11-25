@@ -560,9 +560,11 @@ the origin, such as **Back to Reports** or **Back to saved reports**.
 
 New report lists All activity, Errors & failures, Token usage, Completed calls,
 Human prompts and Agent prompts. Each opens its preview in one action with the
-current choices. Token usage enables the existing token/cache breakdown and
-per-interaction table without changing the frozen report format or its population
-rules. Unsupported source scopes retain their restrictions.
+current choices. Token usage leads with recorded contributor concentration,
+author grouping and coverage, followed by the existing token/cache breakdown and
+linked per-interaction table. Its versioned frozen overview also leads when a
+new saved report opens; legacy readings and population rules stay unchanged.
+Unsupported source scopes retain their restrictions.
 Custom report is the last row, labeled Set up. It opens the existing fields;
 changing Show there does not prepare or save. Compare keeps its own destination.
 The report period is visible, defaults to

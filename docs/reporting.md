@@ -55,7 +55,7 @@ Only **Custom report** opens setup rather than preparing immediately.
 | --- | --- |
 | All activity | Recorded prompts, Work IQ calls and results. Eligible interactions with an unverified author remain included. |
 | Errors & failures | Interactions with any recorded failed call or explicit application/API error, including mixed results. |
-| Token usage | All eligible interactions, with recorded token and cache counts, coverage and a per-interaction table. The preview starts at that breakdown; other report sections remain available. |
+| Token usage | The largest recorded token contributors, author breakdown and measurement coverage, followed by token/cache counts and linked interactions. Other report sections remain available. |
 | Completed calls | Interactions with at least one recorded call, all calls completed and no recorded errors. This does not establish task success. |
 | Human prompts | Interactions whose originating prompt is recorded as user-authored. |
 | Agent prompts | Interactions whose originating prompt is recorded as agent-authored. |
@@ -203,8 +203,12 @@ Reopening the same unfinished report keeps its frozen activity.
 ### Usage and tokens
 
 Choose **Token usage** under **New report** to start with the recorded token
-breakdown. It counts each originating interaction once and keeps missing counts
-explicit; it does not estimate billed spend.
+overview in preview and saved output. Its leading finding uses up to three
+largest positive recorded counts and names the measured-token denominator.
+The author breakdown uses those same eligible interactions, with Sender unclear
+kept separate. **View ranked interactions** opens the exact included records,
+including ones without a verified count. Recorded zero is not missing usage.
+Nothing estimates unrecorded tokens or billed spend.
 
 In **Custom report**, **Usage question** lets you compare Human and Agent prompts,
 find tools used in high-usage interactions, or compare model mix and cache

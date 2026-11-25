@@ -3,7 +3,7 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     const doc = host.ownerDocument, source = doc.createElement("template");
     source.innerHTML = value.text;
     const main = source.content.querySelector("main"), model = value.brief;
-    if (!main || !model) return null;
+    if (!main || !model || main.querySelector('[data-token-overview="4"]')) return null;
     const elements = (node, selector) => Array.from(node.querySelectorAll(selector));
     const interactions = new Map(elements(main, "#examples>article[data-report-scenario]").map(n => [n.id, n]));
     const calls = new Map(elements(main, "#recorded-result-facts>section[id]").map(n => [n.id, n]));

@@ -10440,13 +10440,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         reportPreset = preset;
         const tokenReport = preset === "tokens";
+        const usageOptions = { tokens: true, rows: false, ...draft.options().usageOptions };
+        if (tokenReport) Object.assign(usageOptions, { tokens: true, rows: true, overview: true });
+        else delete usageOptions.overview;
         reportAuthors = authorship.selection(preset === "mine" ? ["user"] : preset === "agent" ? ["agent"] : undefined);
         invalidatePreview();
         draft.change({
             saveMode: "local", title: namedReport?.name || (tokenReport ? "Token usage" : undefined), overrides: [], manualTerms: [],
             reportNotes: [], recordedContext: false, resultText: preset === "errors", resultTextKind: "errors",
             reportFocus: bounded ? undefined : { version: 1, preset: tokenReport ? "all" : preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
-            ...(tokenReport ? { usageOptions: { ...draft.options().usageOptions, tokens: true, rows: true } } : {}),
+            usageOptions,
         });
         draft.synchronizeTime(viewerTime, effectiveReportDates());
         acceptNativeReportScope(); updateSelection();
