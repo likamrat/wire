@@ -209,6 +209,8 @@ The author breakdown uses those same eligible interactions, with Sender unclear
 kept separate. **View ranked interactions** opens the exact included records,
 including ones without a verified count. Recorded zero is not missing usage.
 Nothing estimates unrecorded tokens or billed spend.
+JSON-only token overviews need an updated WIRE reader. To read the full result
+with older software, include HTML or PDF in **Formats** and open that saved file.
 
 In **Custom report**, **Usage question** lets you compare Human and Agent prompts,
 find tools used in high-usage interactions, or compare model mix and cache

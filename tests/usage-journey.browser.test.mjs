@@ -29,6 +29,7 @@ test("Token usage preset leads with frozen contributors and authors through JSON
     assert.equal(facts.metered,7);assert.equal(facts.eligible,8);
     assert.equal(facts.rows.length,8);assert.equal(facts.rows.filter(r=>r.total===null).length,1);
     assert.equal(frozen.readingVersion,4);
+    assert.equal(frozen.version,2);
     assert.deepEqual(facts.authors.map(g=>[g.label,g.metered,g.eligible,g.total]),
         [["Agent",3,3,236500],["Human",3,4,75000],["Sender unclear",1,1,30500]]);
     const frame=page.frameLocator(".report-frame"), usage=frame.locator("#usage-selected");
