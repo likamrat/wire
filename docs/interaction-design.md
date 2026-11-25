@@ -69,6 +69,9 @@ defines when pending reads and return state lose permission to publish.
 Lead with accepted recorded outcomes and activity patterns. For comparable tool
 calls, the ring centers the total and unit. Beside it, a square-ended strip shows
 the same shares, with the exact percentage and count beneath each outcome label.
+Pointing at a ring slice or strip segment identifies the same outcome in both
+charts and its label, and shows the count and percentage. Clicking either mark
+opens the label's evidence; the label is the single keyboard stop for that outcome.
 Zero-count outcomes remain available as compact definition links; they do not
 take up a primary outcome column or get a painted segment. For chart actions,
 hover tints the control, press deepens the tint, and keyboard focus outlines it.

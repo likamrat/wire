@@ -136,14 +136,16 @@ export function createEvidenceUX(icons, operations) {
         if (bubble.style.left !== position.left + "px") bubble.style.left = position.left + "px";
         if (bubble.style.top !== position.top + "px") bubble.style.top = position.top + "px";
     }
-    function clearTooltip() {
+    function clearTooltip(keepOpening = false) {
         hoverPoint?.disconnect(); hoverPoint = null;
         tooltipResize.disconnect();
-        clearTimeout(openTimer);
+        if (!keepOpening) {
+            clearTimeout(openTimer);
+            openTimer = null;
+            opening = null;
+        }
         clearTimeout(closeTimer);
-        openTimer = null;
         closeTimer = null;
-        opening = null;
         if (active) {
             const ids = (active.getAttribute("aria-describedby") || "").split(/\s+/).filter((id) => id && id !== bubble.id);
             if (ids.length) active.setAttribute("aria-describedby", ids.join(" "));
@@ -409,7 +411,8 @@ export function createEvidenceUX(icons, operations) {
             const keyboardVisit = owner && owner === liveOwner(focused) && focusSource === "focus";
             const sameOwnerHover = owner && owner === liveOwner(hovered);
             const overTip = bubble.matches(":hover") && pointer && bubble.contains(document.elementFromPoint(pointer.x, pointer.y));
-            if (!overTip && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip();
+            // The departing owner's grace timer must not cancel a newer pointer visit.
+            if (!overTip && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip(Boolean(opening && opening !== active));
         }, 120);
     }
     function cancelClose() {

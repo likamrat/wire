@@ -13,7 +13,7 @@ import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters, fulfillFixtureUpdateStatus } from "./helpers.mjs";
 
 const proof = process.env.WIRE_RECORDED_OUTCOMES_PROOFS;
 const baselinePath = process.env.WIRE_RECORDED_OUTCOMES_BASE;
@@ -46,16 +46,17 @@ function records(total) {
     });
 }
 
-async function setup(t, total) {
+async function setup(t, total, frontend) {
     const cleanup = [], { context } = await privateFixture({ after: action => cleanup.push(action) }, records(total));
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false },
         evaluation: { evaluatorFactory: async () => { throw new Error("No provider calls in outcome sizing proof"); },
             readSource: async () => { throw new Error("No source reads in outcome sizing proof"); } } });
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, locale: "en-US", timezoneId: "UTC" });
     const errors = [], denied = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.route("**/*", route => {
+    await page.route("**/*", async route => {
+        if (await fulfillFixtureUpdateStatus(route,new URL(runtime.url).origin)) return;
         const request = route.request(), url = new URL(request.url());
         const reads = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/report-artifacts/list"];
@@ -133,7 +134,7 @@ function measure() {
     return { paintedDiameter: 208 * scale, innerDiameter: 132 * scale, value: text(".percentage-total-value"),
         unit: text(".percentage-total-unit"), widget: box(card), legend: box(legend),
         ring, bottomGap: box(card).bottom - Math.max(box(legend).bottom,ring.bottom),
-        strip: [...root.querySelectorAll(".outcome-share-strip>span")].map(segment=>
+        strip: [...root.querySelectorAll(".outcome-share-strip>*")].map(segment=>
             box(segment).width / box(segment.parentElement).width),
         scopeInWidget: card.contains(scope), scopeInCommands: document.getElementById("analyzeResultCommands").contains(scope),
         rows: [...legend.children].map(row => ({ category: row.dataset.category, count: +row.dataset.count,
@@ -254,11 +255,39 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
     }
 });
 
-test("outcome scope, hover, keyboard, slices and zero/missing states retain their behavior", async t => {
-    const page = await setup(t, 239);
+for (const frontend of ["bundled","react"]) test(`${frontend}: outcome scope, hover, keyboard, slices and zero/missing states retain their behavior`, async t => {
+    const page = await setup(t, 239, frontend);
     await expect(page.locator("#activityListSummary")).toHaveText("3 interactions · 239 matching tool calls");
     const label = page.locator('#outcomeChart [data-category="failure"] .percentage-label');
     const slice = page.locator('#outcomeChart .percentage-slice[data-category="failure"]');
+    await chooseTheme(page,"dark");
+    const root = page.locator("#outcomeChart"), strip = root.locator(".outcome-share-strip");
+    for (const [index,category] of ["success","failure","unknown"].entries()) {
+        const wedge = root.locator(`.percentage-slice[data-category="${category}"]`);
+        const item = root.locator(`li[data-category="${category}"]`), name = item.locator(".percentage-label");
+        const expected = `${await name.textContent()}: ${await item.getAttribute("data-percentage")} (${await item.getAttribute("data-count")} of 239 tool calls).`;
+        await wedge.scrollIntoViewIfNeeded();
+        const point = await wedge.evaluate(n=>{
+            const angle=(+n.dataset.start + +n.dataset.end)*Math.PI + Math.PI/2;
+            return new DOMPoint(85*Math.cos(angle),85*Math.sin(angle)).matrixTransform(n.getScreenCTM()).toJSON();
+        });
+        const segment = strip.locator(":scope > *").nth(index);
+        await expect(segment).toHaveAttribute("tabindex","-1");
+        await expect(segment).toHaveAttribute("href",await name.getAttribute("href"));
+        for (const mark of ["strip","ring"]) {
+            if (mark === "ring") await page.mouse.move(point.x,point.y); else await segment.hover();
+            await expect(page.getByRole("tooltip")).toHaveText(expected);
+            await expect(name).not.toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+            await expect(name).toHaveCSS("text-decoration-line","none");
+            await expect(wedge).toHaveClass(/percentage-active/); await expect(segment).toHaveClass(/percentage-active/);
+            if (proof && category === "unknown") {
+                await mkdir(proof,{recursive:true});
+                await page.screenshot({path:path.join(proof,`${frontend}-unknown-${mark}.png`)});
+            }
+        }
+    }
+    await page.mouse.move(0,0); await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(root.locator(".percentage-active")).toHaveCount(0);
     await label.hover(); await expect(slice).toHaveClass(/percentage-active/);
     const row=label.locator("..");
     await expect(row).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
@@ -282,12 +311,14 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     });
     await page.mouse.click(point.x, point.y); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("32");
-    await selectActivityOption(page, "outcomeFilter", "unknown"); await closeAnalyzeFilters(page); await ready(page);
+    await page.goBack(); await ready(page); await expect(label).toBeFocused();
+    await strip.locator('[data-category="unknown"]').click(); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("1");
     await expect(page.locator("#outcomeChart .percentage-total-unit")).toHaveText("tool call");
-    await expect(page.locator("#outcomeChart .outcome-share-strip>span")).toHaveCount(1);
+    await expect(page.locator("#outcomeChart .outcome-share-strip>*")).toHaveCount(1);
     await expect(page.locator("#outcomeChart .outcome-zeros li")).toHaveCount(2);
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key","request:recorded-outcomes-sizing-2");
     await expect(page.locator("#outcomeChart .percentage-slice")).toHaveAttribute("data-exact-fraction", "1");
     await expect(page.locator("#analyzeScopeCaption")).toHaveText("Outcome: No result recorded");
     await selectActivityOption(page, "outcomeFilter", "partial"); await closeAnalyzeFilters(page); await ready(page);

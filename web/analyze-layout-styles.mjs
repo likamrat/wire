@@ -440,7 +440,11 @@ ${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-off
 #outcomeChart .outcome-hybrid .percentage-total-unit {font-size:clamp(.875rem,1.1cqi,1.1rem);line-height:1.2}
 .outcome-distribution {min-width:0}
 .outcome-share-strip {display:flex;height:clamp(18px,1.8cqi,32px);margin-block-end:var(--space-md)}
-.outcome-share-strip>span {flex-basis:0;background:var(--column-label)}
+.outcome-share-strip>* {flex-basis:0;min-width:0;background:var(--column-label)}
+.outcome-share-strip>.percentage-active {outline:2px solid var(--ink);outline-offset:-2px}
+.outcome-hybrid .percentage-face.percentage-active {stroke:var(--ink);stroke-width:1.5px;vector-effect:non-scaling-stroke;paint-order:stroke fill}
+.outcome-hybrid .percentage-legend-row.percentage-active .percentage-label[href] {background:var(--hover)}
+.outcome-hybrid .percentage-legend-row.percentage-active .percentage-label[href]:active {background:var(--pill-pressed)}
 #outcomeChart .outcome-hybrid .percentage-legend {display:flex;flex-wrap:wrap;gap:4px clamp(20px,4cqi,64px)}
 #outcomeChart .outcome-hybrid .percentage-legend-row {grid-template-columns:auto minmax(0,1fr);gap:0 6px;align-items:center;align-content:start;justify-items:start}
 #outcomeChart .outcome-hybrid .percentage-label {font-size:clamp(1rem,1.25cqi,1.25rem)}
@@ -483,6 +487,7 @@ ${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-off
  #analyzeTools .analyze-tool-action {max-width:none}
 }
 @media(forced-colors:active) {
+ .outcome-share-strip>.percentage-active,.outcome-hybrid .percentage-face.percentage-active {outline-color:Highlight;stroke:Highlight}
  .analyze-filter-dialog,.analyze-scope-summary,.analyze-tools,.analyze-view-controls {border-color:CanvasText;box-shadow:none}
 }
 `;
