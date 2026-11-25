@@ -90840,7 +90840,7 @@ function presentClusters(summary, { reasons = {}, paths = {} } = {}, audit = {})
     firstSeen: cluster2.first_seen,
     lastSeen: cluster2.last_seen,
     days: cluster2.distinct_days,
-    sessions: cluster2.sessions?.length ?? 0,
+    sessions: Number.isInteger(cluster2.sessions) ? cluster2.sessions : 0,
     verdict: cluster2.verdict,
     ...audit[cluster2.id] ? { audit: audit[cluster2.id] } : {}
   }));

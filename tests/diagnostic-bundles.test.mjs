@@ -25,6 +25,7 @@ test("diagnostic bundle preview reads the Analyze scope and writes nothing", asy
     const denied = preview.clusters.find(cluster => cluster.errorCodes.includes("ErrorAccessDenied"));
     assert.deepEqual([denied.tool, denied.count, denied.share, denied.statusCodes], ["workiq-fetch", 3, "33.3%", ["403"]]);
     assert.deepEqual(denied.reasons, ["Access is denied. Check credentials and try again."]);
+    assert.ok(denied.sessions >= 1, "failure groups count the chats they occurred in");
     assert.ok(preview.clusters.some(cluster => cluster.errorCodes.includes("-32001") && cluster.reasons[0].includes("timed out")));
     assert.ok(preview.limitations.some(line => /no recorded result/.test(line)));
     assert.match(preview.report, /^# MCP diagnostic/);
