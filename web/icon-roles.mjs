@@ -41,6 +41,9 @@ export const uxIconSources = Object.freeze({
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", tree: "list-tree", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",
+    "navigation-documentation": "book-open-text", "doc-link": "link", "doc-external": "external-link", "doc-image-off": "image-off",
+    "doc-note": "info", "doc-tip": "lightbulb", "doc-important": "circle-alert", "doc-warning": "triangle-alert", "doc-caution": "octagon-alert",
+    "doc-commit": "git-commit-horizontal", "doc-offline": "wifi-off", "doc-copy": "copy", "doc-copied": "check", "doc-contents": "list-tree",
 });
 
 export const serviceIconSources = Object.freeze({
@@ -54,7 +57,7 @@ export const serviceIconRole = service => "service:" + service.toLowerCase().rep
 
 export function iconSize(role) {
     return role.startsWith("navigation-") || role.startsWith("settings-") || role === "search-analysis" ? 24
-        : role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small", "sun", "moon"].includes(role) ? 16 : 20;
+        : role.startsWith("doc-") || role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small", "sun", "moon"].includes(role) ? 16 : 20;
 }
 
 // Lucide's canonical names have changed since the family shipped in React Icons.

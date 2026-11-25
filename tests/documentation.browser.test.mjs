@@ -1,0 +1,176 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { appendFile, rename } from "node:fs/promises";
+import path from "node:path";
+import { chromium, expect } from "@playwright/test";
+import { searchFixture } from "./live-search-fixture.mjs";
+import { documentationRepository } from "./documentation-fixture.mjs";
+
+async function setup(t, { frontend = "react", width = 752 } = {}) {
+    const repo = await documentationRepository(t);
+    const app = await searchFixture(t, { frontend, copilotAccess: true, reply: false, documentation: { source: repo.source() } });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(10000);
+    const errors = [], outside = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => {
+        if (new URL(route.request().url()).origin !== new URL(app.runtime.url).origin) { outside.push(route.request().url()); return route.abort(); }
+        return route.continue();
+    });
+    t.after(() => { assert.deepEqual(errors, []); assert.deepEqual(outside, [], "Documentation makes no requests beyond WIRE"); });
+    await page.goto(app.runtime.url);
+    await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
+    return { page, repo, app };
+}
+const heading = (page, id) => page.locator(`#documentationView [id="user-content-${id}"]`);
+async function inView(page, id) {
+    await expect.poll(async () => (await heading(page, id).boundingBox())?.y ?? -1).toBeGreaterThan(0);
+    assert.ok((await heading(page, id).boundingBox()).y < 260, `${id} is at the top of the reading area`);
+}
+
+test("Documentation reads the repository guides at the 752px panel with ordinary addresses, Back and a live freshness check", async t => {
+    const { page, repo } = await setup(t);
+    const firstCheck = Promise.withResolvers();
+    await page.route("**/api/documentation/check", async route => {
+        await firstCheck.promise;
+        await route.continue();
+    }, { times: 1 });
+    t.after(() => firstCheck.resolve());
+    const newer = await repo.publish("docs/published.md", "# Published guide\n");
+
+    // The entry sits at the bottom of the sidebar, directly above the account block.
+    const entry = page.locator('.navigation-bottom > nav.documentation-navigation a[data-nav="documentation"]');
+    await expect(entry).toBeVisible();
+    assert.equal(await entry.evaluate(node => Boolean(node.closest("nav").compareDocumentPosition(document.getElementById("navigationFooter")) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+    assert.ok((await entry.boundingBox()).y + (await entry.boundingBox()).height <= (await page.locator("#navigationFooter").boundingBox()).y);
+    await entry.focus();
+    await entry.press("Enter");
+    await expect(page).toHaveURL(/\/documentation$/);
+    await expect(page).toHaveTitle("Documentation | WIRE");
+    await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
+    await expect(page.locator("#docTitle")).toBeFocused();
+    await expect(entry).toHaveAttribute("aria-current", "page");
+    // At 752px the guide tree folds behind "All guides"; the active guide lists its sections.
+    await page.locator(".docs-left-toggle > summary").click();
+    await page.locator('.docs-tree a[data-guide="user-guide"]').click();
+    await expect(page).toHaveURL(/\/documentation\?guide=user-guide$/);
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    // A late automatic check updates the guide being read, not the index where it started.
+    firstCheck.resolve();
+    await expect(page.locator(".docs-source")).toContainText(newer.slice(0, 7));
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    await expect(page.locator("#docTitle")).toBeFocused();
+    await expect(page.locator('.docs-tree a[data-guide="user-guide"]')).toHaveAttribute("aria-current", "page");
+    assert.ok(await page.locator(".docs-tree-sections a").count() > 4);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+
+    // Section links are document anchors: #trends must not be read as the old Trends address.
+    const contents = page.locator(".docs-outline-inline > summary");
+    const trends = page.locator('.docs-outline-inline a[data-fragment="trends"]').first();
+    await contents.press("Enter");
+    await trends.press("Enter");
+    await expect(page).toHaveURL(/\/documentation\?guide=user-guide#trends$/);
+    await inView(page, "trends");
+    await expect(heading(page, "trends")).toBeFocused();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/documentation\?guide=user-guide$/);
+    await expect(trends).toBeFocused();
+    await page.goBack();
+    await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
+    await expect(page.locator('.docs-tree a[data-guide="user-guide"]')).toBeFocused();
+    await page.goForward();
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    await page.goto(new URL("/documentation?guide=user-guide#trends", page.url()).href);
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    await inView(page, "trends");
+    await expect(page).toHaveURL(/\/documentation\?guide=user-guide#trends$/);
+
+    // Collapsing the sidebar gives the guide the freed width.
+    const narrow = (await page.locator("#documentationView").boundingBox()).width;
+    await page.locator("#navigationCollapse").click();
+    await expect.poll(async () => (await page.locator("#documentationView").boundingBox()).width).toBeGreaterThan(narrow + 120);
+    await expect(entry).toBeVisible();
+
+    // A docs-only commit on GitHub main appears without a WIRE release or restart.
+    const published = await repo.publish("docs/user-guide.md", "# Use WIRE today\n\nNewer guidance from main.\n\n## Trends\n\nText.\n");
+    await page.getByRole("button", { name: "Check now" }).click();
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE today");
+    await expect(page.locator(".docs-source")).toContainText(published.slice(0, 7));
+    await expect(page.getByRole("link", { name: /^View this guide on GitHub/ })).toHaveAttribute("href", new RegExp(`/blob/${published}/docs/user-guide\\.md$`));
+
+    // Offline, the last fetched main stays readable and says so.
+    await rename(repo.origin, repo.origin + ".offline");
+    await page.getByRole("button", { name: "Check now" }).click();
+    await expect(page.locator(".docs-source-warning")).toContainText("Couldn't reach GitHub main");
+    await expect(page.locator(".docs-source-warning")).toContainText("Showing main as last fetched");
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE today");
+
+    // A contributor's checkout: saved edits appear in place, marked against main.
+    await page.getByRole("button", { name: "This checkout" }).click();
+    await expect(page.locator(".docs-source-local")).toContainText("Previewing this checkout");
+    await expect(page.getByRole("button", { name: "This checkout" })).toHaveAttribute("aria-pressed", "true");
+    await appendFile(path.join(repo.work, "docs", "user-guide.md"), "\nLocal preview paragraph.\n");
+    await expect(page.locator(".docs-article")).toContainText("Local preview paragraph.", { timeout: 8000 });
+    await expect(page.locator('.docs-tree a[data-guide="user-guide"] .docs-badge')).toHaveText("Edited");
+    await expect(page.locator(".docs-article-footer")).toContainText("Local file: docs/user-guide.md (edited, differs from GitHub main)");
+});
+
+test("guides render GitHub Markdown safely, with images from the same revision and checked links", async t => {
+    const { page, repo } = await setup(t, { width: 1440 });
+    await page.goto(new URL("/documentation?guide=rendering-check", page.url()).href);
+    await expect(page.locator("#docTitle")).toHaveText("Rendering check");
+    const article = page.locator(".docs-article");
+
+    await expect(article.locator('[id="user-content-repeated-heading-1"]')).toHaveCount(1);
+    await expect(article.locator('[id="user-content-punctuation-quotes-commas--ampersands--dashes-too"]')).toHaveCount(1);
+    await expect(page.locator(".docs-right .docs-outline")).toContainText("Repeated heading");
+    await expect(article.locator(".docs-inline-contents")).toHaveCount(1);
+    await expect(article.locator(".docs-inline-contents")).toBeHidden();
+
+    await expect(article.locator('.doc-table[role="region"] table th')).toHaveText(["Column", "Alignment", "Number"]);
+    await expect(article.locator(".doc-code pre")).toContainText("npm run build");
+    await expect(article.getByRole("button", { name: "Copy code" })).toHaveCount(1);
+    await expect(article).toContainText("🚀");
+    await expect(article.locator(".doc-footnotes")).toContainText("The footnote.");
+    await expect(article.locator(".doc-alert-warning")).toContainText("Urgent information.");
+    await expect(article.locator(".doc-task input[type=checkbox]")).toHaveCount(2);
+    assert.equal(await article.locator(".doc-task input[type=checkbox]").evaluateAll(nodes => nodes.every(node => node.disabled)), true);
+
+    const image = article.locator('img[alt="Trends overview"]');
+    await expect(image).toHaveAttribute("src", /^\/api\/documentation\/asset\/[a-f0-9]{64}\/docs\/images\/trends-overview\.png$/);
+    await expect.poll(() => image.evaluate(node => node.naturalWidth)).toBeGreaterThan(0);
+    await expect(article.locator('.doc-image-note[role="note"]')).toContainText("Hosted on img.shields.io");
+    await expect(article.getByRole("img", { name: "Image unavailable: Image with a handler" })).toHaveCount(1);
+
+    await expect(article.getByRole("link", { name: "Development" })).toHaveAttribute("href", "/documentation?guide=development");
+    await expect(article.getByRole("link", { name: "Trends in the user guide" })).toHaveAttribute("href", "/documentation?guide=user-guide#trends");
+    await expect(article.getByRole("link", { name: /^Contributing/ })).toHaveAttribute("href", "/documentation?guide=contributing");
+    await expect(article.getByRole("link", { name: /^helpers/ })).toHaveAttribute("href", `https://github.com/likamrat/wire/blob/${repo.head()}/tests/helpers.mjs`);
+    const outside = article.getByRole("link", { name: /^GitHub Docs/ });
+    await expect(outside).toHaveAttribute("target", "_blank");
+    await expect(outside).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(article.locator(".doc-missing-link")).toHaveCount(2);
+
+    // Raw HTML from a guide never runs or takes over the page.
+    assert.deepEqual(await page.evaluate(() => [window.__docsScript, window.__docsOnError, window.__docsLink]), [undefined, undefined, undefined]);
+    await expect(article.locator("script, [onerror], [style], a[href^='javascript']")).toHaveCount(0);
+    await expect(article).toContainText("Overlay attempt");
+
+    await article.getByRole("link", { name: "jump to the second one" }).click();
+    await expect(page).toHaveURL(/#repeated-heading-1$/);
+    await inView(page, "repeated-heading-1");
+    await page.locator('.docs-right a[data-fragment="tables"]').click();
+    await inView(page, "tables");
+    await expect(page.locator('.docs-right a[data-fragment="tables"]')).toHaveAttribute("aria-current", "location");
+});
+
+test("the bundled renderer offers the same Documentation entry", async t => {
+    const { page } = await setup(t, { frontend: "bundled", width: 1440 });
+    const entry = page.locator('.navigation-bottom > nav.documentation-navigation a[data-nav="documentation"]');
+    await expect(entry).toBeVisible();
+    await entry.click();
+    await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
+    await expect(page.locator(".docs-tree")).toBeVisible();
+});

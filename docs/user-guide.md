@@ -27,6 +27,7 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
   [themes](#themes), [defaults](#wire-defaults)
 - [Collection, privacy and account](#collection-privacy-and-account)
 - [Help, Feedback and the sidebar](#help-feedback-and-the-sidebar)
+- [Documentation](#documentation)
 
 ## Pages and addresses
 
@@ -713,3 +714,32 @@ those fields on WIRE's new issue form. The issue is public only after you submit
 Drag the sidebar's right edge to resize it. With the divider focused, use the
 left and right arrow keys. WIRE remembers your width in this browser;
 double-click the edge or press Enter on it to restore the default.
+
+## Documentation
+
+Select **Documentation** at the bottom of the sidebar, just above your account,
+to read these guides inside WIRE.
+
+The list on the left shows every guide, with the sections of the one you're
+reading. The list on the right shows the sections on the current page and marks
+where you are. In a narrow window, both lists fold into **All guides** and
+**On this page** above the text.
+
+Links, section addresses and your browser's Back and Forward work as they do on
+any web page. You can bookmark a section or share its address.
+
+The line under each title says which guides you're reading:
+
+| You see | What it means |
+| --- | --- |
+| **From GitHub main** | The current guides from the WIRE repository. WIRE checks for newer ones when you open Documentation, at most every 15 minutes. Select **Check now** to check again. |
+| **Couldn't reach GitHub main** | The check failed. You're reading the guides WIRE last fetched, which may not be the latest. |
+| **Guides included with this WIRE build** | WIRE hasn't fetched GitHub main yet, or this copy doesn't come from the WIRE repository. |
+
+Newer guides appear without updating WIRE. A check fetches only the
+repository's main branch into WIRE's own Git data. It doesn't change your files,
+settings or installed version. Images come from the same version as the text.
+Images hosted on other sites aren't loaded; WIRE shows a link to them instead.
+
+If you're editing guides in your own clone or fork, see
+[Preview documentation changes](development.md#preview-documentation-changes).
