@@ -320,7 +320,8 @@ preference doesn't change the charts.
 ### Homepage layout
 
 Use the arrow at the right of any Analyze widget, including Interactions, to
-collapse or expand it. Its heading and View trend or View by day link stay
+collapse or expand it. **Collapse all** and **Expand all** beside Refresh
+change all visible widgets at once. Each heading and View trend or View by day link stays
 available. Collapsing does not hide individual interactions, change report
 selection or filter the data. Your choices stay while you browse in this page;
 reloading starts with every widget expanded.

@@ -230,6 +230,8 @@ do not acquire invented date controls.
 Local scrolling keeps all labels readable within the current window.
 
 Each Analyze widget, including Interactions, has one trailing collapse button.
+The Results toolbar offers **Collapse all** when any visible widget is open,
+or **Expand all** when all visible widgets are folded. Neither changes the scope.
 Keep the heading and contextual navigation available; remove the body from
 layout and keyboard navigation without discarding its day, scroll or selection
 state. Collapse is page-local, survives in-page navigation and resets on reload,

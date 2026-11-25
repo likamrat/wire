@@ -18,6 +18,31 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
     grid.className = "analyze-ordered-widgets";
     const slots = new Map(), reduced = matchMedia("(prefers-reduced-motion: reduce)");
     const collapsed = new Set(), widgets = new Map(), packing = new Map();
+    const toggleAll = document.createElement("button");
+    toggleAll.type = "button"; toggleAll.id = "analyzeToggleAll"; toggleAll.className = "quiet"; toggleAll.hidden = true;
+    document.getElementById("analyzeToolbar").prepend(toggleAll);
+    const visibleWidgets = () => [...widgets].filter(([, { toggle }]) => toggle.isConnected && toggle.checkVisibility());
+    function syncToggleAll(active) {
+        const visible = active ? visibleWidgets() : [];
+        toggleAll.hidden = visible.length === 0;
+        if (!visible.length) return;
+        const fold = visible.some(([key]) => !collapsed.has(key)), text = fold ? "Collapse all" : "Expand all";
+        if (toggleAll.textContent !== text) toggleAll.replaceChildren(icon(fold ? "collapse-sections" : "expand-sections"), text);
+    }
+    function updateFolds(keys, fold, control) {
+        if (!ordinary || !isCurrent(publication)) return;
+        dismissHover();
+        for (const key of keys) {
+            if (fold) collapsed.add(key); else collapsed.delete(key);
+        }
+        syncWidgets(true);
+        for (const owner of packing.values()) owner.refresh();
+        control.focus({ preventScroll: true });
+    }
+    toggleAll.addEventListener("click", () => {
+        const keys = visibleWidgets().map(([key]) => key);
+        updateFolds(keys, keys.some(key => !collapsed.has(key)), toggleAll);
+    });
     let publication;
     function syncWidgets(active) {
         for (const key of standard) {
@@ -35,14 +60,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
             if (!toggle) {
                 toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "quiet analyze-widget-toggle";
                 toggle.id = `analyzeCollapse-${key}`; header.append(toggle);
-                toggle.addEventListener("click", () => {
-                    if (!ordinary || !isCurrent(publication)) return;
-                    dismissHover();
-                    if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
-                    syncWidgets(true);
-                    for (const owner of packing.values()) owner.refresh();
-                    toggle.focus({ preventScroll: true });
-                });
+                toggle.addEventListener("click", () => updateFolds([key], !collapsed.has(key), toggle));
             }
             const bodies = [...shell.children].filter(node => node !== header && node.id !== "activityTitle");
             bodies.push(...header.querySelectorAll(":scope > .percentage-denominator,:scope > .usage-sort,:scope > .activity-list-scope"));
@@ -59,6 +77,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
             }).join(" "));
             widgets.set(key, { card, toggle, bodies });
         }
+        syncToggleAll(active);
     }
     function syncPacking() {
         const roots = new Set([grid, document.querySelector("#frontendBreakdowns .percentage-panels")].filter(node => node?.isConnected));
@@ -197,6 +216,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
         },
         leave() {
             ordinary = entered = false; publication = null; finish(); layout();
+            toggleAll.hidden = true;
             for (const { card, toggle, bodies } of widgets.values()) {
                 card.dataset.collapsed = "false"; toggle.hidden = true;
                 for (const body of bodies) body.inert = false;
