@@ -154,6 +154,14 @@ Within a wide Work IQ tool calls or Response models card, four or more entries
 read across in pairs: name, percentage and count together, bar underneath.
 Narrow cards and shorter lists use one entry per row. Prompt authors always
 uses one list. Services and operations keeps its service icons and bar layout.
+Keep a balanced exterior inset above the first painted heading or control and
+below the last painted row, track or axis label, including both model readings.
+Account for header hit areas, font leading and plot-frame whitespace rather
+than equating CSS padding alone. Use the established Services card as a peer;
+do not stretch short cards or change plot scales to manufacture symmetry.
+The same rule applies to Trends' overview, chart and comparison-introduction
+cards. Settings forms, contextual dialogs and frozen report output keep their
+own spacing contracts.
 
 Screen headings use sentence case, including **Work IQ**. Keep branding,
 genuine acronyms and recorded identifiers unchanged. In the interaction reader,

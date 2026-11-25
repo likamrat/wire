@@ -5,6 +5,33 @@ export function rgb(value) {
     throw new TypeError(`Unsupported measured color: ${value}`);
 }
 
+// Scan a flat widget's actual ink and marks, excluding its rounded outer border.
+export async function paintedWidgetInsets(card, screenshotPath) {
+    const image = await card.screenshot({ path: screenshotPath, animations: "disabled" });
+    return card.evaluate(async (node, base64) => {
+        const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))]));
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d"); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+        const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const bounds = node.getBoundingClientRect(), scale = width / bounds.width, css = getComputedStyle(node);
+        const surface = (width * 2 + Math.floor(width / 2)) * 4;
+        const inset = Math.ceil(Math.max(20, parseFloat(css.borderTopLeftRadius)) * scale);
+        let first = height, last = -1;
+        for (let y = 3; y < height - 3; y++) for (let x = inset; x < width - inset; x++) {
+            const i = (y * width + x) * 4;
+            if (Math.max(Math.abs(data[i] - data[surface]), Math.abs(data[i + 1] - data[surface + 1]),
+                Math.abs(data[i + 2] - data[surface + 2])) >= 24) {
+                first = Math.min(first, y); last = Math.max(last, y);
+            }
+        }
+        if (last < first) throw new Error("The widget has no measurable foreground paint.");
+        return { top: first / scale - parseFloat(css.borderTopWidth),
+            bottom: (height - last - 1) / scale - parseFloat(css.borderBottomWidth),
+            width: bounds.width, height: bounds.height };
+    }, image.toString("base64"));
+}
+
 // Measure ordinary screen text against its composed surface, including inset control faces.
 export function visibleInk() {
     const rgba = value => {
