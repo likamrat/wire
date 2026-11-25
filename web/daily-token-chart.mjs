@@ -1,6 +1,7 @@
 // The same renderer is bundled for React and serialized in the standalone shell.
 export function renderDailyTokenChart(el, host, calendar, summary, { formatDate, dateLink, scopeKey }) {
     const number = new Intl.NumberFormat().format;
+    const axisNumber = new Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1}).format;
     const dayIndex = date => Date.parse(date + "T00:00:00Z") / 86400000;
     const start = dayIndex(calendar.range.from), span = dayIndex(calendar.range.to) - start;
     const dateAt = i => new Date((start + i) * 86400000).toISOString().slice(0,10);
@@ -21,7 +22,7 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         svg.append(node);return node;
     }
     for (let tick=0;tick<=ceiling;tick+=step) {
-        const label=el("span","",number(tick));
+        const label=el("span","",axisNumber(tick));
         label.style.top=y(tick);axis.append(label);
         mark("line",{x1:"0",x2:"100%",y1:y(tick),y2:y(tick),class:tick?"token-grid":"token-axis"});
     }
@@ -50,13 +51,15 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         ` · ${number(summary.metered)} of ${number(summary.eligible)} interactions measured`));
     const undated=calendar.days.find(d=>d.date===null);
     if(undated?.metered)footer.append(` · ${number(undated.total)} undated`);
-    plot.append(svg,slider,detail);wrap.append(axis,plot,labels,footer);
+    const caption=el("div","token-history-caption");
+    caption.append(footer,detail);plot.append(svg,slider);wrap.append(axis,plot,labels,caption);
     const previous=host.querySelector(".usage-date-slider"), focused=previous && host.ownerDocument.activeElement===previous;
     const saved=previous?.dataset.scope===scopeKey?previous.valueAsNumber:NaN;
     let current, inspecting=false, pinned=false;
     function reveal(show) {
-        inspecting=show;plot.toggleAttribute("data-inspecting",show);
+        inspecting=show;wrap.toggleAttribute("data-inspecting",show);
         detail.setAttribute("aria-hidden",String(!show));
+        footer.setAttribute("aria-hidden",String(show));
         const link=dateHost.querySelector("a");if(link)link.tabIndex=show?0:-1;
     }
     function inspect(i) {
@@ -71,26 +74,22 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         slider.setAttribute("aria-valuetext",`${formatDate(date,true)}: ${text}`);reading.textContent=text;
         dateHost.replaceChildren(d?.active?dateLink(date):el("span","",formatDate(date,true)));
         const link=dateHost.querySelector("a");if(link)link.tabIndex=inspecting?0:-1;
-        detail.style.setProperty("--inspected-x",at);
-        detail.toggleAttribute("data-left",span>0 && i>span/2);
     }
     function pointer(e) {
         const bounds=plot.getBoundingClientRect();
         if(bounds.width){
             const fraction=Math.max(0,Math.min(1,(e.clientX-bounds.left)/bounds.width));
             inspect(Math.round(fraction*span));
-            detail.style.setProperty("--inspected-x",`${100*fraction}%`);
-            detail.toggleAttribute("data-left",fraction>.5);
         }
         reveal(true);
     }
     slider.addEventListener("pointermove",e=>{if(!pinned && (e.pointerType==="mouse" || e.buttons))pointer(e);});
     slider.addEventListener("pointerup",e=>{pointer(e);pinned=true;});
     slider.addEventListener("input",()=>{inspect(slider.valueAsNumber);reveal(true);});
-    plot.addEventListener("focusin",()=>reveal(true));
-    plot.addEventListener("focusout",e=>{if(!plot.contains(e.relatedTarget)){pinned=false;reveal(false);}});
-    plot.addEventListener("pointerleave",()=>{pinned=false;if(!plot.querySelector(":focus-visible"))reveal(false);});
-    plot.addEventListener("keydown",e=>{if(e.key==="Escape" && inspecting){e.preventDefault();e.stopPropagation();pinned=false;slider.focus({preventScroll:true});reveal(false);}});
+    wrap.addEventListener("focusin",()=>reveal(true));
+    wrap.addEventListener("focusout",e=>{if(!wrap.contains(e.relatedTarget)){pinned=false;reveal(false);}});
+    wrap.addEventListener("pointerleave",()=>{pinned=false;if(!wrap.querySelector(":focus-visible"))reveal(false);});
+    wrap.addEventListener("keydown",e=>{if(e.key==="Escape" && inspecting){e.preventDefault();e.stopPropagation();pinned=false;slider.focus({preventScroll:true});reveal(false);}});
     inspect(Number.isInteger(saved)&&saved>=0&&saved<=span?saved:Math.max(0,Math.min(span,dayIndex(measured.at(-1)?.date??calendar.range.to)-start)));
     reveal(false);host.replaceChildren(wrap);
     if(focused)slider.focus({preventScroll:true});

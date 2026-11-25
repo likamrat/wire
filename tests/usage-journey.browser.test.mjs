@@ -69,6 +69,40 @@ test("a metered zero is a token point on the baseline, not an unknown or an empt
     await expect(chart.locator(".token-day-value")).toHaveText("Token count unavailable · 0 of 1 measured");
 });
 
+for(const frontend of ["react","bundled"])test(`${frontend}: daily chart readings cannot obscure a hovered point or clip date labels`,async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend);
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage({timezoneId:"UTC",reducedMotion:"reduce"});await page.goto(runtime.url);
+    const card=page.locator("#analyzeUsage"),plot=card.locator(".token-history-plot"),slider=plot.getByRole("slider");
+    await expect(plot.locator(".token-point")).toHaveCount(4);
+    for(const [width,scale] of [[1440,1],[768,1],[390,1],[390,2],[320,1]]) {
+        await page.setViewportSize({width,height:955});
+        await page.evaluate(s=>{document.documentElement.style.fontSize=`${100*s}%`;},scale);
+        await card.evaluate(c=>c.scrollIntoView({block:"center"}));await page.evaluate(()=>document.fonts.ready);
+        const box=await plot.boundingBox();
+        for(const [i,fraction] of [.001,1/3,2/3,.999].entries()){
+            const x=box.x+box.width*fraction,y=box.y+box.height*.45;
+            await page.mouse.move(x,y);await expect(slider).toHaveValue(String(i));
+            await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","1");
+            assert.deepEqual(await card.evaluate((c,{x,y})=>{
+                const issues=[],rect=n=>n.getBoundingClientRect(),bounds=rect(c),p=c.querySelector(".token-history-plot");
+                const box=rect(p),read=c.querySelector(".token-day-reading"),detail=rect(read);
+                if(document.elementFromPoint(x,y)!==p.querySelector("input"))issues.push("hover blocked");
+                if(detail.top<box.bottom-.5)issues.push("reading overlaps plot");
+                const glyphs=n=>{const r=document.createRange();r.selectNodeContents(n);return [...r.getClientRects()];};
+                const ticks=[...c.querySelectorAll(".token-history-dates span")].filter(n=>getComputedStyle(n).visibility!=="hidden").flatMap(glyphs);
+                const overlap=(a,b)=>a.left<b.right-.5 && a.right>b.left+.5 && a.top<b.bottom-.5 && a.bottom>b.top+.5;
+                if(ticks.some((a,i)=>ticks.slice(i+1).some(b=>overlap(a,b)) || overlap(a,detail)))issues.push("date labels overlap");
+                const text=[...ticks,...glyphs(read.querySelector(".token-day-value")),...glyphs(read.querySelector(".token-day-date"))];
+                if(text.some(b=>b.left<bounds.left || b.right>bounds.right || b.bottom>bounds.bottom || b.top<bounds.top))issues.push("text clipped");
+                return issues;
+            },{x,y}),[],`${width}px / ${scale*100}% text / day ${i}`);
+        }
+        await page.mouse.move(0,0);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
+    }
+});
+
 for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: Most tokens reorders the same cards and both Analyze defaults survive reopening`,async t=>{
     const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
     const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend,{paginated:true});
