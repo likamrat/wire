@@ -50,6 +50,7 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
         const reasons = {
             "interaction-link-or-boundary":"The prompt and final response could not be linked.",
             "outside-read-window":"The saved history does not cover the full exchange.",
+            "history-gap":"Part of this exchange's saved history could not be read.",
             "incomplete-or-nested":"A history gap or nested agent work prevents a complete count.",
             "conflicting-link":"More than one request may own these calls.",
             "unverified-model-call":"A model call could not be identified.",
@@ -62,6 +63,7 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
         if (!sized.length) return;
     } else {
         renderModelCounts(el, host, u);
+        if (scenario.usageUnfinished) host.append(el("p", "usage-context", "This exchange stopped before a final answer. The count covers every model call it recorded."));
     }
     host.classList.add("usage-reading");
     if (sized.length !== 1 || tools.length !== 1) {

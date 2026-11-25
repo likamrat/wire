@@ -341,12 +341,32 @@ putting the raw opaque ID in new retained model metadata or in reports.
 - WIRE doesn't sum `session.usage_checkpoint`, reason from chat order alone,
   subscribe to live SDK events or start a backfill.
 
-These optional fields use the existing evidence snapshot; no store conversion
-is needed.
+#### Where an exchange starts and ends
 
-When a response explicitly identifies a retained Work IQ run, its request-only
-receipt can survive a collection restart before the final boundary arrives.
-WIRE still shows no total until it verifies the complete exchange.
+- A message the producer delivers as `steering` carries the same run ID into
+  the running interaction. Its model calls count with that root prompt; it isn't
+  a rival prompt.
+- When both the prompt and a reply record a run ID, the run decides ownership.
+  Copilot can repeat the first prompt's `originatingMessageId` on replies to
+  later prompts.
+- An exchange that stopped before a final answer still spent every model call
+  it recorded. Once the next independent prompt begins or Copilot ends the
+  session, those calls are its total and the reader says it stopped early.
+  A reply to it after that point conflicts.
+- The assistant message Copilot writes after a background notification has no
+  turn, model request, run or originating message. It isn't a rival reply.
+- Only a skipped, oversized or withheld entry between the prompt and the next
+  prompt blocks a total. An unread prefix, pasted image or withheld entry
+  elsewhere in the chat doesn't. Withheld prompt text keeps its run and message
+  identity, so it can still contest ownership.
+- A gap is missing evidence. It never clears a total that was already verified.
+
+#### Older journals without receipts
+
+Older Copilot journals have no per-call receipts, so their exchanges stay
+unmeasured. The Copilot app also keeps per-call accounting in `session-store.db`
+beside the approved chat database. WIRE doesn't read it: that file isn't part
+of the approved source, and using it needs its own approval.
 
 #### Returned text size
 

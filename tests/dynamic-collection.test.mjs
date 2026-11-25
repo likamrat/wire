@@ -201,6 +201,61 @@ test("history compatibility: shared run receipts stay with their exact messages 
     assert.deepEqual((await read()).map(r=>r.usage),[null,null]);
 });
 
+test("history compatibility: an older journal without receipts stays unmeasured; the app's per-call index is not read", async t => {
+    const app = await installation(t), id = app.session(), start = call("indexed-fetch");
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    app.cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const text = "Summarize the invented launch notes.";
+    const batch = [event("user.message", { content: text, messageId: "older-prompt", delivery: "idle" }),
+        event("assistant.turn_start", { turnId: "a" }), event("assistant.message", { turnId: "a", toolRequests: [{ toolCallId: "indexed-fetch" }] }), start,
+        event("tool.execution_complete", { toolCallId: "indexed-fetch", success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: "a" }),
+        event("assistant.turn_start", { turnId: "b" }), event("assistant.message", { turnId: "b", content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: "b" })];
+    const base = Date.now() - 60000;
+    batch.forEach((e, n) => { e.timestamp = new Date(base + n * 1000).toISOString(); });
+    const after = id => new Date(Date.parse(batch.find(e => e.data.turnId === id && e.type === "assistant.message").timestamp) + 4).toISOString();
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Invented answer");
+    index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',5000,100,4000,500,?)").run(id, after("a"));
+    index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',6000,300,5500,400,?)").run(id, after("b"));
+    const file = await logFor(app, id, batch);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    const record = await read();
+    assert.equal(record.usage, null, "The app's per-call index beside the approved database is not read without its own approval");
+    assert.equal(record.usageBasis, undefined);
+});
+
+test("history compatibility: a pasted image inside an exchange does not hide its exact receipts, but an unreadable entry still does", async t => {
+    for (const [kind, total] of [["session.binary_asset", 4400], ["assistant.message", null]]) {
+        const app = await installation(t), id = app.session(), start = call("image-fetch");
+        const messageId = "image-prompt", interactionId = "image-run", model = "gpt-4.1";
+        start.data.turnId = "turn-one";
+        const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId, inputTokens: 2000, outputTokens: 200 } });
+        const batch = [event("user.message", { messageId, interactionId, content: "Read the invented screenshot.", delivery: "idle" }),
+            event(kind, kind === "session.binary_asset" ? { mimeType: "image/png", data: "x".repeat(1100 * 1024) } : { content: "x".repeat(1100 * 1024) }),
+            event("assistant.message", { apiCallId: "img-one", turnId: "turn-one", model, originatingMessageId: messageId, toolRequests: [{ toolCallId: "image-fetch" }] }), start,
+            event("tool.execution_complete", { toolCallId: "image-fetch", success: true, result: { content: "INVENTED" } }), receipt("img-one"),
+            event("assistant.turn_start", { turnId: "turn-two" }),
+            event("assistant.message", { apiCallId: "img-two", turnId: "turn-two", model, originatingMessageId: messageId, phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+            receipt("img-two"), event("assistant.turn_end", { turnId: "turn-two" })];
+        const base = Date.now() - 20000;
+        batch.forEach((e, n) => { e.timestamp = new Date(base + n * 100).toISOString(); });
+        await logFor(app, id, batch);
+        const collector = await createCollector(app.context, { timers: false });
+        app.cleanup.push(() => collector.close());
+        await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+        await collector.collectNow();
+        const record = (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+        assert.equal(record.usage?.total ?? null, total, kind);
+        if (total === null) assert.equal(record.usageGap, "history-gap");
+    }
+});
 test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {
     const app = await installation(t), id = app.session(), start = call("metered-fetch");
     const model = "claude-sonnet-5-5", messageId = "metered-prompt", interactionId = "interaction-one";

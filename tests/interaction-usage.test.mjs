@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { firstUsageDays, recordedUsage, usageSummary, usageQuestionGroups } from "../lib/interaction-usage.mjs";
 import { createUsageReading } from "../web/usage-reading.mjs";
-import { modelRequestKey, retainedReceiptContext, retainedUsage, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
+import { modelRequestKey, retainedReceiptContext, retainedUsage, retainToolTokens, retainUsageReceipt, toolTokenReadings, usageMatcherEvents } from "../lib/usage-receipts.mjs";
 import { retainInteractionModelMetadata } from "../lib/interaction-model.mjs";
 import { qualifiedResultPaths } from "../lib/history.mjs";
+import { continuingUsageContext, retainEvent } from "../lib/collector.mjs";
 
 test("Analyze attributes a multi-day interaction once but keeps its later calls inside View by day",()=>{
     const {usageCalendar} = createUsageReading({firstUsageDays});
@@ -119,7 +121,7 @@ test("independent-message metering never bypasses ambiguous ownership, privacy, 
         events => { events.push({...events.find(e=>e.id==="receipt-answer-api-2"),id:"run-only",data:{
             apiCallId:"unowned",origin:"shared",model:"example",tokens:{input:1,output:1}}}); },
         events => { events.splice(events.findIndex(e=>e.id==="receipt-answer-api-1"),1); },
-        events => { events.find(e=>e.id==="answer-1").data.finalAnswer=false; },
+        events => { events.find(e=>e.id==="answer-1").data.finalAnswer=false; events.splice(events.findIndex(e=>e.id==="prompt-2")); },
         events => { events.splice(3,0,{id:"delegate",type:"subagent.started",data:{}}); },
         events => { events.find(e=>e.id==="answer-2").data.wireToolRequestIds=["tool-1"]; },
     ];
@@ -201,4 +203,235 @@ test("model cohorts split multiple calls by recorded model and preserve measured
     assert.deepEqual(identified.models.map(row=>[row.model,row.total,row.interactions,row.interactionIds]),[
         ["gpt-4.1",24,3,["mixed","repeated","zero"]],["new-private-model",3,1,["mixed"]],
     ]);
+});
+
+function steeredRun() {
+    let ordinal = 0;
+    const e = (id, type, data, extra = {}) => ({ id, type, timestamp:new Date(1700000000000 + 1000 * ordinal++).toISOString(), data, ...extra });
+    const reply = (n, extra) => e(`reply-${n}`, "assistant.message", {wireUsageOrigin:"run",originatingMessageId:"root",turnId:`t-${n}`,
+        wireOriginalModel:{apiCallId:`api-${n}`,model:"example"},...extra});
+    const receipt = n => e(`receipt-${n}`, "session.usage_record", {apiCallId:`api-${n}`,origin:"run",model:"example",
+        tokens:{freshInput:10*n,cacheRead:0,cacheWrite:0,output:n}});
+    const round = (n, extra) => [e(`start-${n}`,"assistant.turn_start",{turnId:`t-${n}`}), receipt(n), reply(n, extra), e(`end-${n}`,"assistant.turn_end",{turnId:`t-${n}`})];
+    const events = [e("prompt","user.message",{content:"Find the notes",messageId:"root",wireUsageOrigin:"run",wireDelivery:"idle"}),
+        ...round(1,{hasToolRequests:true,wireToolRequestIds:["tool"]}), e("tool-start","tool.execution_start",{toolCallId:"tool"}),
+        e("steer","user.message",{content:"Only this week",messageId:"steer",wireUsageOrigin:"run",wireDelivery:"steering"}),
+        ...round(2,{hasToolRequests:true}), ...round(3,{finalAnswer:true})];
+    const record = {sourceSessionId:"source",userPrompt:{sourceEventId:"prompt",sourceTimestamp:events[0].timestamp,text:"Find the notes"},
+        toolCalls:[{startEventId:"tool-start",toolCallId:"tool"}]};
+    return {events,record};
+}
+
+test("a steering message continues its interaction, so every model call after it is counted with the root prompt", () => {
+    const {events,record} = steeredRun();
+    const calls = retainedUsage(events,record,false);
+    assert.deepEqual(calls?.map(c=>c.apiCallId),["api-1","api-2","api-3"]);
+    assert.equal(recordedUsage(calls).total,66);
+    for (const change of [
+        events => { events.find(e=>e.id==="steer").data.wireDelivery="idle"; },
+        events => { events.find(e=>e.id==="steer").data.wireUsageOrigin="other"; },
+        events => { delete events.find(e=>e.id==="steer").data.wireDelivery; },
+        events => { events.find(e=>e.id==="steer").agentId="nested"; },
+    ]) {
+        const run = steeredRun(); change(run.events);
+        assert.equal(retainedUsage(run.events,run.record,false),null,"Only a recorded steering delivery into the same run continues it");
+    }
+});
+
+test("a skipped or withheld entry only blocks a total when it falls between the prompt and the next prompt", () => {
+    const gap = id => ({ id, type: "wire.history_gap", data: { reason: "oversized-line", offset: 1 } });
+    const before = steeredRun(); before.events.unshift(gap("wire-gap-before"));
+    assert.equal(recordedUsage(retainedUsage(before.events,before.record,false)).total,66,"A pasted image earlier in the chat does not hide this exchange");
+    const withheld = steeredRun(); withheld.events[0].data = { ...withheld.events[0].data, content: null, wirePromptCapture: { reason: "credential-excluded" } };
+    assert.equal(recordedUsage(retainedUsage(withheld.events,withheld.record,false)).total,66,"Withheld prompt text does not change its exact model counts");
+    const inside = steeredRun(); inside.events.splice(6,0,gap("wire-gap-inside"));
+    assert.equal(retainedUsage(inside.events,inside.record,false),null);
+    const after = steeredRun(); after.events.push(gap("wire-gap-after"));
+    assert.equal(retainedUsage(after.events,after.record,false),null,"An unread entry before the next prompt could continue this exchange");
+    after.events.push({ id:"next", type:"user.message", timestamp:new Date(1800000000000).toISOString(), data:{ messageId:"next", wireUsageOrigin:"next" } });
+    assert.equal(retainedUsage(after.events,after.record,false),null);
+});
+test("compacting a long open exchange never leaves a smaller exact total", () => {
+    let n = 0;
+    const e = (type, data) => ({ id: `e-${n}`, type, timestamp: new Date(1700000000000 + 1000 * n++).toISOString(), data });
+    const events = [e("wire.history_gap", { reason: "oversized-line", offset: 1 }), e("user.message", { messageId: "m", wireUsageOrigin: "run", wireDelivery: "idle" })];
+    const prompt = events[1], record = { sourceSessionId: "s", userPrompt: { sourceEventId: prompt.id, sourceTimestamp: prompt.timestamp }, toolCalls: [{ startEventId: "tool-start", toolCallId: "tool" }] };
+    for (let i = 0; i < 101; i++) {
+        events.push(e("assistant.turn_start", { turnId: `t${i}` }),
+            e("session.usage_record", { apiCallId: `api-${i}`, origin: null, model: "m1", tokens: { freshInput: 10, cacheRead: 0, cacheWrite: 0, output: 1 } }),
+            e("assistant.message", { originatingMessageId: "m", wireUsageOrigin: "run", turnId: `t${i}`, wireOriginalModel: { apiCallId: `api-${i}`, model: "m1" },
+                ...(i === 0 ? { hasToolRequests: true, wireToolRequestIds: ["tool"] } : i === 100 ? { finalAnswer: true } : {}) }),
+            ...(i === 0 ? [{ ...e("tool.execution_start", { toolCallId: "tool" }), id: "tool-start" }] : []),
+            e("assistant.turn_end", { turnId: `t${i}` }));
+    }
+    const kept = continuingUsageContext(events, [record], "s", { contextEvictions: 0 });
+    const calls = retainedUsage(usageMatcherEvents(kept), record, false);
+    assert.ok(calls === null || recordedUsage(calls).total === 1111, `compaction produced ${calls && recordedUsage(calls).total}`);
+    assert.equal(recordedUsage(calls).total, 1111, "The open exchange keeps every round it needs");
+});
+
+test("an assistant message the producer writes after a background notification is not a rival reply", () => {
+    const run = () => { const r = steeredRun(), diag = { credentialExclusions:0 }, ctx = { metering:true, sourceSessionId:"source" }, at = r.events.findIndex(e => e.id === "start-2") + 1;
+        const notice = retainEvent({ id:"notice", type:"system.notification", timestamp:r.events[at].timestamp, data:{ kind:{ type:"shell_completed" }, content:"done" } },diag,ctx);
+        const note = retainEvent({ id:"note", type:"assistant.message", timestamp:r.events[at].timestamp,
+            data:{ messageId:"note-m", content:"Reading the finished command.", toolRequests:[{ toolCallId:"note-tool" }] } },diag,ctx);
+        return { ...r, notice, note, at }; };
+    const plain = run(); plain.events.splice(plain.at,0,plain.note);
+    assert.deepEqual(plain.notice.data,{},"No notification content is retained");
+    assert.equal(retainedUsage(plain.events,plain.record,false),null,"Without a notification just before it, a message missing links is still unaccounted");
+    const noted = run(); noted.events.splice(noted.at,0,noted.notice,noted.note);
+    assert.equal(recordedUsage(retainedUsage(noted.events,noted.record,false)).total,66);
+    const later = Array.from({ length:305 },(_,i) => ({ id:`later-${i}`, type:"assistant.turn_start", timestamp:new Date(1800000000000 + i).toISOString(), data:{ turnId:`later-${i}` } }));
+    const aged = [...noted.events,...later];
+    const kept = continuingUsageContext(aged,[{ ...noted.record, usageCalls:retainedUsage(noted.events,noted.record,false) }],"source",{ contextEvictions:0 });
+    assert.ok(kept.some(e => e.id === "notice"),"Compaction of a long open exchange keeps the sanitized notification");
+    const modelled = run(); modelled.note.data.wireOriginalModel = { ...modelled.note.data.wireOriginalModel, model:"example" }; modelled.events.splice(modelled.at,0,modelled.notice,modelled.note);
+    assert.equal(retainedUsage(modelled.events,modelled.record,false),null,"A reply with recorded model metadata is a model call, not a producer note");
+    const unmetered = run(), before = unmetered.events.findIndex(e => e.id === "start-3");
+    unmetered.events.splice(before,0,{ id:"start-x", type:"assistant.turn_start", timestamp:unmetered.events[before].timestamp, data:{ turnId:"t-x" } },
+        unmetered.notice,unmetered.note,{ id:"end-x", type:"assistant.turn_end", timestamp:unmetered.events[before].timestamp, data:{ turnId:"t-x" } });
+    assert.equal(retainedUsage(unmetered.events,unmetered.record,false),null,"A notification does not make an otherwise unmetered round free");
+});
+test("replies to a later prompt that repeat the first prompt's message id belong to their own run", () => {
+    const {events,record} = steeredRun(), at = Date.parse(events.at(-1).timestamp);
+    const e = (id, type, data, n) => ({ id, type, timestamp:new Date(at + 1000 * n).toISOString(), data });
+    events.push(e("next","user.message",{content:"And last week?",messageId:"next",wireUsageOrigin:"later",wireDelivery:"idle"},1),
+        e("start-9","assistant.turn_start",{turnId:"t-9"},2),
+        e("receipt-9","session.usage_record",{apiCallId:"api-9",origin:"later",model:"example",tokens:{freshInput:90,cacheRead:0,cacheWrite:0,output:9}},3),
+        e("reply-9","assistant.message",{wireUsageOrigin:"later",originatingMessageId:"root",turnId:"t-9",finalAnswer:true,
+            wireOriginalModel:{apiCallId:"api-9",model:"example"}},4), e("end-9","assistant.turn_end",{turnId:"t-9"},5));
+    assert.equal(recordedUsage(retainedUsage(events,record,false)).total,66,"The later run's call is not part of the first exchange");
+    events.splice(events.findIndex(x => x.id === "end-9"),0,e("tool-9","tool.execution_start",{toolCallId:"later-tool"},4.5));
+    assert.equal(retainedUsage(events,{...record,toolCalls:[...record.toolCalls,{startEventId:"tool-9",toolCallId:"later-tool"}]},false),null,
+        "A record that also groups the later prompt's call cannot take only the first exchange's total");
+    const gapped = [...events]; gapped.splice(gapped.findIndex(x => x.id === "start-2"),0,{ id:"wire-gap-x", type:"wire.history_gap", data:{ reason:"oversized-line", offset:1 } });
+    assert.equal(retainedUsage(gapped,{...record,toolCalls:[...record.toolCalls,{startEventId:"tool-9",toolCallId:"later-tool"}]},false,r=>r),"conflicting-link",
+        "Known foreign membership is a conflict even when a gap would otherwise preserve a total");
+    events.find(x => x.id === "reply-9").data.wireUsageOrigin = "run";
+    assert.equal(retainedUsage(events,record,false),null,"A reply under the first run after the next prompt still conflicts");
+});
+test("an exchange that stopped before a final answer counts every recorded call once the next prompt bounds it", () => {
+    const cut = () => { const run = steeredRun(); run.events.splice(run.events.findIndex(e => e.id === "start-3")); return run; };
+    const lone = cut();
+    assert.equal(retainedUsage(lone.events,lone.record,false),null,"Without a later prompt the exchange may still be running");
+    const next = { id:"next", type:"user.message", timestamp:new Date(1800000000000).toISOString(), data:{ messageId:"next", wireUsageOrigin:"later", wireDelivery:"idle" } };
+    const bounded = cut(); bounded.events.push(next);
+    const calls = retainedUsage(bounded.events,bounded.record,false);
+    assert.deepEqual(calls.map(c => c.apiCallId),["api-1","api-2"]); assert.ok(calls.every(c => c.unfinished));
+    const late = cut(); late.events.push(next, { ...late.events.find(e => e.id === "reply-2"), id:"late-reply", timestamp:new Date(1800000001000).toISOString(),
+        data:{ ...late.events.find(e => e.id === "reply-2").data, wireOriginalModel:{ apiCallId:"api-9", model:"example" } } });
+    assert.equal(retainedUsage(late.events,late.record,false),null,"A reply to it after the next prompt means it had not stopped");
+    const shut = cut(); shut.events.push({ id:"bye", type:"session.shutdown", timestamp:new Date(1800000000000).toISOString(), data:{} });
+    assert.deepEqual(retainedUsage(shut.events,shut.record,false).map(c => c.apiCallId),["api-1","api-2"],"The producer ending the session also ends the exchange");
+    shut.events.push({ ...shut.events.find(e => e.id === "reply-2"), id:"after-resume", timestamp:new Date(1800000002000).toISOString(),
+        data:{ ...shut.events.find(e => e.id === "reply-2").data, wireOriginalModel:{ apiCallId:"api-8", model:"example" } } });
+    assert.equal(retainedUsage(shut.events,shut.record,false),null,"Work resumed after the shutdown means it had not ended");
+    const resumed = steeredRun(); resumed.events.splice(resumed.events.findIndex(e => e.id === "start-3"),0,{ id:"bye-2", type:"session.shutdown", timestamp:resumed.events[0].timestamp, data:{} });
+    assert.equal(retainedUsage(resumed.events,resumed.record,false),null,"A final answer after a shutdown is resumed work, not this exchange");
+    const unbound = cut(); unbound.events.push({ id:"receipt-4", type:"session.usage_record", timestamp:new Date(1799999999000).toISOString(),
+        data:{ apiCallId:"api-4", model:"example", tokens:{ freshInput:40, cacheRead:0, cacheWrite:0, output:4 } } }, next);
+    assert.equal(retainedUsage(unbound.events,unbound.record,false),null,"An unbound receipt inside the exchange contests the total");
+    const compacted = continuingUsageContext(unbound.events,[unbound.record],"source",{ contextEvictions:0 });
+    assert.equal(retainedUsage(usageMatcherEvents(compacted),unbound.record,false),null,"Dropping that receipt must not let a smaller total through");
+    const sameRun = cut(); sameRun.events.push({ ...unbound.events.at(-2), data:{ ...unbound.events.at(-2).data, origin:"run" } }, next);
+    assert.equal(recordedUsage(retainedUsage(sameRun.events,sameRun.record,false)).total,77,"A request-only call under the same run still spent tokens");
+    assert.equal(recordedUsage(retainedUsage(usageMatcherEvents(continuingUsageContext(sameRun.events,[sameRun.record],"source",{ contextEvictions:0 })),sameRun.record,false)).total,77);
+});
+test("successive compactions of a run-linked exchange and its nesting marker never yield a smaller exact total", () => {
+    for (const nested of [false, true]) {
+        let n = 0;
+        const e = (type, data) => ({ id: `c-${n}`, type, timestamp: new Date(1700000000000 + 1000 * n++).toISOString(), data });
+        const prompt = e("user.message", { wireUsageOrigin: "run", wireDelivery: "idle" });
+        const record = { sourceSessionId: "s", userPrompt: { sourceEventId: prompt.id, sourceTimestamp: prompt.timestamp }, toolCalls: [{ startEventId: "tool-start", toolCallId: "tool" }] };
+        const round = (i, extra = {}) => [e("assistant.turn_start", { turnId: `t${i}` }),
+            e("session.usage_record", { apiCallId: `api-${i}`, origin: null, model: "m1", tokens: { freshInput: 10, cacheRead: 0, cacheWrite: 0, output: 1 } }),
+            e("assistant.message", { wireUsageOrigin: "run", turnId: `t${i}`, wireOriginalModel: { apiCallId: `api-${i}`, model: "m1" }, ...extra }),
+            ...(i === 0 ? [{ ...e("tool.execution_start", { toolCallId: "tool" }), id: "tool-start" }] : []), e("assistant.turn_end", { turnId: `t${i}` })];
+        let context = [prompt, ...round(0, { hasToolRequests: true, wireToolRequestIds: ["tool"] }), ...(nested ? [e("subagent.started", {})] : [])];
+        for (const batch of [[1, 60], [60, 101]]) {
+            for (let i = batch[0]; i < batch[1]; i++) context.push(...round(i, i === 100 ? { finalAnswer: true } : {}));
+            context = continuingUsageContext(context, [record], "s", { contextEvictions: 0 });
+        }
+        const calls = retainedUsage(usageMatcherEvents(context), record, false);
+        if (nested) assert.equal(calls, null, "Compaction must not erase the nesting that makes the main-agent total incomplete");
+        else assert.equal(recordedUsage(calls)?.total, 1111);
+    }
+});
+test("pruning an earlier exchange's rounds reports missing history instead of a smaller total", () => {
+    let n = 0;
+    const e = (type, data) => ({ id: `p-${n}`, type, timestamp: new Date(1700000000000 + 1000 * n++).toISOString(), data });
+    const prompt = e("user.message", { wireUsageOrigin: "run", wireDelivery: "idle" });
+    const record = { sourceSessionId: "s", userPrompt: { sourceEventId: prompt.id, sourceTimestamp: prompt.timestamp }, toolCalls: [{ startEventId: "tool-start", toolCallId: "tool" }] };
+    const events = [prompt];
+    for (let i = 0; i < 101; i++) events.push(e("assistant.turn_start", { turnId: `t${i}` }),
+        e("assistant.message", { wireUsageOrigin: "run", turnId: `t${i}`, wireOriginalModel: { apiCallId: `api-${i}`, model: "m1" }, ...(i === 0 ? { hasToolRequests: true, wireToolRequestIds: ["tool"] } : {}) }),
+        ...(i < 100 ? [e("session.usage_record", { apiCallId: `api-${i}`, origin: "run", model: "m1", tokens: { freshInput: 10, cacheRead: 0, cacheWrite: 0, output: 1 } })] : []),
+        ...(i === 0 ? [{ ...e("tool.execution_start", { toolCallId: "tool" }), id: "tool-start" }] : []), e("assistant.turn_end", { turnId: `t${i}` }));
+    events.push(e("user.message", { wireUsageOrigin: "next", wireDelivery: "idle", messageId: "next" }));
+    for (let i = 0; i < 120; i++) events.push(e("assistant.turn_start", { turnId: `n${i}` }), e("assistant.turn_end", { turnId: `n${i}` }));
+    const kept = continuingUsageContext(events, [record], "s", { contextEvictions: 0 });
+    kept.push(e("session.usage_record", { apiCallId: "api-100", origin: "run", model: "m1", tokens: { freshInput: 10, cacheRead: 0, cacheWrite: 0, output: 1 } }));
+    let why; const calls = retainedUsage(usageMatcherEvents(kept), record, false, r => { why = r; return null; });
+    assert.ok(calls === null || recordedUsage(calls).total === 1111, `pruning produced ${calls && recordedUsage(calls).total}`);
+});
+function reviewFixture(messageId = false) {
+    let clock = 1700000000000;
+    const event = (id, type, data) => ({ id, type, timestamp: new Date(clock += 1000).toISOString(), data });
+    const prompt = event("p", "user.message", { content: "Invented question", wireUsageOrigin: "run", wireDelivery: "idle", ...(messageId ? { messageId: "root" } : {}) });
+    const record = { scenarioId: "scenario", sourceHost: "copilot-app", sourceSessionId: "s",
+        userPrompt: { sourceEventId: prompt.id, sourceTimestamp: prompt.timestamp, text: prompt.data.content }, toolCalls: [{ startEventId: "tool", toolCallId: "tool" }] };
+    return { event, prompt, record };
+}
+
+test("a late last receipt after compaction reports missing history, not a smaller total", () => {
+    const { event: e, prompt, record } = reviewFixture(), events = [prompt];
+    for (let n = 0; n < 101; n++) events.push(e(`s${n}`, "assistant.turn_start", { turnId: `t${n}` }),
+        e(`r${n}`, "assistant.message", { turnId: `t${n}`, wireUsageOrigin: "run", wireOriginalModel: { apiCallId: `api${n}`, model: "example" },
+            hasToolRequests: true, ...(n === 80 ? { wireToolRequestIds: ["tool"] } : {}) }),
+        ...(n === 80 ? [e("tool", "tool.execution_start", { toolCallId: "tool" }), e("done", "tool.execution_complete", { toolCallId: "tool", success: true })] : []),
+        e(`u${n}`, "session.usage_record", { apiCallId: `api${n}`, origin: null, model: "example", tokens: { freshInput: 10, cacheRead: 0, cacheWrite: 0, output: 1 } }),
+        e(`z${n}`, "assistant.turn_end", { turnId: `t${n}` }));
+    const late = events.find(x => x.id === "u100"), pending = events.filter(x => x !== late);
+    pending.push(e("next", "user.message", { content: "Independent question", wireUsageOrigin: "other", wireDelivery: "idle" }),
+        e("next-start", "assistant.turn_start", { turnId: "next-turn" }));
+    late.timestamp = new Date(Date.parse(pending.at(-1).timestamp) + 1000).toISOString();
+    assert.equal(recordedUsage(retainedUsage([...pending, late], record, false)).total, 1111);
+    let reason;
+    const calls = retainedUsage(usageMatcherEvents([...continuingUsageContext(pending, [record], "s", { contextEvictions: 0 }), late]), record, false,
+        value => { reason = value; return null; });
+    assert.equal(calls, null, `Incorrect exact total: ${calls && recordedUsage(calls).total}`);
+    assert.equal(reason, "history-gap");
+});
+
+function nestingRun(kind) {
+    let clock = 1700000000000;
+    const e = (id, type, data, extra = {}) => ({ id, type, timestamp: new Date(clock += 1000).toISOString(), data, ...extra });
+    const prompt = e("p", "user.message", { content: "Invented question", messageId: "root", wireUsageOrigin: "run", wireDelivery: "idle" });
+    const record = { sourceSessionId: "s", userPrompt: { sourceEventId: prompt.id, sourceTimestamp: prompt.timestamp }, toolCalls: [{ startEventId: "tool", toolCallId: "tool" }] };
+    const events = [prompt];
+    if (kind === "subagent") events.push(e("nested", "subagent.started", {}));
+    else if (kind === "nested-tool") events.push(e("nested-start", "tool.execution_start", { toolCallId: "nested", toolName: "workiq-fetch", parentToolCallId: "parent" }, { agentId: "child" }),
+        e("nested-end", "tool.execution_complete", { toolCallId: "nested", success: true }, { agentId: "child" }));
+    // An unsupported nested start is not retained; only its completion remains.
+    else events.push(e("nested-end", "tool.execution_complete", { toolCallId: "nested", success: true }, { agentId: "child" }));
+    for (let n = 0; n < 160; n++) events.push(e(`noise-start-${n}`, "tool.execution_start", { toolCallId: `noise-${n}`, toolName: "workiq-fetch" }),
+        e(`noise-end-${n}`, "tool.execution_complete", { toolCallId: `noise-${n}`, success: true }));
+    for (let n = 0; n < 2; n++) events.push(e(`s${n}`, "assistant.turn_start", { turnId: `t${n}` }),
+        e(`r${n}`, "assistant.message", { turnId: `t${n}`, originatingMessageId: "root", wireUsageOrigin: "run", wireOriginalModel: { apiCallId: `api${n}`, model: "example" },
+            hasToolRequests: n === 0, finalAnswer: n === 1, ...(n === 0 ? { wireToolRequestIds: ["tool"] } : {}) }),
+        ...(n === 0 ? [e("tool", "tool.execution_start", { toolCallId: "tool" }), e("done", "tool.execution_complete", { toolCallId: "tool", success: true })] : []),
+        e(`u${n}`, "session.usage_record", { apiCallId: `api${n}`, origin: "run", model: "example", tokens: { freshInput: 10, cacheRead: 0, cacheWrite: 0, output: 1 } }),
+        e(`z${n}`, "assistant.turn_end", { turnId: `t${n}` }));
+    events.push(e("next", "user.message", { content: "Next question", messageId: "next", wireUsageOrigin: "other", wireDelivery: "idle" }));
+    return { events, record };
+}
+
+for (const kind of ["subagent", "nested-tool", "orphan-nested-completion"]) test(`compaction preserves an older exchange's ${kind} completeness barrier`, () => {
+    const { events, record } = nestingRun(kind);
+    let before; assert.equal(retainedUsage(events, record, false, r => { before = r; return null; }), null);
+    assert.equal(before, "incomplete-or-nested");
+    let reason;
+    const calls = retainedUsage(usageMatcherEvents(continuingUsageContext(events, [record], "s", { contextEvictions: 0 })), record, false, r => { reason = r; return null; });
+    assert.equal(calls, null, `Incorrect exact total: ${calls && recordedUsage(calls).total}`);
+    assert.ok(["history-gap", "incomplete-or-nested"].includes(reason), reason);
 });
