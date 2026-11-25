@@ -1,5 +1,8 @@
 # Contributing to WIRE
 
+**Contents:** [Report a problem](#report-a-problem-or-propose-a-change) ·
+[Make a change](#make-a-change) · [Keep examples safe](#keep-examples-safe)
+
 Bug reports, documentation corrections and focused code changes are welcome.
 For suspected vulnerabilities, use [Security](SECURITY.md) instead of a public issue.
 

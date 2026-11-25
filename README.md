@@ -9,6 +9,10 @@
 
 # Work IQ Request Explorer
 
+**Contents:** [Getting started](#getting-started) · [How WIRE fits](#how-wire-fits) ·
+[Trends](#trends) · [Reports](#reports) · [Compare](#compare) · [Guides](#guides) ·
+[Contributing](#contributing) · [Security](#security) · [License](#license)
+
 Synthetic evals are essential, but they will always have a blind spot: how people
 actually work with AI. People phrase requests differently, bring different context
 and take different paths through multi-turn conversations. Those choices shape
@@ -28,9 +32,6 @@ that evidence to test the behaviors people rely on and improve their agents.
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
-
-**Contents:** [Getting started](#getting-started) · [How WIRE fits](#how-wire-fits) ·
-[Trends](#trends) · [Reports](#reports) · [Compare](#compare) · [Guides](#guides)
 
 <a id="start"></a>
 
