@@ -91,6 +91,7 @@ import { createReportDraftPicker } from "./report-draft-picker.mjs";
 import { normalizeSearchText } from "../lib/search-normalize.mjs";
 import { createUsageReading } from "./usage-reading.mjs";
 import { renderDailyTokenChart } from "./daily-token-chart.mjs";
+import { mountDocumentation } from "./documentation.mjs";
 import * as usage from "../lib/interaction-usage.mjs";
 
 function factories() {
@@ -98,7 +99,7 @@ function factories() {
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
-        createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
+        mountDocumentation, createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
         createCardVisibility, renderDailyTokenChart, ...createUsageReading(usage),
         mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows }),

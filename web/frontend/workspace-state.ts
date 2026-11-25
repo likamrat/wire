@@ -58,7 +58,7 @@ export function createWorkspaceState<E extends object = object, S extends object
             return () => { listeners.delete(listener); };
         },
         present(next: { active: string; view: string }) {
-            const destinations = ["analyze", "trends", "reports", "compare", "settings", "request", "collection-status", "help"];
+            const destinations = ["analyze", "trends", "reports", "compare", "settings", "request", "collection-status", "help", "documentation"];
             if (!destinations.includes(next.active) || !destinations.includes(next.view)) {
                 throw new TypeError("Workspace presentation requires a supported public destination.");
             }

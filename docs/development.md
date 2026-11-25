@@ -11,7 +11,8 @@ on the source, checking a change and troubleshooting a local installation.
   [test the updater](#test-the-updater)
 - [Windows, WSL and Linux](#windows-wsl-and-linux)
 - [Changing the local port](#changing-the-local-port)
-- [Keep development data separate](#keep-development-data-separate)
+- [Keep development data separate](#keep-development-data-separate):
+  [preview documentation changes](#preview-documentation-changes)
 - [Check a change](#check-a-change): [journal formats](#changing-a-copilot-journal-format),
   [browser build and React evaluation](#browser-build-and-react-evaluation)
 - [PDF and browser tools](#pdf-and-browser-tools):
@@ -267,6 +268,25 @@ Browser tests set up temporary stores through
 [`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
 Reuse that pattern for tests and image capture. A different port alone does
 not create a separate store.
+
+### Preview documentation changes
+
+To see how your guide edits read in WIRE, start your clone, fork or worktree with
+`npm run dev`. Open **Documentation** and select **This checkout**.
+
+WIRE then reads `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, the guides in
+`docs/` and their images straight from your working folder, including changes
+you haven't committed. Save a file and the page updates in place, keeping your
+reading position.
+
+Guides that differ show **Edited**, and guides that don't exist there yet show
+**New**. In a clone of the WIRE repository they're compared with the GitHub
+main that WIRE last fetched; select **GitHub main** and **Check now** first to
+compare with the latest. A fork is compared with its own last commit.
+
+The preview only reads those guide and image files. It doesn't write, list
+other files or send anything elsewhere. An installation started with
+`npm start` from a clean clone is managed by the updater and doesn't offer it.
 
 ## Check a change
 

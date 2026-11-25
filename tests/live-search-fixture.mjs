@@ -29,7 +29,7 @@ export function searchRecords(count = 3) {
         return row;
     });
 }
-export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs, frontend, copilotAccess = false } = {}) {
+export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs, frontend, copilotAccess = false, documentation } = {}) {
     const cleanups = [];
     const { context, root } = await privateFixture({ after: fn => cleanups.push(fn) }, records);
     const sessionRoot = path.join(root, "session-state");
@@ -52,7 +52,7 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
     const access = copilotAccess ? await createCopilotRuntimeAccess(context) : undefined;
     const runtime = await startServer(context, exports, { port: 0, frontend, access, collector: { timers: false },
         ...(copilotAccess ? { githubProfile: { fetch() { providerCalls++; throw Error("No profile network in the documentation fixture."); } } } : {}),
-        search: typeof search === "function" ? search(root) : search, sessionTtlMs,
+        search: typeof search === "function" ? search(root) : search, sessionTtlMs, documentation,
         evaluation: {
             evaluatorFactory: async () => { providerCalls++; throw new Error("Provider work forbidden in search proof."); },
             readSource: async () => { providerCalls++; throw new Error("Assessment source reads forbidden in search proof."); },
