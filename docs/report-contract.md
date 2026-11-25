@@ -14,13 +14,16 @@ and [comparison](#comparisons) requirements.
 - [Report facts](#report-facts)
 - [Evidence and membership](#evidence-and-membership)
 - [Service, outcome and time meaning](#service-outcome-and-time-meaning):
+  [result extensions](#result-extensions), [interpretation rules](#interpretation-rules),
   [report presets and notes](#report-presets-and-notes)
 - [Preparation, disclosure and Save](#preparation-disclosure-and-save):
   [frozen preparation](#frozen-preparation), [report text choices](#report-text-choices),
   [Save authorization](#save-authorization), [prepared bytes and recovery](#prepared-bytes-and-recovery)
 - [Bounded linked context](#bounded-linked-context)
-- [Frozen files and saved reading](#frozen-files-and-saved-reading)
-- [Comparisons](#comparisons): [retained-period comparison](#report-a-retained-period-comparison)
+- [Frozen files and saved reading](#frozen-files-and-saved-reading): [usage facts](#usage-facts),
+  [formats](#formats), [branding](#report-branding), [verified Open](#verified-open), [Brief](#brief)
+- [Comparisons](#comparisons): [existing saved comparisons](#existing-saved-comparisons),
+  [retained-period comparison](#report-a-retained-period-comparison)
 - [Saved-artifact deletion](#saved-artifact-deletion)
 - [Validation pointers](#validation-pointers)
 
@@ -154,113 +157,169 @@ counts they saved; comparisons do not equate the two pattern definitions.
 | Comparison timing | Compatible raw samples, not means of percentages or medians of medians; nearest-rank median/P95 and one-sample limits stay explicit |
 
 The canonical tool `partial` bucket preserves an explicit retained
-`reportedOutcome: "partial"`; it is not derived from returned statuses,
-`contentStatus: "partial"`, missing completion timing or response truncation.
-HTTP 206 remains a 2xx status in its own evidence layer. The current Copilot
-completion normalizer emits succeeded/failed/unknown from the completion event's
-boolean success field; no partial tool state is synthesized during capture.
-Screen explanations can identify the saved partial flag and absent completion
-provenance without inferring which work completed. Frozen report meanings and
-interpretations do not acquire that screen-only explanation.
+`reportedOutcome: "partial"`.
 
-Missing timing remains unavailable, not zero.
+- It isn't derived from returned statuses, `contentStatus: "partial"`, missing
+  completion timing or response truncation.
+- HTTP 206 stays a 2xx status in its own evidence layer.
+- The current Copilot completion normalizer emits succeeded/failed/unknown from
+  the completion event's boolean success field. No partial tool state is
+  synthesized during capture.
+- Screen explanations can identify the saved partial flag and absent completion
+  provenance without inferring which work completed. Frozen report meanings and
+  interpretations don't acquire that screen-only explanation.
+
+Missing timing stays unavailable, not zero.
+
+### Result extensions
+
+Each extension below is optional on new observations. Existing frozen
+observations without it stay unchanged, and each needs a compatible reader.
+
+#### `timingFailure` v1
 
 New result observations can include `timingFailure` v1: the saved, qualified
-`request-timeout` signal with `basis: "retained-failure-signal"`. Reports preserve
-it separately from the outer error code and unavailable original error text.
-The recorded timeout message or its qualified retained signal must establish
-this condition; -32001 or elapsed time alone does not. A timeout does not
-establish whether the requested work finished.
-Existing frozen observations without this extension stay unchanged; Compare
-can identify newly included evidence without calling it a new execution.
-Readers predating this extension cannot read new reports containing it.
+`request-timeout` signal with `basis: "retained-failure-signal"`.
+
+- Reports keep it separate from the outer error code and unavailable original
+  error text.
+- The recorded timeout message or its qualified retained signal must establish
+  this condition. -32001 or elapsed time alone doesn't.
+- A timeout doesn't establish whether the requested work finished.
+- Compare can identify newly included evidence without calling it a new
+  execution.
+- Readers predating this extension can't read new reports containing it.
+
+#### `interpretation` v2
 
 New GitHub result observations can also freeze `interpretation` v2. Its closed
 condition, call/result/returned-entry scope and exact explanatory text are
-validated together. **WIRE interpretation** is technical context, not a quoted
-source reason or a report-author note. It changes no outcome, count or timing
-sample. Compare separates changed interpretations from changed source facts.
-Old observations without it receive no new interpretation when opened. Version 1
-interpretations retain their frozen wording. Version 2 limits absence statements
-to the error signal or status alone, so a specific detail in another retained
-channel is not contradicted. Older readers reject version 2; keep a compatible
-reader after saving new reports.
+validated together.
+
+- **WIRE interpretation** is technical context, not a quoted source reason or a
+  report-author note. It changes no outcome, count or timing sample.
+- Compare separates changed interpretations from changed source facts.
+- Old observations without it receive no new interpretation when opened.
+- Version 1 interpretations keep their frozen wording.
+- Version 2 limits absence statements to the error signal or status alone, so a
+  specific detail in another retained channel isn't contradicted.
+- Older readers reject version 2. Keep a compatible reader after saving new
+  reports.
+
+#### `statusConflict` v1
 
 A returned entry can freeze `statusConflict` v1 with separate `reported` and
-`diagnostic` statuses. Both are qualified numeric statuses, the reported value
-matches the existing entry status, and the values must differ. Its interpretation
-preserves that ambiguity at the same entry instead of choosing a status as the
-definitive outcome. Old entries without the field remain unchanged; the new
-field requires a compatible reader.
-For new preparation, either conflicting side in the 400-599 range counts as
-recorded error evidence: the interaction belongs in Errors & failures and is not
-completed-only. This does not change the outer tool completion or choose an API
-outcome. A conflict between non-error statuses alone is not error evidence.
+`diagnostic` statuses.
+
+- Both are qualified numeric statuses. The reported value matches the existing
+  entry status, and the values must differ.
+- Its interpretation keeps that ambiguity at the same entry instead of choosing
+  a status as the definitive outcome.
+- For new preparation, either conflicting side in the 400-599 range counts as
+  recorded error evidence: the interaction belongs in Errors & failures and isn't
+  completed-only. This doesn't change the outer tool completion or choose an API
+  outcome.
+- A conflict between non-error statuses alone isn't error evidence.
+
+### Interpretation rules
 
 Interpretations use qualified retained signals, diagnostic fields and statuses,
-never prompts, replies or elapsed-time thresholds. Detailed source wording stays
-intact without a repetitive status glossary. Partial or missing evidence cannot
-establish a timeout, cancellation or the outcomes of omitted entries. Fixed
-technical context can travel without optional diagnostic prose; it contains no
-source-text excerpts, private identifiers or reconstructed causes.
-Each interpreted call keeps its recorded operation and qualified tool interval
-beside the explanation. When diagnostic copies are selected, their masked or
-edited wording appears there too, without another copy in the result-text
-section. Omitted copies stay omitted. The explanation states what the evidence
-does not establish, without next checks, troubleshooting recommendations or
-remediation advice. It never reruns the operation or borrows a nearby call's evidence.
+never prompts, replies or elapsed-time thresholds.
 
-The timeout explanation follows the
-[MCP lifecycle timeout rule](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#timeouts)
-and the [TypeScript SDK's request timeout handling](https://github.com/modelcontextprotocol/typescript-sdk/blob/v1.25.2/src/shared/protocol.ts).
-The SDK defines `RequestTimeout = -32001`, but
-[JSON-RPC reserves that range for implementation-defined errors](https://www.jsonrpc.org/specification#error_object):
-the number alone is not a universal timeout diagnosis. WIRE requires the
-recorded timeout message or its qualified retained signal. It does not infer
-the configured deadline, the slow component or whether the work finished.
-HTTP explanations follow [RFC 9110 status semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15)
-and [RFC 6585 for rate limiting](https://www.rfc-editor.org/rfc/rfc6585.html#section-4),
-with recorded upstream connection details kept separate from a bare 503.
+- Detailed source wording stays intact without a repetitive status glossary.
+- Partial or missing evidence can't establish a timeout, cancellation or the
+  outcomes of omitted entries.
+- Fixed technical context can travel without optional diagnostic prose. It
+  contains no source-text excerpts, private identifiers or reconstructed causes.
+- Each interpreted call keeps its recorded operation and qualified tool interval
+  beside the explanation.
+- When diagnostic copies are selected, their masked or edited wording appears
+  there too, without another copy in the result-text section. Omitted copies stay
+  omitted.
+- The explanation states what the evidence doesn't establish, without next
+  checks, troubleshooting recommendations or remediation advice.
+- It never reruns the operation or borrows a nearby call's evidence.
+
+Sources for the explanations:
+
+- The timeout explanation follows the
+  [MCP lifecycle timeout rule](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#timeouts)
+  and the [TypeScript SDK's request timeout handling](https://github.com/modelcontextprotocol/typescript-sdk/blob/v1.25.2/src/shared/protocol.ts).
+  The SDK defines `RequestTimeout = -32001`, but
+  [JSON-RPC reserves that range for implementation-defined errors](https://www.jsonrpc.org/specification#error_object):
+  the number alone isn't a universal timeout diagnosis. WIRE requires the
+  recorded timeout message or its qualified retained signal. It doesn't infer
+  the configured deadline, the slow component or whether the work finished.
+- HTTP explanations follow [RFC 9110 status semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15)
+  and [RFC 6585 for rate limiting](https://www.rfc-editor.org/rfc/rfc6585.html#section-4),
+  with recorded upstream connection details kept separate from a bare 503.
 
 ### Report presets and notes
 
-`reportPopulation` v1 freezes metadata-only reference membership and the included
-interaction IDs separately. The reference cohort applies the same source,
-authors, dates and services before the outcome restriction. Failure frequency
-uses distinct interactions, not calls or the failure subset as its denominator.
-Only included cases supply prompt, reply or diagnostic copies.
+#### `reportPopulation` v1
 
-An error case has a qualified failed call or explicit application/API error.
-Mixed interactions qualify. Completed-only requires at least one eligible call,
-every call completed and no recorded errors. Unknown evidence is neither failure
-nor success. Unverified authors remain available through All.
+`reportPopulation` v1 freezes metadata-only reference membership and the
+included interaction IDs separately.
+
+- The reference cohort applies the same source, authors, dates and services
+  before the outcome restriction.
+- Failure frequency uses distinct interactions, not calls or the failure subset
+  as its denominator.
+- Only included cases supply prompt, reply or diagnostic copies.
+
+Preset membership:
+
+- An error case has a qualified failed call or explicit application/API error.
+  Mixed interactions qualify.
+- Completed-only requires at least one eligible call, every call completed and no
+  recorded errors.
+- Unknown evidence is neither failure nor success.
+- Unverified authors stay available through All.
+
+#### `reportPatterns` v3
 
 `reportPatterns` v3 binds normalized operations and distinct error channels to
-their calls and interactions. It does not infer root causes or prompt similarity.
-In a new HTML pattern table, the arrow beside **Interactions** links to one
-example, not a filtered list: its destination is the group's first stored
-interaction reference. The link names the total and the destination's report
-number. The in-app report reader opens that interaction's disclosure. In v3
-error rows, **Calls** links to the individual report call, or expands a list of
-call links when there are several. Plain call totals are not actions. These
-reading controls do not change membership or rewrite earlier saved HTML.
-For conflicting returned statuses with error evidence, patterns preserve both
-the reported and diagnostic sides and label the conflict. Version 1 patterns and
-all saved population flags retain their original frozen meaning; they are not
-recomputed on read. New observations can include `errorDetailVersion: 1`:
-the typed error field supplied text or a code, independently of whether the
-report may disclose its value. A status disagreement between two non-error
-statuses is not itself an error. Version 3 patterns count these qualified
-signals without copying the message or a withheld code into the pattern. A
-qualified recurring cause, such as sign-in required or an upstream connection
-timeout, is grouped with its operation and attributed to its call, result or
-returned entry. An unexplained marker does not acquire a cause from similar calls.
-Older observations and v1/v2 pattern groups keep their saved meaning; new
-reports with this extension need a compatible reader.
+their calls and interactions. It doesn't infer root causes or prompt similarity.
+
+Reading controls in a new HTML pattern table:
+
+- The arrow beside **Interactions** links to one example, not a filtered list.
+  Its destination is the group's first stored interaction reference, and the link
+  names the total and the destination's report number. The in-app report reader
+  opens that interaction's disclosure.
+- In v3 error rows, **Calls** links to the individual report call, or expands a
+  list of call links when there are several. Plain call totals aren't actions.
+- These reading controls don't change membership or rewrite earlier saved HTML.
+
+Error evidence:
+
+- For conflicting returned statuses with error evidence, patterns keep both the
+  reported and diagnostic sides and label the conflict.
+- New observations can include `errorDetailVersion: 1`: the typed error field
+  supplied text or a code, independently of whether the report may disclose its
+  value.
+- A status disagreement between two non-error statuses isn't itself an error.
+- Version 3 patterns count these qualified signals without copying the message or
+  a withheld code into the pattern.
+- A qualified recurring cause, such as sign-in required or an upstream connection
+  timeout, is grouped with its operation and attributed to its call, result or
+  returned entry. An unexplained marker doesn't acquire a cause from similar
+  calls.
+
+Version 1 patterns and all saved population flags keep their original frozen
+meaning; they aren't recomputed on read. Older observations and v1/v2 pattern
+groups keep their saved meaning; new reports with this extension need a
+compatible reader.
+
+#### `reportNotes` v1
+
 `reportNotes` v1 contains report-author context scoped to included pseudonymous
-interaction IDs. Notes share privacy treatment and the existing copy budget,
-but never enter metrics. Matching namespace hashes are required in the manifest
-and snapshot; malformed or expanded fields are rejected.
+interaction IDs.
+
+- Notes share privacy treatment and the existing copy budget, but never enter
+  metrics.
+- Matching namespace hashes are required in the manifest and snapshot. Malformed
+  or expanded fields are rejected.
 
 ## Preparation, disclosure and Save
 
@@ -277,27 +336,39 @@ The report controller owns the sequence:
    the warning's explicit choice for that save.
 
 Before preparation, a [named draft](reporting.md#keep-interactions-in-a-draft)
-stores references to selected interactions for its owner and source. Adding
-an interaction does not copy its text. Preparing freezes the eligible
-membership at that point: later draft edits cannot add cases to an open
-preview or rewrite a saved file. Deleting a draft removes its selection only.
+stores references to selected interactions for its owner and source.
+
+- Adding an interaction doesn't copy its text.
+- Preparing freezes the eligible membership at that point. Later draft edits
+  can't add cases to an open preview or rewrite a saved file.
+- Deleting a draft removes its selection only.
 
 Qualified GitHub previews pin the original content-addressed evidence file.
 Later collection can add follow-ups without changing prepared copies.
 
-The Reports landing combines choices and saved access. Back is not discard,
-preparation or Save. Resuming the same focus with unchanged dates can reopen
-the authorized in-memory preview, including its edits, without recapturing
-membership. Legacy create URLs and Selected/Current/contextual entry retain
-their scope. An unconfirmed write cannot be hidden behind the landing or
-replayed through a new preparation. Saved-list menus use the current authorized index;
-withdrawal retires their held text and actions with the existing readers.
+#### Landing, Back and resume
+
+The Reports landing combines choices and saved access. Back isn't discard,
+preparation or Save.
+
+- Resuming the same focus with unchanged dates can reopen the authorized
+  in-memory preview, including its edits, without recapturing membership.
+- Legacy create URLs and Selected/Current/contextual entry keep their scope.
+- An unconfirmed write can't be hidden behind the landing or replayed through a
+  new preparation.
+- Saved-list menus use the current authorized index. Withdrawal retires their
+  held text and actions with the existing readers.
+
+#### Retiring prepared copies
+
 Accepted activity deletion, changed scope and preview replacement use the same
-prepared-copy retirement boundary. It scrubs app-owned mutable Text/Attr nodes,
-editor fields and file/frame payloads before their owners detach them, and
-disables old callbacks. Hidden Local original copies are included. This is not
-erasure of immutable strings copied outside WIRE, and activity deletion does
-not delete or rewrite independently saved report files.
+prepared-copy retirement boundary.
+
+- It scrubs app-owned mutable Text/Attr nodes, editor fields and file and frame
+  payloads before their owners detach them, and disables old callbacks.
+- Hidden Local original copies are included.
+- This isn't erasure of immutable strings copied outside WIRE, and activity
+  deletion doesn't delete or rewrite independently saved report files.
 
 | Change after preparation | Effect |
 | --- | --- |
@@ -306,22 +377,29 @@ not delete or rewrite independently saved report files.
 | Title, note, privacy, copy or format change | Regenerate bytes against the original frozen reference and included populations |
 | Material source/configuration, consent, deletion, key or owner change | Fresh preparation under current authority; old preparation cannot bypass it |
 
-Original evidence-file identity also keys the report read model, so reading
-a saved report cannot replace current Analyze facts. Saving appends to current
-state; it never restores the preview's evidence snapshot over newer collection.
-For a qualified pinned preparation, a later correction to collected prompt
-authorship stays outside that frozen source snapshot. Explicit Save preserves
-the prepared author-filtered membership and facts; a new preparation uses the
-correction. Source/account permission, consent, deletion and owner changes still
-invalidate Save. Unpinned preparations must revalidate their live selected facts.
+Original evidence-file identity also keys the report read model, so reading a
+saved report can't replace current Analyze facts.
 
-New ordinary saved entries retain their snapshot's date selection as `reportPeriod`,
-independently of report presets. When present it must match the frozen manifest
-and participates in the artifact fingerprint. The native publication check
-also binds the new index entry to the reviewed period before registering it.
-Older entries without it remain
-readable; missing index metadata is not evidence that the file has no period.
-Preparation timestamps never substitute for the saved date selection.
+- Saving appends to current state. It never restores the preview's evidence
+  snapshot over newer collection.
+- For a qualified pinned preparation, a later correction to collected prompt
+  authorship stays outside that frozen source snapshot. Explicit Save keeps the
+  prepared author-filtered membership and facts; a new preparation uses the
+  correction.
+- Source or account permission, consent, deletion and owner changes still
+  invalidate Save.
+- Unpinned preparations must revalidate their live selected facts.
+
+New ordinary saved entries keep their snapshot's date selection as
+`reportPeriod`, independently of report presets.
+
+- When present it must match the frozen manifest and participates in the
+  artifact fingerprint.
+- The native publication check also binds the new index entry to the reviewed
+  period before registering it.
+- Older entries without it stay readable. Missing index metadata isn't evidence
+  that the file has no period.
+- Preparation timestamps never substitute for the saved date selection.
 
 ### Report text choices
 
@@ -411,6 +489,8 @@ or corrupted payloads block preparation.
 
 ## Frozen files and saved reading
 
+### Usage facts
+
 New reports can include `usageFacts` version 1. The optional breakdown counts
 each originating interaction once, separately in each period for a period
 report. Model token shares include all metered interactions.
@@ -424,34 +504,44 @@ the question applied separately inside each period. Tool groups can overlap,
 but repeated uses of a tool never multiply an interaction's tokens. Model
 groups use the model on each receipt. A missing return size is never counted
 as zero. New reports freeze token counts and coverage (`readingVersion: 3`).
+
 Token-overview reports with per-interaction rows use `usageFacts` version 2
 and `readingVersion: 4`. Ordinary breakdowns remain version 1.
 They freeze author totals over the same eligible members and derive the leading
 contributor share only from frozen positive ranked rows and the recorded total.
 Unmeasured and measured-zero cohorts have no concentration percentage. This
 overview leads in each saved format; earlier readings keep their interpretation.
+
 JSON-only overviews require a reader that supports version 2. Older readers
 refuse that structured view rather than silently omitting its finding and author
 totals. For portable reading, explicitly include HTML or PDF and open that saved
 format; WIRE never adds a format the user did not confirm.
+
 Earlier reports retain their originally saved fields and wording.
 Earlier snapshots without `usageFacts` gain no usage section when reopened.
 Use a current reader for newly saved JSON-only reports. Older readers that
 require the retired field on timing metrics may refuse the newer snapshot.
 Opening an earlier file in the current reader does not rewrite it.
 
+### Finding-first reading
+
 Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
-finding-first reading. Version 2 changes the explanation of the counts, not
-what is counted. Version 1 keeps its original wording when reopened from JSON.
-HTML/PDF/Markdown and the verified Brief refer to
-the same frozen `reportPopulation.reference` / `included`, `reportPatterns`
-member sets and `resultFacts` observations. The five leading pattern bars use
-distinct interaction counts against the included population; patterns overlap.
-The example follows `reportPatterns.calls[].ref → scenarioRef` and, for
-diagnostic text, the exact `memberRefs`, `observationRef` and `entryIndex` of
-the saved copy. A null entry index does not describe a returned item's reason.
-Neither an improvement hypothesis nor a future evaluation target is a fact
-in the report. Earlier presentations and original downloads are unchanged.
+finding-first reading. Version 2 changes the explanation of the counts, not what
+is counted. Version 1 keeps its original wording when reopened from JSON.
+
+- HTML/PDF/Markdown and the verified Brief refer to the same frozen
+  `reportPopulation.reference` / `included`, `reportPatterns` member sets and
+  `resultFacts` observations.
+- The five leading pattern bars use distinct interaction counts against the
+  included population; patterns overlap.
+- The example follows `reportPatterns.calls[].ref → scenarioRef` and, for
+  diagnostic text, the exact `memberRefs`, `observationRef` and `entryIndex` of
+  the saved copy. A null entry index doesn't describe a returned item's reason.
+- Neither an improvement hypothesis nor a future evaluation target is a fact in
+  the report.
+- Earlier presentations and original downloads are unchanged.
+
+### Formats
 
 | Format | Saved representation |
 | --- | --- |
@@ -461,32 +551,49 @@ in the report. Earlier presentations and original downloads are unchanged.
 | JSON and manifest | Complete typed facts and bindings |
 
 Human summaries may omit redundant prose, not selected evidence or
-qualifications. Screen tokens, icons and typography cannot restyle frozen files.
+qualifications. Screen tokens, icons and typography can't restyle frozen files.
 
-New reports declare `presentation.brandVersion: 2` for the clean-contour
-Magenta Human Path artwork. Version 1 retains its originally shipped artwork
-in the frozen `wire-report-brand-v1` SVGs. Snapshots without that field retain
-the historical `wire-wordmark` brand; unknown brand versions are unsupported,
-not permission to use the current logo.
-Keep historical logo assets and report styles unchanged so JSON/Markdown-only
-Open preserves the complete historical rendering, not merely the saved bytes.
-An identity change requires a new presentation brand version and preservation
-of its predecessors. The screen/README brand is not a global report override.
-Markdown files remain portable text; their in-app file-preview brand follows
-the verified manifest's declared version, with the historical brand used when
-that field is absent.
+### Report branding
 
-Recorded tool results include every selected call, including calls with no
-saved diagnostic; there is no first-twelve-call display cap. Each result names
-its tool and the requested operation from the same frozen technical facts,
-when available. Returned-entry positions remain separate from requested batch
-targets. Error details distinguish source absence, retention loss, privacy
-exclusion and unsupported formats. Completed means the source recorded tool
-completion, not that WIRE established task success.
+New reports declare `presentation.brandVersion: 2` for the clean-contour Magenta
+Human Path artwork.
+
+| Declared version | Artwork |
+| --- | --- |
+| `2` | Clean-contour Magenta Human Path |
+| `1` | Its originally shipped artwork, in the frozen `wire-report-brand-v1` SVGs |
+| None | The historical `wire-wordmark` brand |
+| Unknown | Unsupported; not permission to use the current logo |
+
+- Keep historical logo assets and report styles unchanged so JSON/Markdown-only
+  Open preserves the complete historical rendering, not merely the saved bytes.
+- An identity change needs a new presentation brand version and preservation of
+  its predecessors.
+- The screen and README brand isn't a global report override.
+- Markdown files stay portable text. Their in-app file-preview brand follows the
+  verified manifest's declared version, with the historical brand used when that
+  field is absent.
+
+### Recorded tool results
+
+Recorded tool results include every selected call, including calls with no saved
+diagnostic; there's no first-twelve-call display cap.
+
+- Each result names its tool and the requested operation from the same frozen
+  technical facts, when available.
+- Returned-entry positions stay separate from requested batch targets.
+- Error details distinguish source absence, retention loss, privacy exclusion and
+  unsupported formats.
+- Completed means the source recorded tool completion, not that WIRE established
+  task success.
+
 When an invocation error and a separate result error are both retained, selected
 copies keep both with distinct labels and copy identities under the same call.
 Readers must understand those labels; an older reader may refuse a newer report
-rather than drop one of its errors. Existing saved copies and hashes stay unchanged.
+rather than drop one of its errors. Existing saved copies and hashes stay
+unchanged.
+
+### Verified Open
 
 Verified Open follows the saved artifact:
 
@@ -498,36 +605,42 @@ Verified Open follows the saved artifact:
    fetching cited resources. Format selectors and downloads use the same
    registered inventory, not regenerated DOM.
 
-Failed verification cannot silently downgrade to an unchecked reading path.
-Unsupported schemas and missing facts remain explicit; current activity cannot
-fill gaps in a saved report.
+Failed verification can't silently downgrade to an unchecked reading path.
+Unsupported schemas and missing facts stay explicit; current activity can't fill
+gaps in a saved report.
 
-Report view is separate from original-file inspection and Download. When HTML
-is absent, supported saved JSON can supply a read-only HTML view after snapshot,
-manifest, ownership and disclosure checks. Markdown/PDF-only saves use their
-local readable representations. A declared missing or altered preferred file
-still refuses; this is not a fallback or repair path. Legacy-original viewing
-retains its explicit warning and unverified status.
+Report view is separate from original-file inspection and Download.
 
-Screen-only section and interaction disclosures preserve all content and
-original anchor identities. Color repeats recorded outcome words, never a new
-success judgment. Collapse, navigation and format switching do not change
-membership, facts, file bytes or print/export completeness.
+- When HTML is absent, supported saved JSON can supply a read-only HTML view after
+  snapshot, manifest, ownership and disclosure checks.
+- Markdown/PDF-only saves use their local readable representations.
+- A declared missing or altered preferred file still refuses. This isn't a
+  fallback or repair path.
+- Legacy-original viewing keeps its explicit warning and unverified status.
+
+Screen-only section and interaction disclosures preserve all content and original
+anchor identities. Color repeats recorded outcome words, never a new success
+judgment. Collapse, navigation and format switching don't change membership,
+facts, file bytes or print/export completeness.
+
+### Brief
 
 For supported ordinary focused reports, Brief uses the verified manifest's
-pattern membership, call-to-interaction bindings and permitted result copies
-with the corresponding saved document anchors. It never joins a call to a
-prompt by display order or transfers a returned status to the parent outcome.
-For a returned-status finding, quoted entry text must bind to that call,
-observation, entry position and nonconflicting status. A separately labelled
-call-level example is not an entry explanation; other entries' text stays in
-the exact call view.
-The full historical reading and original files remain separate choices.
+pattern membership, call-to-interaction bindings and permitted result copies with
+the corresponding saved document anchors.
 
-Saved metadata search does not read prompt/report bodies. Global Search
-extracts only permitted text from independently verified saved files through
-the [corpus contract](search-corpus.md). Its receipt authority is not
-interchangeable with library authority on reload or invalidation.
+- It never joins a call to a prompt by display order or transfers a returned
+  status to the parent outcome.
+- For a returned-status finding, quoted entry text must bind to that call,
+  observation, entry position and nonconflicting status.
+- A separately labelled call-level example isn't an entry explanation; other
+  entries' text stays in the exact call view.
+- The full historical reading and original files stay separate choices.
+
+Saved metadata search doesn't read prompt or report bodies. Global Search
+extracts only permitted text from independently verified saved files through the
+[corpus contract](search-corpus.md). Its receipt authority isn't interchangeable
+with library authority on reload or invalidation.
 
 ## Comparisons
 
@@ -541,40 +654,50 @@ interchangeable with library authority on reload or invalidation.
 | Missing pattern | Not proof of a fix; no generated causality/significance claim |
 
 Comparisons use recorded outcomes and timing. Separately selected result copies
-must already be frozen and masked; additional masking is allowed, but fetching
-missing source text is not.
+must already be frozen and masked; extra masking is allowed, but fetching missing
+source text isn't.
+
+### Existing saved comparisons
 
 Existing saved comparisons are read-only. Some schema-3 files declare
-`presentation.comparisonVersion: 1`. Their two `sourceIdentity` entries bind
-the exact Earlier/Later report references and hashes to manifest-declared
-titles, selected windows, time contexts and included-interaction counts.
-Missing historical metadata is explicitly null, not recovered from current
-activity or an indexed display name. Titles pass the report masking rules.
-The identity is frozen in the comparison hash, snapshot and manifest, and
-is not derived from current activity.
+`presentation.comparisonVersion: 1`.
+
+- Their two `sourceIdentity` entries bind the exact Earlier/Later report
+  references and hashes to manifest-declared titles, selected windows, time
+  contexts and included-interaction counts.
+- Missing historical metadata is explicitly null, not recovered from current
+  activity or an indexed display name.
+- Titles pass the report masking rules.
+- The identity is frozen in the comparison hash, snapshot and manifest, and isn't
+  derived from current activity.
 
 The versioned reading leads with this named pair and recorded measures.
-Selected report windows are not verified per-call coverage. Operation failure
-wording names its evidence layer, and Markdown carries the same saved operation
-paths as HTML/PDF. Earlier/Later values stay adjacent when the layout reflows.
-Unmarked comparisons retain their historical wording, styles and original
-files; they acquire no inferred identity. Unsupported or mismatched new
-markers are refused. Version-marked JSON-only comparisons require the matching reader;
-downgrading is not permission to regenerate them from current history.
+
+- Selected report windows aren't verified per-call coverage.
+- Operation failure wording names its evidence layer, and Markdown carries the
+  same saved operation paths as HTML/PDF.
+- Earlier/Later values stay adjacent when the layout reflows.
+- Unmarked comparisons keep their historical wording, styles and original files;
+  they acquire no inferred identity.
+- Unsupported or mismatched new markers are refused. Version-marked JSON-only
+  comparisons need the matching reader; downgrading isn't permission to
+  regenerate them from current history.
 
 ### Report a retained-period comparison
 
 Fresh Compare entry uses all eligible activity in the saved collection,
-independently of Analyze. Its 7/14/30-day presets end yesterday in the selected
-IANA zone and compare the immediately preceding equal number of civil days.
-Custom ranges can differ in length or overlap. Use Analyze view is an explicit
-transfer of its authorized non-date scope; unavailable private membership
-cannot fall back to all activity.
+independently of Analyze.
 
-Chart views and inspection are presentations of one accepted pair. Outcome
-shares retain the before-outcome reference population. Error-focused reading
-keeps failed execution distinct from explicit application/API errors; report
-presets still use their documented whole-interaction membership rules.
+- Its 7/14/30-day presets end yesterday in the selected IANA zone and compare the
+  immediately preceding equal number of civil days.
+- Custom ranges can differ in length or overlap.
+- Use Analyze view is an explicit transfer of its authorized non-date scope.
+  Unavailable private membership can't fall back to all activity.
+
+Chart views and inspection are presentations of one accepted pair. Outcome shares
+keep the before-outcome reference population. Error-focused reading keeps failed
+execution distinct from explicit application/API errors; report presets still use
+their documented whole-interaction membership rules.
 
 1. Freeze accepted A/B ranges, shared non-date filters, source/revision and
    exact matching rows. For an explicit Analyze entry, replace its dates while
@@ -587,24 +710,29 @@ presets still use their documented whole-interaction membership rules.
    cannot supply receipt authority.
 
 Complete parent interactions support copies and full-interaction timing without
-expanding matching-call denominators. `records` supplies those permitted copies,
-not a union metric denominator or third cohort. Undated rows stay outside dated
-cohorts; B-minus-A shares use percentage points, not relative percent.
+expanding matching-call denominators.
 
-A saved period report is one artifact with two cohorts. New preparation never
-manufactures two source reports. Changed selected facts/authority invalidate
-preparation; unrelated accepted activity need not.
-Comparison-origin preparation and saved reading return to the accepted
-comparison while its authority remains current. Reports-origin returns keep
-their separate library state.
-Opening Reports from the sidebar starts a Reports-origin task. Creating a
-report from the accepted comparison preserves its explicit comparison origin.
+- `records` supplies those permitted copies, not a union metric denominator or
+  third cohort.
+- Undated rows stay outside dated cohorts.
+- B-minus-A shares use percentage points, not relative percent.
 
-Current readers accept both the older Analyze author-policy wording and the
-new Compare periods wording. Older readers that recognize only the Analyze
-wording reject new paired reports. After saving a new paired report, downgrading
-to such a reader is not a compatible recovery path; retain the matching reader
-and original saved files.
+A saved period report is one artifact with two cohorts.
+
+- New preparation never manufactures two source reports.
+- Changed selected facts or authority invalidate preparation; unrelated accepted
+  activity need not.
+- Comparison-origin preparation and saved reading return to the accepted
+  comparison while its authority stays current. Reports-origin returns keep their
+  separate library state.
+- Opening Reports from the sidebar starts a Reports-origin task. Creating a
+  report from the accepted comparison keeps its explicit comparison origin.
+
+Current readers accept both the older Analyze author-policy wording and the new
+Compare periods wording. Older readers that recognize only the Analyze wording
+reject new paired reports. After saving a new paired report, downgrading to such a
+reader isn't a compatible recovery path; keep the matching reader and original
+saved files.
 
 ## Saved-artifact deletion
 

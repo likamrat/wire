@@ -18,105 +18,158 @@ and motion. For user instructions, use [Use WIRE](user-guide.md) or
 
 ## Navigation and return
 
-Reports, Trends and Compare use one page-title scale, icon alignment and gap
-before their section links. A page title names the destination. Put the applied
-dates with what they govern: the Analyze results, Trends chart control, report
-outline, or each side of Compare. Don't repeat a date or time zone beside the
-page title. Keep civil dates in their selected calendar; preserve the time and
-offset for instant boundaries. A saved report's period is not its preparation
-time, and an unknown period stays unknown.
+### Titles and dates
 
-The WIRE logo remains a link to Analyze, with **Work IQ Request Explorer** help
-on hover or keyboard focus, including the compact mark and narrow drawer.
-Escape dismisses open help before the drawer without taking focus. Activating
-the link dismisses its help. Hover-only help also closes when neither the
-target nor the tooltip is under the pointer, even if the layout moved.
-The separate panel control beside the desktop logo retains **Collapse
-navigation** / **Expand navigation** names and expanded state. Narrow navigation
-keeps its existing Open/Close controls and the same mounted brand and links.
+Reports, Trends and Compare use one page-title scale, icon alignment and gap
+before their section links. A page title names the destination.
+
+- Put the applied dates with what they govern: the Analyze results, Trends chart
+  control, report outline or each side of Compare. Don't repeat a date or time
+  zone beside the page title.
+- Keep civil dates in their selected calendar. Preserve the time and offset for
+  instant boundaries.
+- A saved report's period isn't its preparation time, and an unknown period stays
+  unknown.
+
+### Logo and navigation controls
+
+The WIRE logo stays a link to Analyze, with **Work IQ Request Explorer** help on
+hover or keyboard focus, including the compact mark and narrow drawer.
+
+- Escape dismisses open help before the drawer, without taking focus.
+- Activating the link dismisses its help.
+- Hover-only help also closes when neither the target nor the tooltip is under
+  the pointer, even if the layout moved.
+- The separate panel control beside the desktop logo keeps its **Collapse
+  navigation** / **Expand navigation** names and expanded state.
+- Narrow navigation keeps its existing Open/Close controls and the same mounted
+  brand and links.
+
+### Return and focus
 
 Keep existing route, reading-position and focus owners. A return restores the
-actual origin only while its authority and reading intent remain current.
-A press on a Microsoft activity card can finish through a refresh if the same
-authorized row stays in place. Replacing its target or withdrawing access
-retires the press; it must not open another conversation.
-Activating Close from the keyboard during reader entry keeps the origin's
-place through the reversal. Scrolling the results cancels that compensation.
-Later user input wins over delayed navigation, reads and motion callbacks.
-Pointer presses must not trigger older scroll restoration that moves the
-targeted control before release.
-When filtering changes a long result list to an empty one, keep the workspace
-aligned. The viewport scrollbar and the Filters count must not move neighbouring
-controls; the Refresh action keeps its space when its label changes to Retry.
-Private Search state never becomes a copied public URL or a broader fallback.
-Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
-reading keeps one return to its actual origin. Entering Compare opens it rather
-than toggling it off; Analyze and Compare retain independent accepted scopes.
-When a destination needs a new stored read, select it and show its loading
-state immediately. Do not present the old charts as its accepted population.
-Failed reads restore the accepted origin; later navigation wins over held reads.
+actual origin only while its authority and reading intent stay current.
+
+- A press on a Microsoft activity card can finish through a refresh if the same
+  authorized row stays in place. Replacing its target or withdrawing access
+  retires the press; it must not open another conversation.
+- Activating Close from the keyboard during reader entry keeps the origin's place
+  through the reversal. Scrolling the results cancels that compensation.
+- Later user input wins over delayed navigation, reads and motion callbacks.
+- Pointer presses must not trigger older scroll restoration that moves the
+  targeted control before release.
+- When filtering changes a long result list to an empty one, keep the workspace
+  aligned. The viewport scrollbar and the Filters count must not move
+  neighbouring controls; the Refresh action keeps its space when its label
+  changes to Retry.
+- Private Search state never becomes a copied public URL or a broader fallback.
+
+### Destinations
+
+- Documentation opens from the bottom of the sidebar. Its guide tree selects the
+  article; the outline selects a section. At narrow widths, both fold above
+  the article. Back reopens the originating list and restores its focused link.
+- Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
+  reading keeps one return to its actual origin.
+- Entering Compare opens it rather than toggling it off. Analyze and Compare keep
+  independent accepted scopes.
+- When a destination needs a new stored read, select it and show its loading
+  state immediately. Don't present the old charts as its accepted population.
+- Failed reads restore the accepted origin; later navigation wins over held
+  reads.
 
 Keep a local choice at the control that owns it. Choosing dates, arranging
-charts, or adjusting report options does not start a new task. Preserve
-the accepted reading and its scroll position until the user applies a change.
-Exact evidence, preparation and irreversible decisions keep their own surfaces.
+charts or adjusting report options doesn't start a new task. Preserve the
+accepted reading and its scroll position until the user applies a change. Exact
+evidence, preparation and irreversible decisions keep their own surfaces.
 
 The [runtime-access contract](runtime-access.md#client-publication-and-withdrawal)
 defines when pending reads and return state lose permission to publish.
 
 ## Analyze and filters
 
-Lead with accepted recorded outcomes and activity patterns. For comparable tool
-calls, the ring centers the total and unit. Beside it, a square-ended strip shows
-the same shares, with the exact percentage and count beneath each outcome label.
-Pointing at a ring slice or strip segment identifies the same outcome in both
-charts and its label, and shows the count and percentage. Clicking either mark
-opens the label's evidence; the label is the single keyboard stop for that outcome.
-Zero-count outcomes remain available as compact definition links; they do not
-take up a primary outcome column or get a painted segment. For chart actions,
-hover tints the control, press deepens the tint, and keyboard focus outlines it.
-Keep this feedback on the outcome, tool, model or author label, not its whole
-column. Services highlights the row that opens the service. Chart actions do
-not underline their text in any state. Small layouts keep the strip
-and stack the labelled readings below the ring.
-Do not combine separate populations into one strip. Model, tool and service widgets use
-content-sized layout, not equal-height filler or hidden rows for symmetry.
-The time chart, tool results, token usage, four breakdowns and Interactions can each move in **Settings >
-Analyze**. The original layout is the default. Follow the chosen order in both
-the painted layout and keyboard navigation. The time chart, tool results,
-token usage, and Interactions each occupy a full row, even after reordering.
-In the Settings editor, pairing or separating charts changes the miniature,
-without moving the surrounding controls or scrolling the page. Focus follows
-the section's arrow, switching direction when it reaches an end.
+Lead with accepted recorded outcomes and activity patterns.
+
+### Tool call results
+
+For comparable tool calls, the ring centers the total and unit. Beside it, a
+square-ended strip shows the same shares, with the exact percentage and count
+beneath each outcome label.
+
+- Pointing at a ring slice or strip segment identifies the same outcome in both
+  charts and its label, and shows the count and percentage.
+- Clicking either mark opens the label's evidence. The label is the single
+  keyboard stop for that outcome.
+- Zero-count outcomes stay available as compact definition links. They don't
+  take up a primary outcome column or get a painted segment.
+- Small layouts keep the strip and stack the labelled readings below the ring.
+- Don't combine separate populations into one strip.
+
+### Chart action feedback
+
+- Hover tints the control, press deepens the tint, and keyboard focus outlines
+  it.
+- Keep this feedback on the outcome, tool, model or author label, not its whole
+  column. Services highlights the row that opens the service.
+- Chart actions don't underline their text in any state.
+- Model, tool and service widgets use content-sized layout, not equal-height
+  filler or hidden rows for symmetry.
+
+### Homepage order
+
+The time chart, tool results, token usage, four breakdowns and Interactions can
+each move in **Settings > Analyze**. The original layout is the default.
+
+- Follow the chosen order in both the painted layout and keyboard navigation.
+- The time chart, tool results, token usage and Interactions each occupy a full
+  row, even after reordering.
+- In the Settings editor, pairing or separating charts changes the miniature
+  without moving the surrounding controls or scrolling the page.
+- Focus follows the section's arrow, switching direction when it reaches an end.
+
 The entrance build presents accepted numbers only, not acquisition progress.
-Reduced motion and assistive technology get the final values without counting through them.
+Reduced motion and assistive technology get the final values without counting
+through them.
 
-Prompt authors is a compact breakdown of canonical originating
-interactions across the complete accepted slice, before paging. Human prompts,
-Agent prompts and Sender unclear use the shared author vocabulary and screen
-colors; all three remain visible when the population is nonempty, including
-known zeros. The chart's accessible description names the total matching
-interactions, not calls, without repeating it on a separate visible line.
-For mixed sources, keep the GitHub denominator visible;
-incompatible Microsoft 365 conversations stay separately unavailable. Exact
-counts and provenance definitions live in Guide. A positive row opens its
-matching interactions; a zero opens the definition. The row label, bar and
-count share one link and one keyboard stop.
+### Prompt authors
 
-Filters opens one panel with the existing controls, applied chips and separate
-View group. On desktop the workspace remains interactive; outside dismissal
-does not submit a draft. Narrow screens retain the focused sheet. Fields/labels
-wrap; accepting a restriction must not move focus.
+Prompt authors is a compact breakdown of canonical originating interactions
+across the complete accepted slice, before paging.
+
+- Human prompts, Agent prompts and Sender unclear use the shared author
+  vocabulary and screen colors. All three stay visible when the population is
+  nonempty, including known zeros.
+- The chart's accessible description names the total matching interactions, not
+  calls, without repeating it on a separate visible line.
+- For mixed sources, keep the GitHub denominator visible. Incompatible
+  Microsoft 365 conversations stay separately unavailable.
+- Exact counts and provenance definitions live in Guide.
+- A positive row opens its matching interactions; a zero opens the definition.
+  The row label, bar and count share one link and one keyboard stop.
+
+### Filters panel
+
+Filters opens one panel with the existing controls, applied chips and a separate
+View group.
+
+- On desktop the workspace stays interactive. Outside dismissal doesn't submit a
+  draft.
+- Narrow screens keep the focused sheet.
+- Fields and labels wrap. Accepting a restriction must not move focus.
+
 Both Trends measure selectors and long project, chat, tool, category, service,
-path and time-zone selectors find words anywhere in their option labels. Keep
-the finder inside the open picker; opening on touch does not focus a text
-field until tapped. Typing never changes an accepted choice, removes a check,
-performs a new read or sends a query to Search. A miss is recoverable in place.
-Compact lists keep their ordinary prefix/repeated-letter navigation.
+path and time-zone selectors find words anywhere in their option labels.
+
+- Keep the finder inside the open picker. Opening on touch doesn't focus a text
+  field until tapped.
+- Typing never changes an accepted choice, removes a check, performs a new read
+  or sends a query to Search. A miss is recoverable in place.
+- Compact lists keep their ordinary prefix and repeated-letter navigation.
+
 The closed Filters control names how many restrictions the displayed results
-actually use. Drafts and display choices do not count. Name non-default
-grouping in the chart title; in Trends, distinguish a subset of drawn series
-or compared measures from a change to the measured population.
+actually use. Drafts and display choices don't count. Name non-default grouping
+in the chart title. In Trends, distinguish a subset of drawn series or compared
+measures from a change to the measured population.
 
 | Control or action | Effect |
 | --- | --- |
@@ -128,23 +181,35 @@ or compared measures from a change to the measured population.
 | Reset filters | Stays beside restrictions; preserves report selection, data and preferences. Opening Analyze at All dates does not by itself enable Reset. |
 
 The count, scope caption, charts, rows and current-view report membership use
-one accepted population. Pending or failed ordinary reads retain its prior
-scope rather than relabel it with requested filters. Partial/unbound analytical
-Search withholds measures instead of inventing zeros. Access withdrawal clears
-private results rather than keeping stale content visible.
+one accepted population.
 
-Historical date inputs share one calendar. Today is selectable in the display
-time zone; later dates cannot be selected or applied by typing. This week and
-This month stop at today. Recovery previews and confirmations remain separate
-from date selection. Calendar presets and custom dates use the selected IANA zone. Custom dates
-are inclusive civil days; buckets are clipped to that scope. Don't repeat
-inclusivity or the configured zone under a valid date range. Show the zone
-when it explains a cutoff, fallback or consequential operation. Undated records
-stay explicit. Missing history cannot be assigned to the current filtered
-slice from source-wide diagnostics.
-Analyze keeps the note about the last history check in Filters. If a
-date range has no matching activity, show the coverage note beside the empty
-result as well. A date range extending past the last check is not a source failure.
+- Pending or failed ordinary reads keep its prior scope rather than relabel it
+  with requested filters.
+- Partial or unbound analytical Search withholds measures instead of inventing
+  zeros.
+- Access withdrawal clears private results rather than keeping stale content
+  visible.
+
+### Dates and time zones
+
+Historical date inputs share one calendar.
+
+- Today is selectable in the display time zone. Later dates can't be selected or
+  applied by typing. This week and This month stop at today.
+- Recovery previews and confirmations stay separate from date selection.
+- Calendar presets and custom dates use the selected IANA zone. Custom dates are
+  inclusive civil days; buckets are clipped to that scope.
+- Don't repeat inclusivity or the configured zone under a valid date range. Show
+  the zone when it explains a cutoff, fallback or consequential operation.
+- Undated records stay explicit. Missing history can't be assigned to the current
+  filtered slice from source-wide diagnostics.
+
+Analyze keeps the note about the last history check in Filters. If a date range
+has no matching activity, show the coverage note beside the empty result as
+well. A date range extending past the last check isn't a source failure.
+
+### Time chart windows
+
 Analyze's time chart defaults to individual calendar days, including All dates
 and long ranges; it does not silently combine them into weeks or months.
 Every day between the first and last qualifying dated records remains reachable.
@@ -163,6 +228,7 @@ single dated record. Explicit window controls remain available after recovery
 to preserve keyboard focus and Back; genuinely empty or undated populations
 do not acquire invented date controls.
 Local scrolling keeps all labels readable within the current window.
+
 Empty days mean no qualifying retained records, not proof of no activity.
 Explicit weekly/monthly links retain their grouping and exact interval drilldown,
 including after changing Dates. Date ranges select membership, not chart granularity.
@@ -174,29 +240,41 @@ unlabelled partial comparison. Choosing Week/Month is always explicit.
 Row-only catalog, report membership, assessment-row and Search-corpus work uses
 the canonical filtered selection without materializing calendar bins.
 
-Prepare chat-name/reference lookups once for the current render, including the
-full source roster. Keep every option, exact name and shortest distinguishing
-ID suffix. Reuse that lookup only within the render; do not retain private
-catalogs across source updates or access withdrawal.
+Prepare chat-name and reference lookups once for the current render, including
+the full source roster. Keep every option, exact name and shortest
+distinguishing ID suffix. Reuse that lookup only within the render; don't keep
+private catalogs across source updates or access withdrawal.
 
 ### Chart guide
 
 Under the Analyze title, the shared icon-and-label section strip offers
 **Results** and **Guide**. Keep Refresh and Filters with the accepted Results
-scope, not in the section strip or on a chart. Open the Topic reader
-directly on recorded outcomes; a preference
-under Settings > Analyze can resume the last topic read in this tab. Show
-a compact topic rail beside the reading pane, or a Topics chooser when space
-is limited. Results and browser Back retain filters, focus and reading position.
-When Back restores a chart filtered by Search, focus returns to the original
-link only after its matching records are ready and only if the reader has not moved on.
-Keep the section strip above the reader. Use the existing navigation
-hover and focus treatment, without an underline. Label worked examples as
-illustrations and keep them distinct from the accepted view's values.
-Exact numbers, not the glossary, own
-the breakdown. Definitions and table counts use the same accepted facts. A row finder filters
-only table labels, not analytical membership or totals. Overflow remains
-local, keyboard/touch accessible and truthful; do not shrink type or hide data.
+scope, not in the section strip or on a chart.
+
+- Open the Topic reader directly on recorded outcomes. A preference under
+  Settings > Analyze can resume the last topic read in this tab.
+- Show a compact topic rail beside the reading pane, or a Topics chooser when
+  space is limited.
+- Keep the section strip above the reader. Use the existing navigation hover and
+  focus treatment, without an underline.
+
+Return:
+
+- Results and browser Back keep filters, focus and reading position.
+- When Back restores a chart filtered by Search, focus returns to the original
+  link only after its matching records are ready, and only if the reader hasn't
+  moved on.
+
+Content:
+
+- Label worked examples as illustrations and keep them distinct from the
+  accepted view's values.
+- Exact numbers, not the glossary, own the breakdown. Definitions and table
+  counts use the same accepted facts.
+- A row finder filters only table labels, not analytical membership or totals.
+- Overflow stays local, keyboard and touch accessible, and truthful. Don't shrink
+  type or hide data.
+
 Use the shared [chart encodings](design.md#chart-reading) for those facts.
 
 ## Trends
@@ -204,164 +282,255 @@ Use the shared [chart encodings](design.md#chart-reading) for those facts.
 Trends is a peer destination. Overview opens with the daily Errors & failures
 count. Charts lists Errors & failures first and keeps all eight measure names
 visible, including on narrow screens. Chart guide is an in-page destination.
-A contextual Analyze entry opens Charts on the corresponding
-measure with supported scope; related rather than equivalent views name the
-difference before switching. Return restores the widget and its reading context.
-Forward arrows on chart, comparison, table and supporting-call actions open a
-reading; the back arrow returns from it. In-place choices and disclosures
-do not use these navigation arrows.
-Changing measure, chart type, series or unit is not a new population read.
-The current measure and selected unit or chart type remain identifiable while
-hovered or pressed. Comparison choices and legend entries focus as labelled
-rows; keep their checkbox and text inside the same hit target.
-Compare measures opens a free choice of two daily readings; examples preselect
-a pair but do not limit the available combinations. Distinguish selecting the
-second measure, hiding a chart and changing the population. In the optional
-**All charts** workspace the charts occupy full-width rows with sizing
-controls. Short author/service labels stay whole rather than being squeezed.
-Empty Today does not discard useful earlier data or turn the screen into
-unavailable rows. Unknown and incomplete evidence stays explicit.
-Use the full workspace in both orientations without scaling text. Narrow
-layouts wrap the legend; the plot scrolls horizontally. **Dates > Custom
-dates** expands the existing calendar at the same trigger. Filters and **Show or
-hide charts** likewise open at their own toolbar controls. Select the extra
-charts to show below the current measure; Cancel leaves that choice alone.
-Opening a different measure from the index starts with just that chart.
-**Back to selected charts** restores the selection after visiting All charts.
-The period control (or the title in
-All charts) names the accepted range. Presets and Apply update the charts
-together; drafts, Cancel, pending reads and failed reads retain the
-accepted range. Today remains a current-day label, not a claim of full-day coverage.
-Delayed reads show the requested range separately, without relabeling accepted
-facts. Success, failure, superseding intent, departure and withdrawal clear it.
-With a chart already on screen, read feedback sits with that chart rather than
-pushing the measure index down. Adding a comparison keeps the existing chart
-mounted. The author legend and exact-value tooltip use the same Human, Agent
-and unverified presentation as the interaction reader; the chart does not
-infer who wrote a prompt.
 
-In the index, hover/focus previews a mark; click, tap or Enter pins its reading
-and exposes the matching calls. **View daily values** includes hidden series and the
-full period, not only the drawn window. **Columns / Lines** retains exact
-selection and denominators. Put the measured population beside the chart title;
-keep model-history qualifications in the exact values table. A known model still
-counts when other responses or the end of the interaction cannot be verified.
-In All charts, selection updates the selected-day
-and subject row. Maximize uses the same chart and controls, adding the
-selected-date breakdown and View numbers. Back to all charts restores the activating
-control and reading position. **Collapse all / Expand all** affects only the
-current stack: selected charts in the index, or all eight in All charts. Expand
-all opens every chart in that stack, including individually collapsed rows.
-The pair reader uses **Collapse both charts / Expand both charts** for two
-aligned plots, and a single disclosure for one graph. These controls preserve
-measure, series choices and date reading. Filters and dates remain available
-while maximized. Do not introduce a generic chart builder or a new analytics layer.
-The lower selected-date values retain a local date/measure/population caption,
-so their scope remains visible after the upper chart context scrolls away.
-This caption shares that qualified context and does not repeat its action buttons.
-Only the explicit maximize/restore controls change chart size. Clicking, tapping
-or pressing Enter/Space on a data mark selects it in place, without hiding other
-widgets, moving the page or changing horizontal reading position. A restrained
-selected-mark outline remains after hover closes. Maximizing later retains that
-exact selected date and series for View evidence.
-The supporting-call sheet has one scrolling body with its title and Close outside
-that body. Opening a call scrubs the list, but retains its exact identity and
-position within the authorized scope. The existing contextual reader returns to
-the stable View evidence control; reopening the sheet restores the inspected call.
-Scope changes, departure and authority loss retire the return state and links.
-Never retain withdrawn private nodes for restoration.
-Measure controls use the same header position for every widget, not just Tools.
-Counts, percentages and timing keep their distinct units; these controls do not
-redefine the underlying evidence. Omit redundant subheaders and the repeated
-"tool calls" caption beneath the Tool calls total.
-Duration shortcuts and legend checkboxes share one series-visibility state.
-Weekly shares name the actual calendar week and its selected-date denominator;
-partial-week rules and week boundaries distinguish denominator changes without
-changing daily membership or the calculation. Exact tables retain every column
-in a keyboard-scrollable region with intrinsic column sizing and semantic headers.
-In narrow daily-value sheets, long headings wrap beside the pinned date column
-so a focused count keeps its full heading readable.
+### Entry and navigation
+
+- A contextual Analyze entry opens Charts on the corresponding measure with
+  supported scope. Related rather than equivalent views name the difference
+  before switching. Return restores the widget and its reading context.
+- Forward arrows on chart, comparison, table and supporting-call actions open a
+  reading; the back arrow returns from it. In-place choices and disclosures don't
+  use these navigation arrows.
+- Changing measure, chart type, series or unit isn't a new population read.
+- The current measure and selected unit or chart type stay identifiable while
+  hovered or pressed.
+- Comparison choices and legend entries focus as labelled rows. Keep their
+  checkbox and text inside the same hit target.
+
+### Comparing measures and several charts
+
+Compare measures opens a free choice of two daily readings. Examples preselect a
+pair but don't limit the available combinations. Distinguish selecting the
+second measure, hiding a chart and changing the population.
+
+- In the optional **All charts** workspace the charts occupy full-width rows with
+  sizing controls. Short author and service labels stay whole rather than being
+  squeezed.
+- **Show or hide charts** opens at its own toolbar control. Select the extra
+  charts to show below the current measure; Cancel leaves that choice alone.
+- Opening a different measure from the index starts with just that chart.
+- **Back to selected charts** restores the selection after visiting All charts.
+- Adding a comparison keeps the existing chart mounted.
+
+### Layout
+
+- Empty Today doesn't discard useful earlier data or turn the screen into
+  unavailable rows. Unknown and incomplete evidence stays explicit.
+- Use the full workspace in both orientations without scaling text.
+- Narrow layouts wrap the legend; the plot scrolls horizontally.
+- **Dates > Custom dates** expands the existing calendar at the same trigger.
+  Filters likewise opens at its own toolbar control.
+- With a chart already on screen, read feedback sits with that chart rather than
+  pushing the measure index down.
+- The author legend and exact-value tooltip use the same Human, Agent and
+  unverified presentation as the interaction reader. The chart doesn't infer who
+  wrote a prompt.
+
+### Accepted range
+
+The period control (or the title in All charts) names the accepted range.
+
+- Presets and Apply update the charts together. Drafts, Cancel, pending reads and
+  failed reads keep the accepted range.
+- Today stays a current-day label, not a claim of full-day coverage.
+- Delayed reads show the requested range separately, without relabeling accepted
+  facts. Success, failure, superseding intent, departure and withdrawal clear it.
+
+### Selection and maximize
+
+In the index, hover or focus previews a mark. Click, tap or Enter pins its
+reading and exposes the matching calls.
+
+- **View daily values** includes hidden series and the full period, not only the
+  drawn window.
+- **Columns / Lines** keeps exact selection and denominators.
+- Put the measured population beside the chart title. Keep model-history
+  qualifications in the exact values table. A known model still counts when other
+  responses or the end of the interaction can't be verified.
+- In All charts, selection updates the selected-day and subject row.
+- Maximize uses the same chart and controls, adding the selected-date breakdown
+  and View numbers. Back to all charts restores the activating control and
+  reading position.
+- Filters and dates stay available while maximized.
+- Don't introduce a generic chart builder or a new analytics layer.
+
+Collapsing:
+
+- **Collapse all / Expand all** affects only the current stack: selected charts in
+  the index, or all eight in All charts. Expand all opens every chart in that
+  stack, including individually collapsed rows.
+- The pair reader uses **Collapse both charts / Expand both charts** for two
+  aligned plots, and a single disclosure for one graph.
+- These controls preserve measure, series choices and date reading.
+
+The lower selected-date values keep a local date, measure and population caption,
+so their scope stays visible after the upper chart context scrolls away. This
+caption shares that qualified context and doesn't repeat its action buttons.
+
+Only the explicit maximize and restore controls change chart size.
+
+- Clicking, tapping or pressing Enter or Space on a data mark selects it in
+  place, without hiding other widgets, moving the page or changing horizontal
+  reading position.
+- A restrained selected-mark outline stays after hover closes.
+- Maximizing later keeps that exact selected date and series for View evidence.
+
+### Supporting calls
+
+The supporting-call sheet has one scrolling body, with its title and Close
+outside that body.
+
+- Opening a call scrubs the list, but keeps its exact identity and position
+  within the authorized scope.
+- The existing contextual reader returns to the stable View evidence control.
+  Reopening the sheet restores the inspected call.
+- Scope changes, departure and authority loss retire the return state and links.
+  Never keep withdrawn private nodes for restoration.
+
+### Measure controls and tables
+
+- Measure controls use the same header position for every widget, not just Tools.
+- Counts, percentages and timing keep their distinct units. These controls don't
+  redefine the underlying evidence.
+- Omit redundant subheaders and the repeated "tool calls" caption beneath the
+  Tool calls total.
+- Duration shortcuts and legend checkboxes share one series-visibility state.
+- Weekly shares name the actual calendar week and its selected-date denominator.
+  Partial-week rules and week boundaries distinguish denominator changes without
+  changing daily membership or the calculation.
+- Exact tables keep every column in a keyboard-scrollable region with intrinsic
+  column sizing and semantic headers.
+- In narrow daily-value sheets, long headings wrap beside the pinned date column
+  so a focused count keeps its full heading readable.
+
+### Collapsed rows
+
 Collapsed rows contain the title, applied date range and sizing controls, not
-metric totals or explanatory labels. Clicking anywhere
-on the collapsed row expands it; clicking an expanded header's non-control
-area collapses it. Measure, sizing, series and evidence controls keep their own
-actions. The named expand/collapse button provides the same action by keyboard
-and exposes its expanded state and content relationship.
+metric totals or explanatory labels.
 
-Keep the 7/14/30/custom date family. Bare entry (or a measure-only link) first
-checks the current seven days. Only when that week is empty can it open seven
-days ending at the latest retained matching call. Explicit dates, including
-an empty period, do not widen. Keep applied periods and filters in the view,
-not its address. Choosing a chart measure or replacing a filter does not create a Back step;
-do not serialize private filter values or an activity-derived date.
-Every civil day remains separate in the selected IANA zone. A compact index
-plot may thin tick labels, never observations or daily table rows.
-Use month and day for past dates, Today for the current day and an exact date
-in hover. Measured label widths set minimum day spacing at a stable screen
-font size; maximization never magnifies SVG text. All charts opens at the latest
-dates; a clipped index plot opens at the busiest span that fits and identifies
-its visible dates. Encoding/size changes preserve the user's reading position.
-Gap days keep labels without invented bars. Long ranges still page at 90 days
-after establishing complete membership, without a new range limit.
-Date filtering never approves collection.
+- Clicking anywhere on the collapsed row expands it. Clicking an expanded
+  header's non-control area collapses it.
+- Measure, sizing, series and evidence controls keep their own actions.
+- The named expand/collapse button provides the same action by keyboard and
+  exposes its expanded state and content relationship.
+
+### Periods and daily marks
+
+Keep the 7/14/30/custom date family.
+
+- Bare entry (or a measure-only link) first checks the current seven days. Only
+  when that week is empty can it open seven days ending at the latest retained
+  matching call.
+- Explicit dates, including an empty period, don't widen.
+- Keep applied periods and filters in the view, not its address. Choosing a chart
+  measure or replacing a filter doesn't create a Back step. Don't serialize
+  private filter values or an activity-derived date.
+- Date filtering never approves collection.
+
+Every civil day stays separate in the selected IANA zone.
+
+- A compact index plot may thin tick labels, never observations or daily table
+  rows.
+- Use month and day for past dates, Today for the current day and an exact date
+  in hover.
+- Measured label widths set minimum day spacing at a stable screen font size.
+  Maximization never magnifies SVG text.
+- All charts opens at the latest dates. A clipped index plot opens at the busiest
+  span that fits and identifies its visible dates.
+- Encoding and size changes preserve the user's reading position.
+- Gap days keep labels without invented bars.
+- Long ranges still page at 90 days after establishing complete membership,
+  without a new range limit.
+
+### What the chart says
 
 Use prominent period counts, appropriate percentages with supporting counts and
-one measure label. Avoid repeated source captions, explanatory subtitles and
-prose narrating values already drawn. Keep necessary coverage qualifications;
-definitions belong in Chart guide. Differences in shares are percentage points.
-Source-wide saved-chat read/import issues belong in Collection status, not
-in a generic Trends toolbar warning: their affected dates are not established.
-Keep the retained coverage metadata without implying a complete selected period.
-Chart-specific missing models, timing, outcomes and service details remain
-visible, as do calls excluded because they have no start date.
-Selected-date bars use the same measure and zero-based scale as the chart:
-reach is not call share, and count views use the count axis rather than percent
-widths. Hiding series does not rescale that axis.
+one measure label.
 
-Population filters require Apply; Cancel preserves the accepted scope.
-Series visibility does not change membership, rates or exact-data tables.
-Keep controls mounted, plot geometry and scroll anchors stable, and reserve the
-selected-date area's established height during same-view changes. No refocus or
-page jump after toggling a series. Daily marks have deliberate spacing; scroll
-the plot rather than shrinking labels, smoothing values or combining days.
-Measure selectors reserve their longest option's intrinsic width. Responsive
-layout updates settle the selected-date geometry before the next interaction;
-unchanged parent renders do not remount a chart or dismiss its hover value.
+- Avoid repeated source captions, explanatory subtitles and prose narrating values
+  already drawn.
+- Keep necessary coverage qualifications. Definitions belong in Chart guide.
+- Differences in shares are percentage points.
+- Source-wide saved-chat read and import issues belong in Collection status, not
+  in a generic Trends toolbar warning: their affected dates aren't established.
+  Keep the retained coverage metadata without implying a complete selected
+  period.
+- Chart-specific missing models, timing, outcomes and service details stay
+  visible, as do calls excluded because they have no start date.
+- Selected-date bars use the same measure and zero-based scale as the chart:
+  reach isn't call share, and count views use the count axis rather than percent
+  widths. Hiding series doesn't rescale that axis.
+
+### Stability during changes
+
+Population filters need Apply; Cancel preserves the accepted scope. Series
+visibility doesn't change membership, rates or exact-data tables.
+
+- Keep controls mounted, plot geometry and scroll anchors stable, and reserve the
+  selected-date area's established height during same-view changes.
+- No refocus or page jump after toggling a series.
+- Daily marks have deliberate spacing. Scroll the plot rather than shrinking
+  labels, smoothing values or combining days.
+- Measure selectors reserve their longest option's intrinsic width.
+- Responsive layout updates settle the selected-date geometry before the next
+  interaction. Unchanged parent renders don't remount a chart or dismiss its
+  hover value.
+
 During sidebar motion, width changes update only mounted chart geometry.
-Reuse formatted labels, values and exact point membership; do not recreate all
-chart SVGs on every frame. Keep hit targets and selected outlines aligned with
-their marks, preserve horizontal reading, and retire stale hover during reflow.
-Reversing the sidebar must not turn a transient scroll clamp into a new reading
-position; deliberate wheel, touch or keyboard scrolling still takes precedence.
+
+- Reuse formatted labels, values and exact point membership. Don't recreate all
+  chart SVGs on every frame.
+- Keep hit targets and selected outlines aligned with their marks, preserve
+  horizontal reading, and retire stale hover during reflow.
+- Reversing the sidebar must not turn a transient scroll clamp into a new reading
+  position. Deliberate wheel, touch or keyboard scrolling still takes precedence.
+
 Chart type scales with text size, and long recorded names wrap without truncation
 in legends, selected values and hover cards.
 
-Hover/focus belongs to a bar segment or nearby line sample,
-not a full-column invisible target. Use one compact, hoverable, dismissible card.
-Use plain solid lines and bars, with stable labeled colors. A hovered legend
-or sample can emphasize its series; it does not select or filter evidence.
-Tool reach pairs interactions with call counts; service/model cards preserve
-overlap; errors separate tool failures and result signals; timing names available
-samples. Blank space cannot activate another mark. Escape, departure, scrolling,
-view changes and access withdrawal retire hover content. Keyboard arrows inspect
-dates/series; Enter and touch/click select the exact dated series for evidence.
+### Hover and keyboard
 
-The selected subject and current measure remain visible above the date breakdown.
-View evidence uses that mark's exact supporting call identities, not the union
-of other shown series. Hiding its series preserves this selection and labels it
-hidden; changing measures preserves the series/date under the newly named measure.
-Before a mark is selected, the scope is explicitly the shown series for the day.
-The evidence dialog separates matching calls from the full interaction opened
-in the existing reader. Wider parent context does not expand the chart measure.
-Leaving or returning preserves only currently authorized state. Late responses
-cannot republish withdrawn data.
+Hover and focus belong to a bar segment or nearby line sample, not a full-column
+invisible target.
+
+- Use one compact, hoverable, dismissible card.
+- Use plain solid lines and bars, with stable labeled colors.
+- A hovered legend or sample can emphasize its series. It doesn't select or
+  filter evidence.
+- Blank space can't activate another mark.
+- Escape, departure, scrolling, view changes and access withdrawal retire hover
+  content.
+- Keyboard arrows inspect dates and series. Enter and touch or click select the
+  exact dated series for evidence.
+
+Hover cards by measure:
+
+- Tool reach pairs interactions with call counts.
+- Service and model cards preserve overlap.
+- Errors separate tool failures and result signals.
+- Timing names available samples.
+
+### Evidence for a selected mark
+
+The selected subject and current measure stay visible above the date breakdown.
+
+- View evidence uses that mark's exact supporting call identities, not the union
+  of other shown series.
+- Hiding its series keeps this selection and labels it hidden. Changing measures
+  keeps the series and date under the newly named measure.
+- Before a mark is selected, the scope is explicitly the shown series for the
+  day.
+- The evidence dialog separates matching calls from the full interaction opened
+  in the existing reader. Wider parent context doesn't expand the chart measure.
+- Leaving or returning keeps only currently authorized state. Late responses
+  can't republish withdrawn data.
 
 ## Interaction cards and reading
 
 ### Cards
 
-A fine pointer tints just the interaction under it. The surface stays still;
-it is not a link. Its actions retain their own focus and hover cues.
+A fine pointer tints just the interaction under it. The surface stays still; it
+isn't a link. Its actions keep their own focus and hover cues.
 
 On Analyze, show the beginning of the request as a short wrapping excerpt.
 On a local interaction card the excerpt is selectable text. Choose **Prompt**
@@ -377,29 +546,43 @@ Message text that uses Markdown shows its words on cards, titles and labels,
 not its syntax: emphasis and link markup drop away, and a table contributes its
 header names. Readers render the same text with the shared message formatter.
 
-The origin and date identify the request. The identity key describes the
-matching records, not the current account: exact tools, recorded targets,
-operations and applicable gaps. The reader keeps complete-parent ordinals.
-When a legacy interaction and full history refer to the same recorded call,
-keep the legacy prompt for context. Show the call's input, timing and returned
-entries from the canonical owner together. Identical copies of the same call
-in that interaction count once. If copies with the same identity disagree,
-leave the call details unavailable instead of choosing one by order.
-The outcome and its trailing arrow form one link to the right-hand reader.
-The arrow's tip also appears on keyboard focus. Close, Escape or Back returns
-to the link. The failed-call count opens the matching failure or set of failures,
-not the first member of a plural count. Under each call, a returned-entry link opens
-that entry in its parent call, even when siblings have the same status. Unavailable
-reasons are text, not actions. Report selection is separate.
-On an Analyze tool-call card, the operation or service-limit label and its
-trailing arrow form one link to that call's evidence. **First of N calls** opens
-the earliest matching call in the interaction, not the first call with a known
-target elsewhere on the card.
+#### Identity and duplicate calls
+
+The origin and date identify the request. The identity key describes the matching
+records, not the current account: exact tools, recorded targets, operations and
+applicable gaps. The reader keeps complete-parent ordinals.
+
+When a legacy interaction and full history refer to the same recorded call:
+
+- keep the legacy prompt for context;
+- show the call's input, timing and returned entries from the canonical owner
+  together;
+- count identical copies of the same call in that interaction once;
+- if copies with the same identity disagree, leave the call details unavailable
+  instead of choosing one by order.
+
+#### Outcome links
+
+The outcome and its trailing arrow form one link to the right-hand reader. The
+arrow's tip also appears on keyboard focus. Close, Escape or Back returns to the
+link.
+
+- The failed-call count opens the matching failure or set of failures, not the
+  first member of a plural count.
+- Under each call, a returned-entry link opens that entry in its parent call,
+  even when siblings have the same status.
+- Unavailable reasons are text, not actions. Report selection is separate.
+- On an Analyze tool-call card, the operation or service-limit label and its
+  trailing arrow form one link to that call's evidence. **First of N calls**
+  opens the earliest matching call in the interaction, not the first call with a
+  known target elsewhere on the card.
+
 Keep the native links, text selection, focus return and disclosure controls
-independent. Opening the reader does not alter report membership.
-Back from a card opened in **Change activity selection** returns to the
-chooser at its previous scroll position and focuses the same action, provided
-that report, membership and action are still current.
+independent. Opening the reader doesn't alter report membership.
+
+Back from a card opened in **Change activity selection** returns to the chooser
+at its previous scroll position and focuses the same action, provided that
+report, membership and action are still current.
 
 ### Call results
 
@@ -416,21 +599,25 @@ Failure presentation keeps three boundaries:
   first-N cap, "one more reason" disclosure or extra failure page. Keep the
   distinguishing middle of a retained diagnostic, not just its beginning and end.
 
-A retained code does not hide a privacy, size or format gap in the rest of the
-diagnostic. Source-absent details and details WIRE did not retain stay distinct.
+A retained code doesn't hide a privacy, size or format gap in the rest of the
+diagnostic. Source-absent details and details WIRE didn't retain stay distinct.
 The reader explains completed calls through their recorded completion evidence,
 without claiming the answer was correct or the overall task succeeded.
 
+#### WIRE interpretation
+
 When a terse error needs context, the same **WIRE interpretation** appears beside
 its recorded reason in the reader, and travels in newly prepared reports.
-It explains the supported mechanism and remaining unknowns without replacing the
-code, status or full diagnostic. Opening exact evidence keeps that interpretation
-visible. A clear source explanation needs no duplicate glossary paragraph.
-WIRE interpretations do not generate next checks, troubleshooting or remediation
-advice, or messages for product teams. Timeout explanations do not infer a
-downstream cause.
 
-Exact input/provenance disclosure is a separate action. Partial-response
+- It explains the supported mechanism and remaining unknowns without replacing
+  the code, status or full diagnostic.
+- Opening exact evidence keeps that interpretation visible.
+- A clear source explanation needs no duplicate glossary paragraph.
+- WIRE interpretations don't generate next checks, troubleshooting or
+  remediation advice, or messages for product teams.
+- Timeout explanations don't infer a downstream cause.
+
+Exact input and provenance disclosure is a separate action. Partial-response
 coverage is separate from failure reasons and matching-call counts.
 
 ### Reader disclosures
@@ -442,28 +629,37 @@ The reader's order follows the user's question:
 3. Available Copilot reply.
 4. Source details.
 
-A quiet date/time line beneath the selected prompt matches its card's recorded
-time and display zone. Any first-action fallback stays explicitly labeled.
+A quiet date and time line beneath the selected prompt matches its card's
+recorded time and display zone. Any first-action fallback stays explicitly
+labeled.
 
-Selected prompts exceeding six rendered lines start with those six lines visible.
-This keeps a useful exact excerpt above the recorded activity without a nested
-scroll area. Short prompts have no toggle. The author heading of a long prompt
-is a single disclosure with a chevron. It expands the exact retained text and
-collapses it back to the excerpt without moving focus to a different button.
-Copy is a separate header action. Width/font changes recheck actual overflow. The choice
-belongs to that interaction's in-memory reading state, never its stored evidence.
-Search opens the full selected prompt so the preview cannot hide matching text.
-Authorship, exact Copy and report text are unchanged.
+#### Long prompts
 
-Build exact call arguments only while their disclosure is open; clear them
-when it closes. Returned entries keep their own path/status/identity, never
-a sibling's input or inferred parent cause.
-When a batch entry has no returned path, keep its help icon beside the last
-word of the explanation. Moving focus to the icon must not hide the parent
-call or shift the entry.
+Selected prompts over six rendered lines start with those six lines visible. This
+keeps a useful exact excerpt above the recorded activity without a nested scroll
+area. Short prompts have no toggle.
 
-Linked context stays in its existing separate disclosure. It cannot transfer
-intent or outcomes between interactions.
+- The author heading of a long prompt is a single disclosure with a chevron. It
+  expands the exact retained text and collapses it back to the excerpt without
+  moving focus to a different button.
+- Copy is a separate header action.
+- Width and font changes recheck actual overflow.
+- The choice belongs to that interaction's in-memory reading state, never its
+  stored evidence.
+- Search opens the full selected prompt so the preview can't hide matching text.
+- Authorship, exact Copy and report text are unchanged.
+
+#### Call arguments and returned entries
+
+- Build exact call arguments only while their disclosure is open; clear them when
+  it closes.
+- Returned entries keep their own path, status and identity, never a sibling's
+  input or inferred parent cause.
+- When a batch entry has no returned path, keep its help icon beside the last
+  word of the explanation. Moving focus to the icon must not hide the parent call
+  or shift the entry.
+- Linked context stays in its existing separate disclosure. It can't transfer
+  intent or outcomes between interactions.
 
 The call reader places **Call duration** beside the ordinal and tool name.
 Use one unit (milliseconds below a second, seconds otherwise). Entry duration
@@ -477,66 +673,74 @@ from an unavailable prompt, and its author remains independently qualified.
 
 ### Copy and selection
 
-Prompts, Copilot replies, Microsoft conversation messages and task updates are
-message prose. When they contain Markdown, the reader renders headings,
-emphasis, lists, tables, code and labeled links in the reading hierarchy.
-Text without Markdown keeps its exact spacing. Formatting is display-only.
-Raw HTML stays literal text. Images are not loaded, and only web and email
-links open, in a new tab. Tables wrap within the reader and scroll inside
-their own focusable region when they are wider. Tool inputs, diagnostics and
-source fields stay exact. Search excerpts and saved reports keep the literal
-source text.
+Prompt and response Copy use the exact authorized original, not the excerpt,
+metadata or report copy.
 
-Prompt/response Copy uses the exact authorized original, not the excerpt,
-metadata or report copy. Its icon and accessible name identify the subject and
-unmasked text. Pending/success feedback replaces the existing glyph without a
-new line or layout shift. Failure remains explicit with manual-copy guidance.
-No Clipboard read is required.
+- Its icon and accessible name identify the subject and unmasked text.
+- Pending and success feedback replace the existing glyph without a new line or
+  layout shift.
+- Failure stays explicit with manual-copy guidance.
+- No Clipboard read is required.
 
-For local Copilot interactions in Analyze, the card utility and the reader
-action after Source share one named-draft picker. In the reader strip, its
-hover follows the icon and label like Source, not the remaining row width.
-Only a clipped label needs a tooltip. Search and Remove stay in
-that picker. Reading does not select or save. Other reader entry points keep
-their contextual report footer; broader scopes do not silently switch to Selected.
+For local Copilot interactions in Analyze, the card utility and the reader action
+after Source share one named-draft picker.
+
+- In the reader strip, its hover follows the icon and label like Source, not the
+  remaining row width. Only a clipped label needs a tooltip.
+- Search and Remove stay in that picker.
+- Reading doesn't select or save.
+- Other reader entry points keep their contextual report footer. Broader scopes
+  don't silently switch to Selected.
 
 ### Reader size
 
-Reader width/maximize controls belong only to interaction reading. They preserve
-the current visible text anchor and mounted disclosure/focus owners; report
-creation and saved inspection do not inherit them. Narrow modal focus remains
-independent of the navigation drawer.
+Reader width and maximize controls belong only to interaction reading. They
+preserve the current visible text anchor and mounted disclosure and focus
+owners; report creation and saved inspection don't inherit them. Narrow modal
+focus stays independent of the navigation drawer.
 
-In the maximized reader, the prompt uses the full width, with Copy at its right
-edge. Lead each Work IQ call with the recorded operation and outcome. Keep the
-ordinal, exact tool name, duration and **Call details** control secondary.
-Show a recorded reason directly under its call and distinguish WIRE's
-interpretation from that reason. The Copilot reply follows all the calls.
+In the maximized reader:
+
+- The prompt uses the full width, with Copy at its right edge.
+- Lead each Work IQ call with the recorded operation and outcome. Keep the
+  ordinal, exact tool name, duration and **Call details** control secondary.
+- Show a recorded reason directly under its call, and distinguish WIRE's
+  interpretation from that reason.
+- The Copilot reply follows all the calls.
 
 ## Search
 
-Use one stationary rounded capsule with results as the user types.
-There is no Submit or expanded Search mode.
-Scope and type choices stay together beneath it. Clear belongs to the field;
-Escape/outside dismissal does not silently clear the query.
+Use one stationary rounded capsule with results as the user types. There's no
+Submit or expanded Search mode.
+
+- Scope and type choices stay together beneath it.
+- Clear belongs to the field. Escape or outside dismissal doesn't silently clear
+  the query.
+
+### Result order
 
 Results group the complete authorized population by type before selecting a
 20-item page. Categories follow their first ranked match and keep server order
-within each category; this changes presentation order, not membership or receipts.
-Original titles and actual matching excerpts/source labels identify each hit;
-omit equivalent unmatched captions, never a matched field or distinct record.
-Missing fields create no blank slots. Body-only matches must show the matching
-body, not an unrelated opening
-paragraph. Match ranges come from the server and use inert text nodes,
-preserving original graphemes and full visible matches.
+within each category. This changes presentation order, not membership or
+receipts.
 
-Title, excerpt and source wrap independently; no clamp hides the actual match.
-Use original ranges and a single boundary ellipsis where text is omitted.
-Formats provide disambiguation, not invented metadata.
+### What a result shows
 
-Category/service/outcome cues and original text keep separate roles. Whole-row
-Open and category/paging controls use the existing behavior. Partial coverage,
-no match, failure and unavailable content stay distinct. The
+- Original titles and actual matching excerpts or source labels identify each
+  hit. Omit equivalent unmatched captions, never a matched field or distinct
+  record.
+- Missing fields create no blank slots.
+- Body-only matches must show the matching body, not an unrelated opening
+  paragraph.
+- Match ranges come from the server and use inert text nodes, preserving original
+  graphemes and full visible matches.
+- Title, excerpt and source wrap independently; no clamp hides the actual match.
+- Use original ranges and a single boundary ellipsis where text is omitted.
+- Formats provide disambiguation, not invented metadata.
+
+Category, service and outcome cues and original text keep separate roles.
+Whole-row Open and category and paging controls use the existing behavior.
+Partial coverage, no match, failure and unavailable content stay distinct. The
 [matching and lifecycle contract](live-search.md) defines query behavior and
 result authority.
 
@@ -706,156 +910,242 @@ Screen paint changes do not restyle saved documents.
 
 ## Compare
 
-Compare has one destination. The period presets, activity selection and filters
-are local controls below the page title. The chart-view switch belongs to the
-reading, with the accepted baseline and selected dates; presets are not tabs.
-Highlight the active chart view without outlining the whole group.
+Compare has one destination.
 
-For a retained Work IQ tool-call comparison, **Call results** and **What changed**
-follow the same Baseline and Selected columns. The editable dates are in one header;
-use those role names rather than renaming a side “Previous week” or repeating its
-range in findings, bars and tables. Timeline buckets retain their own dates.
-Baseline and Selected show the calls and distinct originating
-interactions for each period. The affected share includes an interaction once
-when a matching call failed or had a recorded application/API error. An empty
-denominator is unavailable, not 0%. Choose a period's value to inspect its
-exact contributing calls; an error within a completed call does not relabel
-that call as failed.
+- The period presets, activity selection and filters are local controls below the
+  page title.
+- The chart-view switch belongs to the reading, with the accepted baseline and
+  selected dates. Presets aren't tabs.
+- Highlight the active chart view without outlining the whole group.
+
+### Baseline and Selected
 
 The baseline is the period to compare against; the selected period is the one
-under review. Either date opens the shared calendar on that side. Choose a measure
-name for both exact values, or a side's value for its calls. On the change-table
-view, the call-count action opens the selected period first, or the baseline
-when only it has calls. An empty side has one dated row and no empty bar.
-Mention returned errors on the period row that contains them, counting each
-call once. Missing result details do not turn a completed call into a failure.
-If outcome filtering removed all calls, show its pre-outcome reference count;
-do not interpret no dated matches as a coverage finding.
-In **What changed** and **Call results**, read the measure or outcome on the
-left, then compare the two equal-width periods. Center each period heading,
-value and supporting count on the same axis, whether the value is clickable
-or plain text. When space is tight, put the row label above the pair and the
-change below it; keep the periods side by side.
+under review.
+
+For a retained Work IQ tool-call comparison, **Call results** and **What changed**
+follow the same Baseline and Selected columns.
+
+- The editable dates are in one header. Use those role names rather than renaming
+  a side "Previous week" or repeating its range in findings, bars and tables.
+- Timeline buckets keep their own dates.
+- Baseline and Selected show the calls and distinct originating interactions for
+  each period.
+- The affected share includes an interaction once when a matching call failed or
+  had a recorded application/API error.
+- An empty denominator is unavailable, not 0%.
+
+### Inspecting values
+
+- Either date opens the shared calendar on that side.
+- Choose a measure name for both exact values, or a side's value for its exact
+  contributing calls. An error within a completed call doesn't relabel that call
+  as failed.
+- On the change-table view, the call-count action opens the selected period
+  first, or the baseline when only it has calls.
+- An empty side has one dated row and no empty bar.
+- Mention returned errors on the period row that contains them, counting each
+  call once. Missing result details don't turn a completed call into a failure.
+- If outcome filtering removed all calls, show its pre-outcome reference count.
+  Don't interpret no dated matches as a coverage finding.
+
+### Row layout
+
+In **What changed** and **Call results**, read the measure or outcome on the left,
+then compare the two equal-width periods.
+
+- Center each period heading, value and supporting count on the same axis,
+  whether the value is clickable or plain text.
+- When space is tight, put the row label above the pair and the change below it.
+  Keep the periods side by side.
+
+### Periods
 
 Fresh entry opens Outcomes for all eligible retained activity, without importing
-Analyze filters. Seven complete civil days ending yesterday are compared with
-the preceding seven; 14/30-day choices follow the same rule. Custom dates uses
-the shared calendar beside the trigger, with independent inclusive ranges and
-cancellation that keeps the accepted pair. Opening a period's own date label
-edits only that side; the Custom dates action can edit both before applying once.
+Analyze filters.
 
-Use the compact five-choice activity menu. Keep Outcomes, Timeline, By tool
-and Timing together with the reading; keep the scope controls in the workspace.
-Optional refinement retains every supported selector and combination, with
-local option finding and immediate selection. Additional restrictions appear
-once beside the accepted dates; pending reads must not relabel old facts.
-Author choices retain an existing completion/error focus; the menu names the
-combination (for example, Completed calls + Human prompts), rather than hiding it
-under Custom activity. All activity clears the menu-owned author, outcome and
-focus choices without clearing independent refinements.
+- Seven complete civil days ending yesterday are compared with the preceding
+  seven. 14- and 30-day choices follow the same rule.
+- Custom dates uses the shared calendar beside the trigger, with independent
+  inclusive ranges and cancellation that keeps the accepted pair.
+- Opening a period's own date label edits only that side. The Custom dates action
+  can edit both before applying once.
 
-One action row below the reading owns the call count, View numbers and Create report. Chart
-switching and mark inspection do not change the pair. Exact values qualify
-their unit, period, denominator and missing evidence. Timings keep call latency
-and full-interaction clocks separate. The comparison-origin report return is
-Back to comparison, including the accepted scope and reading position.
-Outcomes and By tool name their common zero-based count scale separately from
-percentage-first labels. A/B outcome values stay adjacent, including narrow
-layouts. Exact-call inspection recomputes interaction and service coverage from
-the selected rows; opening their complete parent does not expand that table.
+### Activity and refinements
+
+Use the compact five-choice activity menu. Keep Outcomes, Timeline, By tool and
+Timing together with the reading; keep the scope controls in the workspace.
+
+- Optional refinement keeps every supported selector and combination, with local
+  option finding and immediate selection.
+- Additional restrictions appear once beside the accepted dates. Pending reads
+  must not relabel old facts.
+- Author choices keep an existing completion or error focus. The menu names the
+  combination (for example, Completed calls + Human prompts) rather than hiding
+  it under Custom activity.
+- All activity clears the menu-owned author, outcome and focus choices without
+  clearing independent refinements.
+
+### Actions and exact values
+
+One action row below the reading owns the call count, View numbers and Create
+report.
+
+- Chart switching and mark inspection don't change the pair.
+- Exact values qualify their unit, period, denominator and missing evidence.
+- Timings keep call latency and full-interaction clocks separate.
+- The comparison-origin report return is Back to comparison, including the
+  accepted scope and reading position.
+- Outcomes and By tool name their common zero-based count scale separately from
+  percentage-first labels.
+- A/B outcome values stay adjacent, including narrow layouts.
+- Exact-call inspection recomputes interaction and service coverage from the
+  selected rows. Opening their complete parent doesn't expand that table.
 
 ## Settings, collection and consequential actions
 
 ### First connection
 
 A fresh Copilot-only instance offers a short welcome after access, source status
-and retained activity are known. **Review and connect** opens the existing source
-review in Settings. It does not approve the source. **Not now**, Close and Escape
-dismiss the welcome and leave one **Not connected** prompt in Analyze. Remember
-dismissal as a browser-local preference, not source permission.
+and retained activity are known.
+
+- **Review and connect** opens the existing source review in Settings. It doesn't
+  approve the source.
+- **Not now**, Close and Escape dismiss the welcome and leave one **Not
+  connected** prompt in Analyze.
+- Remember dismissal as a browser-local preference, not source permission.
 
 The welcome sentence fits one line at ordinary desktop width and wraps naturally
 with narrow or enlarged text. Keep returning users, retained activity, Pause and
-explicit sign-out out of the welcome path. A missing profile does not block setup.
+explicit sign-out out of the welcome path. A missing profile doesn't block setup.
 
 Guided review shows the suggested paths, **Change paths**, and the existing
-history/frequency choices in one draft. Cancel returns to the originating
-Analyze entry; ordinary Settings review keeps its existing return behavior.
-An uncertain approval stays in Settings for read-current recovery.
+history and frequency choices in one draft.
 
-Place brief waiting guidance beside first approval and while the initial read
-is pending. Show available activity without waiting for older history to finish.
-Use actual source status for pending, missing, unreadable and empty history;
-do not replace those distinctions with zero charts or filter-reset advice.
-Settings remains the configuration owner, with an explicit **View activity**
-action after confirmed first approval.
+- Cancel returns to the originating Analyze entry. Ordinary Settings review keeps
+  its existing return behavior.
+- An uncertain approval stays in Settings for read-current recovery.
+
+While waiting:
+
+- Place brief waiting guidance beside first approval and while the initial read
+  is pending.
+- Show available activity without waiting for older history to finish.
+- Use actual source status for pending, missing, unreadable and empty history.
+  Don't replace those distinctions with zero charts or filter-reset advice.
+- Settings stays the configuration owner, with an explicit **View activity**
+  action after confirmed first approval.
 
 ### Categories and setting search
 
-Settings opens in **General**. One card shows the running package version,
-the update result and the time of the last successful check when known.
-**Check for updates** sits beside the result; the automatic-check switch is below it.
-When an update is available, **Update and restart** replaces Check and matches the
-action in the notification above the account on desktop. The notification glides in without moving
-the page or taking focus. Dismiss hides only the notification. With reduced motion
-it appears and disappears without sliding. Below updates,
-show the current theme with a miniature WIRE screen, its name and mode,
-and swatches drawn from the active screen palette. Each category opens with its
-title and a short sentence explaining what changes there. Read the sentence,
-field labels, help and control values together: state scope once, name the
-choice in its label, and reserve help for a constraint or consequence. Let
-necessary text wrap at narrow widths and larger text sizes. Place decision
-help between the relevant setting label and its controls. Keep current values,
-warnings and unavailable states beside their controls. The preview and
-**Change theme** share one link to Themes; the effective time zone links
-to Regional. The whole shortcut stays clickable, but hover and press tint
-only the destination label and chevron. Center them together beside the
-current value and keep keyboard focus visible around the link.
-Each row opens its existing category without changing anything.
-Back restores the activating row and its current value. Direct category and
-search entries do not gain a false General return. The other categories are Collection,
-Source access, Themes, Regional, and Privacy & saved data. **WIRE
-defaults** groups the four destinations with starting preferences in this
-browser: Analyze, Trends, Reports and Compare. The first group starts at General without a heading.
-Name each default in its visible control label or group legend so its purpose
-is clear even without the navigation. The category intro names the default
-behavior being changed even on direct entry.
-General does not repeat this directory. Apply a default only to a fresh entry;
-an explicit link, a return position, a selected period or a resumed draft keeps
-its own context. Report format defaults select files, not a disclosure policy
-or permission to save. Keep one
-focused pane; on narrow screens the same categories collapse into a chooser.
-Source access owns approval and paths; Collection owns cadence, Pause and
-one-time checks. Opening either area never approves a source. Search finds fixed setting
-metadata and navigates; it never clicks an action or reads private path values.
+#### General
+
+Settings opens in **General**. One card shows the running package version, the
+update result and the time of the last successful check when known.
+
+- **Check for updates** sits beside the result; the automatic-check switch is
+  below it.
+- When an update is available, **Update and restart** replaces Check and matches
+  the action in the notification above the account on desktop.
+- The notification glides in without moving the page or taking focus. Dismiss
+  hides only the notification. With reduced motion it appears and disappears
+  without sliding.
+
+Below updates, show the current theme with a miniature WIRE screen, its name and
+mode, and swatches drawn from the active screen palette.
+
+- The preview and **Change theme** share one link to Themes. The effective time
+  zone links to Regional.
+- The whole shortcut stays clickable, but hover and press tint only the
+  destination label and chevron. Center them together beside the current value
+  and keep keyboard focus visible around the link.
+- Each row opens its existing category without changing anything. Back restores
+  the activating row and its current value.
+- Direct category and search entries don't gain a false General return.
+- General doesn't repeat the category directory.
+
+#### Category pages
+
+Each category opens with its title and a short sentence explaining what changes
+there.
+
+- Read the sentence, field labels, help and control values together: state scope
+  once, name the choice in its label, and reserve help for a constraint or
+  consequence.
+- Let necessary text wrap at narrow widths and larger text sizes.
+- Place decision help between the relevant setting label and its controls.
+- Keep current values, warnings and unavailable states beside their controls.
+- Keep one focused pane. On narrow screens the same categories collapse into a
+  chooser.
+
+The other categories are Collection, Source access, Themes, Regional, and Privacy
+& saved data.
+
+- Source access owns approval and paths. Collection owns cadence, Pause and
+  one-time checks. Opening either area never approves a source.
+- Search finds fixed setting metadata and navigates. It never clicks an action or
+  reads private path values.
+
+#### WIRE defaults
+
+**WIRE defaults** groups the four destinations with starting preferences in this
+browser: Analyze, Trends, Reports and Compare. The first group starts at General
+without a heading.
+
+- Name each default in its visible control label or group legend so its purpose
+  is clear even without the navigation.
+- The category intro names the default behavior being changed, even on direct
+  entry.
+- Apply a default only to a fresh entry. An explicit link, a return position, a
+  selected period or a resumed draft keeps its own context.
+- Report format defaults select files, not a disclosure policy or permission to
+  save.
+
+#### Sidebar footer
 
 The sidebar footer pairs the account avatar and name with Help, Feedback and
-Settings icons. The icons have accessible names and on-demand tooltips. Help
-opens the standalone WIRE Help reader. Topic links open a direct answer followed
-by steps or a worked example. Like other top-level destinations, Help uses
-browser history and sidebar navigation, not a parent-workspace link. Feedback asks for a required title and
-optional description for a WIRE bug or feature suggestion, not a rating of a
-recorded interaction. **Open on GitHub** prefills the same two fields on the
-new issue form; posting is a separate action on GitHub. The
-account menu shows the complete bound identity even if the name is clipped.
-Keep static explanations of counts and recorded tool outcomes in Help. Coverage
-warnings belong with the affected activity and link to Collection status.
+Settings icons. The icons have accessible names and on-demand tooltips.
+
+- Help opens the standalone WIRE Help reader. Topic links open a direct answer
+  followed by steps or a worked example. Like other top-level destinations, Help
+  uses browser history and sidebar navigation, not a parent-workspace link.
+- Feedback asks for a required title and optional description for a WIRE bug or
+  feature suggestion, not a rating of a recorded interaction. **Open on GitHub**
+  prefills the same two fields on the new issue form; posting is a separate
+  action on GitHub.
+- The account menu shows the complete bound identity even if the name is
+  clipped.
+- Keep static explanations of counts and recorded tool outcomes in Help. Coverage
+  warnings belong with the affected activity and link to Collection status.
+
+#### Setting search
 
 While a Settings query is present, replace the category list with grouped
-destinations. Show each category once, followed by indented setting names.
-Keep description and keyword matches even when the name has no matching word;
-full help and consequences stay at the destination. An unavailable action
-gets a short status, but its result remains a link to the setting and explanation.
+destinations.
 
-Use a flat, compact field face inside a full input target, scoped to Settings.
-Keep the global retained-content Search field unchanged.
-Results use regular Asta Sans, plain Lucide category icons and no filled cards.
-Give category and result rows a quiet whole-row hover and a distinct pressed fill.
-The location mark persists independently of the pointer; keyboard focus outlines
-the target. Reserve underlines for links within prose or evidence.
-Tab and Enter reach the existing control; Clear or Escape restores the category
-list. Back restores the query and activating link, including after visiting
-Collection status.
+- Show each category once, followed by indented setting names.
+- Keep description and keyword matches even when the name has no matching word.
+  Full help and consequences stay at the destination.
+- An unavailable action gets a short status, but its result stays a link to the
+  setting and explanation.
+
+Appearance:
+
+- Use a flat, compact field face inside a full input target, scoped to Settings.
+  Keep the global retained-content Search field unchanged.
+- Results use regular Asta Sans, plain Lucide category icons and no filled cards.
+- Give category and result rows a quiet whole-row hover and a distinct pressed
+  fill.
+- The location mark persists independently of the pointer; keyboard focus
+  outlines the target.
+- Reserve underlines for links within prose or evidence.
+
+Keyboard and return:
+
+- Tab and Enter reach the existing control.
+- Clear or Escape restores the category list.
+- Back restores the query and activating link, including after visiting
+  Collection status.
 
 Settings categories use a compact neutral selection mark, not a second filled
 selection tile.
@@ -863,32 +1153,43 @@ selection tile.
 ### Account and profile
 
 The supported source is local GitHub Copilot app history. Settings should expose
-only supported connections. Account keeps the local WIRE sign-in/out action.
-Sign-out names this instance and explains that collection stops and saved
-activity is hidden, not deleted; GitHub and Copilot sign-ins are unchanged.
+only supported connections.
+
+Account keeps the local WIRE sign-in and sign-out action. Sign-out names this
+instance and explains that collection stops and saved activity is hidden, not
+deleted; GitHub and Copilot sign-ins are unchanged.
 
 The profile inherits the approved Copilot app source's recorded account and
-cached avatar. It is display context, not authentication or ownership of
-history. Do not replace it with a CLI account or a manually chosen username.
-Missing, ambiguous or unsupported profile data keeps the neutral fallback.
-The sidebar shows the display name and avatar without a second handle line.
-Keep the handle in the opened account menu; use it as the sidebar fallback only
-when the source has no display name.
-Renew a still-current profile before its deadline without clearing or remounting
-the avatar. Failed reads, expired identity and access withdrawal still clear it.
+cached avatar. It's display context, not authentication or ownership of
+history.
+
+- Don't replace it with a CLI account or a manually chosen username.
+- Missing, ambiguous or unsupported profile data keeps the neutral fallback.
+- The sidebar shows the display name and avatar without a second handle line.
+  Keep the handle in the opened account menu; use it as the sidebar fallback only
+  when the source has no display name.
+- Renew a still-current profile before its deadline without clearing or
+  remounting the avatar. Failed reads, expired identity and access withdrawal
+  still clear it.
+
 The [collection contract](collection.md#account-profile) defines the profile's
 source mapping and qualified reads.
 
-The account avatar keeps the same internal horizontal alignment throughout
-sidebar motion. Its image and name stay mounted; fade and clip the
-copy with the moving footer rather than switching its grid to a centered
-alignment before the rail has moved. Reversals start at the painted position.
+#### Sidebar motion and resizing
 
-The expanded desktop rail resizes from its right edge. Use a single short grip
-for hover, keyboard focus and drag, not a full-height focus rectangle. The header
-and workspace track the rail live; release saves the width and Escape cancels the drag. A smaller viewport
-limits the rail without replacing the chosen width. The mobile drawer does not
-inherit a desktop width.
+The account avatar keeps the same internal horizontal alignment throughout
+sidebar motion. Its image and name stay mounted. Fade and clip the copy with the
+moving footer rather than switching its grid to a centered alignment before the
+rail has moved. Reversals start at the painted position.
+
+The expanded desktop rail resizes from its right edge.
+
+- Use a single short grip for hover, keyboard focus and drag, not a full-height
+  focus rectangle.
+- The header and workspace track the rail live. Release saves the width, and
+  Escape cancels the drag.
+- A smaller viewport limits the rail without replacing the chosen width.
+- The mobile drawer doesn't inherit a desktop width.
 
 ### Saving preferences
 
@@ -904,17 +1205,23 @@ Source review keeps paths and preferences in one draft.
 
 ### Refresh and consequential actions
 
-Refresh sits in Analyze and the connection/status task, using one
-dispatcher and its real pending state. Read stored activity is a different,
-clearly named effect. Completion and coverage stay separate; a no-change
-receipt does not prove complete history.
-Do not promise that retry recreates a missing file or removes a read limit.
+Refresh sits in Analyze and the connection and status task, using one dispatcher
+and its real pending state.
 
-Deletion/recollection dialogs keep the question, body-only scroller and fixed
-actions. Preview and actual confirmation are different stages; Cancel receives
-safe initial focus. Destructive paint belongs only to deletion, not a read-only
-result check or recollection. Unknown results preserve original recovery
-identity and cannot be dismissed into a new mutation.
+- Read stored activity is a different, clearly named effect.
+- Completion and coverage stay separate. A no-change receipt doesn't prove
+  complete history.
+- Don't promise that retry recreates a missing file or removes a read limit.
+
+Deletion and recollection dialogs keep the question, a body-only scroller and
+fixed actions.
+
+- Preview and actual confirmation are different stages. Cancel receives safe
+  initial focus.
+- Destructive paint belongs only to deletion, not a read-only result check or
+  recollection.
+- Unknown results keep the original recovery identity and can't be dismissed into
+  a new mutation.
 
 The [collection contract](collection.md#operations-and-permissions) defines the
 permissions and retained effects behind these controls. Check changed journeys

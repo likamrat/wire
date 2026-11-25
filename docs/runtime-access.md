@@ -54,41 +54,48 @@ schema 1, enforced/unbound mode and, when applicable, the exact collection
 mode. Explicit unbound is a validated compatibility mode, never inferred from
 a missing or failed watch. Enforced renewal cannot silently downgrade.
 
-Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
-random capabilities, TTL and the 128-panel limit still apply. Each page GET
-allocates a capability, including on reload. Fetching HTML alone does not register
-an update blocker. A managed browser view participates after it uses its capability.
-Each participating view must fence its own edits and acknowledge the same update
-operation before one launcher restarts the installation. The notification carries
-no private data and cannot authorize an update or renew data access. On a clean departure, a verified
-browser page releases only its original panel. Suspended pages and pages
-with unfinished work do not release it. If the browser cannot deliver the
-release, the ordinary session expires after inactivity; expiry does not
-clear a managed installation's update interlock. If a clean document leaves
-while its first update status is in transit, its departure is accepted only
-for that document's still-live original runtime grant. A suspended document
-or one with unresolved work does not take this path.
+Protocol metadata isn't authentication. Host, origin, JSON and fetch-site checks,
+random capabilities, TTL and the 128-panel limit still apply.
+
+- Each page GET allocates a capability, including on reload. Fetching HTML alone
+  doesn't register an update blocker; a managed browser view participates after
+  it uses its capability.
+- Each participating view must fence its own edits and acknowledge the same
+  update operation before one launcher restarts the installation. The
+  notification carries no private data and can't authorize an update or renew
+  data access.
+- On a clean departure, a verified browser page releases only its original
+  panel. Suspended pages and pages with unfinished work don't release it.
+- If the browser can't deliver the release, the ordinary session expires after
+  inactivity. Expiry doesn't clear a managed installation's update interlock.
+- If a clean document leaves while its first update status is in transit, its
+  departure is accepted only for that document's still-live original runtime
+  grant. A suspended document or one with unresolved work doesn't take this
+  path.
 
 **Check open views** asks the existing participants for their current hold, not
 for permission to restart. It reports a count of missing replies rather than
 guessing whether a window was closed. It neither stages a build nor creates a
-restart receipt, releases a participant, or supplies readiness for a later Apply.
-There is no general HTML fallback for other paths, files, APIs or methods.
-The localhost spelling is only an entry redirect for root navigation; fragments
-stay with the browser. It is not an alternate API/write origin. Requests with
-an Origin header, a non-root path or non-navigation fetch metadata retain the
+restart receipt, releases a participant or supplies readiness for a later Apply.
+
+There's no general HTML fallback for other paths, files, APIs or methods. The
+localhost spelling is only an entry redirect for root navigation; fragments stay
+with the browser. It isn't an alternate API or write origin. Requests with an
+Origin header, a non-root path or non-navigation fetch metadata keep the
 existing rejection, and the destination never comes from forwarded headers.
 
 Every client must match this protocol and its runtime client. A successful
 server start does not make an incompatible adapter safe to use.
 
 The registered canvas targets only the selected canonical loopback port.
-It checks the health identity against the enforced handshake and pins that
-runtime for its action owner; a restricted unbound preview or a replacement
-process is not a continuation. Its embedded browser obtains a different panel
-from the same server. Agent report previews are not browser disclosure approval.
-Source checks stay in the normal browser flow; the canvas does not advertise
-the unsupported legacy history import or network diagnostic writes.
+
+- It checks the health identity against the enforced handshake and pins that
+  runtime for its action owner. A restricted unbound preview or a replacement
+  process isn't a continuation.
+- Its embedded browser obtains a different panel from the same server.
+- Agent report previews aren't browser disclosure approval.
+- Source checks stay in the normal browser flow. The canvas doesn't advertise
+  the unsupported legacy history import or network diagnostic writes.
 
 ## One latest-state watch
 
@@ -109,14 +116,17 @@ and resume; late timers/responses cannot extend it. Status/watch are safe
 control observations, not independent private-read grants.
 
 On delivery, validate the incoming watch against its own request-start deadline,
-not the preceding observation's deadline. A still-fresh, same-generation watch
-can preserve an unretired view after a renderer pause. It cannot revive a token
-already withdrawn by an expiry check, logout, generation change or page departure.
-If delivery leaves at most two maximum server waits of freshness, the existing
-next watch uses a null cursor for an immediate current-state response. This
-reserves room for the wait and its delivery; ordinary long polling resumes once
-freshness is replenished. It adds no overlapping watch, timer or capability
-renewal and changes neither the five-second bound nor capability TTL.
+not the preceding observation's deadline.
+
+- A still-fresh, same-generation watch can preserve an unretired view after a
+  renderer pause. It can't revive a token already withdrawn by an expiry check,
+  logout, generation change or page departure.
+- If delivery leaves at most two maximum server waits of freshness, the next
+  watch uses a null cursor for an immediate current-state response. This
+  reserves room for the wait and its delivery; ordinary long polling resumes
+  once freshness is replenished.
+- This adds no overlapping watch, timer or capability renewal, and changes
+  neither the five-second bound nor capability TTL.
 
 | Transition | Client effect |
 | --- | --- |
@@ -143,15 +153,22 @@ authority was available at return before treating either retained content or
 clearance as a defect.
 
 Returning to a visible tab also requests current collection status. That read
-can overtake an earlier poll. Only the newest poll in the current operation
-generation may publish status or errors, accept source-control status, or
-schedule the next poll. This also fences its pending detailed issue read.
-Detail reads started by entering Collection status capture the same poll
-generation. A Settings write takes over responsibility for restarting ordinary
-polling when it completes, including failure; fresh status neither retries
-that write nor settles an unconfirmed outcome.
-Collector failures and recovery can leave the evidence revision unchanged;
-that revision alone cannot order these responses. A retired response must
+can overtake an earlier poll, so only the newest poll in the current operation
+generation may:
+
+- publish status or errors;
+- accept source-control status;
+- schedule the next poll.
+
+This also fences its pending detailed issue read. Detail reads started by
+entering Collection status capture the same poll generation.
+
+A Settings write takes over responsibility for restarting ordinary polling when
+it completes, including on failure. Fresh status neither retries that write nor
+settles an unconfirmed outcome.
+
+Collector failures and recovery can leave the evidence revision unchanged, so
+that revision alone can't order these responses. A retired response must
 neither bring back an old warning nor hide a newer failure.
 
 `Collection cannot check history` reports a collector failure, not a recorded
