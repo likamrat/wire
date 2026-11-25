@@ -68324,9 +68324,11 @@ function createDiagnosticBundles({ api, ux, time: time2, viewerTime, savedFilePr
       outcome5.append(withIcon(el("span", "diagnostic-outcome", "Failed"), "result-failure-compact"));
       if (codes2.length) outcome5.append(el("code", "", codes2.join(" \xB7 ")));
       item.append(outcome5);
-      const reason2 = el("p", "diagnostic-cluster-reason");
-      reason2.textContent = cluster2.reasons.length ? cluster2.reasons.join(" ") : "No reason text was recorded.";
-      item.append(reason2);
+      if (cluster2.reasons.length > 1) {
+        const reasons = el("ul", "diagnostic-cluster-reasons");
+        for (const text6 of cluster2.reasons) reasons.append(el("li", "diagnostic-cluster-reason", text6));
+        item.append(reasons);
+      } else item.append(el("p", "diagnostic-cluster-reason", cluster2.reasons[0] ?? "No reason text was recorded."));
       if (audits) {
         const audit = el("p", "diagnostic-cluster-audit");
         if (cluster2.audit) {
@@ -68916,6 +68918,7 @@ var diagnosticBundleStyles = `
 .diagnostic-outcome {display:inline-flex;align-items:center;gap:6px;color:var(--tool-negative)}
 .diagnostic-outcome>.wire-icon {flex:none}
 .diagnostic-cluster-reason {font-size:var(--type-body);line-height:1.5}
+.diagnostic-cluster-reasons {margin:0;padding-left:1.25em;display:grid;gap:4px}
 .diagnostic-cluster-audit {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px}
 .diagnostic-verdict {font-weight:600}
 .diagnostic-audit-none,.diagnostic-audit-note {color:var(--muted)}
