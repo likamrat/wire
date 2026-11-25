@@ -308,9 +308,10 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         const list = guides(), index = list.findIndex(item => item.guide === guide);
         if (index < 0) return null;
         const previous = list[index - 1], next = list[index + 1];
-        return el("nav", { class: "docs-pager", "aria-label": "Previous and next guide" },
-            previous ? el("a", { href: hrefFor(previous.guide), "data-guide": previous.guide, rel: "prev" }, el("span", { class: "docs-quiet" }, "Previous"), el("span", {}, previous.title)) : el("span"),
-            next ? el("a", { href: hrefFor(next.guide), "data-guide": next.guide, rel: "next", class: "docs-pager-next" }, el("span", { class: "docs-quiet" }, "Next"), el("span", {}, next.title)) : el("span"));
+        const neighbor = (item, back) => item && el("a", { href: hrefFor(item.guide), "data-guide": item.guide,
+            rel: back ? "prev" : "next", class: "navigation-action" }, back ? glyph("back") : null,
+            el("span", {}, `${back ? "Previous" : "Next"}: ${item.title}`), back ? null : glyph("forward"));
+        return el("nav", { class: "docs-pager", "aria-label": "Previous and next guide" }, neighbor(previous, true), neighbor(next, false));
     }
 
     function layout(data) {
@@ -333,7 +334,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             el("nav", { class: "docs-outline", "aria-label": "On this page" }, outlineList(sections, data.guide))) : null;
         if (inline) article.querySelector(".docs-source").after(inline);
         const footer = el("footer", { class: "docs-article-footer" },
-            data.sourceUrl ? (() => { const link = el("a", { href: data.sourceUrl, class: "docs-text-link" }, "View this guide on GitHub"); external(link, "opens on GitHub"); return link; })()
+            data.sourceUrl ? (() => { const link = el("a", { href: data.sourceUrl, class: "navigation-action" }, "View this guide on GitHub"); external(link, "opens on GitHub"); return link; })()
                 : catalog.source.kind === "checkout" ? el("p", { class: "docs-quiet" }, `Local file: ${data.file}${catalog.source.changed?.[data.file] ? catalog.source.changed[data.file] === "new" ? ` (new, not in ${base()})` : ` (edited, differs from ${base()})` : ""}`) : null,
             pager(data.guide));
         const wide = host.clientWidth > 880;

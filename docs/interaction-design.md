@@ -72,6 +72,9 @@ actual origin only while its authority and reading intent stay current.
 - Open a guide image in a WIRE dialog over the same section. Close or Escape
   returns focus to its image control without moving the guide. A thumbnail
   that also links to a guide keeps that destination separate from enlargement.
+  Previous and Next name the adjacent guide. Like **View trend**, their
+  unadorned labels and arrows stay still; hover, press and keyboard focus
+  paint the compact inner face, not the full click target.
 - Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
   reading keeps one return to its actual origin.
 - Entering Compare opens it rather than toggling it off. Analyze and Compare keep

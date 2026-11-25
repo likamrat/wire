@@ -1,6 +1,6 @@
 const readings = ":is(#percentageCharts,.analyze-ordered-widgets) .percentage-content .percentage-tool-list";
 const pairs = `${readings}:has(>:nth-child(4))`;
-const chartAction = ":is(.analyze-trend-link,.usage-date-link,.population-link)";
+const navigationAction = ":is(.analyze-trend-link,.usage-date-link,.population-link,.navigation-action)";
 const breakdownContent = ":is(#percentageCharts,.analyze-ordered-widgets) .percentage-content";
 
 export const analyzeLayoutStyles = `
@@ -164,12 +164,12 @@ export const analyzeLayoutStyles = `
 @supports(text-box:trim-start cap alphabetic) {
  :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3) {align-self:start;margin-block-start:var(--space-lg);text-box:trim-start cap alphabetic}
 }
-${chartAction} {position:relative;isolation:isolate;padding-inline:var(--space-sm);border-radius:var(--radius-control);text-decoration:none}
-${chartAction}::before {content:"";position:absolute;inset:var(--control-face-inset) 0;border-radius:inherit;z-index:-1;pointer-events:none}
-${chartAction}:hover::before {background:var(--hover)}
-${chartAction}:active::before {background:var(--pill-pressed)}
-${chartAction}:focus-visible {outline:none}
-${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-offset:1px}
+${navigationAction} {position:relative;isolation:isolate;padding-inline:var(--space-sm);border-radius:var(--radius-control);text-decoration:none}
+${navigationAction}::before {content:"";position:absolute;inset:var(--control-face-inset) 0;border-radius:inherit;z-index:-1;pointer-events:none}
+${navigationAction}:hover::before {background:var(--hover)}
+${navigationAction}:active::before {background:var(--pill-pressed)}
+${navigationAction}:focus-visible {outline:none}
+${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outline-offset:1px}
 @container (max-width:16rem){
  :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){grid-template-columns:minmax(0,1fr)}
  .analyze-trend-link:not([hidden]){grid-area:2 / 1;justify-self:start}

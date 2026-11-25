@@ -209,10 +209,10 @@ test("the bundled renderer offers the same Documentation entry", async t => {
     await viewer.getByRole("button", { name: "Close image" }).click();
     await expect(compareImage).toBeFocused();
     assert.equal(await page.evaluate(() => scrollY), origin);
-    const next = page.locator('.docs-pager [rel="next"]');
+    const next = page.getByRole("link", { name: "Next: Use WIRE" });
     await next.press("Enter");
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
-    const previous = page.locator('.docs-pager [rel="prev"]');
+    const previous = page.getByRole("link", { name: "Previous: Work IQ Request Explorer" });
     await previous.press("Enter");
     await expect(page.locator("#docTitle")).toHaveText("Work IQ Request Explorer");
     await expect(page.locator('.docs-pager [rel="prev"]')).toHaveCount(0);

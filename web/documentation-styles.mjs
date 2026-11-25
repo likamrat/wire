@@ -46,7 +46,6 @@ export const documentationStyles = `
 .docs-source-warning .docs-icon{color:var(--warning)}
 .docs-source-local{color:var(--ink);font-weight:var(--weight-medium)}
 .docs-text-button,.docs-asset-link{display:inline-flex;align-items:center;gap:var(--pill-gap)}
-.docs-text-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px;font:inherit}
 .docs-source-switch{display:flex;flex-wrap:wrap;gap:var(--pill-gap)}
 
 .docs-article{font-size:var(--type-reading);line-height:var(--leading-reading);max-inline-size:76ch;overflow-wrap:anywhere}
@@ -136,12 +135,11 @@ export const documentationStyles = `
 
 .docs-article-footer{max-inline-size:76ch;margin-top:var(--space-2xl);padding-top:var(--space-lg);border-top:1px solid var(--docs-rule);font-size:var(--type-small)}
 .docs-article-footer>p{margin:0}
-.docs-pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:var(--space-md)}
-.docs-pager a{display:grid;gap:2px;padding:12px 14px;border:1px solid var(--docs-rule);border-radius:var(--radius-small);color:var(--ink);text-decoration:none}
-.docs-pager a>span:last-child{font-weight:var(--weight-medium);color:var(--accent)}
-.docs-pager a:hover{background:var(--hover)}
-.docs-pager a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.docs-pager-next{text-align:end;justify-items:end}
+.docs-article-footer .navigation-action{display:inline-flex;align-items:center;gap:var(--pill-gap);min-height:var(--pill-height);max-width:100%;color:var(--ink);font:var(--weight-medium) var(--type-control)/var(--leading-control) var(--font);text-decoration:none;overflow-wrap:anywhere}
+.docs-article-footer .navigation-action .docs-icon{inline-size:var(--icon-size-small);block-size:var(--icon-size-small)}
+@media(forced-colors:active){.wire-docs .navigation-action:focus-visible::before{outline-color:Highlight}}
+.docs-pager{display:flex;flex-wrap:wrap;gap:var(--pill-gap);margin-top:var(--space-sm)}
+.docs-pager [rel=next]{margin-inline-start:auto}
 .docs-error{max-inline-size:720px}
 .docs-error h1{font-size:var(--type-title);margin-top:0}
 
@@ -153,7 +151,7 @@ export const documentationStyles = `
 .docs-left-toggle{border:1px solid var(--docs-rule);border-radius:var(--radius-small);background:var(--paper);padding:6px}
 .docs-left-toggle>summary{display:flex}
 .docs-left-toggle .docs-tree{padding-top:6px}}
-@container docs (max-width:700px){.docs-paper{padding:20px 16px 32px;border-radius:var(--radius-small)}.docs-pager{grid-template-columns:1fr}}
+@container docs (max-width:700px){.docs-paper{padding:20px 16px 32px;border-radius:var(--radius-small)}}
 @container docs (max-width:480px){.docs-paper{padding:16px 14px 28px}}
 @media (pointer:coarse){.docs-tree a,.docs-outline a,.docs-left-toggle>summary,.docs-outline-inline>summary,#documentationView .docs-source-switch button{min-block-size:44px}#documentationView button.doc-copy{inline-size:44px;block-size:44px}}
 
