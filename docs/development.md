@@ -244,8 +244,9 @@ engine in `lib/mcp-diagnostics/`, a dependency-free port of the Python
 redaction and bundle bytes match the Python reference;
 `tests/mcp-diagnostics-parity.test.mjs` checks this when `python3` and those
 skills are installed. `get_diagnostic_calls` projects only retained,
-sanitized call metadata. Saved bundles go to a `diagnostics` folder beside
-the WIRE data folder.
+sanitized call metadata. `lib/diagnostic-bundles.mjs` owns saved bundles for
+both the canvas and the agent tools: preview, save, list, verified open,
+delete and audit results, in `diagnostics/` inside the WIRE data folder.
 
 ## Check a change
 

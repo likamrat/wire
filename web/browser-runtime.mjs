@@ -82,6 +82,7 @@ import { mountBoundedNative } from "./bounded-native.mjs";
 import { createNativeActivityPresentation } from "./native-activity.mjs";
 import { activityPage } from "./activity-page.mjs";
 import { createSavedFilePreview, createPreparedFileInspection } from "./saved-file-preview.mjs";
+import { createDiagnosticBundles } from "./diagnostic-bundles.mjs";
 import { mountFirstConnection } from "./first-connection.mjs";
 import { mountAppUpdate } from "./app-update.mjs";
 import { createPageDefaults, bindPageDefaults, pageDefaultSpecs } from "./page-defaults.mjs";
@@ -124,7 +125,7 @@ function factories() {
         createControls: createAssessmentControls, mountConsent: mountConsentSetup,
         createReportComparison: () => createReportComparison(wording, timing.duration),
         createArtifactDeletion: options => createSavedArtifactDeletion({ ...options, createEligibilityState: createArtifactEligibilityState }),
-        mountRecollection, describeRecollection,
+        mountRecollection, describeRecollection, createDiagnosticBundles,
     };
 }
 

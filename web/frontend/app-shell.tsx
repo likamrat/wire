@@ -80,7 +80,7 @@ function Analyze() {
                     <div id="chart" /><div id="chartFooter" className="chart-footer" />
                 </div>
             </section>
-            <section className="analyze-outcome-summary" aria-label="Recorded outcomes"><div id="outcomeChart" /></section>
+            <section className="analyze-outcome-summary" aria-label="Recorded outcomes"><div id="outcomeChart" /><div id="diagnosticPackageAction" hidden /></section>
         </div>
     </div>;
 }

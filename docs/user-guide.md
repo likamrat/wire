@@ -70,6 +70,9 @@ Choose the donut total to list the matching calls, eight per page. Open a call
 by its tool or path. Its outcome describes the tool execution; returned entries
 keep their own statuses in the call reader. **Show all matching activity**
 returns to the interaction list.
+When the view includes failed calls, **Package these failures** below the donut
+previews and saves a local diagnostic bundle. See
+[Diagnostic bundles](reporting.md#diagnostic-bundles).
 
 <a id="analyze-homepage-layout"></a>
 
@@ -418,7 +421,8 @@ don’t change.
 In **Reports**, select a named draft or start a **New report**. Check its
 activity, dates, text and formats, then choose **Prepare preview**. No report
 files have been saved. Read the finding and its examples before choosing **Save
-report**. Open an existing report by name in **Saved library**.
+report**. Open an existing report by name in **Saved library**. Diagnostic
+bundles saved from Analyze are listed there too, below the reports.
 
 [Create and read reports](reporting.md) covers scope, text masking, file
 inspection, and what happens when you delete a draft or a saved copy.

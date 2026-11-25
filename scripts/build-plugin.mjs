@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -83,6 +84,13 @@ if (check) {
         const [expected, actual] = await Promise.all([digestTree(temporary), digestTree(committed)]);
         const changed = [...new Set([...expected.keys(), ...actual.keys()])].filter(file => expected.get(file) !== actual.get(file)).sort();
         if (await readFile(catalog, "utf8").catch(() => "") !== marketplace()) changed.push(".github/plugin/marketplace.json");
+        // Installs copy what git tracks, so an ignored plugin file would be missing for users.
+        const ignored = execFileSync("git", ["ls-files", "--others", "--ignored", "--exclude-standard", "--", "plugin"], { cwd: root, encoding: "utf8" })
+            .split("\n").filter(Boolean);
+        if (ignored.length) {
+            console.error(`plugin/ has ${ignored.length} git-ignored file(s), e.g. ${ignored.slice(0, 3).join(", ")}. Adjust .gitignore so installs include them.`);
+            process.exitCode = 1;
+        }
         if (changed.length) {
             console.error(`plugin/ is out of date (${changed.length} file(s), e.g. ${changed.slice(0, 5).join(", ")}). Run npm run build:plugin and commit the result.`);
             process.exitCode = 1;

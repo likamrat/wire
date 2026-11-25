@@ -1,0 +1,27 @@
+{
+  "_browser-runtime-ivswqFby.js": {
+    "file": "browser-runtime-ivswqFby.js",
+    "name": "browser-runtime"
+  },
+  "web/browser-entry.mjs": {
+    "file": "browser-D0JKA1gq.js",
+    "name": "browser",
+    "src": "web/browser-entry.mjs",
+    "isEntry": true,
+    "imports": [
+      "_browser-runtime-ivswqFby.js"
+    ]
+  },
+  "web/frontend/entry.tsx": {
+    "file": "evaluation-BPDpCLPO.js",
+    "name": "evaluation",
+    "src": "web/frontend/entry.tsx",
+    "isEntry": true,
+    "imports": [
+      "_browser-runtime-ivswqFby.js"
+    ],
+    "css": [
+      "evaluation-9cjn3SwF.css"
+    ]
+  }
+}

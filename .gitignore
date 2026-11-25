@@ -22,3 +22,6 @@ candidate-manifest.json
 .DS_Store
 Thumbs.db
 Desktop.ini
+# The Copilot app plugin ships its built client and vendored runtime files.
+!/plugin/com.github.copilot/extensions/wire/dist/
+!/plugin/com.github.copilot/extensions/wire/node_modules/

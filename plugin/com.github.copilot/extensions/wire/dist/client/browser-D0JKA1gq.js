@@ -1,0 +1,1 @@
+import{t as e}from"./browser-runtime-ivswqFby.js";e({},`bundled`,import.meta.url);

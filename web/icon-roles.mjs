@@ -40,6 +40,7 @@ export const uxIconSources = Object.freeze({
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", tree: "list-tree", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",
+    "diagnostic-bundle": "package", "work-item-link": "external-link",
 });
 
 export const serviceIconSources = Object.freeze({

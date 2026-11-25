@@ -46,7 +46,8 @@ You can also ask questions directly, for example "which Work IQ calls failed
 this week and why?". The plugin's skills and read-only tools answer from your
 local evidence without opening the canvas. Ask it to package failures for a
 team and it prepares a redacted diagnostic report and bundle, saved locally
-only when you agree.
+only when you agree. In the canvas, **Package these failures** in Analyze does
+the same, and **Reports > Saved library** lists the saved bundles.
 
 WIRE runs while the Copilot app is open, so collection pauses when you close
 the app. To update, run `copilot plugin update wire`.

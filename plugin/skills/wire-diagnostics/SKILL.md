@@ -26,13 +26,15 @@ Call `wire_diagnostic_calls` with the window. Read `totals`, `coverage` and `cov
 
 ## 3. Prepare the bundle
 
-Call `wire_diagnostic_bundle` with the same window and `save: false`. It returns the draft `report.md`, the cluster list and a verdicts template, without writing anything.
+Call `wire_diagnostic_bundle` with the same window and `save: false`. It returns the draft `report.md`, headline counts, the clusters with each one's tool, API path, error codes, HTTP statuses and recorded reasons, plain limitations and a verdicts template, without writing anything.
+
+The user can do the same in the WIRE canvas: **Analyze > Tool call results > Package these failures** previews and saves the current view's failures. Both paths use the same WIRE server, so a bundle saved either way appears under **Reports > Saved library > Diagnostic bundles**.
 
 Choose `captureScope`:
 
 | Scope | Use when | Failure rate |
 | --- | --- | --- |
-| `complete` | `coverage.complete` is true for this window | Reported; WIRE reconciles its own totals |
+| `complete` | `coverage.complete` is true for this window (the default then) | Withheld anyway: WIRE keeps no successful reply bodies. WIRE reconciles its own totals |
 | `sample` | Anything else, including a truncated window | Withheld |
 | `failures-only` | The user asked only about failures | Withheld |
 
@@ -46,7 +48,7 @@ Don't infer cause from a symptom, ownership from a timeout, or test intent from 
 
 ## 5. Save locally, after the user agrees
 
-Show the first screen of the draft report: what was observed, the issues worth acting on, which counts are meaningful, and what's missing. Then ask before saving. Call `wire_diagnostic_bundle` again with `save: true`; it writes the report and zip to WIRE's private data folder and returns their paths.
+Show the first screen of the draft report: what was observed, the issues worth acting on, which counts are meaningful, and what's missing. Then ask before saving. Call `wire_diagnostic_bundle` again with `save: true`; WIRE writes the zip and `report.md` to its private data folder, lists the bundle in Reports and returns its `bundleId` and paths. Saving never overwrites an existing bundle. `wire_diagnostic_bundles` lists what's saved.
 
 The save refuses if the final redaction check finds residue. Redaction is rule-based, not a judgment about meaning, so a passing check isn't proof that nothing private remains.
 
