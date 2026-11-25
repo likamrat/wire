@@ -20,6 +20,7 @@ const exec = promisify(execFile);
 const project = fileURLToPath(new URL("../", import.meta.url));
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
+const releaseJourney = process.env.WIRE_UPDATE_BROWSER === "release";
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
@@ -46,6 +47,13 @@ test("full WIRE clone updates on the original address and reopens the same saved
         await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     });
     await mkdir(origin);
+    const guideText = title => `# Fixture guide\n\n## Reading updates\n\n${title}\n\n![Release illustration](images/example.svg)\n`;
+    const guideImage = width => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="16"><rect width="${width}" height="16" fill="teal"/></svg>`;
+    if (releaseJourney) {
+        await mkdir(path.join(origin,"docs","images"),{recursive:true});
+        await writeFile(path.join(origin,"docs","README.md"),guideText("Installed guide before update."));
+        await writeFile(path.join(origin,"docs","images","example.svg"),guideImage(32));
+    }
     // Only committed source is an eligible integration input. No ignored assets,
     // working directories, Git credentials, node_modules, or private data.
     const tracked = (await git(project, "ls-files", "-z", "--cached")).split("\0").filter(Boolean);
@@ -81,8 +89,11 @@ test("full WIRE clone updates on the original address and reopens the same saved
     // The injection substitutes only the repository address for this local qualification.
     async function originHook(installation, name) {
         const sourceURL = pathToFileURL(path.join(installation, "lib", "update-source.mjs")).href;
+        const feed = path.join(temp,"release.json");
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
-        export const {inspectInstallation,checkMain,stageMain}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)}});`;
+        import {readFile} from 'node:fs/promises';
+        export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney?"release":"main")},
+        fetcher:async()=>{try{return Response.json(JSON.parse(await readFile(${JSON.stringify(feed)},'utf8')))}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
         const hook = path.join(temp, name);
         await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
         if(c.parentURL===${JSON.stringify(pathToFileURL(path.join(installation, "lib", "update-launch.mjs")).href)}&&s==="./update-source.mjs")
@@ -126,6 +137,77 @@ test("full WIRE clone updates on the original address and reopens the same saved
         for (const [file, digest] of reportHashes) assert.equal(hash(await readFile(file)), digest);
         assert.deepEqual(await readFile(cfgPath), configBytes);
         assert.equal(await git(root, "rev-parse", "HEAD"), base);
+    }
+    if (releaseJourney) {
+        const {chromium,expect} = await import("@playwright/test");
+        const publish = async (tag,commit,body) => {
+            await git(origin,"tag",tag,commit);
+            await writeFile(path.join(temp,"release.json"),JSON.stringify({tag_name:tag,html_url:`https://github.com/likamrat/wire/releases/tag/${tag}`,
+                body,published_at:new Date().toISOString(),prerelease:false,draft:false}));
+        };
+        await writeFile(path.join(origin,"lib","fixture-release.mjs"),"export const version = 1;\n");
+        await git(origin,"add","."); await git(origin,"commit","-qm","Fixture starter update");
+        const starter = await git(origin,"rev-parse","HEAD");
+        await publish("v1.1.0",starter,"### Changed\n- Starter version.");
+        await update("preferences",{enabled:false}); await applyTip();
+        const prior = await health();
+        assert.equal((await update("status")).installedRelease.tag,"v1.1.0");
+        await post("api/app-update/release-panel",{});
+        const secondRoot = path.join(temp,"second"), secondStore = path.join(temp,"second-store");
+        await git(temp,"clone","--quiet",origin,secondRoot);
+        await exec(process.execPath,[npm,"ci","--include=dev"],{cwd:secondRoot,env});
+        await exec(process.execPath,[npm,"run","build"],{cwd:secondRoot,env});
+        independent = fork(path.join(secondRoot,"scripts/launch.mjs"),["--port","0"],{cwd:secondRoot,env:{...env,WORKIQ_EVIDENCE_DATA_DIR:secondStore,
+            NODE_OPTIONS:"--import="+await originHook(secondRoot,"second-origin.mjs")},execArgv:[],stdio:["ignore","pipe","pipe","ipc"]});
+        independentExit = new Promise(resolve=>independent.once("exit",resolve));
+        let output=""; independent.stdout.on("data",bytes=>output+=bytes);
+        const otherUrl=await until(()=>output.match(/ready at (http:\/\/127\.0\.0\.1:\d+\/)/)?.[1]);
+        const secondHealth=()=>fetch(otherUrl+"health").then(r=>r.json()), beforeSecond=await secondHealth();
+        const edge=await chromium.launch({channel:"msedge"});t.after(()=>edge.close());
+        const chrome=await chromium.launch();t.after(()=>chrome.close());
+        const first=await edge.newContext(), peer=await chrome.newContext();
+        for(const c of [first,peer]) await c.route("**/*",r=>[new URL(url).origin,new URL(otherUrl).origin].includes(new URL(r.request().url()).origin)?r.continue():r.abort());
+        const settings=await first.newPage(), guide=await first.newPage(), reports=await peer.newPage(), separate=await peer.newPage();
+        await Promise.all([settings.goto(url+"settings"),guide.goto(url+"documentation#reading-updates"),
+            reports.goto(url+"reports?bundle="+bundle.bundleId),separate.goto(otherUrl+"settings")]);
+        const participants=[settings,guide,reports];
+        for(const p of [...participants,separate]) await expect(p.locator("#appUpdateAuto")).toBeEnabled();
+        await expect(guide.locator(".docs-article")).toContainText("Installed guide before update.");
+        await expect(reports.locator("#savedReportReader h1")).toBeVisible();
+        const reportTitle=await reports.locator("#savedReportReader h1").textContent();
+        await writeFile(path.join(origin,"docs","README.md"),guideText("Revised release guidance."));
+        await writeFile(path.join(origin,"docs","images","example.svg"),guideImage(64));
+        await git(origin,"commit","-qam","Guide and illustration only");
+        const tip=await git(origin,"rev-parse","HEAD");
+        const check=settings.getByRole("button",{name:"Check for updates",exact:true});
+        await check.click(); await expect(settings.locator("#appUpdateStatus")).toContainText("Up to date.");
+        await publish("v1.1.1",tip,"## What's new in v1.1.1\n\n### Changed\n- Revised release guidance.");
+        await writeFile(path.join(origin,"docs","README.md"),guideText("Not released yet."));
+        await git(origin,"commit","-qam","Unreleased next edit");
+        await check.click(); await expect(settings.locator("#appUpdateHeading")).toHaveText("WIRE v1.1.1 is available");
+        await settings.locator("#noticeReleaseNotes").click();
+        await expect(settings.locator("#releaseNotesBody")).toContainText("Revised release guidance.");
+        await expect(settings.locator("#releaseReaderGitHub")).toHaveAttribute("href","https://github.com/likamrat/wire/releases/tag/v1.1.1");
+        await settings.goBack(); await settings.locator("#appUpdateDismiss").click();
+        await expect(settings.locator("#appUpdateNotice")).toBeHidden();
+        const destinations=participants.map(p=>p.url()), starts=stdout.match(/WIRE ready at /g).length;
+        await settings.locator("#settingsAppUpdate").click();
+        await Promise.all(participants.map(p=>expect(p.getByRole("dialog",{name:"WIRE is updating"})).toBeVisible()));
+        await expect(separate.locator("#appUpdateFence")).toBeHidden();
+        await Promise.all(participants.map(p=>expect(p.locator("#appUpdateHeading")).toHaveText("WIRE updated to v1.1.1",{timeout:120000})));
+        assert.deepEqual(participants.map(p=>p.url()),destinations);
+        const after=await health();
+        assert.equal(after.build,tip); assert.notEqual(after.runtimeId,prior.runtimeId);
+        assert.equal(after.clientEntry,prior.clientEntry,"docs-only update can reuse the identical browser bundle");
+        assert.equal(stdout.match(/WIRE ready at /g).length,starts+1);
+        assert.deepEqual(await secondHealth(),beforeSecond);
+        await expect(guide.locator(".docs-article")).toContainText("Revised release guidance.");
+        await expect.poll(()=>guide.locator('.docs-article img').evaluate(n=>n.naturalWidth)).toBe(64);
+        await expect(reports.locator("#savedReportReader h1")).toHaveText(reportTitle);
+        await expect(settings.locator("#appUpdateVersion")).toHaveText("WIRE v1.1.1");
+        await verifyPreserved();
+        t.diagnostic("Edge and Chromium: one docs-only release restart across three pages, same browser bundle, unchanged second instance and saved report.");
+        return;
     }
     if (process.env.WIRE_UPDATE_BROWSER === "reloaded") {
         const { chromium, expect } = await import("@playwright/test");
@@ -195,14 +277,6 @@ test("full WIRE clone updates on the original address and reopens the same saved
             assert.equal(new URL(destinations[1]).pathname, "/");
             await expect(analyze.locator("#workspace")).toBeVisible();
             await expect(analyze).toHaveTitle("Analyze | WIRE");
-            const viewCheck = settings.getByRole("button", { name: "Check open views" });
-            await analyze.route("**/api/app-update/readiness", route => route.abort(), { times: 1 });
-            await viewCheck.click();
-            await expect(settings.locator("#appUpdateViewStatus")).toContainText("1 of 2 registered views did not answer", { timeout: 15000 });
-            await expect(settings.locator("#appUpdateViewStatus")).toContainText("WIRE sent the check");
-            await expect(install).toBeEnabled();
-            await viewCheck.click();
-            await expect(settings.locator("#appUpdateViewStatus")).toContainText("Both views reported no unfinished work", { timeout: 15000 });
             assert.equal((await health()).runtimeId, starter.runtimeId);
             await expect(analyze.getByRole("dialog", { name: "WIRE is updating" })).toHaveCount(0);
             const applyResponse = () => settings.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "apply");

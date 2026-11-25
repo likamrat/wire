@@ -82,6 +82,21 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
     return { page, state, setup, actions, releases, healthReads, pages };
 }
 
+test("What's new opens the offered version's notes in WIRE without installing or following preview branches", async t => {
+    const {page,state,actions} = await workspace(t,{offer:null});
+    Object.assign(state,{phase:"available",candidate:next,availableRelease:{tag:"v1.2.0",commit:next,notes:"## What's new in v1.2.0\n\n### Fixed\n- Saved reports reopen.",url:"https://github.com/likamrat/wire/releases/tag/v1.2.0"}});
+    await page.getByRole("button",{name:"Check for updates",exact:true}).click();
+    await page.locator("#availableReleaseNotes").click();
+    await expect(page).toHaveURL(/section=release-notes&release=v1\.2\.0/);
+    await expect(page.locator("#releaseNotesBody li")).toHaveText("Saved reports reopen.");
+    await expect(page.locator("#releaseReaderGitHub")).toHaveAttribute("href",state.availableRelease.url);
+    await expect(page.locator("#releaseReaderVersion")).toHaveText("v1.2.0");
+    await expect(page.locator("#releaseReaderApply")).toBeVisible();
+    assert.equal(actions.some(r=>r.action==="apply"),false);
+    await page.goBack();
+    await expect(page.locator("#availableReleaseNotes")).toBeVisible();
+});
+
 test("React Settings checks, opts in and out, dismisses only this build, and schedules checks without applying", async t => {
     const { page, state, actions } = await workspace(t, { offer: null });
     const auto = page.getByRole("switch", { name: "Automatically check for updates" });

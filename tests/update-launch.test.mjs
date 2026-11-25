@@ -82,7 +82,7 @@ async function fixture(t, host) {
     const git = (cwd, ...args) => execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
         "-c", "commit.gpgSign=false", ...args], { env, cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     for (const file of ["scripts/start.mjs", "scripts/launch.mjs", "lib/update-launch.mjs", "lib/update-launch-artifact.mjs",
-        "lib/update-launch-child.mjs", "lib/update-launch-state.mjs", "lib/update-source.mjs", "lib/update-compatibility.json",
+        "lib/update-launch-child.mjs", "lib/update-launch-state.mjs", "lib/update-source.mjs", "lib/wire-release.mjs", "lib/update-compatibility.json",
         "lib/update-bridge.mjs", "lib/paths.mjs", "lib/search-model-assets.mjs", "lib/search-linguistics-assets.mjs", "lib/runtime-endpoint.mjs"]) {
         await copyFile(path.join(project, file), path.join(origin, file));
     }
@@ -109,8 +109,8 @@ async function fixture(t, host) {
     const stageLog = path.join(base, "stage-operations");
     const source = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
         import {appendFile} from "node:fs/promises";
-        const implementation=createUpdateSource({fixtureRemote:${JSON.stringify(origin)}});
-        export const {checkMain,inspectInstallation}=implementation;
+        const implementation=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:"main"});
+        export const {checkMain,inspectInstallation,channel}=implementation;
         export async function stageMain(...args) {
             const record=event=>appendFile(${JSON.stringify(stageLog)},event+"\\n");
             await record("stageMain: fetching, verifying, installing and building");
@@ -216,7 +216,7 @@ activationTest("owned replacement retains a single writer, port, settings and or
     const competing = f.launch();
     assert.equal((await competing.done).code, 1);
     assert.match(competing.stderr, /already has a launcher/);
-    const candidate = await f.commit("next");
+    let candidate = await f.commit("next");
     const [a,b] = await Promise.all([request(url, "auto-check"), request(url, "auto-check")]);
     assert.equal(a.candidate, candidate); assert.equal(b.lastChecked, a.lastChecked);
     assert.equal((await request(url, "dismiss", { candidate })).dismissed, candidate);
@@ -226,13 +226,18 @@ activationTest("owned replacement retains a single writer, port, settings and or
     assert.match((await phase(url, "error")).message, /busy/);
     assert.equal((await f.events()).length, 1);
     await rm(path.join(f.store, "busy"));
-    const rechecked = await request(url, "check");
+    let rechecked = await request(url, "check");
     assert.equal(rechecked.candidate, candidate);
     // With protocol v0, the old SHA is no longer advertised after this docs-only advance.
     f.git(f.root, "config", "--global", "protocol.version", "0");
     await writeFile(path.join(f.origin, "README.md"), "Revised instructions.");
     f.git(f.origin, "add", "README.md"); f.git(f.origin, "commit", "-qm", "Docs after the offer");
     assert.equal((await request(url, "apply", { candidate })).phase, "preparing");
+    assert.match((await phase(url,"error")).message,/update changed/);
+    rechecked = await request(url,"check");
+    candidate = f.git(f.origin,"rev-parse","HEAD");
+    assert.equal(rechecked.candidate,candidate);
+    assert.equal((await request(url,"apply",{candidate})).phase,"preparing");
     const status = await phase(url, "current");
     assert.equal(status.installed, candidate);
     assert.equal(status.automatic, false);
