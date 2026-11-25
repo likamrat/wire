@@ -938,15 +938,16 @@ Double-click the edge or press Enter on it to restore the default.
 Select **Documentation** at the bottom of the sidebar, just above your account,
 to read these guides inside WIRE.
 
-The list on the left shows every guide, with the sections of the one you're
-reading. The list on the right shows the sections on the current page and marks
-where you are. In a narrow window, both lists fold into **All guides** and
-**On this page** above the text.
+Use **All guides** on the left to open another guide. **On this page** on the
+right jumps to a section in the current guide and marks where you're reading.
+Select either panel's heading to close it and give the article more room.
+Select its icon to reopen it. You can close both without leaving your place.
 
-![Documentation with Use WIRE selected on the left and the current Trends section marked on the right.](images/documentation-guide-tree.png)
+![The Architecture guide between All guides and On this page. Installed version is beside Documentation above both panels.](images/documentation-guide-tree.png)
 
-Links, section addresses and your browser's Back and Forward work as they do on
-any web page. You can bookmark a section or share its address.
+In a narrow window the two controls sit above the article. Open the list you
+need, then select a guide or section. You can bookmark a section, share its
+address or use Back and Forward to return to it.
 
 To inspect a screenshot or diagram, choose **Enlarge image** on it. **Actual
 size** lets you scroll through its details; **Fit image** shows the whole
@@ -954,16 +955,16 @@ picture. Use the **Close image** (X) button or press Escape to return to the
 same image in the guide. **Previous** and **Next** at the foot of a guide name
 the guides they open.
 
-**Installed version** reads the guides and images included with the running
-build. A documentation-only release uses the same **Update and restart**
-process as a code release.
+**Installed version** shows the guides and images that came with the running
+build. To preview a pushed branch in an official Git-backed installation:
 
-In an official Git-backed installation, open **Installed version** beside
-**Documentation**, then choose a pushed branch. The guide list, pages and images
-in this tab all come from that branch's selected commit. You can move between
-guides without choosing again. WIRE does not run branch code or change which
-app updates are offered. Choose **Installed version** to return.
-Images hosted on other sites aren't loaded; WIRE shows a link instead.
+1. Open **Installed version** beside **Documentation** and choose the branch.
+2. Open a guide. Every page and image in this tab now comes from that commit.
+3. To return, open the branch name and choose **Installed version**.
+
+Previewing a branch doesn't run its code or change which updates WIRE offers.
+A docs-only release uses the usual **Update and restart**. Images hosted on
+other sites appear as links instead of loading in WIRE.
 
 If you're editing guides in your own clone or fork, see
 [Preview documentation changes](development.md#preview-documentation-changes).
