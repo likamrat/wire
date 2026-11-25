@@ -5726,7 +5726,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const reading = key ? `${resultLabels[key]}: ${count(point[key])} of ${count(point.total)} ${chartGroupUnit(point)}`
                 : `${count(point.total)} ${chartGroupUnit(point)}`;
             return ux.tooltip(control, `${heading}\n${reading}`, { tone: "chart", placement: "top", followPointer: true,
-                immediatePointer: true, avoid: () => document.querySelectorAll("#chart .dimensional-time-labels,.app-header") });
+                immediatePointer: true, avoid: () => {
+                    const fixed = document.querySelectorAll("#chart .dimensional-time-labels,.app-header");
+                    const day = control.closest(".time-slot")?.querySelector(".time-column");
+                    if (!day || day.getBoundingClientRect().height >= 24) return fixed;
+                    const plot = control.closest(".flat-time-plot"), bounds = plot.parentElement.getBoundingClientRect();
+                    // A reading near the baseline must not block the next day's painted segments.
+                    return [...fixed,
+                        ...[...plot.querySelectorAll(".time-column")].filter(mark => {
+                            const box = mark.getBoundingClientRect();
+                            return mark !== day && box.left < bounds.right && box.right > bounds.left;
+                        })];
+                } });
         }
         const chart = dimensional.timeView({
             compact: Boolean(frontendActivity),

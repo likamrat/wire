@@ -82,9 +82,14 @@ ${dimensionalColumnStyles}
 .flat-time-segment {fill-opacity:1;stroke:none;pointer-events:visibleFill}
 .flat-time-column [data-ux-tooltip]:hover {fill-opacity:1}
 .flat-time-plot .time-column:hover .time-stack {filter:none;outline:0}
+.flat-time-plot .time-column:is(:hover,:focus-visible) .time-stack {outline:2px solid var(--focus);outline-offset:1px}
+.flat-time-plot .time-column:hover .dimensional-count,.flat-time-plot .time-zero[href]:hover .dimensional-count {background:var(--hover)}
 .flat-time-plot .time-column:focus-visible {outline:0}
 .flat-time-plot .dimensional-count {font-size:1rem;min-width:44px}
+.flat-time-plot .dimensional-count::before {content:"";position:absolute;inset:0 0 -8px;pointer-events:auto}
 .flat-time-plot .time-zero {position:absolute;bottom:0;left:50%;transform:translateX(-50%);height:0;background:none}
+.flat-time-plot .time-zero[href] {height:8px}
+.flat-time-plot .time-zero[href] .dimensional-count {bottom:100%}
 .time-zero[href] .dimensional-count {pointer-events:auto;color:var(--accent)}
 .time-zero[href]:focus-visible .dimensional-count {outline:2px solid var(--focus)}
 .time-segment-link {position:absolute;left:50%;transform:translateX(-50%)}

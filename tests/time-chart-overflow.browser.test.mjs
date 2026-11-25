@@ -461,6 +461,61 @@ async function captureFocus(page, name, bounds) {
     await writeFile(path.join(directory, name + ".json"), JSON.stringify({ bounds, chart, afterCapture: await measure(page) }, null, 2));
 }
 
+for (const frontend of ["bundled", "react"]) test(`${frontend}: low daily bars keep a usable hover target after scrolling`, async t => {
+    const daily = [95, ...Array(16).fill(0), 9, 0, 13, 3, 4, 0, 0, 8];
+    const records = daily.flatMap((n, i) => {
+        if (!n) return [];
+        const record = fixture(`harbor-inventory-${i}`), stamp = new Date(Date.UTC(2026, 9, 1 + i, 12)).toISOString();
+        record.capturedAt = record.userPrompt.sourceTimestamp = stamp;
+        record.toolCalls = Array.from({ length: n }, (_, c) => ({ ...record.toolCalls[0], startedAt: stamp,
+            toolCallId: `field-${i}-${c}`, startEventId: `field-start-${i}-${c}`, toolSucceeded: c !== 0, reportedOutcome: c ? "succeeded" : "failed" }));
+        return [record];
+    });
+    const page = await setup(t, records, { frontend, route: "#analyze" });
+    await chooseTheme(page, "light");
+    const scroll = page.locator(".flat-time-scroll"), slots = scroll.locator(".time-slot"), tip = page.locator("#evidence-tooltip");
+    const total = slots.nth(20).locator(".time-column"), segment = slots.nth(19).locator('[data-segment=failure].time-segment-link');
+    const origin = page.url();
+    for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 }); await ready(page);
+        await scroll.evaluate(node => { node.scrollLeft = node.scrollWidth; });
+        await total.scrollIntoViewIfNeeded();
+        const g = await measure(page);
+        assert.equal(g.marks[0].maximum, 95);
+        assert.ok(g.marks[0].right < g.scroll.x, "Tallest day is outside the visible scrollport");
+        const mark = g.marks.find(m => m.total === 3);
+        const geometry = { frontend, width, height: mark.height, mixedHeight: g.marks.find(m => m.total === 13).height,
+            maximum: g.marks[0].maximum, plotExtent: g.plotExtent, plotHeight: g.plot.height, barWidth: mark.width };
+        if (process.env.WIRE_OVERFLOW_PROOFS) {
+            await mkdir(process.env.WIRE_OVERFLOW_PROOFS, { recursive: true });
+            await writeFile(path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.json`), JSON.stringify(geometry));
+        }
+        // A pointer a few pixels above a shallow column is still over its day,
+        // but not over the count label or a particular outcome.
+        await page.mouse.move(0, 0);
+        await page.mouse.move(mark.x + mark.width / 2, mark.y - 4);
+        if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.png`) });
+        await expect(tip).toContainText("3 Work IQ tool calls", { timeout: 1200 });
+        await expect(tip).toBeVisible();
+        await expect(total.locator(".time-stack")).toHaveCSS("outline-style", "solid");
+        await segment.scrollIntoViewIfNeeded(); await ready(page);
+        const painted = await segment.boundingBox();
+        await page.mouse.move(1, 1);
+        await page.mouse.move(painted.x + painted.width / 2, painted.y + painted.height / 2);
+        await expect(tip).toContainText("Tool failed: 1 of 13");
+        if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-mixed.png`) });
+        await page.keyboard.press("Escape"); await expect(tip).toBeHidden();
+        assert.ok(Math.abs(mark.height - 3 / 95 * g.plotExtent) < .04, "Actual column paint uses the whole-window maximum");
+    }
+    await segment.press("Tab"); await page.keyboard.press("Shift+Tab");
+    await expect(segment).toBeFocused(); await expect(tip).toContainText("Tool failed: 1 of 13");
+    await segment.press("Enter"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await page.goBack(); await ready(page); await expect(page).toHaveURL(origin); await expect(segment).toBeFocused();
+    await slots.nth(18).locator(".time-zero").focus();
+    await expect(tip).toContainText("No matching records"); await expect(slots.nth(18).locator(".flat-time-column")).toHaveCount(0);
+});
+
 test("a fitted seven-bucket Analyze chart has no horizontal scrollbar and keeps every label and column", async t => {
     const page = await setup(t);
     await page.setViewportSize({width:2048,height:1080}); await ready(page);
