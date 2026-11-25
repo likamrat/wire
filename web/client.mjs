@@ -5669,6 +5669,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const calendar = usageCalendar(), usageHost = $("analyzeUsageContent");
         const summary = {...breakdown.models.usage,eligible:breakdown.models.usage.eligible + breakdown.authors.nativeConversations};
         if (calendar.range) assessmentFactories.renderDailyTokenChart(el,usageHost,calendar,summary,{
+            columns:dimensional.geometryPolicy.dailyColumns(Boolean(frontendActivity)),
             formatDate:date, scopeKey:`${workspaceState.evidence.revision}:${calendar.range.from}:${calendar.range.to}`,
             dateLink:day => offersTrends ? analyzeTrends.link("usage",day,date(day,true)) : el("span","",date(day,true)),
         });

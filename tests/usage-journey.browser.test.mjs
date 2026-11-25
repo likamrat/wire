@@ -74,7 +74,7 @@ test("a metered zero is a baseline marker, not an invented column, unknown or em
     const chart=page.locator("#analyzeUsage");
     await chart.getByRole("slider").press("End");await chart.getByRole("slider").press("ArrowLeft");
     await expect(chart.locator(".token-day-value")).toHaveText("0 tokens");
-    await expect(chart.locator(".token-zero[cy='88%']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
+    await expect(chart.locator(".token-zero")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
     await chart.getByRole("slider").press("ArrowRight");
     await expect(chart.locator(".token-day-value")).toHaveText("Token count unavailable");
 });
@@ -181,11 +181,11 @@ for(const frontend of ["bundled","react"])test(`${frontend}: both Analyze date a
                 .screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-${scale}-${selector.startsWith(".token")?"tokens":"activity"}-scrollbar.png`)});
         }
         const aligned=await page.locator("#analyzeUsage").evaluate(card=>{
-            const plot=card.querySelector(".token-history-plot").getBoundingClientRect();
+            const baseline=card.querySelector(".token-axis").getBoundingClientRect().top;
             return [...card.querySelectorAll("[data-measured-day]")].map(mark=>{
                 const rect=mark.getBoundingClientRect(),label=card.querySelector(`time[datetime="${mark.dataset.measuredDay}"]`).getBoundingClientRect();
                 return {centerDifference:Math.abs(rect.left+rect.width/2-label.left-label.width/2),
-                    baselineDifference:Math.abs((mark.matches("rect")?rect.bottom:rect.top+rect.height/2)-(plot.top+.88*plot.height)),
+                    baselineDifference:Math.abs((mark.matches("rect")?rect.bottom:rect.top+rect.height/2)-baseline),
                     zero:mark.classList.contains("token-zero")};
             });
         });

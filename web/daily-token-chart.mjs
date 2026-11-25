@@ -1,5 +1,5 @@
 // The same renderer is bundled for React and serialized in the standalone shell.
-export function renderDailyTokenChart(el, host, calendar, summary, { formatDate, dateLink, scopeKey }) {
+export function renderDailyTokenChart(el, host, calendar, summary, { columns, formatDate, dateLink, scopeKey }) {
     const number = new Intl.NumberFormat().format;
     const axisNumber = new Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1}).format;
     const dayIndex = date => Date.parse(date + "T00:00:00Z") / 86400000;
@@ -15,8 +15,11 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
     const windowSize=90;
     let first=0, count=0;
     const x = i => (100*(i-first+.5)/count) + "%";
-    const y = n => `${88-76*n/ceiling}%`;
+    const height = n => 88*n/ceiling;
+    const y = n => `${100-height(n)}%`;
     const wrap = el("div","token-history"), axis = el("div","token-history-scale"), plot = el("div","token-history-plot");
+    wrap.style.setProperty("--day-column-width",`${columns.width}px`);
+    wrap.style.setProperty("--day-min-pitch",`${columns.pitchAt14/14}em`);
     const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.setAttribute("aria-hidden","true");
     function mark(tag,attrs,parent=svg) {
@@ -38,7 +41,7 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
     earlier.type=later.type="button";
     function draw(i) {
         first=Math.floor(i/windowSize)*windowSize;count=Math.min(windowSize,span+1-first);
-        labels.style.setProperty("--days",String(count));labels.replaceChildren();series.replaceChildren();
+        wrap.style.setProperty("--days",String(count));labels.replaceChildren();series.replaceChildren();
         for(let n=first;n<first+count;n++){
             const date=dateAt(n),d=days.get(date),label=el("time","",formatDate(date));
             label.dateTime=date;labels.append(label);
@@ -47,9 +50,8 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
                 mark("circle",{cx:x(n),cy:y(0),r:3,class:"token-zero","data-measured-day":date},series);
                 continue;
             }
-            const column=mark("rect",{x:x(n),y:y(d.total),height:`${76*d.total/ceiling}%`,
-                class:"token-column","data-measured-day":date},series);
-            column.style.width=`min(${56/count}%, 3rem)`;
+            mark("rect",{x:x(n),y:y(d.total),height:`${height(d.total)}%`,
+                width:columns.width,class:"token-column","data-measured-day":date},series);
         }
         earlier.disabled=first===0;later.disabled=first+count>span;
     }
@@ -66,7 +68,7 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         if(!wrap.isConnected)return;
         const bounds=plot.getBoundingClientRect(), view=scroll.getBoundingClientRect(), owner=wrap.getBoundingClientRect();
         const pointX=bounds.left+bounds.width*(current-first+.5)/count, d=days.get(dateAt(current));
-        const pointY=bounds.top+bounds.height*(d?.metered ? .88-.76*d.total/ceiling : .88);
+        const pointY=bounds.bottom-bounds.height*height(d?.metered?d.total:0)/100;
         const at=anchor??{x:pointX,y:pointY};
         const tip=detail.getBoundingClientRect(), gap=12;
         const left=Math.max(4,view.left), right=Math.min(innerWidth-4,view.right);

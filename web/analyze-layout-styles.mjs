@@ -7,27 +7,27 @@ export const analyzeLayoutStyles = `
 .usage-question-controls {display:flex;align-items:end;flex-wrap:wrap;gap:var(--space-sm) var(--space-md);margin-block:var(--space-sm) var(--space-md);min-width:0}
 .usage-question-controls>.report-form-field:not([hidden]) {display:grid;gap:4px;min-width:0;max-width:100%;color:var(--muted);font-size:var(--type-small)}
 .usage-question-controls :is(select,.select-trigger) {min-width:0;max-width:100%;min-height:44px;color:var(--ink)}
-.analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px var(--space-2xl);background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
+.analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px var(--space-2xl);container:usage-card / inline-size}
 .analyze-usage:has(.token-history) {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
 .analyze-dashboard>.analyze-usage {grid-column:1/-1}
 .wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
 .token-history {display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:10px;color:var(--ink);font-variant-numeric:tabular-nums;font-size:var(--type-small)}
 .token-history-scale {display:grid;position:relative;height:var(--plot-height);color:var(--muted);text-align:end}
 .token-history-scale span {grid-area:1 / 1;position:relative;align-self:start;transform:translateY(-50%)}
-.token-history {--plot-height:clamp(8.5rem,11vw,11rem);position:relative}
+.token-history {--day-lane:max(var(--day-min-pitch),calc(100cqi / var(--days)));--plot-height:calc(max(44px,1.2rem + 16px) + 12px + min(var(--day-column-width) * 1.25,var(--day-lane) * .8));position:relative;padding-block-start:var(--space-sm)}
 .token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;padding-bottom:8px}
 .token-history-strip {display:grid;width:max-content;min-width:100%}
 .token-history-plot {position:relative;height:var(--plot-height);min-width:0;cursor:default}
 .token-history-plot svg {width:100%;height:100%;display:block;overflow:visible}
 .token-history-scroll:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
-.token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--muted);stroke-width:1}
+.token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--control);stroke-width:1}
 .token-column {fill:var(--accent);transform-box:fill-box;transform:translateX(-50%)}
 .token-zero {fill:var(--accent)}
 .token-hover-point {fill:var(--paper);stroke:var(--accent);stroke-width:2;opacity:0}
 .token-history[data-inspecting] .token-hover-point {opacity:1}
 .usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
-.token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--muted)}
-.token-history-dates time {min-width:3.75em;padding-inline:.35em;box-sizing:border-box;text-align:center;white-space:nowrap}
+.token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--accent)}
+.token-history-dates time {min-width:max(3.75em,calc(var(--day-column-width) + var(--space-sm)));padding:4px 4px 0;box-sizing:border-box;text-align:center;white-space:nowrap}
 .token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
 .token-day-reading,#evidence-tooltip[data-tone=chart] {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
 .token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;overflow-wrap:anywhere;opacity:0;pointer-events:none}
@@ -75,13 +75,13 @@ export const analyzeLayoutStyles = `
 @media(hover:hover) and (pointer:fine) {
     body.analyze-reading #activityView #activityList .activity-card:hover {background:color-mix(in srgb,var(--accent) 6%,var(--paper))}
 }
-.analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {
+.analyze-population,.analyze-chart-main,.analyze-usage,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {
  border:1px solid var(--surface-edge);border-radius:var(--radius);
  background:var(--paper);box-shadow:var(--panel-shadow);
 }
-.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {background:var(--screen-plot);box-shadow:none}
+.analyze-chart-main,.analyze-usage,.analyze-outcome-summary,#percentageCharts .percentage-card {background:var(--screen-plot);box-shadow:none}
 @media(forced-colors:active) {
- .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {border-color:CanvasText;box-shadow:none}
+ .analyze-population,.analyze-chart-main,.analyze-usage,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {border-color:CanvasText;box-shadow:none}
 }
 #workspace>#analyzePopulation {padding:16px 20px;margin-block:0 20px;max-width:none;min-width:0}
 #analyzePopulation:not(:has(#periodComparisonSetup:not([hidden]),#filters:not([hidden]),#filterChips:not([hidden]):not(:empty),#freshActivity:not([hidden]),#collectionNotice:not([hidden]))) {display:none}
@@ -118,7 +118,7 @@ export const analyzeLayoutStyles = `
 #analyzePopulation #collectionNotice p {font-size:var(--type-small)}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
-.analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px}
+.analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px;--day-label-gap:var(--space-md)}
 .analyze-dashboard[data-dashboard-layout=packed] {display:grid;grid-template-columns:minmax(0,1fr) minmax(32rem,36rem);grid-auto-rows:1px;gap:0 16px;align-items:start}
 .analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order])>#activityView {grid-column:1/-1;min-width:0;margin:0}
 .analyze-dashboard[data-dashboard-layout=packed]>.analyze-chart-grid {grid-column:1/-1}
@@ -152,6 +152,7 @@ export const analyzeLayoutStyles = `
 /* Full date line boxes and the inner scroll clearance share the existing footer inset. */
 #homeView .analyze-chart-main:has(.dimensional-scroll) .chart-panel {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
 #chart .dimensional-scroll {padding-block-end:8px}
+#chart .dimensional-time-labels,.token-history-dates {padding-block-start:var(--day-label-gap)}
 #chart .dimensional-time-labels {min-height:0}
 #chart .dimensional-time-labels>* {padding-block-end:0}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}

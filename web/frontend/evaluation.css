@@ -69,8 +69,7 @@
     border-inline-start-width: 0;
     background: var(--accent-soft);
 }
-.wire-frontend-react .analyze-dashboard { display: block; }
-.wire-frontend-react #chart .dimensional-time-labels { padding-top: 8px; }
+.wire-frontend-react .analyze-dashboard { display: block; --day-label-gap: var(--space-sm); }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
 .wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: var(--widget-heading-inset) 20px 16px; }
@@ -136,6 +135,7 @@
 }
 @container analyze-view (max-width: 26rem) {
     .wire-frontend-react #homeView .analyze-chart-main .chart-panel,
+    .wire-frontend-react #homeView .analyze-usage,
     .wire-frontend-react #outcomeChart > .percentage-card {
         padding-inline: 16px;
     }

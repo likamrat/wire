@@ -68,6 +68,16 @@ for (const frontend of ["react", "bundled"]) test(`${frontend}: compiled Analyze
     for (const [width, theme] of [[1920, "dark"], [390, "light"]]) {
         await page.setViewportSize({ width, height: 1080 }); await chooseTheme(page, theme);
         await measure(page, widgets, `${frontend}-${width}-${theme}`, readings);
+        const frames = await page.evaluate(() => [
+            [".analyze-chart-main", ".time-column", ".time-chart", ".dimensional-time-labels a"],
+            ["#analyzeUsage", ".token-column", ".token-axis", ".token-history-dates time"],
+        ].map(([card, column, baseline, date]) => {
+            const root = document.querySelector(card), style = getComputedStyle(root);
+            const tick = document.createRange(); tick.selectNodeContents(root.querySelector(date));
+            return { paper: style.backgroundColor, radius: style.borderRadius, column: root.querySelector(column).getBoundingClientRect().width,
+                dateGap: Math.round(tick.getBoundingClientRect().top - root.querySelector(baseline).getBoundingClientRect().bottom) };
+        }));
+        assert.deepEqual(frames[1], frames[0], "Both daily charts use the same card, column width and baseline-to-date spacing");
         await models.getByRole("button", { name: "Token share", exact: true }).click();
         await measure(page, [["token-share", '[data-percentage-card="models"]']], `${frontend}-${width}-${theme}`, readings);
         await models.getByRole("button", { name: "Interactions", exact: true }).click();
