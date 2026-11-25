@@ -946,6 +946,12 @@ where you are. In a narrow window, both lists fold into **All guides** and
 Links, section addresses and your browser's Back and Forward work as they do on
 any web page. You can bookmark a section or share its address.
 
+To inspect a screenshot or diagram, choose **Enlarge image** on it. **Actual
+size** lets you scroll through its details; **Fit image** shows the whole
+picture. Use the **Close image** (X) button or press Escape to return to the
+same image in the guide. **Previous** and **Next** at the foot of a guide name
+the guides they open.
+
 The line under each title says which guides you're reading:
 
 | You see | What it means |

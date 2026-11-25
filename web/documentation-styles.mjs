@@ -4,7 +4,7 @@ export const documentationStyles = `
 .app-sidebar .documentation-navigation a{grid-template-columns:max(24px,1.5rem) minmax(0,1fr)}
 .documentation-navigation .navigation-label{text-overflow:ellipsis}
 :root:has(#documentationView:not([hidden])) .page-heading{display:none}
-.wire-docs{container:docs/inline-size;--docs-rule:color-mix(in srgb,var(--surface-divider) 55%,var(--paper));--docs-sticky:calc(var(--app-header-height,77px) + var(--space-md));color:var(--ink);padding-bottom:var(--space-3xl);view-transition-name:docs-content}
+.wire-docs{container:docs/inline-size;--docs-rule:color-mix(in srgb,var(--surface-divider) 55%,var(--paper));--docs-sticky:calc(var(--app-header-height,77px) + var(--space-md));color:var(--ink);padding-bottom:var(--space-3xl)}
 .wire-docs .docs-icon{display:inline-flex;inline-size:1.1em;block-size:1.1em;flex:none;vertical-align:-.18em}
 .wire-docs .docs-icon svg,.wire-docs .docs-icon .wire-icon{inline-size:100%;block-size:100%}
 .wire-docs .docs-quiet{color:var(--muted)}
@@ -14,7 +14,11 @@ export const documentationStyles = `
 .docs-paper{min-width:0;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:var(--space-xl) clamp(16px,4cqi,48px) var(--space-2xl)}
 .docs-left,.docs-right{position:sticky;top:var(--docs-sticky);max-block-size:calc(100dvh - var(--docs-sticky) - 16px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 2px 16px}
 .docs-left-toggle>summary,.docs-outline-inline{display:none}
-.docs-left-toggle>summary,.docs-outline-inline>summary{align-items:center;gap:8px;cursor:pointer;padding:6px 8px;font-weight:var(--weight-medium);min-block-size:32px}
+.docs-left-toggle>summary,.docs-outline-inline>summary{align-items:center;gap:var(--pill-gap);cursor:pointer;padding:6px 12px;font-weight:var(--weight-medium);min-block-size:44px;list-style:none;border-radius:var(--radius-small)}
+.docs-left-toggle>summary::-webkit-details-marker,.docs-outline-inline>summary::-webkit-details-marker{display:none}
+.docs-left-toggle>summary .docs-icon:last-child,.docs-outline-inline>summary .docs-icon:last-child{margin-inline-start:auto}
+.docs-left-toggle[open]>summary .docs-icon:last-child,.docs-outline-inline[open]>summary .docs-icon:last-child{transform:rotate(180deg)}
+.docs-left-toggle>summary:hover,.docs-outline-inline>summary:hover{background:var(--hover)}
 
 .docs-tree h2,.docs-outline>h2{font-size:var(--type-caption);font-weight:var(--weight-medium);color:var(--muted);margin:0 0 6px;padding:0 10px;letter-spacing:0}
 .docs-tree-group+.docs-tree-group{margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--docs-rule)}
@@ -23,7 +27,7 @@ export const documentationStyles = `
 .docs-tree a:hover,.docs-outline a:hover{color:var(--ink);background:var(--hover)}
 .docs-tree a:focus-visible,.docs-outline a:focus-visible,.docs-left-toggle>summary:focus-visible,.docs-outline-inline>summary:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
 .docs-tree-guide{color:var(--ink)!important}
-.docs-tree-guide[aria-current=page]{background:color-mix(in srgb,var(--ink) 8%,transparent);font-weight:var(--weight-medium)}
+.docs-tree-guide[aria-current=page]{box-shadow:inset 2px 0 0 var(--ink);border-radius:0 var(--radius-small) var(--radius-small) 0;font-weight:var(--weight-medium)}
 .docs-tree-guide>span:first-child{min-width:0}
 .docs-tree-sections,.docs-outline-nested{margin:2px 0 6px 14px!important;border-inline-start:1px solid var(--docs-rule)}
 .docs-tree-sections>li,.docs-outline-nested>li{margin-inline-start:-1px;border-inline-start:1px solid transparent}
@@ -41,14 +45,9 @@ export const documentationStyles = `
 .docs-source-warning{display:inline-flex;align-items:center;gap:6px;color:var(--ink)}
 .docs-source-warning .docs-icon{color:var(--warning)}
 .docs-source-local{color:var(--ink);font-weight:var(--weight-medium)}
-#documentationView button.docs-text-button,#documentationView .docs-source-switch button,#documentationView button.doc-copy{all:unset;box-sizing:border-box;cursor:pointer}
-#documentationView button.docs-text-button::before,#documentationView button.docs-text-button::after,#documentationView .docs-source-switch button::before,#documentationView .docs-source-switch button::after,#documentationView button.doc-copy::before,#documentationView button.doc-copy::after{content:none}
-#documentationView button.docs-text-button,.docs-text-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px;font:inherit}
-#documentationView button.docs-text-button:focus-visible,#documentationView .docs-source-switch button:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
-.docs-source-switch{display:inline-flex;padding:2px;gap:2px;border-radius:var(--radius-pill);border:1px solid var(--docs-rule)}
-#documentationView .docs-source-switch button{font-size:var(--type-caption);color:var(--muted);border-radius:var(--radius-pill);padding:4px 10px;min-block-size:28px;display:inline-flex;align-items:center}
-#documentationView .docs-source-switch button:hover{color:var(--ink);background:var(--hover)}
-#documentationView .docs-source-switch button[aria-pressed=true]{color:var(--ink);background:color-mix(in srgb,var(--ink) 9%,transparent);font-weight:var(--weight-medium)}
+.docs-text-button,.docs-asset-link{display:inline-flex;align-items:center;gap:var(--pill-gap)}
+.docs-text-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px;font:inherit}
+.docs-source-switch{display:flex;flex-wrap:wrap;gap:var(--pill-gap)}
 
 .docs-article{font-size:var(--type-reading);line-height:var(--leading-reading);max-inline-size:76ch;overflow-wrap:anywhere}
 .docs-article>:first-child{margin-top:0}
@@ -71,7 +70,22 @@ export const documentationStyles = `
 .docs-article kbd{font-family:var(--mono);font-size:.85em;border:1px solid var(--surface-edge);border-bottom-width:2px;border-radius:5px;padding:0 .35em}
 .docs-article hr{border:0;border-top:1px solid var(--docs-rule);margin:2em 0}
 .docs-article img{max-inline-size:100%;block-size:auto;border-radius:var(--radius-small)}
-.docs-article p>img:only-child,.docs-article p>a:only-child>img{border:1px solid var(--docs-rule)}
+.docs-image-frame{position:relative;display:inline-block;max-inline-size:100%;vertical-align:middle}
+.docs-image-frame :is(picture,img){display:block;margin:0}
+.docs-image-frame img{border:1px solid var(--docs-rule)}
+.docs-image-expandable img{cursor:zoom-in}
+.docs-image-frame .docs-image-open{position:absolute;inset-block-start:4px;inset-inline-end:4px;background:var(--paper);color:var(--ink);border:1px solid var(--surface-edge)}
+.docs-image-frame .docs-image-open:hover{background:var(--pill-hover)}
+@media(hover:hover) and (pointer:fine){.docs-image-open{opacity:0}.docs-image-frame:is(:hover,:focus-within) .docs-image-open{opacity:1}}
+.docs-image-dialog:modal{display:grid;grid-template-rows:auto minmax(0,1fr);width:calc(100% - 24px);height:calc(100dvh - 24px);max-width:none;overscroll-behavior:contain;overflow:hidden}
+.docs-image-dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
+.docs-image-dialog .dialog-head{gap:var(--space-sm);padding:var(--space-sm) var(--space-md)}
+.wire-docs :is(.dialog-head .icon-only,.docs-image-open)>.docs-icon{inline-size:var(--icon-utility-size);block-size:var(--icon-utility-size)}
+.docs-image-dialog h2{margin-inline-end:auto}
+.docs-image-stage{display:grid;overflow:auto;overscroll-behavior:contain;padding:var(--space-sm)}
+.docs-image-stage img{display:block;place-self:center;width:100%;height:100%;min-width:0;min-height:0;object-fit:contain}
+.docs-image-stage[data-actual-size]{display:block}
+.docs-image-stage[data-actual-size] img{width:auto;height:auto;max-width:none;max-height:none;margin:auto}
 .docs-article blockquote{color:var(--muted);border-inline-start:2px solid var(--surface-divider);padding:0 0 0 1em;margin-inline:0}
 .docs-article details{border:1px solid var(--docs-rule);border-radius:var(--radius-small);padding:.5em .9em;margin:0 0 1em}
 .docs-article summary{cursor:pointer;font-weight:var(--weight-medium)}
@@ -99,7 +113,7 @@ export const documentationStyles = `
 .docs-article .doc-code pre{margin:0;overflow-x:auto;padding:1em 3.2em 1em 1em;border-radius:var(--radius-small);background:color-mix(in srgb,var(--ink) 5%,var(--paper));border:1px solid var(--docs-rule);font-family:var(--mono);font-size:.875em;font-weight:400;line-height:1.55;tab-size:4}
 .docs-article .doc-code pre code{background:none;padding:0;font-size:1em}
 .docs-article .doc-code-label{margin:0 0 .4em;font-size:var(--type-caption);color:var(--muted)}
-#documentationView button.doc-copy{position:absolute;inset:8px 8px auto auto;inline-size:32px;block-size:32px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--docs-rule);background:var(--paper);color:var(--muted)}
+#documentationView button.doc-copy{position:absolute;inset:4px 4px auto auto;background:var(--paper)}
 #documentationView .doc-code-drawn button.doc-copy{inset-block-start:calc(1.5em + 8px)}
 #documentationView button.doc-copy:hover{color:var(--ink);background:var(--hover)}
 #documentationView button.doc-copy:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
@@ -143,8 +157,6 @@ export const documentationStyles = `
 @container docs (max-width:480px){.docs-paper{padding:16px 14px 28px}}
 @media (pointer:coarse){.docs-tree a,.docs-outline a,.docs-left-toggle>summary,.docs-outline-inline>summary,#documentationView .docs-source-switch button{min-block-size:44px}#documentationView button.doc-copy{inline-size:44px;block-size:44px}}
 
-::view-transition-old(docs-content),::view-transition-new(docs-content){animation-duration:160ms}
 @media (prefers-reduced-motion:reduce){
-.docs-article .doc-permalink,#documentationView button.doc-copy{transition:none}
-::view-transition-group(docs-content),::view-transition-old(docs-content),::view-transition-new(docs-content){animation:none!important}}
+.docs-article .doc-permalink,#documentationView button.doc-copy{transition:none}}
 `;

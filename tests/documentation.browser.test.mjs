@@ -57,11 +57,21 @@ test("Documentation reads the repository guides at the 752px panel with ordinary
     await page.locator('.docs-tree a[data-guide="user-guide"]').click();
     await expect(page).toHaveURL(/\/documentation\?guide=user-guide$/);
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
-    // A late automatic check updates the guide being read, not the index where it started.
+    // A late check must not replace an open image, or send the reader back to the index.
+    await expect(page.locator("#docTitle")).toBeFocused();
+    const enlarge = page.getByRole("button", { name: /^Enlarge image: The first-use welcome/ });
+    await enlarge.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Guide image" });
+    const displayed = await dialog.locator("img").evaluate(node => node.src);
+    const replacement = page.waitForResponse(response => response.url().endsWith("/api/documentation/page"));
     firstCheck.resolve();
+    await replacement;
+    await expect(dialog).toBeVisible();
+    assert.equal(await dialog.locator("img").evaluate(node => node.src), displayed);
+    await dialog.getByRole("button", { name: "Close image" }).click();
     await expect(page.locator(".docs-source")).toContainText(newer.slice(0, 7));
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
-    await expect(page.locator("#docTitle")).toBeFocused();
+    await expect(enlarge).toBeFocused();
     await expect(page.locator('.docs-tree a[data-guide="user-guide"]')).toHaveAttribute("aria-current", "page");
     assert.ok(await page.locator(".docs-tree-sections a").count() > 4);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -141,6 +151,18 @@ test("guides render GitHub Markdown safely, with images from the same revision a
     const image = article.locator('img[alt="Trends overview"]');
     await expect(image).toHaveAttribute("src", /^\/api\/documentation\/asset\/[a-f0-9]{64}\/docs\/images\/trends-overview\.png$/);
     await expect.poll(() => image.evaluate(node => node.naturalWidth)).toBeGreaterThan(0);
+    await image.scrollIntoViewIfNeeded();
+    const imageButton = article.getByRole("button", { name: "Enlarge image: Trends overview" });
+    const address = page.url(), origin = await page.evaluate(() => scrollY);
+    await imageButton.press("Enter");
+    const viewer = page.getByRole("dialog", { name: "Guide image" });
+    await expect(viewer).toBeVisible();
+    assert.equal(await viewer.locator("img").evaluate(node => node.src), await image.evaluate(node => node.currentSrc));
+    await expect(viewer.getByRole("button", { name: "Close image" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(imageButton).toBeFocused();
+    assert.equal(page.url(), address);
+    assert.equal(await page.evaluate(() => scrollY), origin);
     await expect(article.locator('.doc-image-note[role="note"]')).toContainText("Hosted on img.shields.io");
     await expect(article.getByRole("img", { name: "Image unavailable: Image with a handler" })).toHaveCount(1);
 
@@ -173,4 +195,25 @@ test("the bundled renderer offers the same Documentation entry", async t => {
     await entry.click();
     await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
     await expect(page.locator(".docs-tree")).toBeVisible();
+    await page.locator('.docs-tree a[data-guide="readme"]').click();
+    const compareImage = page.getByRole("button", { name: /^Enlarge image: Compare with call results/ });
+    await page.setViewportSize({ width: 390, height: 800 });
+    await compareImage.scrollIntoViewIfNeeded();
+    const origin = await page.evaluate(() => scrollY);
+    await compareImage.click();
+    const viewer = page.getByRole("dialog", { name: "Guide image" });
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator("img")).toHaveAttribute("src", /\/docs\/images\/compare-periods\.png$/);
+    await viewer.getByRole("button", { name: "Actual size" }).click();
+    await expect.poll(() => viewer.locator("img").evaluate(i => i.clientWidth)).toBeGreaterThan(390);
+    await viewer.getByRole("button", { name: "Close image" }).click();
+    await expect(compareImage).toBeFocused();
+    assert.equal(await page.evaluate(() => scrollY), origin);
+    const next = page.locator('.docs-pager [rel="next"]');
+    await next.press("Enter");
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    const previous = page.locator('.docs-pager [rel="prev"]');
+    await previous.press("Enter");
+    await expect(page.locator("#docTitle")).toHaveText("Work IQ Request Explorer");
+    await expect(page.locator('.docs-pager [rel="prev"]')).toHaveCount(0);
 });

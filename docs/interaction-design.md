@@ -69,6 +69,9 @@ actual origin only while its authority and reading intent stay current.
 - Documentation opens from the bottom of the sidebar. Its guide tree selects the
   article; the outline selects a section. At narrow widths, both fold above
   the article. Back reopens the originating list and restores its focused link.
+- Open a guide image in a WIRE dialog over the same section. Close or Escape
+  returns focus to its image control without moving the guide. A thumbnail
+  that also links to a guide keeps that destination separate from enlargement.
 - Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
   reading keeps one return to its actual origin.
 - Entering Compare opens it rather than toggling it off. Analyze and Compare keep

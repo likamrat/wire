@@ -44,6 +44,44 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     const guides = () => catalog?.groups.flatMap(group => group.items) ?? [];
     const base = () => catalog?.source.comparedWith === "main" ? "GitHub main" : "your last commit";
     const positionKey = () => `${win.location.pathname}${win.location.search}${win.location.hash}@${win.history.state?.evidenceView?.position ?? ""}`;
+    let imageDialog = null, pendingGuide = null;
+
+    function openImage(button, src, description) {
+        if (imageDialog?.open) return;
+        const image = el("img", { alt: description });
+        const stage = el("div", { class: "docs-image-stage", tabindex: "0", "aria-label": "Image area", role: "region" }, image);
+        const zoom = el("button", { type: "button", class: "quiet", onclick: () => {
+            const actual = stage.toggleAttribute("data-actual-size");
+            zoom.textContent = actual ? "Fit image" : "Actual size";
+            stage.scrollTo(0, 0);
+        } }, "Actual size");
+        const close = el("button", { type: "button", class: "icon-only quiet", autofocus: true,
+            title: "Close image", "aria-label": "Close image", onclick: () => dialog.close() }, glyph("close"));
+        const dialog = el("dialog", { class: "docs-image-dialog", "aria-labelledby": "docsImageTitle" },
+            el("header", { class: "dialog-head" }, el("h2", { id: "docsImageTitle" }, "Guide image"), zoom, close), stage);
+        image.onerror = () => {
+            zoom.disabled = true;
+            stage.replaceChildren(el("p", { role: "status" }, "This image is unavailable. Close it and reopen the guide to try again."));
+        };
+        image.src = src;
+        imageDialog = dialog;
+        host.append(dialog);
+        button.focus({ preventScroll: true });
+        dialog.addEventListener("close", () => {
+            dialog.remove();
+            if (imageDialog !== dialog) return;
+            imageDialog = null;
+            const route = pendingGuide;
+            pendingGuide = null;
+            if (visible && route) void render(route, { quiet: true });
+        }, { once: true });
+        dialog.showModal();
+    }
+    function dismissImage() {
+        pendingGuide = null;
+        if (imageDialog?.open) imageDialog.close();
+        imageDialog = null;
+    }
 
     async function loadCatalog() {
         catalog = await api("/api/documentation/catalog", { source: sourceChoice });
@@ -86,6 +124,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     function present(content, data) {
         const target = value => data.targets[value] ?? { kind: "missing", reason: "This address wasn't checked" };
         const asset = file => data.assetBase + file.split("/").map(encodeURIComponent).join("/");
+        const imageLinks = new Set();
         for (const node of content.querySelectorAll("[id],[name]")) for (const name of ["id", "name"]) {
             const value = node.getAttribute(name);
             if (value) node.setAttribute(name, "user-content-" + value);
@@ -108,8 +147,15 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             } else if (found.kind === "guide") {
                 link.setAttribute("href", hrefFor(found.guide, found.fragment)); link.dataset.guide = found.guide;
                 if (found.fragment) link.dataset.fragment = found.fragment;
-            } else if (found.kind === "asset") { link.setAttribute("href", asset(found.path)); external(link, "opens the image"); }
-            else if (found.kind === "repository") { link.setAttribute("href", found.url); external(link, "opens on GitHub"); }
+            } else if (found.kind === "asset") {
+                link.setAttribute("href", asset(found.path));
+                if (link.querySelector("img")) imageLinks.add(link);
+                else {
+                    const button = el("button", { type: "button", class: "quiet docs-asset-link", "aria-haspopup": "dialog",
+                        onclick: () => openImage(button, asset(found.path), button.textContent) }, ...link.childNodes, glyph("reader-maximize"));
+                    link.replaceWith(button);
+                }
+            } else if (found.kind === "repository") { link.setAttribute("href", found.url); external(link, "opens on GitHub"); }
             else if (found.kind === "external") { link.setAttribute("href", found.url); external(link, found.host === "email" ? "opens your email app" : `opens ${found.host}`); }
             else if (found.kind === "missing") missing(link, found.reason);
             else link.replaceWith(...link.childNodes);
@@ -129,6 +175,25 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
                     image.setAttribute("width", String(Math.round(width)));
                     image.setAttribute("height", String(Math.round(width * found.size[1] / found.size[0])));
                 }
+                const media = image.closest("picture") ?? image, link = media.closest("a");
+                const frame = el("span", { class: "docs-image-frame" });
+                const description = image.getAttribute("alt") || found.path.split("/").at(-1);
+                const button = el("button", { type: "button", class: "icon-only docs-image-open", "aria-haspopup": "dialog",
+                    "aria-label": `Enlarge image: ${description}`, title: "Enlarge image",
+                    "data-doc-image": found.path, onclick: () => openImage(button, image.currentSrc || image.src, description) }, glyph("reader-maximize"));
+                if (link && !imageLinks.has(link)) {
+                    // A linked illustration may open another guide. Keep that destination and give enlargement its own control.
+                    link.replaceWith(frame);
+                    frame.append(link, button);
+                } else {
+                    const original = link ?? media;
+                    original.replaceWith(frame);
+                    frame.append(media, button);
+                    frame.classList.add("docs-image-expandable");
+                    media.addEventListener("click", () => button.click());
+                }
+                for (const node of [image, link]) for (const name of node?.classList ?? [])
+                    if (/^doc-theme-(dark|light)-only$/.test(name)) frame.classList.add(name);
                 continue;
             }
             const alt = image.getAttribute("alt") || "Image";
@@ -155,7 +220,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         }
         for (const pre of content.querySelectorAll(".doc-code pre")) {
             pre.tabIndex = 0;
-            const copy = el("button", { type: "button", class: "doc-copy", "aria-label": "Copy code" }, glyph("doc-copy"));
+            const copy = el("button", { type: "button", class: "doc-copy icon-only", "aria-label": "Copy code", title: "Copy code" }, glyph("doc-copy"));
             copy.addEventListener("click", async () => {
                 try {
                     await win.navigator.clipboard.writeText(pre.textContent);
@@ -211,7 +276,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     function sourceLine() {
         const source = catalog.source, parts = [], sep = () => el("span", { class: "docs-sep", "aria-hidden": "true" }, "·");
         const commit = value => value ? el("span", { class: "docs-commit", title: value }, glyph("doc-commit"), short(value)) : null;
-        const checkButton = label => el("button", { type: "button", class: "docs-text-button", onclick: () => refresh({ force: true }) }, label);
+        const checkButton = label => el("button", { type: "button", class: "docs-text-button quiet", onclick: () => refresh({ force: true }) }, glyph("refresh"), label);
         if (source.kind === "official") {
             parts.push(el("span", {}, "From GitHub main"), sep(), commit(source.commit), sep(), el("span", {}, `published ${relative(source.published)}`));
             if (source.failedAt && (!source.checkedAt || source.failedAt > source.checkedAt))
@@ -263,7 +328,8 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (links.length && links.every(link => link.dataset.fragment !== undefined)) { paragraph.classList.add("docs-inline-contents"); list?.classList.add("docs-inline-contents"); }
         }
         const sections = nest(data.headings, 2, 3);
-        const inline = sections.length ? el("details", { class: "docs-outline-inline" }, el("summary", {}, glyph("doc-contents"), "On this page"),
+        const summary = label => el("summary", {}, glyph("doc-contents"), label, glyph("chevron"));
+        const inline = sections.length ? el("details", { class: "docs-outline-inline" }, summary("On this page"),
             el("nav", { class: "docs-outline", "aria-label": "On this page" }, outlineList(sections, data.guide))) : null;
         if (inline) article.querySelector(".docs-source").after(inline);
         const footer = el("footer", { class: "docs-article-footer" },
@@ -272,7 +338,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             pager(data.guide));
         const wide = host.clientWidth > 880;
         return el("div", { class: "docs-grid" },
-            el("div", { class: "docs-left" }, el("details", { class: "docs-left-toggle", open: wide }, el("summary", {}, glyph("doc-contents"), "All guides"), guideTree(data.guide))),
+            el("div", { class: "docs-left" }, el("details", { class: "docs-left-toggle", open: wide }, summary("All guides"), guideTree(data.guide))),
             el("div", { class: "docs-center" }, el("div", { class: "docs-paper" }, article, footer)),
             el("div", { class: "docs-right" }, sections.length ? el("nav", { class: "docs-outline", "aria-label": "On this page" }, el("h2", {}, "On this page"), outlineList(sections, data.guide)) : null));
     }
@@ -316,6 +382,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     function focusSelector(node) {
         if (!view?.contains(node)) return null;
         if (node.id) return `#${win.CSS.escape(node.id)}`;
+        if (node.dataset.docImage) return `button[data-doc-image="${win.CSS.escape(node.dataset.docImage)}"]`;
         const region = [".docs-left", ".docs-right", ".docs-outline-inline", ".docs-source-switch", ".docs-article", ".docs-pager"].find(selector => node.closest(selector));
         if (!region) return null;
         if (node.matches("a[href]")) return `${region} a[href="${win.CSS.escape(node.getAttribute("href"))}"]`;
@@ -348,12 +415,13 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (guide && !guides().some(item => item.guide === guide)) throw Object.assign(new Error("There's no guide at this address in these guides. It may have been renamed."), { status: 404 });
             const data = await loadPage(guide);
             if (mine !== token || !visible) return;
+            if (quiet && imageDialog?.open) { pendingGuide = route; return; }
+            dismissImage();
             const previousFocus = quiet && focusSelector(doc.activeElement), previousTop = win.scrollY;
             const folds = quiet ? [...host.querySelectorAll(".docs-left-toggle[open], .docs-outline-inline[open]")].map(node => node.className) : [];
-            const swap = () => { view = layout(data); host.replaceChildren(view); page = data; };
-            const previous = page;
-            if (!quiet && previous && previous.guide !== data.guide && doc.startViewTransition && !reduce.matches) await doc.startViewTransition(swap).updateCallbackDone;
-            else swap();
+            view = layout(data);
+            host.replaceChildren(view);
+            page = data;
             if (quiet) {
                 for (const name of folds) { const fold = view.querySelector(`.${name}`); if (fold) fold.open = true; }
                 win.scrollTo({ top: previousTop, behavior: "instant" });
@@ -366,6 +434,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             watchCheckout();
         } catch (error) {
             if (mine !== token || !visible) return;
+            if (quiet && imageDialog?.open) { pendingGuide = route; return; }
             if (error?.code === "documentation_revision_changed" || error?.status === 409) { catalog = null; pages.clear(); return render(route, { restore, quiet }); }
             page = null;
             view = el("div", { class: "docs-paper docs-error", role: "alert" },
@@ -475,8 +544,8 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             }
             void render(route, { restore }).then(() => { if (first) void refresh(); });
         },
-        hide() { visible = false; win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
-        withdraw() { visible = false; win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; pages.clear(); positions.clear(); origins.clear(); host.replaceChildren(); },
+        hide() { visible = false; dismissImage(); win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
+        withdraw() { visible = false; dismissImage(); win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; pages.clear(); positions.clear(); origins.clear(); host.replaceChildren(); },
         close() { this.withdraw(); listeners.abort(); },
     };
 }
