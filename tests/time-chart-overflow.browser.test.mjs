@@ -516,6 +516,53 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: low daily bars k
     await expect(tip).toContainText("No matching records"); await expect(slots.nth(18).locator(".flat-time-column")).toHaveCount(0);
 });
 
+for (const frontend of ["bundled", "react"]) test(`${frontend}: explicit eight-day detail changes only the activity plot and returns to the period scale`, async t => {
+    const totals = [95, ...Array(95).fill(0), 9, 0, 13, 3, 4, 0, 0, 8];
+    const records = totals.flatMap((n, i) => {
+        if (!n) return [];
+        const record = fixture(`detail-${i}`), at = new Date(Date.UTC(2026, 6, 14 + i, 12)).toISOString();
+        record.capturedAt = record.userPrompt.sourceTimestamp = at;
+        record.toolCalls = Array.from({ length:n }, (_, j) => ({...record.toolCalls[0], startedAt:at, toolCallId:`detail-${i}-${j}`, startEventId:`start-${i}-${j}`,
+            toolSucceeded:j !== 0, reportedOutcome:j ? "succeeded" : "failed"}));
+        return [record];
+    });
+    const page = await setup(t, records, {frontend, route:"#analyze"});
+    const chart = page.locator("#chart"), scale = chart.locator("#activityScaleToggle"), scroller = chart.locator(".flat-time-scroll");
+    const axes = chart.locator(".dimensional-time-labels > a");
+    const counts = () => chart.locator("svg.flat-time-column").evaluateAll(ns => ns.map(n => [+n.dataset.total, +n.dataset.maximum]));
+    await expect(scale).toHaveText("Eight-day detail");
+    await expect(axes).toHaveCount(90);
+    await expect(chart.locator(".activity-scale-controls")).toContainText("Full-period peak: 95 calls on Jul 14, 2026");
+    for (const [width, theme] of [[1440, "light"], [390, "dark"]]) {
+        await page.setViewportSize({width,height:1000}); await chooseTheme(page, theme); await ready(page);
+        await scroller.evaluate(n => {n.scrollLeft = n.scrollWidth;});
+        const left = await scroller.evaluate(n => n.scrollLeft), period = await counts();
+        assert.ok(period.every(([,max])=>max===95), "The true peak is before even the loaded 90-day window");
+        await scale.press("Enter"); await expect(scale).toBeFocused();
+        await expect(scale).toHaveText("Return to period scale"); await expect(axes).toHaveCount(8);
+        await expect(axes.first()).toHaveText("Oct 18"); await expect(axes.last()).toHaveText("Oct 25");
+        await expect(chart.locator(".activity-scale-controls")).toContainText("0–13 calls. Full-period peak: 95");
+        await expect(page.locator("#timelineWindow")).toBeHidden();
+        assert.deepEqual(await counts(), [[9,13],[13,13],[3,13],[4,13],[8,13]]);
+        await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("132");
+        await scroller.evaluate(n => {n.scrollLeft = n.scrollWidth;});
+        assert.deepEqual(await counts(), [[9,13],[13,13],[3,13],[4,13],[8,13]], "Scrolling cannot change the detail scale");
+        const segment = chart.locator(".time-slot").nth(2).locator(".time-segment-link[data-segment=failure]");
+        await segment.hover(); await expect(page.getByRole("tooltip")).toContainText("1 of 13");
+        if(process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-eight-day.png`)});
+        await segment.press("Enter"); await ready(page); await expect(page.locator("#activityCount")).toHaveText("1");
+        await page.goBack(); await ready(page);
+        await expect(axes).toHaveCount(8); await expect(segment).toBeFocused();
+        await scale.click(); await expect(scale).toBeFocused(); await expect(scale).toHaveText("Eight-day detail");
+        await expect(page.locator("#timelineWindow")).toBeVisible();
+        assert.deepEqual(await counts(), period);
+        assert.ok(Math.abs(await scroller.evaluate(n => n.scrollLeft)-left)<=1);
+    }
+    await scroller.evaluate(n => {n.scrollLeft = 0;}); await scale.click();
+    await expect(chart.locator(".activity-scale-controls")).toContainText("No recorded calls");
+    await expect(axes).toHaveCount(8); await expect(chart.locator(".flat-time-column")).toHaveCount(0);
+});
+
 test("a fitted seven-bucket Analyze chart has no horizontal scrollbar and keeps every label and column", async t => {
     const page = await setup(t);
     await page.setViewportSize({width:2048,height:1080}); await ready(page);

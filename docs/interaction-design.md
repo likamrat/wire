@@ -234,6 +234,11 @@ single dated record. Explicit window controls remain available after recovery
 to preserve keyboard focus and Back; genuinely empty or undated populations
 do not acquire invented date controls.
 Local scrolling keeps all labels readable within the current window.
+Eight-day detail is an explicit plot choice, not a date filter. Anchor it at
+the current date lane, or the last eight days at the end of the scrollport.
+Show the dates, local maximum and broader peak. If native data covers only a
+chart window, label its peak as such. Returning restores the period scale
+and scroll position; neither horizontal scrolling nor resizing selects a new scale.
 
 Each Analyze widget, including Interactions, has one trailing collapse button.
 The Results toolbar offers **Collapse all** when any visible widget is open,

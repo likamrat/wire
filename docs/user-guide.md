@@ -261,6 +261,11 @@ default, even with All dates or a long range.
   **First dates** and **Latest dates** to reach the rest.
 - The window names its dates. Totals and filters still cover the whole selected
   period, and paging doesn't change which interactions a report includes.
+- Choose **Eight-day detail** to compare small daily call counts. The scale
+  uses the largest count in the eight dates shown; the caption names the
+  dates and the broader peak. Scrolling the detail does not rescale it.
+  **Return to period scale** restores the previous chart and scroll position.
+  Tool call results and the interaction list keep their original filters.
 - If an old link points outside the current dated activity, **First dates** or
   **Latest dates** returns to its recorded dates without clearing your filters.
 

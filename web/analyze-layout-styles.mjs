@@ -152,6 +152,8 @@ export const analyzeLayoutStyles = `
 #chart .dimensional-time-labels {min-height:0}
 #chart .dimensional-time-labels>* {padding-block-end:0}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}
+.activity-scale-controls {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0 var(--space-md);color:var(--muted);font-size:var(--type-small)}
+.activity-scale-controls button {color:var(--accent);min-height:44px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0 12px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}
 .percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator{grid-column:1/-1;grid-row:2}
