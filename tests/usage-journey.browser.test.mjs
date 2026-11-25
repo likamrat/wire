@@ -25,13 +25,17 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     if(width<500) await slider.tap({position:{x:box.width*.98,y:box.height*.5}});
     else await slider.hover({position:{x:box.width*.98,y:box.height*.5}});
     await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable · 0 of 1 measured/);
+    if(width>=500) {
+        await slider.click({position:{x:box.width*.98,y:box.height*.5}});
+        await date.hover();await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable/);
+    }
     await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching activity/);
     await slider.press("Home");await expect(slider).toHaveAttribute("aria-valuetext",/200,000 tokens/);
     const expected=new Date(); expected.setUTCHours(10,0,0,0); expected.setUTCDate(expected.getUTCDate()-20);
     const dateText=expected.toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",year:"numeric",month:"short",day:"numeric"});
     await expect(date).toHaveText(dateText);
     if (process.env.WIRE_USAGE_PROOFS) await card.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-usage-dated.png`)});
-    await date.press("Enter");
+    if(width<500) await date.tap();else await date.press("Enter");
     const panel=page.locator(".trends-panel[data-family=usage]");
     await expect(panel).toContainText("200,000 tokens");
     await expect(panel).toContainText("1 of 2 interactions metered");

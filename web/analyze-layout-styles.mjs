@@ -24,6 +24,7 @@ export const analyzeLayoutStyles = `
 .token-history-dates span {position:absolute;white-space:nowrap}
 .token-history-dates [data-edge=center] {transform:translateX(-50%)}
 .token-history-dates [data-edge=end] {transform:translateX(-100%)}
+@container (max-width:20rem){.token-history-dates [data-edge=center]:not(:only-child){visibility:hidden}}
 .token-history-total {grid-column:1/-1;margin:8px 0 0;color:var(--ink)}
 .token-history-coverage {color:var(--muted)}
 .token-day-reading {position:absolute;z-index:1;left:clamp(0px,calc(var(--inspected-x) + 10px),calc(100% - min(100%,14rem)));top:14%;width:max-content;max-width:min(100%,14rem);display:grid;gap:3px;padding:6px 12px;background:var(--floating-paper);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);opacity:0;pointer-events:none}

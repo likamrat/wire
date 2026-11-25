@@ -53,7 +53,7 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
     plot.append(svg,slider,detail);wrap.append(axis,plot,labels,footer);
     const previous=host.querySelector(".usage-date-slider"), focused=previous && host.ownerDocument.activeElement===previous;
     const saved=previous?.dataset.scope===scopeKey?previous.valueAsNumber:NaN;
-    let current, inspecting=false;
+    let current, inspecting=false, pinned=false;
     function reveal(show) {
         inspecting=show;plot.toggleAttribute("data-inspecting",show);
         detail.setAttribute("aria-hidden",String(!show));
@@ -84,13 +84,13 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         }
         reveal(true);
     }
-    slider.addEventListener("pointermove",e=>{if(e.pointerType==="mouse" || e.buttons)pointer(e);});
-    slider.addEventListener("pointerup",pointer);
+    slider.addEventListener("pointermove",e=>{if(!pinned && (e.pointerType==="mouse" || e.buttons))pointer(e);});
+    slider.addEventListener("pointerup",e=>{pointer(e);pinned=true;});
     slider.addEventListener("input",()=>{inspect(slider.valueAsNumber);reveal(true);});
     plot.addEventListener("focusin",()=>reveal(true));
-    plot.addEventListener("focusout",e=>{if(!plot.contains(e.relatedTarget))reveal(false);});
-    plot.addEventListener("pointerleave",()=>{if(!plot.querySelector(":focus-visible"))reveal(false);});
-    plot.addEventListener("keydown",e=>{if(e.key==="Escape" && inspecting){e.preventDefault();e.stopPropagation();slider.focus({preventScroll:true});reveal(false);}});
+    plot.addEventListener("focusout",e=>{if(!plot.contains(e.relatedTarget)){pinned=false;reveal(false);}});
+    plot.addEventListener("pointerleave",()=>{pinned=false;if(!plot.querySelector(":focus-visible"))reveal(false);});
+    plot.addEventListener("keydown",e=>{if(e.key==="Escape" && inspecting){e.preventDefault();e.stopPropagation();pinned=false;slider.focus({preventScroll:true});reveal(false);}});
     inspect(Number.isInteger(saved)&&saved>=0&&saved<=span?saved:Math.max(0,Math.min(span,dayIndex(measured.at(-1)?.date??calendar.range.to)-start)));
     reveal(false);host.replaceChildren(wrap);
     if(focused)slider.focus({preventScroll:true});
