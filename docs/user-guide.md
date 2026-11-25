@@ -450,9 +450,11 @@ were saved. Older records may lack that specific reason.
 ### Resize or maximize the reader
 
 Drag the reader's left edge or use its minus and plus buttons to change its
-width. On a narrow screen, the reader uses one pane without sizing controls.
+width. On a narrow screen, the reader uses one pane without sizing controls;
+**Close interaction** is beside the title.
 
-Choose **Maximize interaction** to read the calls across the workspace. Each
+Choose **Maximize interaction** to give calls, long replies and tables more room
+without changing the text size. Each
 call shows its operation and outcome together, and a recorded failure reason
 stays with the call it explains. **Call details** opens that call's evidence.
 

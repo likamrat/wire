@@ -707,9 +707,15 @@ preserve the current visible text anchor and mounted disclosure and focus
 owners; report creation and saved inspection don't inherit them. Narrow modal
 focus stays independent of the navigation drawer.
 
+On desktop, leave a small gap below the app toolbar. The title and controls
+stay above the scrolling text. In the narrow reader, keep **Close interaction**
+beside the title, with the token count on the next row.
+
 In the maximized reader:
 
 - The prompt uses the full width, with Copy at its right edge.
+- Give reply paragraphs more room without increasing the type size. Markdown
+  tables fill the reply column and scroll within it if they're too wide.
 - Lead each Work IQ call with the recorded operation and outcome. Keep the
   ordinal, exact tool name, duration and **Call details** control secondary.
 - Show a recorded reason directly under its call, and distinguish WIRE's

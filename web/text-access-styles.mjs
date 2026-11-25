@@ -215,11 +215,17 @@ body[data-reader-expanded]>main {visibility:hidden}
 #contextSidebar {position:fixed;inset:var(--app-header-height,76px) 0 0 auto;margin:0;padding:0;width:var(--context-sidebar-width);max-width:100%;height:calc(100dvh - var(--app-header-height,76px));max-height:none;border:0;border-inline-start:1px solid transparent;border-radius:0;background:var(--paper);color:var(--ink);box-shadow:var(--context-sidebar-shadow);overflow:hidden;z-index:2}
 #contextSidebar[open] {display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
 #contextSidebar[data-mode=overlay] {inset:0 0 0 auto;width:min(100%,40rem);height:100dvh}
+#contextSidebar[data-interaction-reader]:not([data-mode=overlay]) {inset-block-start:calc(var(--app-header-height,76px) + var(--space-sm));height:calc(100dvh - var(--app-header-height,76px) - var(--space-sm));border-top:1px solid var(--surface-edge);border-start-start-radius:var(--radius)}
 #contextSidebar::backdrop {background:var(--scrim)}
 .context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid transparent;min-width:0}
 .context-sidebar-header>h2 {font-size:var(--type-body);font-weight:var(--weight-regular)}
+#contextSidebar[data-interaction-reader] .context-sidebar-header {border-bottom-color:var(--surface-divider)}
+#contextSidebar[data-mode=expanded] .context-sidebar-header>h2 {font-size:var(--type-section);font-weight:var(--weight-medium)}
 .context-sidebar-header .icon-only>.wire-icon {width:var(--icon-utility-size);height:var(--icon-utility-size)}
 .context-sidebar-controls,#readerWidthControls {display:flex;align-items:center;flex:none}
+#contextSidebar[data-interaction-reader][data-mode=overlay] .context-sidebar-header {display:grid;grid-template-columns:minmax(0,1fr) auto}
+#contextSidebar[data-interaction-reader][data-mode=overlay] .context-sidebar-controls {grid-area:1/2}
+#contextSidebar[data-interaction-reader][data-mode=overlay] .reader-token-jump {grid-column:1/-1;justify-self:start;max-inline-size:100%}
 .context-sidebar-controls button {display:grid;place-items:center;flex:none;width:44px;height:44px;min-height:44px;padding:10px}
 .context-sidebar-controls button[aria-disabled=true] {color:var(--muted);cursor:default}
 #readerResize {position:absolute;inset:0 auto 0 0;width:12px;cursor:ew-resize;touch-action:none;z-index:3;outline-offset:-3px}
@@ -228,7 +234,8 @@ body[data-reader-expanded]>main {visibility:hidden}
 #contextSidebar[data-resizing] {user-select:none;cursor:ew-resize}
 #contextSidebar[data-mode=expanded] :is(#requestView,#requestContent) {max-inline-size:none}
 #contextSidebar[data-mode=expanded] #requestContent [data-text-subject=request] .full-text-content {max-inline-size:none}
-#contextSidebar[data-mode=expanded] #requestContent [data-reader-section=response] .full-text-content {max-inline-size:92ch}
+#contextSidebar[data-mode=expanded] #requestContent [data-reader-section=response] .full-text-content {max-inline-size:min(100%,128ch)}
+#contextSidebar[data-mode=expanded] [data-reader-section=response] .message-markdown-table>table {inline-size:100%}
 #contextSidebarBody {grid-row:3;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px;padding:20px;container-type:inline-size}
 #contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid transparent;background:var(--paper);min-width:0}
 #contextSidebarFooter:empty {display:none}
