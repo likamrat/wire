@@ -1,6 +1,8 @@
 // Documentation page styles. WIRE screen tokens only; the docs area sizes its own columns with container queries.
 export const documentationStyles = `
 .documentation-navigation{margin:0 0 var(--space-sm);padding-bottom:var(--space-sm);border-bottom:1px solid var(--surface-divider)}
+.app-sidebar .documentation-navigation a{grid-template-columns:max(24px,1.5rem) minmax(0,1fr)}
+.documentation-navigation .navigation-label{text-overflow:ellipsis}
 :root:has(#documentationView:not([hidden])) .page-heading{display:none}
 .wire-docs{container:docs/inline-size;--docs-rule:color-mix(in srgb,var(--surface-divider) 55%,var(--paper));--docs-sticky:calc(var(--app-header-height,77px) + var(--space-md));color:var(--ink);padding-bottom:var(--space-3xl);view-transition-name:docs-content}
 .wire-docs .docs-icon{display:inline-flex;inline-size:1.1em;block-size:1.1em;flex:none;vertical-align:-.18em}
