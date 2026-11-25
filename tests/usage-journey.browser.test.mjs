@@ -6,6 +6,32 @@ import { usagePreview } from "./usage-preview-fixture.mjs";
 import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters, navigateMain, navigateSettings } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
+test("Token usage preset opens the existing frozen token reading with complete coverage", async t => {
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},"react");
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width:1366,height:900},timezoneId:"UTC"});
+    const requests=[];page.on("request",r=>{if(r.method()==="POST")requests.push(new URL(r.url()).pathname);});
+    await page.goto(runtime.url+"reports");
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    const response=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
+    await page.locator("#reportPreset-tokens").click();
+    const prepared=await(await response).json(), facts=prepared.snapshot.usageFacts.cohorts.selected;
+    assert.equal(prepared.title,"Token usage");
+    assert.equal(prepared.snapshot.reportPopulation.focus.preset,"all");
+    assert.equal(facts.total,342000);
+    assert.equal(facts.metered,7);assert.equal(facts.eligible,8);
+    assert.equal(facts.rows.length,8);assert.equal(facts.rows.filter(r=>r.total===null).length,1);
+    const frame=page.frameLocator(".report-frame"), usage=frame.locator("#usage-selected");
+    await expect(usage).toBeVisible();
+    await expect(usage).toContainText("342,000 tokens");
+    await expect(usage).toContainText("Not recorded");
+    await expect(usage.locator("xpath=..")).toHaveJSProperty("open",true);
+    assert.equal(requests.filter(p=>p==="/api/preview").length,1);
+    assert.equal(requests.filter(p=>p==="/api/export").length,0);
+    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-preset.png")});
+});
+
 for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${frontend}: Analyze explains sparse token usage and opens the actual measured day`,async t=>{
     const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
     const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend,{sparse:true});

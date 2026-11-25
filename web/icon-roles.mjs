@@ -25,7 +25,7 @@ export const uxIconSources = Object.freeze({
     "search-action": "workflow", "search-tool": "wrench",
     "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
     "compare-periods": "scale",
-    "report-all": "layers", "scope-issues": "triangle-alert",
+    "report-all": "layers", "report-tokens": "chart-column", "report-custom": "sliders-horizontal", "scope-issues": "triangle-alert",
     "author-user": "user-round", "author-agent": "bot", "author-unknown": "circle-question-mark",
     "report-files": "files", "report-options": "ellipsis", "report-masked": "eye-off",
     "report-original": "triangle-alert", "report-none": "message-square-off",

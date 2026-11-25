@@ -66,6 +66,8 @@ ${saved ? `@media screen{
 @media screen and (hover:hover){body[data-wire-reader] .report-nav a:hover::before{background:var(--accent-soft)}}
 @media screen{body[data-wire-reader] .report-nav a:active::before{background:var(--accent-pressed)}}` : ""}
 body[data-wire-reader] [id]{scroll-margin-top:5rem}
+body[data-wire-reader] a,body[data-wire-reader] a:is(:hover,:active,:focus-visible){text-decoration:none}
+body[data-wire-reader] a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .wire-reading-interaction>article[id]{scroll-margin-top:9rem}
 .wire-reading-meta{margin-top:16px}
 .wire-reading-meta>summary{cursor:pointer;min-height:44px;align-content:center}

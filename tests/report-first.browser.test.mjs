@@ -51,6 +51,46 @@ async function prepare(page, preset = "errors") {
     return prepareSelectedFocus(page);
 }
 
+test("Reports opens visible preset actions, keeps Custom last and resumes the same preview", { timeout: 60000 }, async t => {
+    const { page, context, requests, errors } = await setup(t, { frontend: "react" });
+    const list = page.locator(".report-preset-list"), errorPreset = page.locator("#reportPreset-errors");
+    await expect(page.locator(".report-gallery-header h2")).toHaveText("New report");
+    assert.deepEqual(await list.locator("[data-report-preset]").evaluateAll(nodes => nodes.map(node => node.dataset.reportPreset)),
+        ["all", "errors", "tokens", "completed", "mine", "agent"]);
+    await expect(list.locator("li").last()).toContainText("Custom report");
+    await expect(list.locator("li").last()).toContainText("Set up");
+    await expect(page.locator("#reportDraftsPanel")).toContainText("Drafts");
+    await expect(page.locator(".report-desk")).toBeHidden();
+    for (const [theme, width] of [["light",1366],["dark",390]]) {
+        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 900 });
+        const before = await errorPreset.boundingBox();
+        await errorPreset.hover(); await errorPreset.focus(); await errorPreset.press("Tab"); await page.keyboard.press("Shift+Tab");
+        await expect(errorPreset).toBeFocused();
+        await expect(errorPreset).toHaveCSS("text-decoration-line", "none");
+        assert.deepEqual(await errorPreset.boundingBox(), before);
+        await captureReport(page, `report-entry-${theme}-${width}`);
+    }
+    assert.equal(requests.filter(r => r.path === "/api/preview").length, 0);
+    const response = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await errorPreset.press("Enter");
+    const first = await (await response).json();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    assert.equal(first.snapshot.reportPopulation.reference.length, 8);
+    assert.equal(first.records.length, 2);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    await page.locator("#reportLibraryLink").click();
+    await expect(page.locator("#reportResumePreview")).toBeVisible();
+    await selectReportFocus(page, "all");
+    await page.getByRole("button", { name: "Back to report choices", exact: true }).click();
+    const beforeResume = requests.filter(r => r.path === "/api/preview").length;
+    await page.locator("#reportResumePreview").click();
+    await expect(page.locator("#reportPreviewDrawer")).toBeVisible();
+    await expect(page.locator("#reportDeskFocus")).toHaveValue("errors");
+    assert.equal(requests.filter(r => r.path === "/api/preview").length, beforeResume);
+    assert.equal(requests.filter(r => r.path === "/api/export").length, 0);
+    assert.deepEqual(errors, []);
+});
+
 for (const [zone,today,tomorrow] of [["America/Los_Angeles","2026-02-28","2026-03-01"],["Asia/Tokyo","2026-03-01","2026-03-02"]]) {
     test(`historical calendars stop at ${today} in ${zone} for the same instant`, async t => {
         const {page,requests}=await setup(t,{frontend:"react",route:"reports",timezoneId:zone,now:"2026-03-01T00:15:00Z"});
@@ -627,12 +667,14 @@ test("the normal Reports picker keeps long plural evidence readable in both them
     assert.deepEqual(errors, []);
 });
 
-test("creation text choice applies to the first report without a setup or preview request", { timeout: 60000 }, async t => {
+test("creation text choice applies before a preset preview without writing a report", { timeout: 60000 }, async t => {
     const { page, context, requests, errors } = await setup(t);
     const choice = page.locator("#reportPrivacyChoice");
-    await expect(page.locator('.report-before-prepare [value=masked]')).toBeChecked();
+    await choice.click();
+    await expect(page.locator('#promptOptions [value=masked]')).toBeChecked();
     await expect(page.locator("#additionalMasking")).toBeHidden();
     await page.locator('[name=promptMode][value=none]').check();
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await expect(page.locator("#reportStage1")).toBeVisible();
     const initial = await prepare(page);
@@ -802,9 +844,9 @@ test("changing privacy on the landing resumes frozen facts and keeps edited copi
     assert.deepEqual(errors, []);
 });
 
-test("focus selection leaves Reports unprepared; explicit preview and Save preserve the frozen failure cohort", { timeout: 60000 }, async t => {
+test("custom focus selection leaves Reports unprepared; preview and Save preserve the frozen failure cohort", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
-    await expect(page.locator("#reportDeskFocus option")).toHaveCount(5);
+    await expect(page.locator("#reportDeskFocus option")).toHaveCount(6);
     await expect(page.locator(".report-progress")).toBeHidden();
     const address = page.url();
     await selectReportFocus(page, "errors");
@@ -1209,7 +1251,7 @@ test("new library metadata reflects ordinary reports saved locally", { timeout: 
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     }
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
-    await expect(page.locator("#reportDeskFocus option")).toHaveCount(5);
+    await expect(page.locator("#reportDeskFocus option")).toHaveCount(6);
     await viewAllSavedReports(page);
     await expect(page.locator(".saved-report-privacy").first()).toContainText("Detected personal details hidden");
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
@@ -1651,7 +1693,7 @@ test("withdrawal scrubs retained saved-row titles and menu labels and blocks the
     assert.deepEqual(errors, []);
 });
 
-test("Reports keeps one focus selector with its explanation at compact and wide sizes", { timeout: 60000 }, async t => {
+test("Custom report keeps aligned controls and explanations at compact and wide sizes", { timeout: 60000 }, async t => {
     const { page, requests, errors } = await setup(t);
     const proofs = process.env.WIRE_REPORT_FIRST_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });
@@ -1670,7 +1712,8 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
     ];
     const compact = page.getByRole("combobox", { name: "Show", exact: true });
     const outline = page.locator(".report-desk");
-    for (const [theme, width, size] of [["light", 1280, 100], ["dark", 375, 200]]) {
+    await page.locator("#reportCustomSetup").click();
+    for (const [theme, width, size] of [["light", 1440, 100], ["dark", 375, 200]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
         const narrow = width === 375;
@@ -1692,13 +1735,15 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
             if (explanation) await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
             else await expect(outline.locator(".report-outline-description")).toBeHidden();
         }
-        const faces = await outline.locator("#reportDeskFocus-control,#reportDeskDates").evaluateAll(nodes => nodes.map(n => {
+        const faces = await outline.locator("#reportDeskFocus-control,#reportDeskDates,#reportUsagequestion-control").evaluateAll(nodes => nodes.map(n => {
             const b = n.getBoundingClientRect(), p = getComputedStyle(n, "::before");
             return { face: b.height - parseFloat(p.top) - parseFloat(p.bottom), target: b.height, top: b.top };
         }));
         assert.ok(faces.every(f => f.target >= 44));
-        assert.equal(faces[0].face, faces[1].face);
-        if (!narrow) assert.equal(faces[0].top, faces[1].top);
+        if (!narrow) {
+            assert.ok(faces.every(f => f.face === faces[0].face));
+            assert.ok(faces.every(f => f.top === faces[0].top));
+        }
         const selectorBox = await compact.boundingBox(), description = await outline.locator(".report-outline-description").boundingBox();
         assert.ok(description.y >= selectorBox.y + selectorBox.height - 1);
         await expect(outline.getByRole("button", { name: "Prepare preview", exact: true })).toBeEnabled();

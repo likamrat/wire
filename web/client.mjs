@@ -5015,6 +5015,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("reportsView").classList.toggle("report-home", workspaceState.route.view === "reports" && (drawer || view.landing && workspaceState.route.task !== "library"));
         $("reportCreatePanel").hidden = reading;
         $("savedReportsPanel").hidden = !view.landing && !drawer;
+        if (reportExperience?.draftShelf) reportExperience.draftShelf.hidden = !view.landing || workspaceState.route.task === "library";
         $("savedReportReader").hidden = !reading;
         const filePanel = creating && !$("reportStage3")?.hidden ? $("reportFileInspection") : null;
         $("reportsView").classList.toggle("report-file-stage", !drawer && workspaceState.route.view === "reports" && Boolean(filePanel && !filePanel.hidden)
@@ -10438,12 +10439,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         reportPreset = preset;
+        const tokenReport = preset === "tokens";
         reportAuthors = authorship.selection(preset === "mine" ? ["user"] : preset === "agent" ? ["agent"] : undefined);
         invalidatePreview();
         draft.change({
-            saveMode: "local", title: namedReport?.name, overrides: [], manualTerms: [],
+            saveMode: "local", title: namedReport?.name || (tokenReport ? "Token usage" : undefined), overrides: [], manualTerms: [],
             reportNotes: [], recordedContext: false, resultText: preset === "errors", resultTextKind: "errors",
-            reportFocus: bounded ? undefined : { version: 1, preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
+            reportFocus: bounded ? undefined : { version: 1, preset: tokenReport ? "all" : preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
+            ...(tokenReport ? { usageOptions: { ...draft.options().usageOptions, tokens: true, rows: true } } : {}),
         });
         draft.synchronizeTime(viewerTime, effectiveReportDates());
         acceptNativeReportScope(); updateSelection();
@@ -10782,6 +10785,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     isCurrent: () => api.isCurrent(publication),
                     contained: localSave,
                     reading: readingSelection?.document,
+                    initialSection: reportPreset === "tokens" && !readingSelection ? "usage-selected" : undefined,
                     isReadingCurrent: () => readingSelection?.intent === workspaceState.readingIntent
                         && readingSelection.navigation === workspaceState.navigationGeneration,
                     onReadingIntent: () => workspaceState.noteReading(),
@@ -11727,7 +11731,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const savedTools = $("bundles").querySelector(".saved-library-tools");
     // Both presentations use the same panel and inventory; DOM order is also Tab order.
     $("reportCreatePanel").before($("reportSections"));
-    $("reportCreatePanel").after($("savedReportsPanel"));
+    const reportSide = el("div", "report-side-column");
+    reportSide.append(reportExperience.draftShelf, $("savedReportsPanel"));
+    $("reportCreatePanel").after(reportSide);
     for (const [id, role] of [["reportOverviewLink", "section-overview"], ["viewAllSavedReports", "report-files"]]) {
         const link = $(id);
         link.prepend(ux.icon(role));

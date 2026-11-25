@@ -7,7 +7,7 @@ generate evals or rate answer quality.
 
 **Contents**
 
-- [Open a report](#open-a-report): [what Show includes](#what-show-includes),
+- [Open a report](#open-a-report): [report choices](#report-choices),
   [dates and activity](#dates-and-activity), [named drafts](#keep-interactions-in-a-draft)
 - [Read the findings](#read-the-findings)
 - [Read and adjust](#read-and-adjust): [usage and tokens](#usage-and-tokens),
@@ -22,34 +22,40 @@ Contributors changing report behavior should also read the
 
 ## Open a report
 
-Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
-to search the library. Under **New report**, choose which chat details to
-include, then check **Show**, **Dates**, **Usage question**, **Activity source**
-and **Formats**.
-**Show** filters what the report covers, such as errors or human prompts.
-**Activity source** selects the interactions to start from. A named draft
-supplies its own selected interactions; selecting it does not prepare or save.
+Open **Reports** and pick a report under **New report**. For example,
+**Errors & failures** opens a preview using the dates, activity source and text
+choice shown above the list. No files are written.
+
+Choose **Custom report** at the bottom of the list to set **Show**, **Dates**,
+**Usage question**, **Activity source** and **Formats** before selecting
+**Prepare preview**. Changing these choices alone does not prepare or save.
+**Drafts** lists named selections; open a name to prepare from those interactions.
+Open a recent saved name directly, or search **Saved library**.
+
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
-**Prepare preview** opens a right-side drawer without writing files. Check the
-report there, then choose **Save report** to write the selected files locally.
+Read the report in the right-side preview, then choose **Save report** to write
+the selected files locally. Dates, formats, inclusion and text controls remain
+available in the preview.
 If recorded activity changes while you read, a note in the drawer tells you
 that the preview still contains the activity it was prepared with.
 If you kept chat details, the confirmation names those formats. Nothing is sent.
 
-![Report setup with Show, Dates and Usage question beside recently saved reports.](images/report-choices.png)
+![Report choices with Custom report last, alongside named drafts and recent reports.](images/report-choices.png)
 
-### What Show includes
+<a id="what-show-includes"></a>
 
-To start an error report, choose **New report**, set **Show** to
-**Errors & failures**, then choose **Prepare preview**. The default dates,
-formats and text choice apply unless you change them.
+### Report choices
+
+The configured dates, file formats and text choice apply unless you change them.
+Only **Custom report** opens setup rather than preparing immediately.
 
 | Report | Includes |
 | --- | --- |
 | All activity | Recorded prompts, Work IQ calls and results. Eligible interactions with an unverified author remain included. |
 | Errors & failures | Interactions with any recorded failed call or explicit application/API error, including mixed results. |
+| Token usage | All eligible interactions, with recorded token and cache counts, coverage and a per-interaction table. The preview starts at that breakdown; other report sections remain available. |
 | Completed calls | Interactions with at least one recorded call, all calls completed and no recorded errors. This does not establish task success. |
 | Human prompts | Interactions whose originating prompt is recorded as user-authored. |
 | Agent prompts | Interactions whose originating prompt is recorded as agent-authored. |
@@ -100,11 +106,12 @@ recorded interaction are unchanged.
 
 ![Creating a named draft from the open interaction without leaving Analyze.](images/report-draft.png)
 
-In **Reports**, choose the name under **Report draft**, then **Prepare preview**.
+In **Reports**, choose the name in **Drafts**, then **Prepare preview**.
+The narrow layout also has a **Drafts** shortcut beside **New report**.
 Quick additions keep their membership across reloads, not a copy of the chat.
 They never write an export or change an already prepared or saved report.
 
-To delete a draft, select it under **Report draft**, choose **Delete draft**,
+To delete a draft, open its name in **Drafts**, choose **Delete draft**,
 check the name and confirm. In Analyze, a card that belonged only to that
 draft returns to **Add to report**. Other memberships, the activity itself
 and saved files stay intact. If the response is lost, WIRE checks the draft
@@ -190,12 +197,16 @@ report's contents. The reader keeps its navigation visible while you scroll.
 
 ![An expanded report interaction with its prompt and recorded calls below the section navigation.](images/report-expanded.png)
 
-Changing choices in the outline does not prepare a report until you select **Prepare preview**.
+Changing choices in **Custom report** does not prepare a report until you select **Prepare preview**.
 Reopening the same unfinished report keeps its frozen activity.
 
 ### Usage and tokens
 
-In **New report**, **Usage question** lets you compare Human and Agent prompts,
+Choose **Token usage** under **New report** to start with the recorded token
+breakdown. It counts each originating interaction once and keeps missing counts
+explicit; it does not estimate billed spend.
+
+In **Custom report**, **Usage question** lets you compare Human and Agent prompts,
 find tools used in high-usage interactions, or compare model mix and cache
 reuse. An unverified sender stays separate. For an interaction report, the
 author, tool and minimum token count narrow the interactions included in the

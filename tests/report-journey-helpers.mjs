@@ -1,5 +1,6 @@
 export async function selectReportFocus(page, preset) {
     const control = page.locator("#reportDeskFocus-control");
+    if (!await control.isVisible()) await page.locator("#reportCustomSetup").click();
     if (await control.isDisabled() && await page.locator("#reportDeskFocus").inputValue() === preset) return;
     await control.click();
     await page.locator(`.select-popup [role=option][data-value="${preset}"]`).click();
@@ -10,6 +11,8 @@ export function prepareReportPreview(page) {
 }
 
 export async function prepareLandingReport(page, preset) {
+    const direct = page.locator(`#reportPreset-${preset}`);
+    if (await direct.isVisible()) { await direct.click(); return; }
     await selectReportFocus(page, preset);
     await prepareReportPreview(page);
 }

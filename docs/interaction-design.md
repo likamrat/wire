@@ -550,17 +550,21 @@ not written into an existing saved report.
 
 ### Landing and saved list
 
-Reports opens with New report on the left and up to three recent reports on the
-right. When more are saved, the heading shows how many are visible, for example
+Reports opens with New report on the left and named Drafts above up to three
+recent reports on the right. Opening a draft selects its retained interactions
+without preparing or saving. When more reports are saved, the heading shows how many are visible, for example
 “Recent reports (3 of 9).” At narrow widths the recent list follows creation. Saved library holds
 the full inventory. Preparing opens the working copy in a right-side drawer;
 opening a saved name reads the verified copy in the main workspace. Back names
 the origin, such as **Back to Reports** or **Back to saved reports**.
 
-The outline has five focus choices: All activity,
-Errors & failures, Completed calls, Human prompts and Agent prompts. Compare
-has its own primary destination. One focus selector works at every width.
-Changing focus shows what the report includes; it never prepares or saves.
+New report lists All activity, Errors & failures, Token usage, Completed calls,
+Human prompts and Agent prompts. Each opens its preview in one action with the
+current choices. Token usage enables the existing token/cache breakdown and
+per-interaction table without changing the frozen report format or its population
+rules. Unsupported source scopes retain their restrictions.
+Custom report is the last row, labeled Set up. It opens the existing fields;
+changing Show there does not prepare or save. Compare keeps its own destination.
 The report period is visible, defaults to
 Last 7 days, and offers 14/30/custom choices. Custom dates opens its calendar
 in the same anchored panel. File, text and inclusion choices stay anchored to
@@ -570,6 +574,10 @@ Changing it updates the draft without preparing or saving. The same control move
 into the report toolbar; its choice reaches the initial preparation unchanged.
 Selected and Current are available before preparation through Activity, after
 preparation through inclusion controls, and through their contextual entries.
+Keep the list and drafts content-sized. Wrapped values may grow their controls;
+single-line Show, Dates and Usage question fields share label baselines and
+painted heights. Preset, draft and saved-report links use hover/press paint and
+visible keyboard focus, never text underlines.
 
 Recent entries show their names and compact saved periods. Date ranges share
 month/year only where accurate; longer ranges wrap instead of losing endpoints.

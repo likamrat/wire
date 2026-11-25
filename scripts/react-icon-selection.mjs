@@ -18,6 +18,6 @@ export {
     LuMaximize2, LuMenu, LuMessageCircle, LuMessageCircleHeart, LuMessageSquare, LuMessageSquareOff, LuMessageSquareReply,
     LuMessagesSquare, LuMinimize2, LuMinus, LuMoon, LuNetwork, LuNotebook, LuPalette, LuPanelLeft,
     LuPanelRightClose, LuPanelRightOpen, LuPanelsTopLeft, LuPlug, LuPlus, LuRefreshCw, LuRotateCcw,
-    LuScale, LuSearch, LuSettings, LuShield, LuSun, LuTriangleAlert,
+    LuScale, LuSearch, LuSettings, LuShield, LuSlidersHorizontal, LuSun, LuTriangleAlert,
     LuUnfoldVertical, LuUnplug, LuUserRound, LuUsersRound, LuWorkflow, LuWrench, LuX,
 } from "react-icons/lu";

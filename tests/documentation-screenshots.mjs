@@ -6,7 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, selectActivityOption } from "./helpers.mjs";
-import { selectReportFocus, prepareReportPreview, viewAllSavedReports } from "./report-journey-helpers.mjs";
+import { viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
@@ -279,11 +279,18 @@ test("capture documentation through the normal renderer with isolated light-them
         }
     }
 
+    if (reportsOnly) {
+        await page.locator("#activityList .report-draft-trigger").first().click();
+        const picker = page.getByRole("dialog", { name: "Report drafts" });
+        await picker.getByRole("button", { name: "New draft", exact: true }).click();
+        await picker.getByLabel("Draft name").fill("Launch follow-up");
+        await picker.getByRole("button", { name: "Create draft and add" }).click();
+        await page.getByRole("button", { name: "Dismiss confirmation" }).click();
+    }
     await page.locator('nav [data-nav=reports]').click();
     await ready();
-    await selectReportFocus(page, "errors");
     await capture("report-choices", { fullPage: true });
-    let prepared = await preparedChange(() => prepareReportPreview(page));
+    let prepared = await preparedChange(() => page.locator("#reportPreset-errors").click());
     assert.equal(prepared.snapshot.reportPopulation.reference.length, 12);
     assert.equal(prepared.records.length, 4);
     const report = page.frameLocator(".report-contained-frame");

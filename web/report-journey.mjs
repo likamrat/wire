@@ -1,6 +1,6 @@
 // Prepared copies alone permit parent measurement; saved readers keep their opaque sandbox.
 export function createPreparedReportFrame(html, frozenFrame, { onError, onReady, doc = document, isCurrent = () => true, contained = false,
-    reading, isReadingCurrent = isCurrent, onReadingIntent, onReadingRestored } = {}) {
+    reading, initialSection, isReadingCurrent = isCurrent, onReadingIntent, onReadingRestored } = {}) {
     if (typeof frozenFrame !== "function" || typeof onError !== "function") throw new TypeError("Prepared reports require sanitization and an error handler.");
     const frame = frozenFrame(html, doc), view = doc.defaultView;
     html = null;
@@ -19,7 +19,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
     });
     function current() { return active && isCurrent() && frame.isConnected && source === frame.contentDocument; }
     const inputEvents = ["pointerdown", "wheel", "touchmove", "keydown"];
-    const noteReading = event => { if (event.isTrusted && current()) onReadingIntent?.(); };
+    const noteReading = event => { if (event.isTrusted && current()) { initialSection = null; onReadingIntent?.(); } };
     function schedule() {
         if (!active || !isCurrent() || scheduled) return;
         scheduled = view.requestAnimationFrame(measure);
@@ -51,6 +51,9 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
         if (!link || !current()) return;
         event.preventDefault();
         const id = link.getAttribute("href").split("#")[1];
+        navigateTo(id);
+    }
+    function navigateTo(id, focus = true) {
         const target = id && source.getElementById(id);
         if (!target) return;
         for (let parent = target.parentElement; parent; parent = parent.parentElement) if (parent.localName === "details") parent.open = true;
@@ -58,7 +61,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
             const offset = source.querySelector(".report-nav")?.getBoundingClientRect().height || 0;
             const summary = target.closest(".wire-reading-interaction")?.querySelector(":scope>summary");
             if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
-            target.focus({ preventScroll: true });
+            if (focus) target.focus({ preventScroll: true });
             frame.contentWindow.scrollTo({ top: frame.contentWindow.scrollY + target.getBoundingClientRect().top
                 - offset - (summary?.getBoundingClientRect().height || 0) - 16 });
             return;
@@ -68,7 +71,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
         const offset = (toolbar?.getBoundingClientRect().bottom ?? parseFloat(view.getComputedStyle(doc.documentElement).scrollPaddingTop)) || 0;
         const top = view.scrollY + frame.getBoundingClientRect().top + target.getBoundingClientRect().top - offset - 12;
         if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
-        target.focus({ preventScroll: true });
+        if (focus) target.focus({ preventScroll: true });
         view.scrollTo({ top });
     }
     function loaded() {
@@ -97,6 +100,12 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
                     ? frame.contentWindow.scrollY + target.getBoundingClientRect().top - restore.top : restore.scroll);
                 onReadingRestored?.();
                 refresh();
+            });
+        } else if (initialSection) {
+            source.fonts.ready.then(() => {
+                if (!current() || !initialSection) return;
+                navigateTo(initialSection, false);
+                initialSection = null;
             });
         }
         source.addEventListener("toggle", refresh, true);

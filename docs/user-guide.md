@@ -548,10 +548,11 @@ for baseline and selected dates, missing values, token usage and the calls behin
 
 ## Make a report
 
-In **Reports**, select a named draft or start a **New report**. Check its
-activity, dates, text and formats, then choose **Prepare preview**. Preparing
-does not save any files. Read the finding and its examples before choosing **Save
-report**. Open an existing report by name in **Saved library**.
+In **Reports**, choose a report under **New report** to open its preview.
+**Token usage** follows **Errors & failures**. Use **Custom report** to change
+the setup first, or open a name in **Drafts** and choose **Prepare preview**.
+Preparing does not save files. Read the finding and its examples before choosing
+**Save report**. Open an existing report by name in **Saved library**.
 
 [Create and read reports](reporting.md) covers scope, text masking, file
 inspection, and what happens when you delete a draft or a saved copy.
