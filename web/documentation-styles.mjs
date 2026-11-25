@@ -16,9 +16,9 @@ export const documentationStyles = `
 .docs-left-toggle>summary,.docs-outline-inline{display:none}
 .docs-left-toggle>summary,.docs-outline-inline>summary{align-items:center;gap:var(--pill-gap);cursor:pointer;padding:6px 12px;font-weight:var(--weight-medium);min-block-size:44px;list-style:none;border-radius:var(--radius-small)}
 .docs-left-toggle>summary::-webkit-details-marker,.docs-outline-inline>summary::-webkit-details-marker{display:none}
-.docs-left-toggle>summary .docs-icon:last-child,.docs-outline-inline>summary .docs-icon:last-child{margin-inline-start:auto}
-.docs-left-toggle[open]>summary .docs-icon:last-child,.docs-outline-inline[open]>summary .docs-icon:last-child{transform:rotate(180deg)}
-.docs-left-toggle>summary:hover,.docs-outline-inline>summary:hover{background:var(--hover)}
+:is(.docs-left-toggle,.docs-outline-inline)>summary>.disclosure-icon{margin-inline:auto 0}
+:is(.docs-left-toggle,.docs-outline-inline)>summary:hover{background:var(--hover)}
+:is(.docs-left-toggle,.docs-outline-inline)>summary:active{background:var(--pill-pressed)}
 
 .docs-tree-group>h2,.docs-outline>h2{font-size:var(--type-section);line-height:var(--leading-section);font-weight:var(--weight-strong);color:var(--ink);margin:0 0 var(--space-xs);padding:0 10px}
 .docs-tree-group+.docs-tree-group{margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--docs-rule)}
@@ -47,6 +47,9 @@ export const documentationStyles = `
 .docs-source-local{color:var(--ink);font-weight:var(--weight-medium)}
 .docs-text-button,.docs-asset-link{display:inline-flex;align-items:center;gap:var(--pill-gap)}
 .docs-source-switch{display:flex;flex-wrap:wrap;gap:var(--pill-gap)}
+#documentationView :is(.docs-text-button,.docs-source-switch button,.docs-image-dialog button:not(.icon-only)):focus-visible{outline:none}
+#documentationView :is(.docs-text-button,.docs-source-switch button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline:2px solid var(--focus);outline-offset:2px}
+@media(forced-colors:active){#documentationView :is(.docs-text-button,.docs-source-switch button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline-color:Highlight}}
 
 .docs-article{font-size:var(--type-reading);line-height:var(--leading-reading);max-inline-size:76ch;overflow-wrap:anywhere}
 .docs-article>:first-child{margin-top:0}
