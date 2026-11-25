@@ -267,6 +267,28 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: every Analyze wi
     const control = key => page.locator(`#analyzeCollapse-${key}`);
     await expect(page.locator(".analyze-widget-toggle:visible")).toHaveCount(keys.length);
     const original = await page.locator("#activityList article").allTextContents();
+    const toolbar = page.locator("#analyzeToolbar"), bulk = toolbar.locator("#analyzeToggleAll");
+    for (const [width, scale] of [[1600, 1], [390, 1], [900, 2]]) {
+        await page.setViewportSize({ width, height: 1100 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await control("usage").click();
+        await expect(bulk).toHaveAccessibleName("Collapse all");
+        const prefs = await page.evaluate(() => JSON.stringify(localStorage));
+        await bulk.press("Enter");
+        await expect(page.locator(".analyze-widget-toggle[aria-expanded=false]:visible")).toHaveCount(8);
+        await expect(bulk).toBeFocused(); await expect(bulk).toHaveAccessibleName("Expand all");
+        await control("time").click(); await expect(bulk).toHaveAccessibleName("Collapse all");
+        await control("time").click(); await expect(bulk).toHaveAccessibleName("Expand all");
+        await bulk.click(); await expect(page.locator(".analyze-widget-toggle[aria-expanded=true]:visible")).toHaveCount(8);
+        assert.equal(await page.evaluate(() => JSON.stringify(localStorage)), prefs);
+        assert.ok(await toolbar.evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+        assert.ok(await page.locator("#analyzeResultScope").evaluate(node => node.clientWidth >= Math.min(180, node.parentElement.clientWidth)),
+            "The toolbar wraps before squeezing the scope caption into individual letters");
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await bulk.hover(); await page.screenshot({ path: path.join(proof, `${frontend}-${width}-collapse-all.png`) });
+        }
+    }
     const layout = () => page.locator(".analyze-widget").evaluateAll(nodes => {
         const cards = nodes.filter(node => node.checkVisibility()).map(node => ({ key: node.querySelector(".analyze-widget-toggle").id,
             ...node.getBoundingClientRect().toJSON() }));

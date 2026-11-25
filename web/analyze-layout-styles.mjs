@@ -360,9 +360,10 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 .workspace-command-context{margin-inline-end:auto;min-width:0;color:var(--muted);font-size:var(--type-control)}
 .workspace-command-tools{margin-inline-start:auto}
 #workspace>#analyzeReferenceEntry {max-width:none;margin-bottom:var(--space-md)}
-#workspace>#analyzeResultCommands {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:var(--space-xs) var(--space-md);max-width:none;margin-bottom:var(--space-md)}
+#workspace>#analyzeResultCommands {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-xs) var(--space-md);max-width:none;margin-bottom:var(--space-md)}
 #workspace>#analyzeResultCommands[hidden] {display:none}
-#analyzeResultScope {min-width:0;align-self:center}
+#analyzeResultScope {min-width:0;flex:1 1 16em;align-self:center}
+#analyzeResultCommands .analyze-toolbar {margin-inline-start:auto}
 #analyzeResultScope .analyze-scope-summary {margin:0;padding:0;border:0}
 #analyzeResultScope .analyze-scope-caption {margin:0}
 #analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
@@ -372,21 +373,20 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 .analyze-toolbar[hidden] {display:none}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry) {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control);--pill-border:var(--control);--pill-hover-border:var(--control);flex:none;color:var(--ink)}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry)>.wire-icon {width:1rem;height:1rem;flex:none;color:inherit}
-#analyzeRefresh {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;font-size:var(--type-control);line-height:var(--leading-control)}
-#analyzeRefresh>.wire-icon {width:1rem;height:1rem;flex:none}
+:is(#analyzeRefresh,#analyzeToggleAll) {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;font-size:var(--type-control);line-height:var(--leading-control)}
+:is(#analyzeRefresh,#analyzeToggleAll)>.wire-icon {width:1rem;height:1rem;flex:none}
 #analyzeRefreshLabel {min-inline-size:7ch;text-align:start}
 .analyze-toolbar>.ux-disabled-help {flex:none}
-#analyzeRefresh:focus-visible {outline:none}
-#analyzeRefresh:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
+:is(#analyzeRefresh,#analyzeToggleAll):focus-visible {outline:none}
+:is(#analyzeRefresh,#analyzeToggleAll):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry):focus-visible {outline:none}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 /* One stable target for the longest (two-digit) accepted label, also at enlarged type. */
 .filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
 @media(max-width:550px) {
- #workspace>#analyzeResultCommands {grid-template-columns:minmax(0,1fr)}
- #analyzeResultScope {order:1}
- #analyzeResultCommands .analyze-toolbar {justify-self:end}
+ #analyzeResultScope {order:1;flex-basis:100%}
+ #analyzeResultCommands .filter-entry:not(.has-applied-filters) {inline-size:auto}
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}
