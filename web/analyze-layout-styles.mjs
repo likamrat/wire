@@ -1,5 +1,6 @@
 const readings = ":is(#percentageCharts,.analyze-ordered-widgets) .percentage-content .percentage-tool-list";
 const pairs = `${readings}:has(>:nth-child(4))`;
+const chartAction = ":is(.analyze-trend-link,.usage-date-link,.population-link)";
 
 export const analyzeLayoutStyles = `
 .usage-question-controls {display:flex;align-items:end;flex-wrap:wrap;gap:var(--space-sm) var(--space-md);margin-block:var(--space-sm) var(--space-md);min-width:0}
@@ -26,7 +27,7 @@ export const analyzeLayoutStyles = `
 .token-history-key {gap:5px 16px;color:var(--muted);margin-block:6px 0}.token-history-key span {display:inline-flex;align-items:center;gap:5px}
 .token-history-key i.measured {width:15px;height:2px;background:var(--accent)}
 .token-history-key i.activity {width:3px;height:9px;background:var(--muted)}
-.token-day-reading {gap:8px;align-items:center;min-height:44px}.token-day-date a {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:.18em}
+.token-day-reading {gap:8px;align-items:center;min-height:44px}.token-day-date a {display:inline-flex;align-items:center;min-height:44px}
 .usage-chip.usage-missing {color:var(--muted);border-color:transparent;background:transparent}
 .context-sidebar-header .reader-token-jump {margin-inline-end:auto;display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:3px 6px;color:var(--accent);background:transparent;border:0;box-shadow:none;font-size:var(--type-small)}
 .reader-token-jump .wire-icon {width:1em;height:1em;flex:none}
@@ -144,8 +145,12 @@ export const analyzeLayoutStyles = `
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}
 .percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator{grid-column:1/-1;grid-row:2}
 .analyze-trend-link:not([hidden]){grid-area:1 / 2;align-self:start;justify-self:end;display:inline-flex;align-items:center;min-height:44px;font-size:var(--type-reading);line-height:var(--leading-control);white-space:nowrap}
-.analyze-trend-link:is(:hover,:focus-visible){text-decoration:underline;text-underline-offset:.16em}
-.analyze-trend-link:active{color:var(--ink);text-decoration-thickness:2px}
+${chartAction} {position:relative;isolation:isolate;padding-inline:var(--space-sm);border-radius:var(--radius-control);text-decoration:none}
+${chartAction}::before {content:"";position:absolute;inset:var(--control-face-inset) 0;border-radius:inherit;z-index:-1;pointer-events:none}
+${chartAction}:hover::before {background:var(--hover)}
+${chartAction}:active::before {background:var(--pill-pressed)}
+${chartAction}:focus-visible {outline:none}
+${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-offset:1px}
 @container (max-width:16rem){
  :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){grid-template-columns:minmax(0,1fr)}
  .analyze-trend-link:not([hidden]){grid-area:2 / 1;justify-self:start}
@@ -167,11 +172,14 @@ export const analyzeLayoutStyles = `
 #percentageCharts .percentage-card-heading {margin-bottom:4px;min-height:0}
 #percentageCharts .percentage-card {container:breakdown-card / inline-size}
 #percentageCharts .percentage-legend {gap:4px}
-:is(#outcomeChart,#percentageCharts) .percentage-legend-row {position:relative;border-radius:var(--radius-small)}
-:is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]::after {content:"";position:absolute;inset:0;z-index:1}
-:is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:var(--hover)}
-:is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-legend-row:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
-:is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-legend-row .percentage-label[href]:focus-visible {outline:none}
+:is(#outcomeChart,#percentageCharts,.analyze-ordered-widgets) .percentage-legend-row {position:relative;border-radius:var(--radius-small)}
+:is(#outcomeChart,#percentageCharts,.analyze-ordered-widgets) .percentage-legend-row .percentage-label[href]::after {content:"";position:absolute;inset:0;z-index:1}
+:is(#outcomeChart,#percentageCharts,.analyze-ordered-widgets) .percentage-content:not(.outcome-hybrid) .percentage-legend:not(.percentage-tool-list) .percentage-legend-row {
+ &:has(.percentage-label[href]:hover) {background:var(--hover)}
+ &:has(.percentage-label[href]:active) {background:var(--pill-pressed)}
+ &:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
+ & .percentage-label[href]:is(:hover,:active,:focus-visible) {background:transparent;outline:none}
+}
 #activityList .widget-record {display:grid;grid-template-columns:minmax(0,1fr) minmax(12rem,auto);gap:4px 24px;align-items:center;padding:8px 16px;overflow-wrap:anywhere}
 .widget-record>.text-link,.widget-record-exit {display:inline-flex;align-items:center;justify-self:start;min-height:44px}
 .widget-record-meta {display:grid;gap:2px;min-width:0;font-size:var(--type-small)}
@@ -259,7 +267,7 @@ export const analyzeLayoutStyles = `
 @container breakdown-card (min-width:36rem) {
  ${pairs} {grid-template-columns:repeat(2,minmax(0,1fr));gap:6px clamp(20px,3.6cqi,44px)}
  ${pairs} .percentage-legend-row {grid-column:auto;grid-template-columns:fit-content(70%) minmax(0,1fr);grid-template-rows:auto 6px;gap:0 var(--space-sm);align-self:start;padding-block-end:var(--space-xs)}
- ${pairs} .percentage-label {padding-inline:0}
+ ${pairs} .percentage-label {justify-self:stretch;padding-inline:var(--space-xs)}
  ${pairs} .percentage-value {justify-self:start}
  ${pairs} .percentage-bar-track {grid-area:2/1/3/-1;height:6px}
 }
@@ -269,12 +277,6 @@ export const analyzeLayoutStyles = `
  #percentageCharts .percentage-value {grid-column:3;justify-content:flex-end;text-align:end}
  #percentageCharts .percentage-tool-list .percentage-value {grid-column:2}
 }
-${readings} .percentage-legend-row {position:relative;border-radius:var(--radius-small)}
-${readings} .percentage-label[href]::after {content:"";position:absolute;inset:0;z-index:1}
-${readings} .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:none;outline:none}
-${readings} .percentage-legend-row .percentage-label[href]:is(:hover,:focus-visible,:active) {background:none;text-decoration-line:underline;text-underline-offset:.16em}
-${readings} .percentage-legend-row .percentage-label[href]:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}
-${readings} .percentage-label[href]:active {text-decoration-thickness:2px}
 @media (pointer:fine) {${readings} .percentage-label {min-height:32px}}
 @media (pointer:coarse) {${readings} .percentage-label {min-height:44px}}
 @container outcome-card (max-width:30rem) {
@@ -308,8 +310,8 @@ ${readings} .percentage-label[href]:active {text-decoration-thickness:2px}
 #analyzeResultScope .analyze-scope-caption {margin:0}
 #analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
 #analyzeResultScope #periodResult :is(#activityCount,#activityUnit) {font:inherit;letter-spacing:normal;color:inherit}
-.population-link {display:inline-block;padding:4px 0;color:inherit;text-decoration:none}
-.population-link:is(:hover,:focus-visible) {color:var(--accent);text-decoration:underline}
+.population-link {display:inline-block;padding-block:var(--control-face-inset);color:inherit}
+.population-link:is(:hover,:focus-visible) {color:var(--accent)}
 .analyze-toolbar[hidden] {display:none}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry) {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control);--pill-border:var(--control);--pill-hover-border:var(--control);flex:none;color:var(--ink)}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry)>.wire-icon {width:1rem;height:1rem;flex:none;color:inherit}
@@ -438,8 +440,6 @@ ${readings} .percentage-label[href]:active {text-decoration-thickness:2px}
 #outcomeChart .outcome-hybrid .percentage-legend {display:flex;flex-wrap:wrap;gap:4px clamp(20px,4cqi,64px)}
 #outcomeChart .outcome-hybrid .percentage-legend-row {grid-template-columns:auto minmax(0,1fr);gap:0 6px;align-items:center;align-content:start;justify-items:start}
 #outcomeChart .outcome-hybrid .percentage-label {font-size:clamp(1rem,1.25cqi,1.25rem)}
-#outcomeChart .outcome-hybrid .percentage-legend-row .percentage-label[href]:is(:hover,:focus-visible,:active) {background:none;text-decoration-line:underline;text-underline-offset:.16em}
-#outcomeChart .outcome-hybrid .percentage-legend-row .percentage-label[href]:active {text-decoration-thickness:2px;color:var(--ink)}
 #outcomeChart .outcome-hybrid .percentage-value {grid-column:2;justify-self:start;padding-inline:6px;font-size:clamp(1.35rem,2.05cqi,2rem);line-height:1.2}
 #outcomeChart .outcome-hybrid .percentage-value>span {font-size:.75em}
 #outcomeChart .outcome-distribution>.outcome-zeros {margin-block-start:var(--space-xs);gap:0 var(--space-lg)}

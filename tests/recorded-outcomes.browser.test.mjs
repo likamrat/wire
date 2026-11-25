@@ -262,8 +262,11 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     await label.hover(); await expect(slice).toHaveClass(/percentage-active/);
     const row=label.locator("..");
     await expect(row).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
-    await expect(label).toHaveCSS("text-decoration-line","underline");
-    await page.mouse.down(); await expect(label).toHaveCSS("text-decoration-thickness","2px");
+    await expect(label).toHaveCSS("text-decoration-line","none");
+    const hover=await label.evaluate(n=>getComputedStyle(n).backgroundColor);
+    assert.notEqual(hover,"rgba(0, 0, 0, 0)");
+    await page.mouse.down(); assert.notEqual(await label.evaluate(n=>getComputedStyle(n).backgroundColor),hover);
+    await expect(label).toHaveCSS("text-decoration-line","none");
     await page.mouse.move(0,0); await page.mouse.up();
     await page.mouse.move(0, 0); await label.focus();
     assert.ok(await label.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth) >= 2));

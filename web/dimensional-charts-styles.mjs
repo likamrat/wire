@@ -70,7 +70,8 @@ ${dimensionalColumnStyles}
 .dimensional-time-labels {display:grid;grid-auto-flow:column;grid-auto-columns:var(--scene-pitch);min-height:48px;margin:0;padding-top:24px;color:var(--muted);font-size:var(--type-small);text-align:center}
 .dimensional-time-labels>span {padding-inline:8px;overflow-wrap:anywhere;min-width:0}
 .dimensional-time-labels>a {padding:4px;min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-small);color:var(--accent);text-decoration:none}
-.dimensional-time-labels>a:is(:hover,:focus-visible) {background:var(--hover);text-decoration:underline}
+.dimensional-time-labels>a:hover {background:var(--hover)}
+.dimensional-time-labels>a:active {background:var(--pill-pressed)}
 .flat-time-plot {position:relative;min-width:100%;--time-height:80px}
 .flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0;padding:0;border:0;border-bottom:1px solid var(--control)}
 .flat-time-plot .time-slot {position:relative;display:block;height:100%;min-width:0}

@@ -70,8 +70,11 @@ Lead with accepted recorded outcomes and activity patterns. For comparable tool
 calls, the ring centers the total and unit. Beside it, a square-ended strip shows
 the same shares, with the exact percentage and count beneath each outcome label.
 Zero-count outcomes remain available as compact definition links; they do not
-take up a primary outcome column or get a painted segment. Hover underlines the
-outcome label rather than tinting its whole column. Small layouts keep the strip
+take up a primary outcome column or get a painted segment. For chart actions,
+hover tints the control, press deepens the tint, and keyboard focus outlines it.
+Keep this feedback on the outcome, tool, model or author label, not its whole
+column. Services highlights the row that opens the service. Chart actions do
+not underline their text in any state. Small layouts keep the strip
 and stack the labelled readings below the ring.
 Do not combine separate populations into one strip. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.

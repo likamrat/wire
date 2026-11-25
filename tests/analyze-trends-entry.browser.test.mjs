@@ -309,14 +309,21 @@ for (const frontend of ["react", "bundled"]) {
                     issues.push(`${width} ${row.id}: overlapping title/action`);
             }
             if (width===1600) {
-                const link=links.first();
-                await link.hover(); await expect(link).toHaveCSS("text-decoration-line","underline");
-                const box=await link.boundingBox();
-                await page.mouse.down(); await expect(link).toHaveCSS("text-decoration-thickness","2px");
-                assert.deepEqual(await link.boundingBox(),box);
-                await page.mouse.move(0,0); await page.mouse.up();
-                await link.press("Tab"); await page.keyboard.press("Shift+Tab"); await expect(link).toBeFocused();
-                await expect(link).toHaveCSS("text-decoration-line","underline");
+                for (const kind of ["header","tools","models","authors","services"]) {
+                    const link = kind==="header" ? links.first() : page.locator(`[data-breakdown="${kind}"] .percentage-label[href]`).first();
+                    const face = kind==="services" ? link.locator("..") : link, pseudo = kind==="header" ? "::before" : null;
+                    const paint = () => face.evaluate((node,pseudo)=>getComputedStyle(node,pseudo).backgroundColor,pseudo);
+                    await page.mouse.move(0,0); await expect(link).toHaveCSS("text-decoration-line","none");
+                    await link.hover(); const hover=await paint(), box=await link.boundingBox();
+                    assert.notEqual(hover,"rgba(0, 0, 0, 0)",`${kind} hover must be visible`);
+                    await expect(link).toHaveCSS("text-decoration-line","none");
+                    await page.mouse.down(); assert.notEqual(await paint(),hover,`${kind} press must differ from hover`);
+                    await expect(link).toHaveCSS("text-decoration-line","none"); assert.deepEqual(await link.boundingBox(),box);
+                    await page.mouse.move(0,0); await page.mouse.up();
+                    await link.press("Tab"); await page.keyboard.press("Shift+Tab"); await expect(link).toBeFocused();
+                    await expect(link).toHaveCSS("text-decoration-line","none");
+                    assert.equal(await face.evaluate((node,pseudo)=>getComputedStyle(node,pseudo).outlineStyle,pseudo),"solid",`${kind} keyboard focus`);
+                }
             }
             if (proof) {
                 await mkdir(proof,{recursive:true});
