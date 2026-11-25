@@ -243,7 +243,10 @@ infer who wrote a prompt.
 In the index, hover/focus previews a mark; click, tap or Enter pins its reading
 and exposes the matching calls. **View daily values** includes hidden series and the
 full period, not only the drawn window. **Columns / Lines** retains exact
-selection and denominators. In All charts, selection updates the selected-day
+selection and denominators. Put the measured population beside the chart title;
+keep model-history qualifications in the exact values table. A known model still
+counts when other responses or the end of the interaction cannot be verified.
+In All charts, selection updates the selected-day
 and subject row. Maximize uses the same chart and controls, adding the
 selected-date breakdown and View numbers. Back to all charts restores the activating
 control and reading position. **Collapse all / Expand all** affects only the

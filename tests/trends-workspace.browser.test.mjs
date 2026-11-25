@@ -6,6 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { recordedInteractionModels } from "../lib/interaction-model.mjs";
 import { fixture, privateFixture, navigateMain, navigateSettings, closeAnalyzeFilters, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
@@ -446,6 +447,95 @@ test("bulk disclosure acts only on this chart stack and keeps the pinned reading
     await closeAll.tap(); await openAll.tap(); await expect(point).toHaveAttribute("aria-pressed","true");
     assert.equal(await toolbar.locator("#trendsPeriod").innerText(),period); assert.equal(reads.length,before);
     await index.getByRole("button",{name:"Token usage"}).tap(); await expect(closeAll).toHaveCount(0); await expect(openAll).toHaveCount(0);
+});
+
+test("response models keep known names on the chart and open the exact interactions with partial history", async t => {
+    const stamp = "2026-11-23T19:00:00.000Z";
+    const records = Array.from({ length: 8 }, (_, i) => {
+        const key = `harbor-${i}`, record = fixture(key), messageId = `message-${key}`;
+        record.userPrompt = { text: `Review harbor note ${i}.`, sourceEventId: key, sourceTimestamp: stamp, status: "full" };
+        record.toolCalls[0].startedAt = stamp;
+        const prompt = { id: key, type: "user.message", timestamp: stamp, data: { messageId } };
+        const reply = { id: `reply-${key}`, type: "assistant.message", timestamp: stamp,
+            data: { originatingMessageId: messageId, turnId: key, model: "Alder", phase: "final_answer", content: "Invented answer." } };
+        const end = { id: `end-${key}`, type: "assistant.turn_end", timestamp: stamp, data: { turnId: key } };
+        record.originalModelEvidence = recordedInteractionModels(i === 0 ? [prompt, reply] : i === 1
+            ? [prompt, reply, { ...reply, id: `next-${key}`, data: { ...reply.data, model: null } }, end]
+            : [prompt, reply, end], record, { partialWindow: i === 2 });
+        if (i === 0) record.toolCalls.push({ ...record.toolCalls[0], toolCallId: "another-call", startEventId: "another-start" });
+        return record;
+    });
+    const { page, index, reads } = await setup(t, false, { records, now: "2026-11-24T19:00:00Z" });
+    await index.getByRole("button", { name: "Response models" }).click();
+    const card = panelOf(page, "models"), daily = card.getByRole("button", { name: "View daily values" });
+    assert.equal(reads.at(-1).from, "2026-11-18"); assert.equal(reads.at(-1).to, "2026-11-24");
+    await expect(card.locator(".trends-index-scope")).toHaveText("8 originating interactions in this period");
+    const mark = card.getByRole("button", { name: /Nov 23, 2026: Alder, 8 interactions/ });
+    await expect(mark).toHaveCount(1);
+    await screenshot(page, "response-models-week");
+    await expect(card.locator(".trends-limits")).toBeHidden();
+    const readsBefore = reads.length;
+    await card.getByRole("button", { name: "Lines", exact: true }).click();
+    await card.getByRole("button", { name: "Percentage", exact: true }).click();
+    await card.getByRole("button", { name: /Nov 23, 2026: Alder, 100%/ }).press("Enter");
+    await expect(card.getByRole("button", { name: "View 9 calls" })).toBeVisible();
+    await card.getByRole("checkbox", { name: "Show Alder" }).uncheck();
+    await page.setViewportSize({ width: 390, height: 844 }); await chooseTheme(page, "dark");
+    await daily.press("Enter");
+    const sheet = page.getByRole("dialog"), row = sheet.getByRole("row", { name: /Nov 23, 2026/ });
+    await expect(row).toContainText("100% (8)");
+    const partial = row.getByRole("button", { name: /Partial model history: 3 interactions/ });
+    await partial.focus(); await screenshot(page, "response-models-detail-narrow"); await page.keyboard.press("Enter");
+    const links = sheet.getByRole("link");
+    await expect(links).toHaveCount(4);
+    for (const [i, count] of [[0, 2], [1, 1], [2, 1]]) await expect(links.filter({ hasText: `Review harbor note ${i}.` })).toHaveCount(count);
+    await links.filter({ hasText: "Review harbor note 0." }).first().press("Enter");
+    await expect(page.locator("#requestContent .model-identity").first()).toHaveText("Alder");
+    await expect(page.locator("#requestContent")).toContainText("the final response boundary was not verified");
+    await page.goBack(); await expect(daily).toBeFocused();
+    await daily.press("Enter"); await partial.press("Enter");
+    await expect(links.filter({ hasText: "Review harbor note 0." }).first()).toBeFocused();
+    await sheet.getByRole("button", { name: "Back to daily values" }).press("Enter"); await expect(partial).toBeFocused();
+    await page.keyboard.press("Escape"); await expect(daily).toBeFocused();
+    await expect(card.getByRole("checkbox", { name: "Show Alder" })).not.toBeChecked();
+    await page.getByRole("button", { name: "Show or hide charts" }).click();
+    await page.getByRole("button", { name: "Open all charts" }).click();
+    await page.getByRole("button", { name: "Maximize Response models" }).click();
+    await expect(card.locator(".trends-limits")).toBeHidden();
+    await card.getByRole("button", { name: "View numbers" }).click();
+    const expanded = page.getByRole("region", { name: "Daily exact values" }).getByRole("button", { name: /Partial model history: 3 interactions/ });
+    await expanded.press("Enter"); await expect(sheet.getByRole("link")).toHaveCount(4);
+    await sheet.getByRole("button", { name: "Back to daily values" }).press("Enter"); await expect(expanded).toBeFocused();
+    assert.equal(reads.length, readsBefore);
+});
+
+test("model records without a verified name stay inspectable without plotting models from another week", async t => {
+    const records = callsFixture();
+    const priorWeek = structuredClone(records[0]);
+    for (const call of priorWeek.toolCalls) {
+        call.startedAt = "2026-11-01T12:00:00Z"; call.startEventId += "-prior"; call.toolCallId += "-prior";
+    }
+    priorWeek.scenarioId += "-prior"; priorWeek.sourceSessionId += "-prior";
+    priorWeek.originalModelEvidence.sourceSessionId = priorWeek.sourceSessionId;
+    records[0].originalModelEvidence.conflict = true;
+    records[1].originalModelEvidence.ambiguous = true;
+    const { page, index } = await setup(t, false, { records: [...records, priorWeek] });
+    await index.getByRole("button", { name: "Response models" }).click();
+    const card = panelOf(page, "models"), sheet = page.getByRole("dialog");
+    await expect(card.locator(".trends-plot")).toBeHidden();
+    await expect(card.locator(".trends-no-activity")).toContainText("No verified response models");
+    await card.getByRole("button", { name: "View daily values" }).click();
+    for (const [label, prompt, calls] of [["Conflicting model records", "mon-a", 2], ["Model not verified", "mon-b", 1], ["No model recorded", "wed-c", 1]]) {
+        await sheet.getByRole("button", { name: `${label}: 1 interaction, entire period` }).click();
+        await expect(sheet.getByRole("link")).toHaveCount(calls);
+        await expect(sheet.getByRole("link").filter({ hasText: `Review the invented harbor notes ${prompt}.` })).toHaveCount(calls);
+        await sheet.getByRole("button", { name: "Back to daily values" }).click();
+    }
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Show or hide charts" }).click();
+    await page.getByRole("button", { name: "Open all charts" }).click();
+    await expect(card.locator(".trends-plot")).toBeHidden();
+    await expect(card.locator(".trends-no-activity")).toContainText("No verified response models");
 });
 
 test("daily tokens distinguish zero and missing, and lead back to the contributing interaction", async t => {
@@ -924,10 +1014,16 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         await panel.getByRole("button", { name: "View daily values", exact: true }).click();
         const table = page.locator(".trends-dialog table"); await expect(table.locator("tbody tr")).toHaveCount(8);
         const monday = table.locator("tbody tr").filter({ hasText: "Nov 16" });
-        await expect(monday.getByRole("cell")).toHaveText([...daily[id][0],"2","3"]);
-        await expect(table.getByRole("row",{name:/Nov 18, 2026/}).getByRole("cell")).toHaveText([...daily[id][1],"1","1"]);
+        await expect(monday.getByRole("cell")).toHaveText([...daily[id][0],"2","3",...(id === "models" ? ["0"] : [])]);
+        await expect(table.getByRole("row",{name:/Nov 18, 2026/}).getByRole("cell")).toHaveText([...daily[id][1],"1","1",...(id === "models" ? ["1"] : [])]);
+        if (id === "models") {
+            await table.getByRole("button", { name: "No model recorded: 1 interaction, entire period" }).click();
+            const sheet = page.getByRole("dialog"); await expect(sheet.getByRole("link")).toHaveCount(1);
+            await expect(sheet.getByRole("link")).toContainText("Review the invented harbor notes wed-c.");
+            await sheet.getByRole("button", { name: "Back to daily values" }).click();
+        }
         const empty = id==="timing" ? ["No matching calls","No matching calls","0"] : id==="usage" ? ["No matching calls","0 of 0"] : Array(series[id]).fill("0");
-        await expect(table.getByRole("row",{name:/Nov 17, 2026/}).getByRole("cell")).toHaveText([...empty,"0","0"]);
+        await expect(table.getByRole("row",{name:/Nov 17, 2026/}).getByRole("cell")).toHaveText([...empty,"0","0",...(id === "models" ? ["0"] : [])]);
         await page.keyboard.press("Escape"); await expect(panel.getByRole("button", { name: "View daily values" })).toBeFocused();
     }
     assert.equal(reads.length, initial, "Style, inspection, visibility and unit must not change the retained population");

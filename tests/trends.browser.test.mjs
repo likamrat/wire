@@ -886,7 +886,7 @@ test("real pointer inspection supplies specific values for every chart and never
     await page.locator('.trends-panel[data-family="authors"] .trends-sizing button:first-child').click();
     const cases = [
         ["authors", /Calls in these interactions/], ["tools", /Additional calls/], ["services", /another service/],
-        ["problems", /Failed tool calls/], ["timing", /calls? timed/], ["models", /Model not recorded/], ["rhythm", /Interactions/],
+        ["problems", /Failed tool calls/], ["timing", /calls? timed/], ["models", /Interactions without a verified model/], ["rhythm", /Interactions/],
     ];
     for (const [family, expected] of cases) {
         if (family !== "authors") await selectActivityOption(page, "trendsTrend", family);
@@ -1391,7 +1391,7 @@ test("source-wide read metadata remains separate from the selected Trends period
             lastAttemptAt: "2025-01-01T12:00:00Z" },
     ] });
     const qualification = page.locator(".trends-qualification");
-    await expect(page.locator('[data-family=models] .trends-limits')).toContainText("Model not recorded");
+    await expect(page.locator('[data-family=models] .trends-limits')).toContainText("interactions with a verified model");
     await expect(qualification).toBeHidden();
     await expect(page.locator("#trendsView")).not.toContainText("PRIVATE_RETAINED_ERROR");
     await capture(page, "responsive-history");
@@ -1811,7 +1811,7 @@ test("mixed saved-chat read gaps do not become a Trends scope warning", { timeou
         { sessionId: "missing", eligible: true, error: "PRIVATE_MISSING", errorCode: "ENOENT" },
         { sessionId: "permission", eligible: true, error: "PRIVATE_PERMISSION", errorCode: "EACCES" },
     ] });
-    await expect(page.locator('[data-family=models] .trends-limits')).toContainText("Model not recorded");
+    await expect(page.locator('[data-family=models] .trends-limits')).toContainText("interactions with a verified model");
     await expect(page.locator(".trends-qualification")).toBeHidden();
     await expect(page.locator("#trendsView")).not.toContainText("Saved-chat history gaps");
     await expect(page.locator("#trendsView")).not.toContainText("PRIVATE_");

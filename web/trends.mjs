@@ -1,9 +1,13 @@
 export function mountTrends({ root, api, time, ux, authorship, questionControls, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, onUsageReport, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models", "usage"];
+    const modelDetails = [
+        ["partial", "Partial model history"], ["unavailable", "No model recorded"],
+        ["unverified", "Model not verified"], ["conflicting", "Conflicting model records"],
+    ];
     const families = {
         usage: { label: "Token usage", modes: [["tokens", "Tokens"]],
-            help: "Each interaction contributes its tokens once, on its first matching call date in this period. A tool group includes the whole interaction." },
+            help: "Each interaction contributes its tokens once, on its first matching call date in this period. A dash means activity without a token count. A tool group includes the whole interaction." },
         authors: { label: "Prompt authors", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Each originating interaction counts once per day with a matching call, even if its sender is unclear. The sender is who asked, not who ran the tool." },
         tools: { label: "Tool usage", modes: [["reach", "Interactions %"], ["share", "Calls %"], ["count", "Calls"]],
@@ -17,7 +21,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         models: { label: "Response models", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Each recorded model divided by all matching originating interactions, including missing model names. Models can overlap. Tool hints and the current model cannot fill historical provenance gaps." },
         rhythm: { label: "Tool calls", modes: [["count", "Calls"], ["share", "Share within week"]],
-            help: "Each day remains separate. Its share uses matching calls within that calendar week and the selected dates. This describes recorded call activity, not hours worked or productivity." },
+            help: "Each day's share uses matching calls within that calendar week and the selected dates. An underline marks a week with only some dates selected." },
     };
     const el = (tag, cls, text) => {
         const node = doc.createElement(tag); if (cls) node.className = cls;
@@ -459,7 +463,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         }
         const card = { id, panel, title, periodLabel, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
             point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "", empty, emptyTitle, emptyDetail, showWeek, visibleDays,
-            types, indexModes, indexScope, basis, actions, remove, fold, gapCalls, indexCollapsed:false, type: id === "usage" ? "lines" : "columns", percentMode: "share",
+            types, indexModes, indexScope, basis, actions, numbers, remove, fold, gapCalls, indexCollapsed:false, type: id === "usage" ? "lines" : "columns", percentMode: "share",
             mode: id === "usage" ? "tokens" : id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         card.questions = questions; card.reportQuestion = reportQuestion; cards.set(id, card);
         panel.addEventListener("click", event => {
@@ -536,6 +540,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     function openTable(card) {
         if (!openDialog("Daily values")) return;
+        dialogOrigin = card.numbers;
         const region = el("div", "trends-exact"); region.tabIndex = 0; region.setAttribute("role", "region");
         region.setAttribute("aria-label", `${families[card.id].label} exact values`);
         drawTable(card, region, true); dialogBody.append(region);
@@ -743,9 +748,9 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         card.fold.textContent = card.indexCollapsed ? "Expand chart" : "Collapse chart";
         card.fold.setAttribute("aria-expanded",String(!card.indexCollapsed));
         card.totals.hidden = collapsed || !allCharts;
-        const noCalls = !totals.calls, noMeasure = totals.calls && (!allCharts || !source.definitions[id].length) && (
-            id === "timing" && !totals.timedCalls || id === "models" && totals.missingModels === totals.interactions
-            || id === "services" && !totals.values.services.some(value => value.calls));
+        const noCalls = !totals.calls, noMeasure = totals.calls && (id === "models" && totals.missingModels === totals.interactions
+            || (!allCharts || !source.definitions[id].length) && (id === "timing" && !totals.timedCalls
+                || id === "services" && !totals.values.services.some(value => value.calls)));
         const usage = totals.usagePopulation;
         const missingUsage = id === "usage" && source.definitions.usage.length > 0 && usage?.eligible > 0 && usage.metered === 0;
         const unavailable = noCalls || Boolean(noMeasure) || missingUsage || id === "usage" && !source.definitions.usage.length;
@@ -760,7 +765,9 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (unavailable) {
             const latest = source.coverage.latestMatchingDate;
             card.emptyTitle.textContent = noCalls ? "No matching calls in this period"
-                : id === "timing" ? "No calls with recorded duration" : id === "models" ? "No recorded response models" : "No identified services";
+                : id === "timing" ? "No calls with recorded duration" : id === "models"
+                    ? totals.modelCoverage.unverified || totals.modelCoverage.conflicting ? "No verified response models" : "No recorded response models"
+                    : "No identified services";
             card.emptyDetail.textContent = noCalls ? latest ? `Most recent matching call: ${fullDate(latest)}.`
                 : source.coverage.undatedCalls ? "Matching calls without a start date cannot be placed on a daily chart."
                 : Object.keys(filters).length ? "Try a different filter or date range." : "WIRE has no saved calls with a start date to show here."
@@ -835,17 +842,11 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         card.summary.hidden = !card.legend.childElementCount;
         card.body.hidden = unavailable && (!missingUsage || card.summary.hidden);
         card.body.dataset.summary = String(!card.summary.hidden);
-        const limits = [], captions = [];
+        const limits = [], captions = [], scopeNotes = allCharts ? limits : captions;
         if (id === "usage") {
             const u = totals.usagePopulation ?? totals.values.usage[0];
-            if (!unavailable) (allCharts ? limits : captions).push(`Period total: ${valueText(u, card)} · ${usageCoverage(u)}`);
-            if (source.usageQuestion === "all" && !unavailable && source.days.some(day=>day.calls && !day.usagePopulation.metered && day.values.usage[0].total === null))
-                limits.push("Dash: activity without a daily token count");
-            if (source.usageQuestion === "model" && u.cacheReadShare !== null) limits.push(`${rate(100*u.cacheReadShare)} of input read from cache`);
-            if (source.usageQuestion === "tool") {
-                if (u.unranked) limits.push(`${number(u.unranked)} without a token count`);
-                if (totals.values.usage.reduce((n,g)=>n+g.metered,0) > u.metered) limits.push("An interaction can appear under several tools");
-            }
+            if (!unavailable) scopeNotes.push(`Period total: ${valueText(u, card)} · ${usageCoverage(u)}`);
+            if (source.usageQuestion === "tool" && u.unranked) scopeNotes.push(`${number(u.unranked)} without a token count`);
         }
         const shown = definitions.filter(definition => !hidden.has(definition.id)).length;
         const seriesSubset = shown > 0 && shown < definitions.length ? `${shown} of ${definitions.length} series shown` : "";
@@ -853,22 +854,18 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (id === "services") {
             if (allCharts && totals.missingServices) limits.push(`Service names incomplete for ${quantity(totals.missingServices,"call")}`);
             if (allCharts && totals.preparationCalls) limits.push(`${number(totals.preparationCalls)} preparation calls`);
-        } else if (id === "models") {
-            if (totals.missingModels) limits.push(`Model not recorded: ${rate(totals.modelMissingShare)} (${number(totals.missingModels)})`);
-            for (const [status, description] of [["partial", "Partly recorded model names"], ["unverified", "Unverified model names"], ["conflicting", "Conflicting model names"]])
-                if (totals.modelCoverage[status]) limits.push(`${description}: ${number(totals.modelCoverage[status])} interactions`);
         } else if (id === "timing" && allCharts) limits.push(totals.calls ? `${rate(totals.timingCoverage)} (${number(totals.timedCalls)}) calls measured` : "No calls with timing in this period");
-        else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
-        else if (id === "rhythm" && mode === "share" && source.days.some(day => weekContext(day).partial))
-            limits.push("Underlined weeks include only the selected dates.");
         const unitIsInteraction = ["authors", "models", "problems"].includes(id) || mode === "reach";
         const population = unitIsInteraction ? totals.interactions : totals.calls;
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${quantity(totals.calls,"call")} timed`
+            : id === "models" && totals.missingModels ? `${number(population - totals.missingModels)} of ${quantity(population,"originating interaction")} with a verified model`
             : quantity(population,unitIsInteraction ? "originating interaction" : "dated call");
+        if (allCharts && id === "models" && totals.missingModels) limits.push(summary);
         if (id !== "usage") captions.push(summary + " in this period");
+        if (id === "problems" && totals.values.problems[0].unknownCalls) scopeNotes.push(unknownOutcomes(totals));
         if (id === "timing" && totals.calls && source.window.count === source.window.totalDays && source.days.length > 1) {
             const active = source.days.filter(d=>d.calls);
-            if (active.length === 1) (allCharts ? limits : captions).push(`All calls on ${axisDate(active[0].date)}`);
+            if (active.length === 1) scopeNotes.push(`All calls on ${axisDate(active[0].date)}`);
         }
         if (seriesSubset) captions.push(seriesSubset);
         if (id === "timing") captions.push("milliseconds");
@@ -1006,12 +1003,16 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const day = selectedDay(card), {values,ids,gap} = readingEvidence(day,card);
         openMembers(day, values.length === 1 ? values[0].label : "Shown series", ids, card.evidence, card.id, card.id === "usage",gap);
     }
-    function openMembers(day, label, members, origin, subject, tokenUsage, gap) {
+    function openMembers(day, label, members, origin, subject, tokenUsage, gap, backToValues) {
         if (!current()) return;
         const ids = new Set(members), source = data, key = JSON.stringify([acceptedKey, subject, day?.date, [...ids]]);
         const saved = evidenceReturn?.key === key ? evidenceReturn : null;
         if (!openDialog(`${day ? fullDate(day.date) : formatRange()} · ${label}`)) return;
         dialogOrigin = origin;
+        if (backToValues) {
+            const back = directionButton("Back to daily values", backToValues, "back");
+            dialogBody.append(back); back.focus();
+        }
         const count = `${number(ids.size)} matching ${ids.size === 1 ? "call" : "calls"}.`;
         dialogBody.append(el("p", "muted", `${count} ${gap === "continued" ? "These calls belong to interactions counted on an earlier date."
             : gap === "unmetered" ? "Open a call to see why its interaction has no token count."
@@ -1044,13 +1045,36 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     function dayPage() {
         return `${offset + 1}–${offset + data.window.count} of ${data.window.totalDays} days`;
     }
+    function unknownOutcomes(summary) {
+        const count = summary.values.problems[0].unknownCalls;
+        return count ? `${quantity(count, "call")} without a recorded outcome` : "";
+    }
+    function modelCoverageCell(card, source, day, status, label, inDialog) {
+        const count = day.modelCoverage[status], cell = el("td");
+        if (!count) { cell.textContent = number(0); return cell; }
+        const action = directionButton(number(count), () => {
+            if (!current() || data !== source || !action.isConnected) return;
+            const ids = source.members.filter(m => m.modelStatus === status && (!day.date || m.date === day.date)).map(m => m.id);
+            openMembers(day.date ? day : null, label, ids, inDialog ? card.numbers : exactButton, `model:${status}`, false, null, () => {
+                if (!current() || data !== source) return;
+                if (inDialog) openTable(card); else dialog.close();
+                const host = inDialog ? dialogBody : exact;
+                host.querySelector(`[data-model-status="${status}"][data-date="${day.date ?? ""}"]`)?.focus();
+            });
+        });
+        action.dataset.modelStatus = status; action.dataset.date = day.date ?? "";
+        action.setAttribute("aria-label", `${label}: ${quantity(count, "interaction")}, ${day.date ? fullDate(day.date) : "entire period"}`);
+        cell.append(action); return cell;
+    }
     function drawTable(card, target, includePeriod) {
         const family = card.id, source = viewData(card), table = el("table", "exact-data-table"), header = el("tr");
         const head = el("thead"), body = el("tbody");
+        const coverage = family === "models" ? modelDetails.filter(([status]) => source.totals.modelCoverage[status]) : [];
         const windowLabel = source.window.count < source.window.totalDays ? ` · Daily rows: ${dayPage()}` : "";
         table.append(el("caption", "", `${families[family].label} · ${formatRange()}${windowLabel}`));
         for (const label of ["Date", ...source.definitions[family].map(value => family === "usage" && value.id === "usage" ? "Tokens" : value.label),
-            ...(family === "usage" ? ["Interactions metered"] : family === "timing" ? ["Calls timed"] : []), "Interactions", "Calls"]) {
+            ...(family === "usage" ? ["Interactions metered"] : family === "timing" ? ["Calls timed"] : []), "Interactions", "Calls",
+            ...coverage.map(([, label]) => `${label} (interactions)`)]) {
             const cell = el("th", "", label); cell.scope = "col"; header.append(cell);
         }
         head.append(header); table.append(head, body);
@@ -1061,10 +1085,12 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                 : !day.date && family === "rhythm" && card.mode === "share" ? "Not a daily share" : valueText(value, card)));
             if (family === "usage") row.append(el("td","",`${number(day.usagePopulation.metered)} of ${number(day.usagePopulation.eligible)}`));
             if (family === "timing") row.append(el("td","",number(day.timedCalls)));
-            row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls))); body.append(row);
+            row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls)));
+            for (const [status, label] of coverage) row.append(modelCoverageCell(card, source, day, status, label, includePeriod));
+            body.append(row);
         }
         target.append(table);
-        if (family === "usage" && source.usageQuestion !== "model" && source.totals.usagePopulation.cacheReadShare != null)
+        if (family === "usage" && source.totals.usagePopulation.cacheReadShare != null)
             target.append(el("p","muted",`Input read from cache this period: ${rate(100*source.totals.usagePopulation.cacheReadShare)}.`));
         if (family === "usage" && source.usageQuestion && source.usageQuestion !== "all") {
             const groups = el("table","exact-data-table"), head = groups.createTHead().insertRow();
@@ -1081,6 +1107,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                     ...(tool ? [c?.tokens == null ? "Not recorded" : `~${number(c.tokens)} tokens (${c.sized} / ${c.calls} calls)`] : [])]) row.append(el("td","",text));
             }
             target.append(groups);
+            if (tool && source.totals.values.usage.reduce((n, g) => n + g.metered, 0) > source.totals.usagePopulation.metered)
+                target.append(el("p", "muted", "An interaction can appear under several tools."));
         }
     }
     function formatRange() {
@@ -1160,7 +1188,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             const card = cards.get("problems");
             landingOpen.disabled = false;
             landingScope.textContent = ["Interactions with an error or failed call each day", data.totals.calls && data.days.some(day => !day.calls) ? "No matching dated calls on days marked with a cross" : "",
-                restrictionText.textContent, card.limits.textContent,
+                restrictionText.textContent, unknownOutcomes(data.totals),
                 data.coverage.undatedCalls ? `${number(data.coverage.undatedCalls)} undated calls excluded` : ""].filter(Boolean).join(" · ");
             landingEmpty.hidden = Boolean(data.totals.calls); landingPlot.hidden = !landingEmpty.hidden;
             landingDetail.textContent = card.emptyDetail.textContent;

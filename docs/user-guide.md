@@ -289,7 +289,7 @@ totals, including series hidden in the chart.
 | Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; a short rule along the date axis marks partial weeks. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
-| Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |
+| Response models | Each model counts once per matching interaction. An interaction can use several models. Percentages include interactions without a verified model in the denominator. In **View daily values**, select a partial, missing, unverified or conflicting model count to open its matching calls. The interaction reader shows what was recorded. |
 | Call duration | Median and 95th percentile of recorded durations, in milliseconds. A blank date has no matching calls; a dash means calls had no recorded duration. **View daily values** shows both the number of calls and how many were timed. |
 | Token usage | Each matching interaction contributes its tokens once, on its first matching call date in the period. The coverage count shows how many interactions have a token reading. |
 

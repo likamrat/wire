@@ -129,7 +129,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             if (scene.mode === "reach") detail.append(element("div", "trends-tip-caption", "Tools can reach the same interaction."));
         } else if (scene.family === "authors") facts(detail, [["Calls in these interactions", value.calls]]);
         else if (scene.family === "services") facts(detail, [["Also involve another service", value.also]]);
-        else if (scene.family === "models") facts(detail, [["Model not recorded", value.missing], ["Also use another model", value.also]]);
+        else if (scene.family === "models") facts(detail, [["Interactions without a verified model", value.missing], ["Also use another model", value.also]]);
         else if (scene.family === "problems") facts(detail, [["Failed tool calls", value.failedCalls], ["Calls with API errors", value.apiErrorCalls]]);
         else if (scene.family === "timing") {
             if (day.timedCalls) facts(detail, [[point.id === "p95" ? "Median" : "95th percentile",
