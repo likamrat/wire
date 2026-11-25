@@ -202,7 +202,6 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
     reduced.addEventListener("change", () => { if (reduced.matches) finish(); });
     prefs.subscribe(key => { if (key === "analyzeLayout") layout(); });
     return {
-        trackScrollbars,
         present(active, token, readerOpen) {
             ordinary = active; publication = token;
             layout();

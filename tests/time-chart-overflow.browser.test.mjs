@@ -461,8 +461,8 @@ async function captureFocus(page, name, bounds) {
     await writeFile(path.join(directory, name + ".json"), JSON.stringify({ bounds, chart, afterCapture: await measure(page) }, null, 2));
 }
 
-for (const frontend of ["bundled", "react"]) test(`${frontend}: low daily bars keep a usable hover target after scrolling`, async t => {
-    const daily = [95, ...Array(16).fill(0), 9, 0, 13, 3, 4, 0, 0, 8];
+for (const frontend of ["bundled", "react"]) test(`${frontend}: daily columns scale to the visible dates without changing their counts or drill`, async t => {
+    const daily = [9, 13, 3, 4, 0, 0, 0, 8, ...Array(16).fill(0), 73];
     const records = daily.flatMap((n, i) => {
         if (!n) return [];
         const record = fixture(`harbor-inventory-${i}`), stamp = new Date(Date.UTC(2026, 9, 1 + i, 12)).toISOString();
@@ -474,21 +474,35 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: low daily bars k
     const page = await setup(t, records, { frontend, route: "#analyze" });
     await chooseTheme(page, "light");
     const scroll = page.locator(".flat-time-scroll"), slots = scroll.locator(".time-slot"), tip = page.locator("#evidence-tooltip");
-    const total = slots.nth(20).locator(".time-column"), segment = slots.nth(19).locator('[data-segment=failure].time-segment-link');
+    const total = slots.nth(2).locator(".time-column"), segment = slots.nth(1).locator('[data-segment=failure].time-segment-link');
+    const ticks = page.locator(".activity-count-axis span");
     const origin = page.url();
+    await expect(page.getByRole("button", { name:/eight-day detail|return to period scale/i })).toHaveCount(0);
+    await expect(page.locator("#chart")).not.toContainText(/period peak/i);
+    await expect(ticks).toHaveText(["0", "5", "10", "15"]);
     for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 }); await ready(page);
-        await scroll.evaluate(node => { node.scrollLeft = node.scrollWidth; });
+        await scroll.evaluate(node => { node.scrollLeft = 0; });
         await total.scrollIntoViewIfNeeded();
+        await expect(ticks).toHaveText(["0", "5", "10", "15"]);
         const g = await measure(page);
-        assert.equal(g.marks[0].maximum, 95);
-        assert.ok(g.marks[0].right < g.scroll.x, "Tallest day is outside the visible scrollport");
+        assert.ok(g.marks.at(-1).x > g.scroll.right, "73-call peak is off-screen on entry");
         const mark = g.marks.find(m => m.total === 3);
         const geometry = { frontend, width, height: mark.height, mixedHeight: g.marks.find(m => m.total === 13).height,
-            maximum: g.marks[0].maximum, plotExtent: g.plotExtent, plotHeight: g.plot.height, barWidth: mark.width };
+            axis: await ticks.allTextContents(), plotExtent: g.plotExtent, cardHeight:g.panel.height, barWidth: mark.width };
+        assert.ok(Math.abs(mark.height - 3/15*g.plotExtent) < .04);
+        assert.ok(Math.abs(geometry.mixedHeight - 13/15*g.plotExtent) < .04);
+        assert.ok(geometry.mixedHeight >= 70 && geometry.cardHeight < 400, "The largest visible day uses the compact plot");
+        const centers = await ticks.evaluateAll(nodes => nodes.map(n => {
+            const b = n.getBoundingClientRect(); return b.top + b.height / 2;
+        }));
+        assert.ok(Math.abs(centers[0] - mark.bottom) <= 1);
+        assert.ok(Math.abs(centers[0] - centers.at(-1) - g.plotExtent) <= 1);
         if (process.env.WIRE_OVERFLOW_PROOFS) {
             await mkdir(process.env.WIRE_OVERFLOW_PROOFS, { recursive: true });
             await writeFile(path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.json`), JSON.stringify(geometry));
+            await page.mouse.move(0, 0);
+            await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-chart.png`) });
         }
         // A pointer a few pixels above a shallow column is still over its day,
         // but not over the count label or a particular outcome.
@@ -505,62 +519,19 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: low daily bars k
         await expect(tip).toContainText("Tool failed: 1 of 13");
         if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-mixed.png`) });
         await page.keyboard.press("Escape"); await expect(tip).toBeHidden();
-        assert.ok(Math.abs(mark.height - 3 / 95 * g.plotExtent) < .04, "Actual column paint uses the whole-window maximum");
+        await scroll.evaluate(n => { n.scrollLeft = n.scrollWidth; });
+        await expect(ticks.last()).toHaveText("100");
+        const peak = await slots.last().locator("svg").boundingBox();
+        assert.ok(Math.abs(peak.height - 73/100*g.plotExtent) < .04);
+        await expect(page.locator("#activityCount")).toHaveText("110");
     }
     await segment.press("Tab"); await page.keyboard.press("Shift+Tab");
     await expect(segment).toBeFocused(); await expect(tip).toContainText("Tool failed: 1 of 13");
     await segment.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
     await page.goBack(); await ready(page); await expect(page).toHaveURL(origin); await expect(segment).toBeFocused();
-    await slots.nth(18).locator(".time-zero").focus();
-    await expect(tip).toContainText("No matching records"); await expect(slots.nth(18).locator(".flat-time-column")).toHaveCount(0);
-});
-
-for (const frontend of ["bundled", "react"]) test(`${frontend}: explicit eight-day detail changes only the activity plot and returns to the period scale`, async t => {
-    const totals = [95, ...Array(95).fill(0), 9, 0, 13, 3, 4, 0, 0, 8];
-    const records = totals.flatMap((n, i) => {
-        if (!n) return [];
-        const record = fixture(`detail-${i}`), at = new Date(Date.UTC(2026, 6, 14 + i, 12)).toISOString();
-        record.capturedAt = record.userPrompt.sourceTimestamp = at;
-        record.toolCalls = Array.from({ length:n }, (_, j) => ({...record.toolCalls[0], startedAt:at, toolCallId:`detail-${i}-${j}`, startEventId:`start-${i}-${j}`,
-            toolSucceeded:j !== 0, reportedOutcome:j ? "succeeded" : "failed"}));
-        return [record];
-    });
-    const page = await setup(t, records, {frontend, route:"#analyze"});
-    const chart = page.locator("#chart"), scale = chart.locator("#activityScaleToggle"), scroller = chart.locator(".flat-time-scroll");
-    const axes = chart.locator(".dimensional-time-labels > a");
-    const counts = () => chart.locator("svg.flat-time-column").evaluateAll(ns => ns.map(n => [+n.dataset.total, +n.dataset.maximum]));
-    await expect(scale).toHaveText("Eight-day detail");
-    await expect(axes).toHaveCount(90);
-    await expect(chart.locator(".activity-scale-controls")).toContainText("Full-period peak: 95 calls on Jul 14, 2026");
-    for (const [width, theme] of [[1440, "light"], [390, "dark"]]) {
-        await page.setViewportSize({width,height:1000}); await chooseTheme(page, theme); await ready(page);
-        await scroller.evaluate(n => {n.scrollLeft = n.scrollWidth;});
-        const left = await scroller.evaluate(n => n.scrollLeft), period = await counts();
-        assert.ok(period.every(([,max])=>max===95), "The true peak is before even the loaded 90-day window");
-        await scale.press("Enter"); await expect(scale).toBeFocused();
-        await expect(scale).toHaveText("Return to period scale"); await expect(axes).toHaveCount(8);
-        await expect(axes.first()).toHaveText("Oct 18"); await expect(axes.last()).toHaveText("Oct 25");
-        await expect(chart.locator(".activity-scale-controls")).toContainText("0–13 calls. Full-period peak: 95");
-        await expect(page.locator("#timelineWindow")).toBeHidden();
-        assert.deepEqual(await counts(), [[9,13],[13,13],[3,13],[4,13],[8,13]]);
-        await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("132");
-        await scroller.evaluate(n => {n.scrollLeft = n.scrollWidth;});
-        assert.deepEqual(await counts(), [[9,13],[13,13],[3,13],[4,13],[8,13]], "Scrolling cannot change the detail scale");
-        const segment = chart.locator(".time-slot").nth(2).locator(".time-segment-link[data-segment=failure]");
-        await segment.hover(); await expect(page.getByRole("tooltip")).toContainText("1 of 13");
-        if(process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-eight-day.png`)});
-        await segment.press("Enter"); await ready(page); await expect(page.locator("#activityCount")).toHaveText("1");
-        await page.goBack(); await ready(page);
-        await expect(axes).toHaveCount(8); await expect(segment).toBeFocused();
-        await scale.click(); await expect(scale).toBeFocused(); await expect(scale).toHaveText("Eight-day detail");
-        await expect(page.locator("#timelineWindow")).toBeVisible();
-        assert.deepEqual(await counts(), period);
-        assert.ok(Math.abs(await scroller.evaluate(n => n.scrollLeft)-left)<=1);
-    }
-    await scroller.evaluate(n => {n.scrollLeft = 0;}); await scale.click();
-    await expect(chart.locator(".activity-scale-controls")).toContainText("No recorded calls");
-    await expect(axes).toHaveCount(8); await expect(chart.locator(".flat-time-column")).toHaveCount(0);
+    await slots.nth(4).locator(".time-zero").focus();
+    await expect(tip).toContainText("No matching records"); await expect(slots.nth(4).locator(".flat-time-column")).toHaveCount(0);
 });
 
 test("a fitted seven-bucket Analyze chart has no horizontal scrollbar and keeps every label and column", async t => {

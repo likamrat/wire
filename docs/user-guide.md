@@ -255,17 +255,14 @@ from the interaction summary.
 The **Work IQ tool calls over time** chart shows individual calendar days by
 default, even with All dates or a long range.
 
-- If the days don't fit across the chart, scroll horizontally.
+- If the days don't fit across the chart, scroll horizontally. The numbered
+  axis starts at zero and fits the days in view. The total above each column
+  is the exact count; scrolling doesn't change the filters or totals.
 - Long timelines show up to 90 intervals at a time, starting with the latest
   dates. Scroll within that window, or use **Earlier dates**, **Later dates**,
   **First dates** and **Latest dates** to reach the rest.
 - The window names its dates. Totals and filters still cover the whole selected
   period, and paging doesn't change which interactions a report includes.
-- Choose **Eight-day detail** to compare small daily call counts. The scale
-  uses the largest count in the eight dates shown; the caption names the
-  dates and the broader peak. Scrolling the detail does not rescale it.
-  **Return to period scale** restores the previous chart and scroll position.
-  Tool call results and the interaction list keep their original filters.
 - If an old link points outside the current dated activity, **First dates** or
   **Latest dates** returns to its recorded dates without clearing your filters.
 

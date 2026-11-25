@@ -192,8 +192,8 @@ same workspace edges as the sidebars resize.
   routine rows need no four-state ledger.
 
 The time chart, tool call results and usage each span the workspace in their
-own row. Size the time plot to its date columns, with a height cap on wide
-screens. Scrolling to a different day keeps the same linear scale.
+own row. Keep the daily call plot compact. Its labeled, linear axis starts
+at zero and fits the dates in view; counts and outcome segments share it.
 
 Give Analyze's activity and token charts the same card surface, heading inset,
 column width and space between the baseline and its dates. Activity stacks

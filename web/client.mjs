@@ -5699,7 +5699,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
     }
-    let activityDetail = null;
     function renderTime() {
         const series = workspaceState.analytics.timeSeries;
         const native = sharedNativeView(), nativePoints = native?.timeSeries.points ?? [];
@@ -5742,82 +5741,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         })];
                 } });
         }
-        const dates = [...new Set(points.map(point => point.date))];
-        const daily = workspaceState.scope.bucket === "day" && workspaceState.scope.layer === "tool";
-        const supportsDetail = daily && dates.length > 8
-            && activityProjection.bucketDistance(dates[0], dates.at(-1), "day") + 1 === dates.length;
+        const axis = workspaceState.scope.bucket === "day" && workspaceState.scope.layer === "tool" ? el("div", "activity-count-axis") : null;
+        if (axis) { axis.setAttribute("aria-hidden", "true"); $("chart").append(axis); }
+        const chart = dimensional.timeView({
+            compact: Boolean(frontendActivity),
+            axis,
+            points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
+            unit: frontendActivity ? undefined : total => results.columnUnit(workspaceState.scope.layer, total),
+            summary: point => `${mixed ? point.chartSource + ": " : ""}${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
+            createAction: point => periodLink(point),
+            createSegment: periodLink,
+            zeroDefinition: () => ux.tooltip(widgetDefinitionLink("time"), "No matching records were dated in this period."),
+        });
+        chart.removeAttribute("aria-label");
+        chart.setAttribute("aria-labelledby", "chartTitle");
+        chart.setAttribute("aria-describedby", "chartReadingNotes");
         const windowed = series?.window?.total > 90 || native?.timeSeries.window?.total > 90;
-        const peakOf = rows => rows.reduce((best, point) => point.total > best.total ? point : best);
-        const loadedPeak = peakOf(points);
-        const peak = daily && !nativePoints.length && series?.dailyPeak ? series.dailyPeak : loadedPeak;
-        const partialWindow = windowed && (nativePoints.length > 0 || !series?.dailyPeak);
-        const key = supportsDetail ? JSON.stringify([workspaceState.evidence.revision, workspaceState.scope, semanticQuery,
-            workspaceState.route.withinServices, dates[0], dates.at(-1)]) : null;
-        const publication = api.publicationToken(), accepted = workspaceState.analytics;
-        let detail = supportsDetail && activityDetail?.key === key ? activityDetail : null;
-        let chart, toggle, caption;
-        const controls = el("div", "activity-scale-controls");
-        if (supportsDetail || daily && windowed && peak.total > loadedPeak.total) {
-            caption = el("span");
-            caption.id = "activityScaleCaption";
-            controls.append(caption); $("chart").append(controls);
-        }
-        if (supportsDetail) {
-            toggle = button("", () => {
-                if (!toggle.isConnected || !api.isCurrent(publication) || accepted !== workspaceState.analytics || workspaceState.loading || workspaceState.stale) return;
-                const left = chart.scrollLeft;
-                if (detail) {
-                    const restore = detail.scrollLeft;
-                    activityDetail = detail = null;
-                    draw(restore);
-                } else {
-                    const slot = chart.querySelector(".time-slot");
-                    const index = Math.min(points.length - 1, Math.floor(left / slot.getBoundingClientRect().width));
-                    const atEnd = left + chart.clientWidth >= chart.scrollWidth - 1;
-                    const first = atEnd ? dates.length - 8 : dates.indexOf(points[index].date);
-                    activityDetail = detail = { key, start: dates[Math.min(first, dates.length - 8)], scrollLeft: left };
-                    draw(0);
-                }
-                homepage.trackScrollbars();
-                ux.hideTooltip();
-                toggle.focus({ preventScroll: true });
-            }, "quiet");
-            toggle.id = "activityScaleToggle";
-            toggle.setAttribute("aria-describedby", caption.id);
-            controls.append(toggle);
-        }
-        function draw(left) {
-            const start = detail ? dates.indexOf(detail.start) : -1;
-            const end = dates[start + 7];
-            const visible = start >= 0 ? points.filter(p => p.date >= detail.start && p.date <= end) : points;
-            if (caption) {
-                const outside = start >= 0 && (peak.date < detail.start || peak.date > end);
-                const context = `${partialWindow ? "Chart window" : "Full-period"} peak: ${count(peak.total)} ${peak.total === 1 ? "call" : "calls"} on ${date(peak.date, true)}${mixed ? " · " + peak.chartSource : ""}${outside ? " (outside this detail)" : ""}.`;
-                const high = peakOf(visible).total;
-                caption.textContent = start >= 0
-                    ? `Eight-day detail: ${date(detail.start, true)} – ${date(end, true)} · ${high ? `0–${count(high)} calls` : "No recorded calls"}. ${context}`
-                    : context;
-                if (toggle) toggle.textContent = start >= 0 ? "Return to period scale" : "Eight-day detail";
-                const pager = $("timelineWindow");
-                if (pager) pager.hidden = start >= 0;
-            }
-            if (chart) { dimensional.disposeView(chart); chart.remove(); }
-            chart = dimensional.timeView({
-                compact: Boolean(frontendActivity), points: visible, periodMaximum: daily && start < 0 ? peak.total : 0,
-                label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
-                unit: frontendActivity ? undefined : total => results.columnUnit(workspaceState.scope.layer, total),
-                summary: point => `${mixed ? point.chartSource + ": " : ""}${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
-                createAction: point => periodLink(point), createSegment: periodLink,
-                zeroDefinition: () => ux.tooltip(widgetDefinitionLink("time"), "No matching records were dated in this period."),
-            });
-            chart.removeAttribute("aria-label"); chart.setAttribute("aria-labelledby", "chartTitle");
-            chart.setAttribute("aria-describedby", caption ? `${caption.id} chartReadingNotes` : "chartReadingNotes");
-            viewKey(chart, "chart:time" + (windowed || detail ? ":" + visible[0].date + ":" + visible.at(-1).date : ""));
-            chart.querySelectorAll(".time-slot").forEach((slot, i) => viewKey(slot.firstElementChild, "chart:time:" + visible[i].chartSource + ":" + visible[i].date));
-            $("chart").append(chart); dimensional.refreshView(chart);
-            chart.scrollLeft = left ?? (!detail && windowed && !workspaceState.scope.timelineFrom ? chart.scrollWidth : 0);
-        }
-        draw();
+        viewKey(chart, "chart:time" + (windowed ? ":" + points[0].date + ":" + points.at(-1).date : ""));
+        chart.querySelectorAll(".time-slot").forEach((slot, index) => viewKey(slot.firstElementChild, "chart:time:" + points[index].chartSource + ":" + points[index].date));
+        $("chart").append(chart);
+        dimensional.refreshView(chart);
+        if (windowed && !workspaceState.scope.timelineFrom) chart.scrollLeft = chart.scrollWidth;
         const missing = (series?.undatedCount ?? 0) + (native?.timeSeries.undatedRows ?? 0);
         if (missing) $("chartFooter").append(el("span", "", `${count(missing)} undated ${missing === 1 ? "record" : "records"}.`));
     }
@@ -11990,7 +11934,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
-        activityDetail = null;
         messageText?.clear();
         hiddenCards.bind(null); undoCard = null; closeHiddenDialog(); $("cardVisibilityActions")?.remove();
         homepage.leave();

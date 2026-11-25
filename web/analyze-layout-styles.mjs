@@ -148,12 +148,14 @@ export const analyzeLayoutStyles = `
 /* Full date line boxes and the inner scroll clearance share the existing footer inset. */
 #homeView .analyze-chart-main:has(.dimensional-scroll) .chart-panel {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
 #chart .dimensional-scroll {padding-block-end:8px}
+#chart:has(>.activity-count-axis) {display:grid;grid-template-columns:4ch minmax(0,1fr);column-gap:var(--space-xs)}
+.activity-count-axis {position:relative;align-self:start;color:var(--muted);font-size:var(--type-small);font-variant-numeric:tabular-nums}
+.activity-count-axis span {position:absolute;right:0;transform:translateY(50%);line-height:1}
+.activity-count-axis+.dimensional-scroll .time-chart {overflow:clip;overflow-clip-margin:3px}
 #chart .dimensional-time-labels,.token-history-dates {padding-block-start:var(--day-label-gap)}
 #chart .dimensional-time-labels {min-height:0}
 #chart .dimensional-time-labels>* {padding-block-end:0}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}
-.activity-scale-controls {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0 var(--space-md);color:var(--muted);font-size:var(--type-small)}
-.activity-scale-controls button {color:var(--accent);min-height:44px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0 12px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}
 .percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator{grid-column:1/-1;grid-row:2}
