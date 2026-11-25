@@ -280,6 +280,8 @@ test("capture documentation through the normal renderer with isolated light-them
     }
 
     if (reportsOnly) {
+        await page.locator('nav [data-nav=analyze]').click();
+        await ready();
         await page.locator("#activityList .report-draft-trigger").first().click();
         const picker = page.getByRole("dialog", { name: "Report drafts" });
         await picker.getByRole("button", { name: "New draft", exact: true }).click();

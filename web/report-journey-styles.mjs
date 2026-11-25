@@ -501,7 +501,12 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 @keyframes report-drawer-in{from{transform:translateX(100%)}to{transform:translateX(0)}}
 @media(prefers-reduced-motion:reduce){.report-preview-drawer[open]{animation:none}}
 @media(max-width:52rem){.report-home:not([hidden]){grid-template-columns:minmax(0,1fr);row-gap:1rem}.report-home>#reportSections{margin-bottom:0}.report-preview-drawer{width:100vw}.report-gallery-header .report-draft-shortcut:not([hidden]){display:inline-flex}.report-preset-copy{grid-template-columns:minmax(0,1fr);gap:.15rem}}
-@container report-journey (max-width:34rem){.report-preset-copy{grid-template-columns:minmax(0,1fr);gap:.15rem}.report-preset-destination{font-size:0;gap:0}}
+@container report-journey (max-width:34rem){
+ .report-preset-copy{grid-template-columns:minmax(0,1fr);gap:.15rem}
+ .report-preset-list .report-tile-open{grid-template-columns:1.125rem minmax(0,1fr);row-gap:.2rem}
+ .report-preset-list .report-tile-open>svg{align-self:start;margin-top:.2rem}
+ .report-preset-destination{grid-column:2;justify-self:end}
+}
 .report-first .report-stage{margin-top:0}
 .report-gallery{max-width:none}
 .report-gallery>h2{font-size:1.2rem;font-weight:500;margin:0 0 .75rem}

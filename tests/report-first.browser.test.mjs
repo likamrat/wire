@@ -67,6 +67,8 @@ test("Reports opens visible preset actions, keeps Custom last and resumes the sa
         await errorPreset.hover(); await errorPreset.focus(); await errorPreset.press("Tab"); await page.keyboard.press("Shift+Tab");
         await expect(errorPreset).toBeFocused();
         await expect(errorPreset).toHaveCSS("text-decoration-line", "none");
+        assert.ok(await list.locator(".report-preset-destination").evaluateAll(nodes =>
+            nodes.every(node => parseFloat(getComputedStyle(node).fontSize) >= 12)));
         assert.deepEqual(await errorPreset.boundingBox(), before);
         await captureReport(page, `report-entry-${theme}-${width}`);
     }
