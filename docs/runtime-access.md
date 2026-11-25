@@ -52,7 +52,15 @@ no private data and cannot authorize an update or renew data access. On a clean 
 browser page releases only its original panel. Suspended pages and pages
 with unfinished work do not release it. If the browser cannot deliver the
 release, the ordinary session expires after inactivity; expiry does not
-clear a managed installation's update interlock.
+clear a managed installation's update interlock. If a clean document leaves
+while its first update status is in transit, its departure is accepted only
+for that document's still-live original runtime grant. A suspended document
+or one with unresolved work does not take this path.
+
+**Check open views** asks the existing participants for their current hold, not
+for permission to restart. It reports a count of missing replies rather than
+guessing whether a window was closed. It neither stages a build nor creates a
+restart receipt, releases a participant, or supplies readiness for a later Apply.
 There is no general HTML fallback for other paths, files, APIs or methods.
 The localhost spelling is only an entry redirect for root navigation; fragments
 stay with the browser. It is not an alternate API/write origin. Requests with

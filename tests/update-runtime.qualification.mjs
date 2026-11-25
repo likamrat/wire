@@ -166,6 +166,22 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await expect(analyze.locator("#workspace")).toHaveAttribute("aria-busy", "false");
             const check = settings.getByRole("button", { name: "Check for updates" });
             await expect(check).toBeEnabled();
+            // The server registered this document, but it leaves before its first update status arrives.
+            const joining = await context.newPage(), registered = Promise.withResolvers(), resume = Promise.withResolvers();
+            await joining.route("**/api/app-update", async route => {
+                try {
+                    const response = await route.fetch();
+                    registered.resolve(response.status()); await resume.promise;
+                    await route.fulfill({ response }).catch(() => {}); // Its document may have left.
+                } catch (error) { registered.reject(error); }
+            }, { times: 1 });
+            try {
+                await joining.goto(url + "settings");
+                assert.equal(await registered.promise, 200);
+                await joining.reload();
+            } finally { resume.resolve(); }
+            await expect(joining.locator("#appUpdateAuto")).toBeEnabled();
+            await joining.close({ runBeforeUnload: true });
             await appendFile(path.join(origin, "web", "browser-entry.mjs"), '\ndocument.documentElement.dataset.wireFixtureBuild = "updated";\n');
             await git(origin, "commit", "-qam", "Fixture update for reloaded windows");
             await check.click();
@@ -177,6 +193,16 @@ test("full WIRE clone updates on the original address and reopens the same saved
             assert.equal(new URL(destinations[1]).pathname, "/");
             await expect(analyze.locator("#workspace")).toBeVisible();
             await expect(analyze).toHaveTitle("Analyze | WIRE");
+            const viewCheck = settings.getByRole("button", { name: "Check open views" });
+            await analyze.route("**/api/app-update/readiness", route => route.abort(), { times: 1 });
+            await viewCheck.click();
+            await expect(settings.locator("#appUpdateViewStatus")).toContainText("1 of 2 registered views did not answer", { timeout: 15000 });
+            await expect(settings.locator("#appUpdateViewStatus")).toContainText("WIRE sent the check");
+            await expect(install).toBeEnabled();
+            await viewCheck.click();
+            await expect(settings.locator("#appUpdateViewStatus")).toContainText("Both views reported no unfinished work", { timeout: 15000 });
+            assert.equal((await health()).runtimeId, starter.runtimeId);
+            await expect(analyze.getByRole("dialog", { name: "WIRE is updating" })).toHaveCount(0);
             const applyResponse = () => settings.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "apply");
             // The peer received the offer, but the server did not receive its acknowledgment.
             await analyze.route("**/api/app-update/readiness", route => route.abort(), { times: 1 });

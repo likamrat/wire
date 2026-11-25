@@ -520,6 +520,10 @@ your tabs open: each participating window shows **WIRE is updating**, then
 reloads its own page. If a window has an unfinished edit, save or cancel it
 there before updating. If a window doesn't confirm it's ready, WIRE stops
 before restarting. That message alone doesn't mean you left an edit unfinished.
+When an update is available, **Check open views** in General asks the registered
+views whether they have unfinished work. It doesn’t install anything. If a view
+doesn’t answer, keep your windows and work intact; another update click won’t
+tell you which view was missing. WIRE checks again when you choose to restart.
 Dismissing the notification leaves the update available in General. If your copy can't check for updates,
 General links to **Update instructions** instead.
 
