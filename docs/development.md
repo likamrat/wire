@@ -234,8 +234,9 @@ The first canvas open or WIRE tool call connects to a compatible WIRE on port
 Copilot sessions reuse that runtime; it stops when its owning session's
 extension stops. The embedded runtime can't fork Node children, so Search
 reports saved PDF text as unavailable there. When the plugin is updated, the
-extension that started WIRE stops it within about 15 seconds, so the next
-request starts the new version.
+extension that started WIRE stops it within about 15 seconds and from then on
+only connects to a WIRE started by an updated extension. Reload extensions or
+start a new chat to load the new version.
 
 The `wire-diagnostics` and `wire-failure-audit` skills use the MCP diagnostic
 engine in `lib/mcp-diagnostics/`, a dependency-free port of the Python

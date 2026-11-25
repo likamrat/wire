@@ -97272,7 +97272,11 @@ var runtimeFor = (port) => {
   return runtimes.get(port);
 };
 async function ensureRuntime(port) {
-  if (superseded) throw new CanvasError("runtime_update_required", "WIRE was updated. Start a new chat or reload extensions to use the new version.");
+  if (superseded) {
+    const origin = `http://127.0.0.1:${port}`;
+    if (await compatibleRuntime(origin)) return { origin };
+    throw new CanvasError("runtime_update_required", "WIRE was updated. Reload extensions or start a new chat to open the new version.");
+  }
   const hosted = runtimeFor(port);
   try {
     await hosted.ensure();
