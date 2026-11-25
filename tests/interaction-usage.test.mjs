@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { firstUsageDays, recordedUsage, usageSummary, usageQuestionGroups } from "../lib/interaction-usage.mjs";
 import { createUsageReading } from "../web/usage-reading.mjs";
-import { modelRequestKey, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
+import { modelRequestKey, retainedReceiptContext, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
 import { retainInteractionModelMetadata } from "../lib/interaction-model.mjs";
 import { qualifiedResultPaths } from "../lib/history.mjs";
 
@@ -58,6 +58,23 @@ test("an initiator label does not override a delegated or nested model call", ()
     for (const extra of [{interactionType:"conversation-subagent"}, {interactionType:"conversation-compaction"},
         {interactionType:"conversation-background"}, {parentToolCallId:"parent"}, {fusion:{}}]) assert.equal(receipt(extra).data.tokens,null);
     assert.equal(receipt({}, {agentId:"nested"}).data.tokens,null);
+});
+
+test("pending request-only metering excludes rival run, message, request and delegated claims", () => {
+    const p = { id:"prompt", type:"user.message", timestamp:"2026-10-29T12:00:00Z", data:{ wireUsageOrigin:"run", messageId:"msg" } };
+    const a = { id:"response", type:"assistant.message", data:{ wireUsageOrigin:"run", originatingMessageId:"msg", wireOriginalModel:{ apiCallId:"api" } } };
+    const r = { id:"receipt", type:"session.usage_record", data:{ apiCallId:"api" } };
+    const record = { sourceSessionId:"s", userPrompt:{ sourceEventId:p.id, sourceTimestamp:p.timestamp }, toolCalls:[{ startEventId:"tool" }] };
+    const kept = (events, target = record) => retainedReceiptContext([...events,r],[target],"s").includes(r);
+    assert.equal(kept([p,a]), true);
+    for (const events of [[p,a,{ ...p,id:"other",data:{ ...p.data,messageId:"other" } }],
+        [p,a,{ ...a,id:"rival",data:{ ...a.data,wireUsageOrigin:"different" } }],
+        [p,{ ...a,data:{ ...a.data,originatingMessageId:"different" } }],
+        [p,{ ...a,agentId:"delegate" }], [{ ...p,data:{ ...p.data,wireUsageExcluded:true } },a]]) {
+        assert.equal(kept(events), false);
+    }
+    assert.equal(kept([p,a],{ ...record,sourceSessionId:"other" }), false);
+    assert.equal(kept([p,a],{ ...record,assessmentMembershipPruned:true }), false);
 });
 
 test("opaque request keys match old assistant metadata without admitting raw digest lookalikes or credentials", () => {

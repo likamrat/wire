@@ -234,7 +234,10 @@ exact input/output total. WIRE does not sum `session.usage_checkpoint`, reason f
 order alone, subscribe to live SDK events, or start a backfill. Conflicting,
 partial, or unsupported receipts do not establish a whole-interaction count.
 These optional fields use the existing evidence snapshot; no store conversion
-is necessary. A matched Work IQ completion may retain its returned text byte
+is necessary. When a response explicitly identifies a retained Work IQ run,
+its request-only receipt can survive a collection restart before the final
+boundary arrives. WIRE still shows no total until it verifies the complete
+exchange. A matched Work IQ completion may retain its returned text byte
 count (roughly four UTF-8 bytes per token), not its body.
 When there is no message-level prompt link, an explicitly owned model request
 in the verified run can link its tool ID to one exact start. WIRE can then

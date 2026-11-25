@@ -131,6 +131,38 @@ test("history compatibility: an explicit closed run meters without a prompt mess
     assert.equal(disputed.toolCalls[0].usageContextLinked,undefined);
 });
 
+test("history compatibility: a request-only meter for a retained run survives a restart before its closure", async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID(), turnId = "tool-turn";
+    const prompt = event("user.message", { interactionId, content: "Read the invented review notes." });
+    const tool = call("metered-lookup");
+    tool.data.turnId = turnId;
+    const response = event("assistant.message", { interactionId, turnId, apiCallId: "owned-request", toolRequests: [{ toolCallId: tool.data.toolCallId }] });
+    const meter = apiCallId => event("session.usage_record", { usage: { apiCallId, model: "gpt-4.1", inputTokens: 22, outputTokens: 3 } });
+    const unrelated = meter("unrelated-request"), owned = meter("owned-request");
+    const file = await logFor(app, id, [unrelated, prompt, response, tool,
+        event("tool.execution_complete", { toolCallId: tool.data.toolCallId, success: true }), owned]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    await collector.collectNow();
+    assert.equal((await read()).usage, null);
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    const end = event("assistant.turn_end", { turnId });
+    const closure = event("session.completion_receipt", { schemaVersion: 1, stopReason: "natural",
+        eventRange: { startEventId: prompt.id, endEventId: end.id }, sourceEventId: end.id });
+    await appendFile(file, [end, closure].map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const after = await read();
+    assert.equal(after.usage?.total, 25, "the earlier numeric original is still available when the root closes");
+    assert.equal(after.usage.steps.length, 1);
+    const dir = path.join(app.context.dataDir, "collector");
+    const { fingerprint } = JSON.parse(await readFile(path.join(dir, "index.json"), "utf8"));
+    const checkpoint = JSON.parse(await readFile(path.join(dir, fingerprint, `${id}.json`), "utf8"));
+    assert.equal(checkpoint.events.some(e => e.id === unrelated.id), false);
+});
+
 test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {
     const app = await installation(t), id = app.session(), start = call("metered-fetch");
     const model = "claude-sonnet-5-5", messageId = "metered-prompt", interactionId = "interaction-one";
