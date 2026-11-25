@@ -14,17 +14,18 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await page.goto(runtime.url);
     if (width<500) await chooseTheme(page,"dark");
     const card=page.locator("#analyzeUsage"), date=card.locator(".token-day-date a"), slider=card.getByRole("slider",{name:"Inspect daily token usage"});
-    await expect(card).toContainText("Counts available for 1 of 2 interactions");
-    await expect(card.locator(".token-history-total")).toContainText("200,000 measured tokens");
+    await expect(card.locator(".token-history-total")).toHaveText("200,000 tokens · 1 of 2 interactions measured");
+    await expect(card.locator(".token-day-reading")).toHaveAttribute("aria-hidden","true");
+    await expect(card.locator(".token-day-guide")).toHaveCSS("opacity","0");
     await expect(card).not.toContainText("Recorded tokens");
     await expect(card.locator("[data-measured-day]")).toHaveCount(1);
     await expect(card.locator(".token-line")).toHaveCount(0);
-    await expect(card.locator("[data-activity-day]")).toHaveCount(2);
+    await expect(card).not.toContainText("Work IQ activity");
     const box=await slider.boundingBox();
     if(width<500) await slider.tap({position:{x:box.width*.98,y:box.height*.5}});
     else await slider.hover({position:{x:box.width*.98,y:box.height*.5}});
-    await expect(slider).toHaveAttribute("aria-valuetext",/1 interaction · token count unavailable/);
-    await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching dated activity/);
+    await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable · 0 of 1 measured/);
+    await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching activity/);
     await slider.press("Home");await expect(slider).toHaveAttribute("aria-valuetext",/200,000 tokens/);
     const expected=new Date(); expected.setUTCHours(10,0,0,0); expected.setUTCDate(expected.getUTCDate()-20);
     const dateText=expected.toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",year:"numeric",month:"short",day:"numeric"});
@@ -47,10 +48,11 @@ test("a metered zero is a token point on the baseline, not an unknown or an empt
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
     const page=await browser.newPage();await page.goto(runtime.url);
     const chart=page.locator("#analyzeUsage");
-    await expect(chart.locator(".token-day-value")).toHaveText("0 tokens · 1 of 1 interaction measured");
-    await expect(chart.locator(".token-point[cy='75']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
+    await chart.getByRole("slider").focus();
+    await expect(chart.locator(".token-day-value")).toHaveText("0 tokens");
+    await expect(chart.locator(".token-point[cy='88%']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
     await chart.getByRole("slider").press("ArrowRight");
-    await expect(chart.locator(".token-day-value")).toHaveText("1 interaction · token count unavailable");
+    await expect(chart.locator(".token-day-value")).toHaveText("Token count unavailable · 0 of 1 measured");
 });
 
 for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: Most tokens reorders the same cards and both Analyze defaults survive reopening`,async t=>{
@@ -142,7 +144,10 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(widget.locator(".token-point")).toHaveCount(4);
     await expect(widget.locator(".token-line")).toHaveCount(3);
     await expect(widget.locator(".token-day-value")).toContainText("104,500 tokens");
-    await widget.getByRole("slider").press("ArrowLeft");await expect(widget.locator(".token-day-value")).toHaveText("30,500 tokens · 1 of 2 interactions measured");
+    await widget.getByRole("slider").press("ArrowLeft");await expect(widget.locator(".token-day-value")).toHaveText("30,500 tokens · 1 of 2 measured");
+    await widget.getByRole("slider").press("Escape");
+    await page.locator("#analyzeUsageTitle").click();
+    if (process.env.WIRE_USAGE_PROOFS) await widget.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-simple-line.png`)});
     await expect(widget).not.toContainText(/cost|price|\$/i);
     await capture("home",widget);
     const models=page.locator('[data-percentage-card="models"]');
