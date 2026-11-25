@@ -6,9 +6,9 @@ export function rgb(value) {
 }
 
 // Scan a flat widget's actual ink and marks, excluding its rounded outer border.
-export async function paintedWidgetInsets(card, screenshotPath) {
+export async function paintedWidgetInsets(card, screenshotPath, foregroundSelector) {
     const image = await card.screenshot({ path: screenshotPath, animations: "disabled" });
-    return card.evaluate(async (node, base64) => {
+    return card.evaluate(async (node, { base64, foregroundSelector }) => {
         const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))]));
         const canvas = document.createElement("canvas");
         canvas.width = bitmap.width; canvas.height = bitmap.height;
@@ -17,8 +17,14 @@ export async function paintedWidgetInsets(card, screenshotPath) {
         const bounds = node.getBoundingClientRect(), scale = width / bounds.width, css = getComputedStyle(node);
         const surface = (width * 2 + Math.floor(width / 2)) * 4;
         const inset = Math.ceil(Math.max(20, parseFloat(css.borderTopLeftRadius)) * scale);
+        const foreground = foregroundSelector ? node.querySelector(foregroundSelector)?.getBoundingClientRect() : bounds;
+        if (!foreground) throw new Error(`Missing measured widget foreground: ${foregroundSelector}`);
+        const left = Math.max(inset, Math.floor((foreground.left - bounds.left) * scale));
+        const right = Math.min(width - inset, Math.ceil((foreground.right - bounds.left) * scale));
+        const top = Math.max(3, Math.floor((foreground.top - bounds.top) * scale));
+        const bottom = Math.min(height - 3, Math.ceil((foreground.bottom - bounds.top) * scale));
         let first = height, last = -1;
-        for (let y = 3; y < height - 3; y++) for (let x = inset; x < width - inset; x++) {
+        for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) {
             const i = (y * width + x) * 4;
             if (Math.max(Math.abs(data[i] - data[surface]), Math.abs(data[i + 1] - data[surface + 1]),
                 Math.abs(data[i + 2] - data[surface + 2])) >= 24) {
@@ -29,7 +35,7 @@ export async function paintedWidgetInsets(card, screenshotPath) {
         return { top: first / scale - parseFloat(css.borderTopWidth),
             bottom: (height - last - 1) / scale - parseFloat(css.borderBottomWidth),
             width: bounds.width, height: bounds.height };
-    }, image.toString("base64"));
+    }, { base64: image.toString("base64"), foregroundSelector });
 }
 
 // Measure ordinary screen text against its composed surface, including inset control faces.

@@ -1504,9 +1504,9 @@ export const trendsStyles = `
 .trends-compare-choices input:focus-visible{outline:none}
 .trends-toolbar [hidden],#trendsView [hidden]{display:none!important}
 #trendsView[data-layout=all] .trends-workspace{display:block}#trendsView[data-layout=all] .trends-measure-index{display:flex;flex-wrap:wrap;border:0;margin-bottom:12px}#trendsView[data-layout=all] .trends-measure{width:auto}
-#trendsView[data-layout=all] .trends-panel{padding-block-start:var(--space-xl)}
-#trendsView[data-layout=all] .trends-heading{align-items:start}
-#trendsView[data-layout=all] .trends-title-group h2{margin-block-start:var(--space-sm);text-box:trim-start cap alphabetic}
+#trendsView[data-layout=all] .trends-panel[data-collapsed=false]{padding-block-start:var(--space-xl)}
+#trendsView[data-layout=all] .trends-panel[data-collapsed=false] .trends-heading{align-items:start}
+#trendsView[data-layout=all] .trends-panel[data-collapsed=false] .trends-title-group h2{margin-block-start:var(--space-sm);text-box:trim-start cap alphabetic}
 #trendsView[data-layout=all] .trends-point{margin-block-end:0}
 #trendsView[data-layout=all] .trends-limits:not(:empty){padding-block-end:var(--space-lg);text-box:trim-end cap alphabetic}
 #trendsView[data-layout=all] .trends-plot{contain:layout paint}

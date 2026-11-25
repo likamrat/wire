@@ -130,3 +130,44 @@ test("Trends widgets keep their content-sized frames and balanced exterior paint
         .map(key => [`all-${key}`, `.trends-panel[data-family="${key}"]`]), "trends", readings);
     balanced(readings);
 });
+
+for (const frontend of ["react", "bundled"]) test(`${frontend}: collapsed Trends rows center title ink with their controls`, async t => {
+    const page = await setup(t, frontend), readings = [];
+    await page.setViewportSize({ width: 1440, height: 1100 }); await chooseTheme(page, "light");
+    await navigateMain(page, "trends");
+    await page.getByRole("button", { name: "View chart", exact: true }).click();
+    await page.getByRole("button", { name: "Show or hide charts", exact: true }).click();
+    await page.getByRole("button", { name: "Open all charts", exact: true }).click();
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+    const cards = page.locator(".trends-panel[data-collapsed=true]");
+    await expect(cards).toHaveCount(8); await ready(page); await page.mouse.move(0, 0);
+    if (proof) await mkdir(proof, { recursive: true });
+    for (const card of await cards.all()) {
+        const title = await paintedWidgetInsets(card, undefined, ".trends-title-group h2");
+        const icon = await paintedWidgetInsets(card, undefined, ".trends-sizing>button:first-child svg");
+        readings.push({ name: await card.getAttribute("data-family"), title, icon });
+        for (const control of await card.locator(".trends-sizing>button").all()) {
+            const box = await control.boundingBox();
+            assert.ok(box.width >= 44 && box.height >= 44, "Collapsed controls keep their hit areas");
+        }
+    }
+    if (proof) {
+        await page.evaluate(() => scrollTo(0, 0)); await ready(page);
+        await page.screenshot({ path: path.join(proof, `${frontend}-trends-collapsed.png`) });
+        await writeFile(path.join(proof, `${frontend}-trends-collapsed.json`), JSON.stringify(readings, null, 2));
+    }
+    for (const { name, title, icon } of readings) {
+        assert.ok(Math.abs(title.height - 82) <= 1, `${name}: retains the compact 80px interior plus border`);
+        assert.ok(Math.abs(title.top - title.bottom) <= 4, `${name}: title ink centered (${title.top.toFixed(1)} / ${title.bottom.toFixed(1)}px)`);
+        assert.ok(Math.abs((title.top - title.bottom) - (icon.top - icon.bottom)) <= 4, `${name}: title and control ink align`);
+    }
+    const first = page.locator('.trends-panel[data-family="problems"]');
+    await first.getByRole("button", { name: "Expand Errors & failures", exact: true }).click();
+    await expect(first.locator(".trends-plot")).toBeVisible();
+    balanced([{ name: "expanded again", ...await paintedWidgetInsets(first) }]);
+    await first.getByRole("button", { name: "Collapse Errors & failures", exact: true }).click();
+    await expect(first.locator(".trends-plot")).toBeHidden();
+    const again = await paintedWidgetInsets(first, undefined, ".trends-title-group h2");
+    assert.ok(Math.abs(again.height - readings[0].title.height) <= 1, "Repeated collapse preserves the compact row height");
+    assert.ok(Math.abs(again.top - again.bottom) <= 4, "Repeated collapse centers the title");
+});
