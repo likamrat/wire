@@ -634,6 +634,31 @@ test("backfill preserves the same credential-excluded prompt boundary as live-ta
     }
 });
 
+test("an unrelated append after checkpoint compaction preserves a completed interaction's model history", async t => {
+    const app = await installation(t), id = app.session();
+    const at = Date.now() - 10000;
+    const write = (e, ms) => ({ ...e, timestamp: new Date(at + ms).toISOString() });
+    const p = write(event("user.message", { content: "Review the harbor notes.", messageId: "first" }), 0);
+    const response = write(event("assistant.message", { model: "Alder", originatingMessageId: "first", phase: "final_answer",
+        content: "Harbor notes reviewed.", turnId: "first-turn", apiCallId: "first-request" }), 20);
+    const file = await logFor(app, id, [p, write(call(), 10), response, write(event("assistant.turn_end", { turnId: "first-turn" }), 30)]);
+    let collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const [original] = (await loadBoardState(app.context)).evidence;
+    assert.equal(original.originalModelEvidence.partial, false);
+    const append = events => appendFile(file, events.map(e => JSON.stringify(e) + "\n").join(""));
+    await append([write(event("user.message", { content: "A different request.", messageId: "second" }), 40),
+        ...Array.from({ length: 320 }, (_, i) => write(event("assistant.turn_start", { turnId: `later-${i}` }), 50 + i))]);
+    await collector.collectNow(); await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await append([write(event("assistant.turn_end", { turnId: "later-319" }), 400)]);
+    await collector.collectNow();
+    const [retained] = (await loadBoardState(app.context)).evidence;
+    assert.deepEqual(retained.responseTiming, original.responseTiming);
+    assert.deepEqual(retained.originalModelEvidence, original.originalModelEvidence);
+});
+
 test("original model metadata survives collection, context eviction and restart without capturing replies", async t => {
     const app = await installation(t), id = app.session(), now = Date.now() - 10000;
     const timed = (type, data, ms, eventId) => ({ ...event(type, data, eventId), timestamp: new Date(now + ms).toISOString() });
