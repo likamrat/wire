@@ -208,7 +208,10 @@ overlap: an interaction that used both fetch and retrieve appears in both,
 but its tokens count only once in the period total.
 **Chart guide** explains the units.
 On Analyze,
-choose **View trend** on a widget to open its corresponding measure. From
+choose **View trend** on a widget to open its corresponding measure. With
+**All dates**, the trend spans the first through last dated calls in the
+current view. **Response models** opens interaction counts or measured tokens
+by model according to the switch on the widget. From
 **Tool call results**, WIRE asks before showing **Errors & failures**: that
 chart counts affected interactions, not call outcomes. **Back to Analyze**
 restores the original widget.

@@ -2,10 +2,11 @@
 export function createAnalyzeTrendsEntry({ time, results, authorship, categories }) {
     const subjects = {
         rhythm: "Tool calls", problems: "Errors & failures", tools: "Tool usage",
-        authors: "Prompt authors", models: "Response models", services: "Services", usage: "Token usage",
+        authors: "Prompt authors", models: "Response models", modelTokens: "Tokens by response model", services: "Services", usage: "Token usage",
     };
-    function project(family, { scope, route, revision, hasSearch, includesNative, hasEarlier, otherSources, supportedTools, usageCalendar }, selectedDay) {
-        if (!Object.hasOwn(subjects, family)) throw new RangeError("Unknown Analyze widget.");
+    function project(widget, { scope, route, revision, hasSearch, includesNative, otherSources, supportedTools, coverage, usageCalendar }, selectedDay) {
+        if (!Object.hasOwn(subjects, widget)) throw new RangeError("Unknown Analyze widget.");
+        const family = widget === "modelTokens" ? "usage" : widget;
         const f = scope.filters, zone = scope.timeContext.timeZone, filters = {}, changes = [];
         if (family === "problems") changes.push("Analyze counts recorded outcomes. Errors & failures counts affected interactions, not failed calls; a completed call can contain an API error.");
         if (scope.layer !== "tool") changes.push(`Analyze shows ${results.unit(scope.layer, 2)}. Trends uses recorded Work IQ tool calls and their originating interactions.`);
@@ -14,8 +15,7 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         if (includesNative || otherSources || f.sources?.some(source => source !== "github-copilot") || route.nativeGroup) {
             changes.push("Trends uses retained GitHub Copilot activity only. Other sources and Microsoft groups do not carry over.");
         }
-        if (family === "usage" && ["legacy","history"].includes(f.scope)) filters.collection=f.scope;
-        else if (f.scope === "legacy" || f.scope === "history" && hasEarlier) changes.push("Trends uses both retained collections, not just the selected collection.");
+        if (["legacy","history"].includes(f.scope)) filters.collection=f.scope;
         const omitted = [
             [f.projectIds, "project"], [f.sourceSessionIds, "chat or recorder source"], [f.endpoints, "path or operation"],
             [f.workloads, "activity category"], [f.activityTypes, "activity type"],
@@ -42,18 +42,18 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         } else if (services.length) changes.push("Trends cannot apply this service selection. It opens with all services.");
         const civil = value => /^\d{4}-\d\d-\d\d$/.test(value);
         let period = ["7", "14", "30"].includes(route.range) ? route.range : "custom", range;
-        if (f.from && f.to) {
-            range = { from: civil(f.from) ? f.from : time.day(f.from, zone), to: civil(f.to) ? f.to : time.day(f.to, zone) };
-            if (!civil(f.from) || !civil(f.to)) changes.push("Trends includes whole calendar days, not partial days.");
-        } else if (family === "usage" && usageCalendar?.range) {
-            period = "custom"; range = {from:f.from ? civil(f.from) ? f.from : time.day(f.from,zone) : usageCalendar.range.from,
-                to:f.to ? civil(f.to) ? f.to : time.day(f.to,zone) : usageCalendar.range.to};
+        const extent = family === "usage" ? usageCalendar?.range : coverage && {from:coverage.firstAt,to:coverage.lastAt};
+        const from = f.from || extent?.from, to = f.to || extent?.to;
+        if (from && to) {
+            range = {from:civil(from) ? from : time.day(from,zone), to:civil(to) ? to : time.day(to,zone)};
             if (f.from && !civil(f.from) || f.to && !civil(f.to)) changes.push("Trends includes whole calendar days, not partial days.");
         } else {
             period = "7"; range = time.preset(period, zone);
             changes.push(`Analyze has ${f.from || f.to ? "an open-ended period" : "no date limit"}. Trends opens the last 7 days (${range.from} – ${range.to}).`);
         }
-        return { changes, entry: { revision, family, measure: family === "usage" ? "tokens" : family === "rhythm" ? "count" : "share",
+        if (coverage?.undatedRows) changes.push("Calls without a recorded date cannot appear in a daily trend.");
+        return { changes, entry: { revision, family, ...(widget === "modelTokens" ? {usageQuestion:"model"} : {}),
+            measure: family === "usage" ? "tokens" : family === "rhythm" ? "count" : "share",
             period, range, timeContext: { ...scope.timeContext }, filters, date: selectedDay ?? (range.from === range.to ? range.from : null),
             series: ({ tools: filters.tool, authors: filters.author, services: filters.service })[family] ?? null } };
     }

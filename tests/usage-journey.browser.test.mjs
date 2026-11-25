@@ -197,6 +197,22 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     assert.deepEqual(await cardIds(),measuredIds.toSorted());
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(new RegExp(`Activity list · Metered model: ${modelName}`));
     await page.goBack(); await expect(meteredModel).toBeFocused();
+    const modelTrend = models.getByRole("link",{name:"View trend: Tokens by response model"});
+    await modelTrend.press("Enter");
+    const dailyModels = page.locator('.trends-panel:visible[data-family="usage"]');
+    const modelPoints = dailyModels.locator(`[data-trend-mark][data-series="model:${modelName}"]`);
+    for (const [ago,tokens,expected,numberOfCalls,parent] of [[4,"30,000","Launch notes",3,measuredIds[1]],[3,"82,000","Consolidate changes",2,measuredIds[0]]]) {
+        const date=new Date(Date.now()-ago*86400000).toLocaleDateString("en-US",{timeZone:"UTC",year:"numeric",month:"short",day:"numeric"});
+        await modelPoints.and(page.locator(`[aria-label^="${date}:"][aria-label$=", ${tokens} tokens"]`)).press("Enter");
+        await dailyModels.getByRole("button",{name:`View ${numberOfCalls} calls`}).click();
+        await expect(page.locator(".trends-evidence-row .trends-evidence-context")).toHaveText(Array(numberOfCalls).fill(expected));
+        await page.locator(".trends-evidence-row a").first().click();
+        await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key",parent); await page.goBack();
+        await expect(page.locator("#contextSidebar")).not.toBeVisible();
+        if (await page.locator(".trends-dialog[open]").count()) await page.keyboard.press("Escape");
+    }
+    await page.getByRole("button",{name:"Back to Analyze"}).click(); await expect(modelTrend).toBeFocused();
+    await expect(shares).toHaveAttribute("aria-pressed","true");
     if (width < 500) await interactions.tap(); else await interactions.click();
     await expect(interactions).toHaveAttribute("aria-pressed","true");
     await capture("model-selector",models);

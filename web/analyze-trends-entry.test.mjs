@@ -10,15 +10,15 @@ const { project } = createAnalyzeTrendsEntry({ time, results: createRecordedResu
 const ctx = { scope: { timeContext: { timeZone: "America/Toronto", locale: "en-CA" }, layer: "tool", bucket: "day",
     filters: { scope: "all", from: "2026-10-12", to: "2026-11-12" } }, revision: 12, route: {}, supportedTools: new Set(["workiq-fetch"]) };
 
-test("native groups, Search, a prior collection, project/chat/path, unsupported tool and grouping need specific consent without echoing private values", () => {
-    const result = project("rhythm", { ...ctx, hasSearch: true, includesNative: true, hasEarlier: true,
+test("prior collection stays selected; unsupported scopes need specific consent without echoing private values", () => {
+    const result = project("rhythm", { ...ctx, hasSearch: true, includesNative: true,
         route: { nativeGroup: "private-name", chart: "endpoint", search: "private-search" },
         scope: { ...ctx.scope, bucket: "week", filters: { ...ctx.scope.filters, scope: "legacy", tools: ["private-native-tool"],
             sources: ["microsoft-365-chat"], endpoints: ["private-path"], projectIds: ["private-project"], sourceSessionIds: ["private-session"] } } });
     const text = result.changes.join("\n");
-    for (const phrase of ["Microsoft groups", "Search matches", "both retained collections", "project", "chat or recorder source", "path or operation", "selected tool is unavailable", "one count per calendar day"]) assert.ok(text.includes(phrase), phrase);
+    for (const phrase of ["Microsoft groups", "Search matches", "project", "chat or recorder source", "path or operation", "selected tool is unavailable", "one count per calendar day"]) assert.ok(text.includes(phrase), phrase);
     assert.doesNotMatch(JSON.stringify(result), /private-/);
-    assert.deepEqual(result.entry.filters, {}); assert.equal(result.entry.period, "custom");
+    assert.deepEqual(result.entry.filters, {collection:"legacy"}); assert.equal(result.entry.period, "custom");
     assert.deepEqual(result.entry.range, { from: "2026-10-12", to: "2026-11-12" });
     assert.deepEqual(result.entry.timeContext, ctx.scope.timeContext);
 });

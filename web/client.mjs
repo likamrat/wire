@@ -363,10 +363,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const githubOnly = scope.filters.sources?.length === 1 && scope.filters.sources[0] === "github-copilot";
             return { scope, route, snapshot, revision: snapshot.revision, hasSearch: Boolean(route.search?.trim() || semanticQuery),
                 supportedTools: retainedTrendTools(snapshot), searchMembership: semanticMembership,
-                ...(family === "usage" ? {usageCalendar:usageCalendar()} : {}),
+                coverage: workspaceState.analytics.coverage,
+                ...(["usage","modelTokens"].includes(family) ? {usageCalendar:usageCalendar()} : {}),
                 includesNative: !githubOnly && (boundedIncludesMicrosoft() && hasMicrosoftSource() || snapshot.scenarios.some(nativeActivity.isNative)),
-                otherSources: !githubOnly && snapshot.scenarios.some(s => s.recordKind !== "native-conversation" && !["copilot-app", "copilot-app-chat"].includes(s.sourceHost)),
-                hasEarlier: snapshot.scenarios.some(s => s.isLegacy || s.collectionInactive) };
+                otherSources: !githubOnly && snapshot.scenarios.some(s => s.recordKind !== "native-conversation" && !["copilot-app", "copilot-app-chat"].includes(s.sourceHost)) };
         },
         open: (entry, trigger) => {
             const key = crypto.randomUUID(), reading = captureReading();

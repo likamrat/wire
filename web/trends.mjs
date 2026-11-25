@@ -1241,7 +1241,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (entry && entry.key !== entryKey && entry.revision === context.revision && entry.timeContext.timeZone === context.timeContext.timeZone
             && Object.hasOwn(families, entry.family) && families[entry.family].modes.some(([id]) => entry.measure === id)) {
             if (entry.family === "usage") {
-                usageChoice = {question:routeScope?.usageChoice?.question ?? "all",threshold:routeScope?.usageChoice?.threshold ?? 30000};
+                usageChoice = {question:routeScope?.usageChoice?.question ?? entry.usageQuestion ?? "all",threshold:routeScope?.usageChoice?.threshold ?? 30000};
                 cards.get("usage").questions.sync(usageChoice);
             }
             pairActive = false; entryKey = entry.key; routeScopeKey = routeKey; evidenceReturn = null; homeBack.hidden = false;

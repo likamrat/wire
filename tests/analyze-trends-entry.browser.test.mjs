@@ -111,9 +111,8 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
     await expect(page.locator("#dateFilter")).toHaveValue("capture");
     const count = reads.length;
     await page.locator("#analyze-trend-tools").click();
-    await page.getByRole("button", { name: "Open trend", exact: true }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
-    assert.deepEqual(reads.slice(count).map(read => read.filters), [{ author: "user" }]);
+    assert.deepEqual(reads.slice(count).map(read => read.filters), [{ author: "user", collection:"history" }]);
     await page.getByRole("button", { name: "Back to Analyze" }).click();
     await expect(page).toHaveURL(url + "/");
     await expect(page.locator("#promptAuthorFilter")).toHaveValues(["user"]);
@@ -198,7 +197,7 @@ for (const frontend of ["react", "bundled"]) {
         await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
         assert.equal(page.url(), url + privateTrends);
         assert.equal(reads.length - count, 1, "no intermediate default read");
-        assert.deepEqual(reads.at(-1).filters, { tool: "workiq-fetch", author: "user", service: "Calendar" });
+        assert.deepEqual(reads.at(-1).filters, { tool: "workiq-fetch", author: "user", service: "Calendar", collection:"history" });
         assert.equal(reads.at(-1).from, day); assert.equal(reads.at(-1).to, day);
         assert.equal(reads.at(-1).timeContext.timeZone, "America/Los_Angeles");
         assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /workiq-fetch|Calendar|2026-09-30|invented-trend-origin/);
@@ -221,8 +220,18 @@ for (const frontend of ["react", "bundled"]) {
 }
 for (const frontend of ["react", "bundled"]) {
     test(`${frontend}: six call and interaction widgets open their own daily evidence and return to the exact activating link`, async t => {
-        const { page, url, reads } = await setup(t, frontend, records());
-        await page.goto(`${url}/?range=custom&from=${day}&to=${day}&source=github-copilot`); await ready(page);
+        const source = records(), early = "2026-09-05T01:00:00Z", late = "2026-11-23T18:00:00Z";
+        const last = structuredClone(source[0]);
+        Object.assign(last, {scenarioId:"latest-only",sourceSessionId:"latest-chat"});
+        last.userPrompt.sourceEventId = "latest-prompt";
+        Object.assign(last.toolCalls[0], {toolCallId:"latest-only-call",startEventId:"latest-only-start",completedAt:late,startedAt:late});
+        for (const r of source) Object.assign(r.toolCalls[0], {startedAt:early,completedAt:early});
+        const { page, url, reads } = await setup(t, frontend, [...source,last]);
+        await page.goto(`${url}/?source=github-copilot&scope=all`); await ready(page);
+        await expect(page.locator("#activityCount")).toHaveText("3");
+        const chart = page.locator("#chart");
+        for (const [date,count] of [["Sep 4",2],["Sep 5",0],["Nov 23",1]])
+            await expect(chart.getByRole("link",{name:new RegExp(`^${date}, 2026: ${count} Work IQ tool call`)})).toBeAttached();
         const origin = page.url();
         for (const [family, size] of [["rhythm", 2], ["tools", 2], ["services", 2], ["authors", 2], ["models", 2], ["problems", 1]]) {
             const link = page.locator(`#analyze-trend-${family}`), before = reads.length;
@@ -235,15 +244,32 @@ for (const frontend of ["react", "bundled"]) {
                 await consent.getByRole("button", { name: "Open trend" }).click();
             }
             await expect(visiblePanel(page)).toHaveAttribute("data-family", family);
+            assert.deepEqual([reads.at(-1).from,reads.at(-1).to],["2026-09-04","2026-11-23"],`${family}: all 81 local calendar days`);
             await expect(visiblePanel(page).getByRole("heading", { level: 2 })).toBeFocused();
             assert.equal(reads.length - before, 1, family); assert.equal(page.url(), url + privateTrends);
-            await visiblePanel(page).getByRole("button", { name: `View ${size} call${size === 1 ? "" : "s"}` }).click();
-            const calls = page.locator(".trends-evidence-row a"); await expect(calls).toHaveCount(size);
-            await calls.filter({ hasText: "workiq-fetch" }).click();
-            await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:invented-trend-origin-0");
-            await page.goBack(); await ready(page); await expect(page.locator("#contextSidebar")).not.toBeVisible();
+            const series=({rhythm:"rhythm",problems:"problems",authors:"user",models:"Juniper",services:"Calendar",tools:"workiq-fetch"})[family];
+            await visiblePanel(page).locator(`[data-trend-mark][aria-label^="Sep 4, 2026:"][data-series="${series}"]`).press("Enter");
+            const n = family==="tools" ? 1 : size;
+            await visiblePanel(page).getByRole("button", { name: `View ${n} call${n === 1 ? "" : "s"}` }).click();
+            const calls = page.locator(".trends-evidence-row a"); await expect(calls).toHaveCount(n);
+            for (const [index,r] of source.slice(0,n).entries()) {
+                if (index && !await page.locator(".trends-dialog[open]").count()) await visiblePanel(page).getByRole("button",{name:`View ${n} calls`}).click();
+                await calls.filter({ hasText: r.toolCalls[0].tool }).click();
+                await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", `request:${r.scenarioId}`);
+                await expect(page.locator(`[data-tool-call-id="${r.toolCalls[0].toolCallId}"]`)).toBeAttached();
+                await page.goBack(); await ready(page); await expect(page.locator("#contextSidebar")).not.toBeVisible();
+            }
             await expect(visiblePanel(page)).toHaveAttribute("data-family", family);
             if (await page.locator(".trends-dialog[open]").count()) await page.keyboard.press("Escape");
+            if (family === "rhythm") {
+                const point = date => visiblePanel(page).locator(`[data-trend-mark][aria-label^="${date}, 2026:"]`);
+                await point("Sep 5").press("Enter"); await expect(visiblePanel(page).getByRole("button",{name:"View 0 calls"})).toBeDisabled();
+                await point("Nov 23").press("Enter"); await visiblePanel(page).getByRole("button",{name:"View 1 call"}).click();
+                await calls.click(); await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key","request:latest-only");
+                await expect(page.locator('[data-tool-call-id="latest-only-call"]')).toBeAttached();
+                await page.goBack(); await ready(page);
+                if (await page.locator(".trends-dialog[open]").count()) await page.keyboard.press("Escape");
+            }
             if (family === "tools") await page.goBack();
             else await page.getByRole("button", { name: "Back to Analyze" }).click();
             await ready(page); await expect(link).toBeFocused(); assert.equal(page.url(), origin);
@@ -257,14 +283,14 @@ test("qualified outcome transition cancels in place, accepts only supported scop
     const link = page.getByRole("link", { name: "View trend: Errors & failures", exact: true });
     await link.click();
     const decision = page.getByRole("dialog"), original = page.url();
-    for (const text of ["affected interactions", "Outcome filter does not carry over", "all prompt authors", "all services", "last 7 days"]) {
+    for (const text of ["affected interactions", "Outcome filter does not carry over", "all prompt authors", "all services"]) {
         await expect(decision).toContainText(text);
     }
     await page.keyboard.press("Escape"); await expect(link).toBeFocused();
     assert.equal(page.url(), original); assert.equal(reads.length, 0);
     await link.click(); await decision.getByRole("button", { name: "Open trend" }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "problems");
-    assert.deepEqual(reads.at(-1).filters, {}); assert.equal(page.url(), url + privateTrends);
+    assert.deepEqual(reads.at(-1).filters, {collection:"history"}); assert.equal(page.url(), url + privateTrends);
     const beforeReload = reads.length;
     await page.reload(); await ready(page);
     assert.equal(reads.length, beforeReload, "reload cannot replace a bound home scope with all calls");
