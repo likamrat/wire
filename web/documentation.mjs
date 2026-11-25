@@ -40,6 +40,8 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
     const base = () => catalog?.source.comparedWith === "main" ? "GitHub main" : "your last commit";
     const positionKey = () => `${win.location.pathname}${win.location.search}${win.location.hash}@${win.history.state?.evidenceView?.position ?? ""}`;
     let imageDialog = null, pendingGuide = null;
+    const dockedOpen = { left: true, right: true };
+    let anchorFrame = 0, anchoredGrid = null;
     const reader = el("div", { class: "docs-library-reader" });
     const note = el("p", { class:"docs-library-note", role:"status", hidden:true });
     const picker = createGuideSourcePicker({ doc, el, glyph, ux, list: () => api("/api/documentation/branches",{}), choose: chooseLibrary });
@@ -296,27 +298,77 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
             if (links.length && links.every(link => link.dataset.fragment !== undefined)) { paragraph.classList.add("docs-inline-contents"); list?.classList.add("docs-inline-contents"); }
         }
         const sections = nest(data.headings, 2, 3);
-        const summary = label => {
+        const panel = (side, label, content) => {
             const chevron = glyph("disclosure").firstElementChild;
             chevron.classList.add("disclosure-icon");
-            return el("summary", {}, glyph("doc-contents"), label, chevron);
+            const summary = el("summary", { "aria-label": label, title: label },
+                glyph(side === "left" ? "navigation-collapse" : "activity-panel"), el("span", { class: "docs-panel-label" }, label), chevron);
+            const docked = host.clientWidth > (side === "left" ? 880 : 1080);
+            const details = el("details", { class: `docs-panel ${side === "left" ? "docs-left-toggle" : "docs-outline-inline"}`,
+                "data-docked": String(docked), open: docked && dockedOpen[side] }, summary, content);
+            summary.onclick = event => {
+                if (details.dataset.docked !== "true") return;
+                event.preventDefault();
+                dockedOpen[side] = !details.open;
+                preservePassage();
+                details.open = dockedOpen[side];
+            };
+            return el("div", { class: `docs-${side}` }, details);
         };
-        const inline = sections.length ? el("details", { class: "docs-outline-inline" }, summary("On this page"),
-            el("nav", { class: "docs-outline", "aria-label": "On this page" }, outlineList(sections, data.guide))) : null;
-        if (inline) title.after(inline);
         const footer = el("footer", { class: "docs-article-footer" },
             data.sourceUrl ? (() => { const link = el("a", { href: data.sourceUrl, class: "navigation-action" }, "View this guide on GitHub"); external(link, "opens on GitHub"); return link; })()
                 : catalog.source.kind === "checkout" ? el("p", { class: "docs-quiet" }, `Local file: ${data.file}${catalog.source.changed?.[data.file] ? catalog.source.changed[data.file] === "new" ? ` (new, not in ${base()})` : ` (edited, differs from ${base()})` : ""}`) : null,
             pager(data.guide));
-        const wide = host.clientWidth > 880;
-        return el("div", { class: "docs-grid" },
-            el("div", { class: "docs-left" }, el("details", { class: "docs-left-toggle", open: wide }, summary("All guides"), guideTree(data.guide))),
+        return el("div", { class: "docs-grid", "data-has-outline": String(Boolean(sections.length)) },
+            panel("left", "All guides", guideTree(data.guide)),
             el("div", { class: "docs-center" }, el("div", { class: "docs-paper" }, article, footer)),
-            el("div", { class: "docs-right" }, sections.length ? el("nav", { class: "docs-outline", "aria-label": "On this page" }, el("h2", {}, "On this page"), outlineList(sections, data.guide)) : null));
+            sections.length ? panel("right", "On this page", el("nav", { class: "docs-outline", "aria-label": "On this page" }, outlineList(sections, data.guide))) : null);
     }
 
     // ---------- reading position and the current section ----------
     function headerOffset() { return (doc.querySelector(".app-header")?.getBoundingClientRect().height ?? 76) + 8; }
+    function releasePassage(event) {
+        if ((event?.type === "pointerdown" || event?.type === "keydown" && ["Enter"," "].includes(event.key)) &&
+            event.target.closest?.(".docs-panel>summary")) return;
+        win.cancelAnimationFrame(anchorFrame); anchorFrame = 0; anchoredGrid = null;
+    }
+    function preservePassage() {
+        if (anchorFrame && anchoredGrid === view) return;
+        releasePassage();
+        const article = view?.querySelector(".docs-article");
+        if (!article || !win.scrollY) return;
+        const y = headerOffset() + 24;
+        const block = [...article.children].find(node => node.getBoundingClientRect().bottom > y);
+        if (!block || block.getBoundingClientRect().top > win.innerHeight) return;
+        let pin = block;
+        const active = doc.getElementById("user-content-" + fragment());
+        if (active && article.contains(active) && Math.abs(active.getBoundingClientRect().top - y) < 48) pin = active;
+        else if (block.getBoundingClientRect().top < y && doc.caretPositionFromPoint) {
+            const { left, width } = block.getBoundingClientRect();
+            const caret = doc.caretPositionFromPoint(left + Math.min(width / 2, 32), y);
+            if (caret?.offsetNode.nodeType === 3 && block.contains(caret.offsetNode)) {
+                pin = doc.createRange(); pin.setStart(caret.offsetNode, caret.offset);
+                pin.setEnd(caret.offsetNode, Math.min(caret.offsetNode.length, caret.offset + 1));
+            }
+        }
+        const top = pin.getBoundingClientRect().top, grid = view;
+        // Clicking a docked summary can scroll it a few pixels before the click arrives.
+        // For an anchored heading at the reading edge, keep the browser's original anchor line.
+        const edge = pin === active ? parseFloat(win.getComputedStyle(doc.documentElement).scrollPaddingTop) +
+            parseFloat(win.getComputedStyle(active).scrollMarginTop) : NaN;
+        const line = pin === active && Number.isFinite(edge) && Math.abs(top - edge) < 8 ? edge : top;
+        anchoredGrid = grid;
+        function follow() {
+            if (!visible || view !== grid || !block.isConnected) { releasePassage(); return; }
+            const delta = pin.getBoundingClientRect().top - line;
+            if (Math.abs(delta) > .5) win.scrollBy({ top: delta, behavior: "instant" });
+            anchorFrame = grid.getAnimations().some(a => a.playState !== "finished") ? win.requestAnimationFrame(follow) : 0;
+            if (!anchorFrame) anchoredGrid = null;
+        }
+        anchorFrame = win.requestAnimationFrame(follow);
+    }
+    for (const type of ["wheel","touchstart","pointerdown","keydown"]) win.addEventListener(type, releasePassage,
+        { capture: true, passive: true, signal: listeners.signal });
     function setActive() {
         spyFrame = 0;
         if (!view) return;
@@ -329,9 +381,9 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
             const on = link.dataset.heading === id || link.closest(".docs-tree-sections") && link.dataset.heading === h2;
             on ? link.setAttribute("aria-current", "location") : link.removeAttribute("aria-current");
         }
-        for (const rail of view.querySelectorAll(".docs-left, .docs-right")) {
+        for (const rail of view.querySelectorAll('.docs-panel[data-docked="true"][open]>nav')) {
             const link = rail.querySelector('a[aria-current="location"]');
-            if (!link || win.getComputedStyle(rail).position !== "sticky") continue;
+            if (!link) continue;
             const r = link.getBoundingClientRect(), box = rail.getBoundingClientRect();
             if (r.top < box.top + 24 || r.bottom > box.bottom - 24) rail.scrollTop += r.top - box.top - box.height / 3;
         }
@@ -369,7 +421,10 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
         const origin = origins.get(positionKey()), link = origin && view?.querySelector(origin.selector);
         if (!link) return false;
         const fold = link.closest("details");
-        if (fold) fold.open = true;
+        if (fold) {
+            fold.open = true;
+            if (fold.dataset.docked === "true") dockedOpen[fold.classList.contains("docs-left-toggle") ? "left" : "right"] = true;
+        }
         if (!link.checkVisibility()) return false;
         win.scrollTo({ top: origin.top, behavior: "instant" });
         link.focus({ preventScroll: true });
@@ -396,13 +451,13 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
             if (sources.size > 64) sources.delete(sources.keys().next().value);
             if (noticeGuide !== guide) { note.textContent = ""; note.hidden = true; noticeGuide = null; }
             const previousFocus = quiet && focusSelector(doc.activeElement), previousTop = win.scrollY;
-            const folds = quiet ? [...host.querySelectorAll(".docs-left-toggle[open], .docs-outline-inline[open]")].map(node => node.className) : [];
+            const folds = quiet ? [...host.querySelectorAll('.docs-panel[data-docked="false"][open]')].map(node => node.parentElement.className) : [];
             view = layout(data);
             mountView(view);
             picker.update(catalog.source);
             page = data;
             if (quiet) {
-                for (const name of folds) { const fold = view.querySelector(`.${name}`); if (fold) fold.open = true; }
+                for (const name of folds) { const fold = view.querySelector(`.${name} details`); if (fold) fold.open = true; }
                 win.scrollTo({ top: previousTop, behavior: "instant" });
                 if (previousFocus) win.requestAnimationFrame(() => {
                     if (mine === token && visible) (view.querySelector(previousFocus) ?? view.querySelector("#docTitle")).focus({ preventScroll: true });
@@ -486,19 +541,23 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
             const url = hrefFor(page?.guide ?? "", link.dataset.fragment);
             if (win.location.pathname + win.location.search + win.location.hash !== url) win.location.hash = encodeURIComponent(link.dataset.fragment);
             else scrollToFragment(link.dataset.fragment, { smooth: true });
-            const details = link.closest("details.docs-outline-inline");
+            const details = link.closest('.docs-panel[data-docked="false"]');
             if (details) details.open = false;
         }
     }, { signal: listeners.signal });
     win.addEventListener("hashchange", () => { if (visible && page && !restoreOrigin()) scrollToFragment(fragment(), { smooth: true }); }, { signal: listeners.signal });
-    // Rails fold below 880px. Only a width crossing changes them, so opening the fold (which adds height) stays open.
-    let wideLayout = null;
-    new win.ResizeObserver(([entry]) => {
-        const wide = entry.contentRect.width > 880;
-        if (wide === wideLayout) return;
-        wideLayout = wide;
-        for (const details of host.querySelectorAll(".docs-left-toggle")) if (details.open !== wide) details.open = wide;
-    }).observe(host);
+    const sizeObserver = new win.ResizeObserver(([entry]) => {
+        if (!visible || !entry.contentRect.width) return;
+        for (const [side, limit] of [["left",880],["right",1080]]) {
+            const fold = view?.querySelector(`.docs-${side} .docs-panel`), docked = entry.contentRect.width > limit;
+            if (!fold || fold.dataset.docked === String(docked)) continue;
+            if (fold.contains(doc.activeElement) && doc.activeElement !== fold.firstElementChild && !(docked && dockedOpen[side]))
+                fold.firstElementChild.focus({ preventScroll: true });
+            fold.dataset.docked = String(docked);
+            fold.open = docked && dockedOpen[side];
+        }
+    });
+    sizeObserver.observe(host);
 
     return {
         show(route, { restore = false } = {}) {
@@ -523,6 +582,6 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
         },
         hide() { visible = false; picker.close(false); dismissImage(); win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
         withdraw() { visible = false; picker.clear(); note.hidden=true; note.textContent=""; reader.replaceChildren(); dismissImage(); win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; preview = null; sourceChoice = "installed"; pages.clear(); positions.clear(); origins.clear(); sources.clear(); host.replaceChildren(); },
-        close() { this.withdraw(); listeners.abort(); },
+        close() { this.withdraw(); releasePassage(); sizeObserver.disconnect(); listeners.abort(); },
     };
 }
