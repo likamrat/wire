@@ -1,0 +1,2 @@
+export const DEFAULT_RUNTIME_PORT = 4000;
+export const RUNTIME_ORIGIN = `http://127.0.0.1:${DEFAULT_RUNTIME_PORT}`;

@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, fork, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -22,6 +23,40 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
 const releaseJourney = sleepingGuide || process.env.WIRE_UPDATE_BROWSER === "release";
+const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
+const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
+
+// An oversized binary attachment is not a missing model round. The new journal
+// collector counts the two receipts; the old collector withheld the whole total.
+async function seedAdapterJournal({ appDbPath, sessionRoot }) {
+    const { DatabaseSync } = await import("node:sqlite");
+    const id = randomUUID(), dbDir = path.dirname(appDbPath);
+    await mkdir(dbDir, { recursive: true });
+    const db = new DatabaseSync(appDbPath);
+    try {
+        db.exec(`PRAGMA user_version=156;
+            CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
+            CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
+            CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);`);
+        db.prepare("INSERT INTO sessions VALUES(?, 'Fixture', 'chat', NULL, 'local')").run(id);
+    } finally { db.close(); }
+    const model = "gpt-4.1", interactionId = "fixture-run", messageId = "fixture-prompt", toolCallId = "fixture-tool";
+    const receipt = apiCallId => ["session.usage_record", { usage: { apiCallId, model, interactionId, inputTokens: 2000, outputTokens: 200 } }];
+    const events = [
+        ["session.start", { sessionId: id, version: 1 }], ["user.message", { messageId, interactionId, content: "Read this fixture.", delivery: "idle" }],
+        ["session.binary_asset", { mimeType: "image/png", data: "x".repeat(1100 * 1024) }],
+        ["assistant.message", { apiCallId: "one", model, turnId: "first", originatingMessageId: messageId, toolRequests: [{ toolCallId }] }],
+        ["tool.execution_start", { toolCallId, turnId: "first", toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch", arguments: {entityUrls:["/me/messages"]} }],
+        ["tool.execution_complete", { toolCallId, success: true, result: { content: "Fixture evidence." } }], receipt("one"),
+        ["assistant.turn_start", { turnId: "last" }],
+        ["assistant.message", { apiCallId: "two", model, turnId: "last", originatingMessageId: messageId, phase: "final_answer", content: "Fixture answer.", toolRequests: [] }],
+        receipt("two"), ["assistant.turn_end", { turnId: "last" }],
+    ];
+    await mkdir(path.join(sessionRoot, id), { recursive: true });
+    await writeFile(path.join(sessionRoot, id, "events.jsonl"), events.map(([type, data], i) =>
+        JSON.stringify({ id: randomUUID(), type, data, timestamp: new Date(Date.now() - 20000 + i * 100).toISOString() }) + "\n").join(""));
+    return id;
+}
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
@@ -58,13 +93,22 @@ test("full WIRE clone updates on the original address and reopens the same saved
     }
     // Only committed source is an eligible integration input. No ignored assets,
     // working directories, Git credentials, node_modules, or private data.
-    const tracked = (await git(project, "ls-files", "-z", "--cached")).split("\0").filter(Boolean);
-    for (const name of tracked.filter(name => /^(?:lib|scripts|assets|web)\//.test(name)
-        || [".gitignore","package.json","package-lock.json","vite.config.mjs","tsconfig.json","extension.mjs"].includes(name))) {
-        const target = path.join(origin, name);
-        await mkdir(path.dirname(target), { recursive: true }); await copyFile(path.join(project, name), target);
+    const targetCommit = adapterBridge && await git(project, "rev-parse", "HEAD^{commit}");
+    if (adapterBridge) {
+        // Transfer only the candidate ancestry into the private origin. No live remote or branch is changed.
+        await git(origin, "init", "-qb", "main");
+        await git(origin, "fetch", "--quiet", "--no-tags", project, targetCommit);
+        await git(origin, "merge-base", "--is-ancestor", adapterBase, targetCommit);
+        await git(origin, "merge", "--ff-only", adapterBase);
+    } else {
+        const tracked = (await git(project, "ls-files", "-z", "--cached")).split("\0").filter(Boolean);
+        for (const name of tracked.filter(name => /^(?:lib|scripts|assets|web|canvas-v1)\//.test(name)
+            || [".gitignore","package.json","package-lock.json","vite.config.mjs","tsconfig.json","extension.mjs"].includes(name))) {
+            const target = path.join(origin, name);
+            await mkdir(path.dirname(target), { recursive: true }); await copyFile(path.join(project, name), target);
+        }
+        await git(origin, "init", "-qb", "main"); await git(origin, "add", "."); await git(origin, "commit", "-qm", "Fixture baseline");
     }
-    await git(origin, "init", "-qb", "main"); await git(origin, "add", "."); await git(origin, "commit", "-qm", "Fixture baseline");
     const base = await git(origin, "rev-parse", "HEAD");
     await git(temp, "clone", "--quiet", origin, root);
     const npm = process.env.npm_execpath;
@@ -139,6 +183,44 @@ test("full WIRE clone updates on the original address and reopens the same saved
         for (const [file, digest] of reportHashes) assert.equal(hash(await readFile(file)), digest);
         assert.deepEqual(await readFile(cfgPath), configBytes);
         assert.equal(await git(root, "rev-parse", "HEAD"), base);
+    }
+    if (adapterBridge) {
+        assert.equal(base, adapterBase);
+        await git(origin, "merge", "--ff-only", targetCommit);
+        await applyTip();
+        const after = await health();
+        assert.equal(after.build, targetCommit); assert.notEqual(after.runtimeId, original.runtimeId);
+        assert.ok(await post("api/report/open", { bundleId: bundle.bundleId }));
+        await verifyPreserved();
+        const slots = path.join(root, ".git", "wire-updates");
+        const installed = (await readdir(slots, { withFileTypes: true })).filter(item => item.isDirectory());
+        assert.equal(installed.length, 1);
+        const stage = path.join(slots, installed[0].name);
+        assert.equal(await git(stage, "rev-parse", "HEAD"), targetCommit);
+        const id = await seedAdapterJournal(cfg);
+        await post("api/collection/now", {});
+        // Existing shims still import root; a new installation uses the candidate entry.
+        // Only the SDK registration transport is substituted, not the callbacks or protocol.
+        for (const source of [root, stage]) {
+            const key = "wireCanvas" + randomUUID(), entry = pathToFileURL(path.join(source, "extension.mjs")).href;
+            const sdk = `export const createCanvas=c=>c,joinSession=async s=>{globalThis[${JSON.stringify(key)}]=s.canvases[0];return {}};
+                export class CanvasError extends Error{}`;
+            const hooks = registerHooks({ resolve(spec, context, next) {
+                return spec === "@github/copilot-sdk/extension" && context.parentURL === entry
+                    ? { url: "data:text/javascript," + encodeURIComponent(sdk), shortCircuit: true } : next(spec, context);
+            } });
+            let canvas;
+            try { await import(entry); canvas = globalThis[key]; }
+            finally { hooks.deregister(); delete globalThis[key]; }
+            const instanceId = "bridge-" + randomUUID();
+            assert.equal((await canvas.open({ instanceId, input: { boardId: "workiq-evidence-board-v1", runtimePort: Number(new URL(url).port) } })).url, url);
+            try {
+                const state = await canvas.actions.find(a => a.name === "get_state").handler({ instanceId, actionName: "get_state", input: {} });
+                assert.equal(state.scenarios.find(s => s.sourceSessionId === id)?.usage?.total, 4400);
+            } finally { await canvas.onClose({ instanceId }); }
+        }
+        t.diagnostic(`${base} -> ${after.build} on ${url}; original report preserved and both native adapters read 4,400 tokens from the new collector.`);
+        return;
     }
     if (releaseJourney) {
         const {chromium,expect} = await import("@playwright/test");

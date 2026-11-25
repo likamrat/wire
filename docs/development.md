@@ -170,6 +170,26 @@ path in `lib/update-runtime-docs.json` so changes to that document qualify. An
 incompatible store, launcher or canvas change must update the compatibility
 contract rather than silently treating older readers as compatible.
 
+#### Maintaining the protocol-1 canvas
+
+The personal shim imports the checkout's real `extension.mjs`. That entry uses
+`canvas-v1/`, the frozen native source graph from
+`83a6040065072acdf5e8984d8450bd3b4b8cf42e`. Browser, server and collector
+changes belong in `web/` and `lib/`, **not** in these generated copies. Keeping
+the adapter at the same directory depth as `lib/` preserves its source root and
+the eight `../assets/` paths checked by the original updater. Ship the directory,
+root entry and artwork together, with the locked runtime dependencies.
+
+With that commit available locally, run `node scripts/freeze-canvas-adapter.mjs`
+to verify the entry and every module against Git (`--write` regenerates them).
+The original package-lock Git blob is `e00f638f15f08482a6cca7e1deafbaf8947305c3`
+(npm 11.17.0, esbuild 0.28.2); dependencies are not vendored. Cold/shallow
+source archives do not need Git history to run the adapter. A different executable,
+dependency bundle or referenced asset must still pass the installed byte check
+or use an explicit manual upgrade; changing the staged verifier cannot authorize it.
+To exercise the original launcher against the current committed candidate, set
+`WIRE_UPDATE_BROWSER=adapter-bridge` and run `npm run test:update-runtime`.
+
 ### Recover an interrupted managed writer
 
 On Windows or WSL, a dead PID or free port doesn't make the last child receipt a
