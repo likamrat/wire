@@ -1,13 +1,14 @@
 // Presentation only: callers supply the authorized text, never a lookup for hidden originals.
-export function createTextAccess(ux, presentation, authorship, metadata) {
+export function createTextAccess(ux, presentation, authorship, metadata, messageText) {
     const bindings = new WeakMap();
     const promptReveals = new WeakMap();
     function clearOwnedContent(owner, preserveRootId = false) {
         for (const element of [owner, ...owner.querySelectorAll("*")]) {
+            messageText?.release(element);
             if (element.matches("button")) element.disabled = true;
             if (element.hasAttribute("tabindex")) element.tabIndex = -1;
             for (const name of ["aria-label", "title", "data-ux-tooltip", "data-view-key", "data-prompt-actor",
-                "aria-controls", "aria-labelledby", "aria-describedby", "id"]) {
+                "aria-controls", "aria-labelledby", "aria-describedby", "id", "href"]) {
                 if (name === "id" && element === owner && preserveRootId) continue;
                 const attribute = element.getAttributeNode(name);
                 if (attribute) { attribute.value = ""; element.removeAttributeNode(attribute); }
@@ -37,8 +38,10 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         };
     }
     function excerpt(source, limit = 170) {
-        const text = retained(source);
-        if (text === null) return authorship?.availability?.(source).state === "automatic" ? describePrompt(source).label : "Prompt not available";
+        const retainedText = retained(source);
+        if (retainedText === null) return authorship?.availability?.(source).state === "automatic" ? describePrompt(source).label : "Prompt not available";
+        // Compact labels show what Markdown says, not its syntax; the exact text stays in the reader and Copy.
+        const text = messageText?.project(retainedText) ?? retainedText;
         const compact = text.replace(/\s+/gu, " ").trim();
         if (limit === Infinity) return compact;
         const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(compact);
@@ -80,11 +83,20 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         node.className = "request-card-prompt";
         node.dataset.cardPreview = "";
         const original = retained(source) ?? "";
+        const projected = original && messageText?.project(original);
         if (home) {
             const passage = document.createElement("span");
             passage.className = "card-excerpt";
-            passage.append(exactFragment(original));
+            passage.append(exactFragment(projected ?? original));
+            if (projected == null && messageText) messageText.preview(passage, original);
             node.append(passage);
+            bindings.set(node, () => clearOwnedContent(node));
+            return node;
+        }
+        if (projected) {
+            const link = openPrompt ? openPrompt(original) : null;
+            (link ?? node).replaceChildren(exactFragment(projected));
+            if (link) node.append(link);
             bindings.set(node, () => clearOwnedContent(node));
             return node;
         }
@@ -106,6 +118,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         } else if (openPrompt) {
             const link = openPrompt(original);
             link.replaceChildren(exactFragment(original));
+            messageText?.preview(link, original);
             node.append(link);
         } else node.append(exactFragment(original));
         bindings.set(node, () => clearOwnedContent(node));
@@ -364,15 +377,21 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     body.append(privacy);
                 }
                 if (complete || !allowCopy) {
-                    const pre = document.createElement("pre");
-                    pre.className = "full-text-content";
+                    // Message prose renders Markdown when it has structure; plain text stays exact. Copy always uses the original.
+                    const pre = messageText ? messageText.render(text, { onFormat: () => { if (!released && root.isConnected) paint(); } })
+                        : document.createElement("pre");
+                    const formatted = pre.dataset.messageFormat === "markdown";
+                    pre.classList.add("full-text-content");
                     pre.tabIndex = 0;
-                    pre.setAttribute("aria-label", "Exact recorded " + noun + " text");
-                    pre.textContent = text;
+                    pre.setAttribute("aria-label", (formatted ? "Recorded " : "Exact recorded ") + noun + (formatted ? "" : " text"));
+                    if (messageText) {
+                        const releaseFormatted = releasePreview;
+                        releasePreview = () => { messageText.release(pre); releaseFormatted?.(); };
+                    } else pre.textContent = text;
                     if (allowCopy) {
                         const copy = ux.copyButton({ label: copyLabel,
                             getText: () => !released && root.isConnected && root.contains(pre) && pre.isConnected
-                                && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? pre.textContent : null,
+                                && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? messageText ? text : pre.textContent : null,
                             tooltip: "Copy original " + noun + " (unmasked)" });
                         const scope = document.createElement("span");
                         scope.id = noticeId;
@@ -384,7 +403,10 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                         if (!copyNoticeId) readerActions.append(scope);
                     }
                     body.append(pre);
-                    if (previewTitle && complete && subject === "request") releasePreview = previewPrompt(pre);
+                    if (previewTitle && complete && subject === "request") {
+                        const releaseFormatted = releasePreview, releaseClamp = previewPrompt(pre);
+                        releasePreview = () => { releaseClamp(); releaseFormatted?.(); };
+                    }
                 } else {
                     body.append(ux.codeBlock(text, { label: subject === "response" ? "Exact retained text / local only" : promptLabel + " / local only", copyLabel, prose: true, ...(notice ? { tooltip: notice } : {}) }));
                 }
@@ -406,6 +428,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         return root;
     }
     return { excerpt, renderExcerpt, renderCardPreview, render, caption, describePrompt,
+        formatReady: () => messageText?.ready() ?? Promise.resolve(),
         revealPrompt(root) { promptReveals.get(root)?.reveal(); },
         measurePrompt(root) { promptReveals.get(root)?.measure(); },
         release(root) { bindings.get(root)?.(); bindings.delete(root); },

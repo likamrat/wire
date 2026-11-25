@@ -675,10 +675,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         history.scrollRestoration = "manual";
     }
     let periodReturnReading = null, trendPeriodVisit = null;
-    const textAccess = createTextAccess(ux, presentation, authorship, metadata);
+    const messageText = assessmentFactories.createMessageMarkdown?.();
+    const textAccess = createTextAccess(ux, presentation, authorship, metadata, messageText);
     const nativeActivity = assessmentFactories.createNativeActivityPresentation({
         api, ux, presentation, createReaderSections: assessmentFactories.readerSections, sourceLabel: filterState.sourceLabel,
-        excerpt: textAccess.excerpt, timing: timingPresentation, results, pagedList, activityIdentities,
+        excerpt: textAccess.excerpt, timing: timingPresentation, results, pagedList, activityIdentities, messageText,
         capturedAt: value => time.formatMoment(value, workspaceState.scope?.timeContext || viewerTime),
     });
     const boundedContract = assessmentFactories.createBoundedNativeState();
@@ -689,7 +690,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         matchPolicyId: assessmentFactories.liveSearch.contract.matchPolicyId,
         savedSummary: savedMicrosoftSummary,
         dimensional, formatDate: value => date(value),
-        createReaderSections: assessmentFactories.readerSections, presentation, renderText: value => renderDocument(value),
+        createReaderSections: assessmentFactories.readerSections, presentation, messageText,
+        renderText: value => messageText ? messageText.render(value, { plain: "div" }) : renderDocument(value),
         onPage: () => { if (workspaceState.evidence && !workspaceState.loading && !clearingAccess) queueMicrotask(() => { if (workspaceState.evidence && !workspaceState.loading && !clearingAccess) render(); }); },
         conversationHref: (target, link) => setRouteLink(link, nativeTargetRoute(target)),
         onFilter: values => navigate(routeFor("analyze", { ...values, request: undefined, page: undefined }), true),
@@ -11878,6 +11880,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        messageText?.clear();
         hiddenCards.bind(null); undoCard = null; closeHiddenDialog(); $("cardVisibilityActions")?.remove();
         homepage.leave();
         analyzeDatesPicker.close(false); analyzeDatesPicker.showRange("");

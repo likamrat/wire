@@ -314,7 +314,9 @@ A file attachment may appear as a label such as `notes.md` rather than its
 contents. WIRE keeps the text recorded in Copilot; it does not open the attachment
 or add its local path.
 
-Copy controls copy the exact retained original, unmasked. A saved Copilot reply
+Copy controls copy the exact retained original, unmasked. Readers show
+Markdown in prompts and replies as formatted text, including tables and links;
+Copy still returns the original Markdown. A saved Copilot reply
 is the assistant's text, not a tool result. Enabling reply saving does not
 restore previously omitted replies.
 

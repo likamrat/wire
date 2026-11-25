@@ -634,6 +634,8 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 if (data.observationRef !== observation.observationRef || typeof data.text !== "string" || !sameBasis(data.basis, view.basis)
                     || !["full-record", "bounded-fragment"].includes(data.completeness) || data.finality !== "unverified") throw new Error("The response does not match this evidence context.");
                 if (event && !visibility) textAccess.setOpen(key, true);
+                // Format the reply on its first paint instead of swapping raw Markdown after it appears.
+                await textAccess.formatReady?.();
                 if (!currentRead()) return;
                 const produced = textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
                     key, mode: "complete", subject: "response", contentFirst, copyNoticeId, visibility, actionsHost, copyLabel, headingLabel,

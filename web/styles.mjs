@@ -11,6 +11,7 @@ import { reportJourneyStyles } from "./report-journey-styles.mjs";
 import { settingsStyles } from "./settings-styles.mjs";
 import { periodFlowStyles } from "./period-flow-styles.mjs";
 import { textAccessStyles } from "./text-access-styles.mjs";
+import { messageMarkdownStyles } from "./message-markdown.mjs";
 import { semanticCueStyles } from "./semantic-cue-styles.mjs";
 import { percentageChartStyles } from "./percentage-charts-styles.mjs";
 import { contextualActionStyles } from "./contextual-action-styles.mjs";
@@ -650,6 +651,7 @@ ${reportJourneyStyles}
 ${settingsStyles}
 ${periodFlowStyles}
 ${textAccessStyles}
+${messageMarkdownStyles}
 ${percentageChartStyles}
 ${contextualActionStyles}
 ${homeResultFilterStyles}

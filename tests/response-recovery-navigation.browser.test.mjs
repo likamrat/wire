@@ -23,6 +23,7 @@ for (const [theme, width, scale] of [["light", 1440, 100], ["dark", 375, 200]]) 
             historyCoverage: { eligible: 1, readable: 1, unavailable: 0, limited: 0, affected: 0, pending: 0 }, historyIssues: [] };
         const before = JSON.stringify({ records, assessment, collection });
         const contractSource = await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url), "utf8");
+const markedSource = await readFile(new URL("../node_modules/marked/lib/marked.esm.js", import.meta.url), "utf8");
         const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
         const calls = [], errors = [], unexpected = [];
         let issued, release, statusPhase = "pending";
@@ -40,6 +41,7 @@ for (const [theme, width, scale] of [["light", 1440, 100], ["dark", 375, 200]]) 
             if (request.method() === "GET") {
                 if (url.pathname === "/") return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "recovery-navigation", UNBOUND_FIXTURE_BOOTSTRAP) });
                 if (url.pathname === "/assets/assessment-contract.mjs") return route.fulfill({ contentType: "text/javascript", body: contractSource });
+                if (url.pathname === "/assets/marked.mjs") return route.fulfill({ contentType: "text/javascript", body: markedSource });
                 if (url.pathname === "/favicon.svg") return route.fulfill({ status: 204 });
             }
             const input = request.postDataJSON();

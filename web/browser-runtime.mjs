@@ -80,6 +80,8 @@ import { createArtifactEligibilityState } from "./artifact-eligibility-state.mjs
 import { createNativeReportPublicationState } from "./native-report-publication-state.mjs";
 import { mountBoundedNative } from "./bounded-native.mjs";
 import { createNativeActivityPresentation } from "./native-activity.mjs";
+import { createMessageMarkdown } from "./message-markdown.mjs";
+import { marked } from "marked";
 import { activityPage } from "./activity-page.mjs";
 import { createSavedFilePreview, createPreparedFileInspection } from "./saved-file-preview.mjs";
 import { mountFirstConnection } from "./first-connection.mjs";
@@ -107,7 +109,7 @@ function factories() {
             ...options, createNativeConnectionState,
             mountEnrollment: options => mountMicrosoftEnrollment({ ...options, createState: createMicrosoftEnrollmentState }),
         }),
-        createAccountProfile, createNativeActivityPresentation, activityPage, createNativeConfigurationState,
+        createAccountProfile, createNativeActivityPresentation, createMessageMarkdown: () => createMessageMarkdown({ marked }), activityPage, createNativeConfigurationState,
         createSourceCollectionState, createRefreshSources, mountSourceCollectionSettings, createBoundedNativeState,
         createNativeReportPublicationState, mountBoundedNative,
         savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection, createReportDraftPicker, normalizeSearchText,

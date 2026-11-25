@@ -85,6 +85,10 @@ async function setup(t, envelopes = rows(), expectedCalls = 3, options = {}) {
                 return res.end(renderHtmlShell("a".repeat(64), "native-reader-proof", bootstrap));
             }
             if (["/favicon.ico", "/favicon.svg"].includes(req.url?.split("?")[0])) return res.writeHead(204).end();
+            if (req.method === "GET" && req.url === "/assets/marked.mjs") {
+                res.setHeader("Content-Type", "text/javascript");
+                return res.end(await readFile(new URL("../node_modules/marked/lib/marked.esm.js", import.meta.url), "utf8"));
+            }
             if (req.method === "GET" && req.url === "/assets/assessment-contract.mjs") {
                 res.setHeader("Content-Type", "text/javascript");
                 return res.end(await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url), "utf8"));
@@ -842,9 +846,9 @@ test("reader source prose shares flat message geometry without doubling section 
     const source = page.locator("[data-reader-section=source]");
     await source.locator(".reader-section-toggle").click();
     const record = source.locator(".reader-source-record").filter({ hasText: "Keep the original order." }).first();
-    await expect(record.locator(".report-document")).toBeVisible();
+    await expect(record.locator(".message-markdown")).toBeVisible();
     const geometry = await record.evaluate(node => {
-        const heading = node.querySelector(":scope > h3"), text = node.querySelector(".report-document"), style = getComputedStyle(text);
+        const heading = node.querySelector(":scope > h3"), text = node.querySelector(".message-markdown"), style = getComputedStyle(text);
         return { padding: style.padding, border: style.borderTopWidth, background: style.backgroundColor,
             gap: text.getBoundingClientRect().top - heading.getBoundingClientRect().bottom };
     });

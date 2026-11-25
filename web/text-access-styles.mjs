@@ -293,6 +293,7 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-owned-text:has([data-prompt-actor=agent])>.full-text-body {border-inline-start-color:var(--prompt-author-agent)}
 #requestContent .reader-section-actions>.full-text-reader-actions {display:flex;align-items:center;gap:2px;margin:0}
 #requestContent .full-text-content.prompt-preview-clamped {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:clip}
+#requestContent .full-text-content.prompt-preview-clamped[data-message-format=markdown] {display:block;max-block-size:6lh;overflow:clip}
 #requestContent .reader-section-title:has(.prompt-preview-toggle) {min-width:0;max-width:100%}
 #requestContent .prompt-preview-toggle:is(:hover,:focus-visible)>.wire-icon {color:var(--ink);background:var(--hover);outline:4px solid var(--hover);border-radius:2px}
 #requestContent .reader-section .reader-facts {display:grid;gap:12px;margin:12px 0 0}

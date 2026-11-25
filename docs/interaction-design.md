@@ -373,6 +373,10 @@ fold in place. Missing text has an availability label, not a
 title inferred from the arguments. A bounded source preview is not a full
 conversation; opening it uses its own authorized reader.
 
+Message text that uses Markdown shows its words on cards, titles and labels,
+not its syntax: emphasis and link markup drop away, and a table contributes its
+header names. Readers render the same text with the shared message formatter.
+
 The origin and date identify the request. The identity key describes the
 matching records, not the current account: exact tools, recorded targets,
 operations and applicable gaps. The reader keeps complete-parent ordinals.
@@ -472,6 +476,16 @@ interaction-scoped. An automatic continuation with no new message is distinct
 from an unavailable prompt, and its author remains independently qualified.
 
 ### Copy and selection
+
+Prompts, Copilot replies, Microsoft conversation messages and task updates are
+message prose. When they contain Markdown, the reader renders headings,
+emphasis, lists, tables, code and labeled links in the reading hierarchy.
+Text without Markdown keeps its exact spacing. Formatting is display-only.
+Raw HTML stays literal text. Images are not loaded, and only web and email
+links open, in a new tab. Tables wrap within the reader and scroll inside
+their own focusable region when they are wider. Tool inputs, diagnostics and
+source fields stay exact. Search excerpts and saved reports keep the literal
+source text.
 
 Prompt/response Copy uses the exact authorized original, not the excerpt,
 metadata or report copy. Its icon and accessible name identify the subject and
