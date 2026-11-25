@@ -7,27 +7,32 @@ export const analyzeLayoutStyles = `
 .usage-question-controls {display:flex;align-items:end;flex-wrap:wrap;gap:var(--space-sm) var(--space-md);margin-block:var(--space-sm) var(--space-md);min-width:0}
 .usage-question-controls>.report-form-field:not([hidden]) {display:grid;gap:4px;min-width:0;max-width:100%;color:var(--muted);font-size:var(--type-small)}
 .usage-question-controls :is(select,.select-trigger) {min-width:0;max-width:100%;min-height:44px;color:var(--ink)}
-.analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px var(--space-2xl);background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
+.analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px var(--space-2xl);container:usage-card / inline-size}
+.analyze-usage:has(.token-history) {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
 .analyze-dashboard>.analyze-usage {grid-column:1/-1}
 .wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
 .token-history {display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:10px;color:var(--ink);font-variant-numeric:tabular-nums;font-size:var(--type-small)}
 .token-history-scale {display:grid;position:relative;height:var(--plot-height);color:var(--muted);text-align:end}
 .token-history-scale span {grid-area:1 / 1;position:relative;align-self:start;transform:translateY(-50%)}
-.token-history {--plot-height:clamp(8.5rem,11vw,11rem);position:relative}
-.token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.token-history {--day-lane:max(var(--day-min-pitch),calc(100cqi / var(--days)));--plot-height:calc(max(44px,1.2rem + 16px) + 12px + min(var(--day-column-width) * 1.25,var(--day-lane) * .8));position:relative;padding-block-start:var(--space-sm)}
+.token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;padding-bottom:8px}
 .token-history-strip {display:grid;width:max-content;min-width:100%}
-.token-history-plot {position:relative;height:var(--plot-height);min-width:0;cursor:default}
+.token-history-plot {position:relative;height:var(--plot-height);min-width:0;contain:inline-size;cursor:default}
 .token-history-plot svg {width:100%;height:100%;display:block;overflow:visible}
 .token-history-scroll:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
-.token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--muted);stroke-width:1}
-.token-line,.token-point {stroke:var(--accent);stroke-width:2;fill:var(--paper)}
+.token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--control);stroke-width:1}
+.token-column {fill:var(--accent);transform-box:fill-box;transform:translateX(-50%)}
+.token-zero {fill:var(--accent)}
 .token-hover-point {fill:var(--paper);stroke:var(--accent);stroke-width:2;opacity:0}
 .token-history[data-inspecting] .token-hover-point {opacity:1}
 .usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
-.token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--muted)}
-.token-history-dates time {min-width:3.75em;padding-inline:.35em;box-sizing:border-box;text-align:center;white-space:nowrap;text-box:trim-end cap alphabetic}
+.token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--accent)}
+.token-history-dates time {min-width:max(3.75em,calc(var(--day-column-width) + var(--space-sm)));padding:4px 4px 0;box-sizing:border-box;text-align:center;white-space:nowrap}
 .token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
-.token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;padding:6px 12px;background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);overflow-wrap:anywhere;opacity:0;pointer-events:none}
+.token-day-reading,#evidence-tooltip[data-tone=chart] {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
+.token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;overflow-wrap:anywhere;opacity:0;pointer-events:none}
+#evidence-tooltip[data-tone=chart] {--tooltip-gap:var(--space-md);max-width:min(18rem,calc(100% - 2 * var(--tooltip-gap)));white-space:pre-line}
+#evidence-tooltip[data-tone=chart]::first-line {color:var(--accent)}
 .token-history[data-inspecting] .token-day-reading {opacity:1}
 .token-history[data-day-actionable] .token-day-reading a {pointer-events:auto}
 .token-day-date {color:var(--muted)}.token-day-date a {display:inline-flex;align-items:center;min-height:24px}
@@ -60,7 +65,9 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard[data-custom-order]:not([hidden]) {display:block!important}
 .analyze-dashboard[data-custom-order]>.analyze-chart-grid,.analyze-dashboard[data-custom-order]>#percentageCharts {display:none!important}
 .analyze-ordered-widgets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
-.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto!important;min-width:0;margin:0}
+.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto;min-width:0;margin:0}
+#homeView .analyze-ordered-widgets>#activityView {margin:0}
+.analyze-ordered-widgets[data-dashboard-layout=packed],#frontendBreakdowns .percentage-panels[data-dashboard-layout=packed] {grid-auto-rows:1px;row-gap:0}
 .analyze-dashboard .analyze-ordered-widgets>[data-full-row] {grid-column:1/-1}
 .analyze-dashboard .analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary,.percentage-card) {border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
 .analyze-ordered-widgets>.percentage-card:not(.analyze-usage) {padding:var(--widget-heading-inset) 16px 16px;background:var(--paper);container:breakdown-card / inline-size}
@@ -68,13 +75,13 @@ export const analyzeLayoutStyles = `
 @media(hover:hover) and (pointer:fine) {
     body.analyze-reading #activityView #activityList .activity-card:hover {background:color-mix(in srgb,var(--accent) 6%,var(--paper))}
 }
-.analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {
+.analyze-population,.analyze-chart-main,.analyze-usage,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {
  border:1px solid var(--surface-edge);border-radius:var(--radius);
  background:var(--paper);box-shadow:var(--panel-shadow);
 }
-.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {background:var(--screen-plot);box-shadow:none}
+.analyze-chart-main,.analyze-usage,.analyze-outcome-summary,#percentageCharts .percentage-card {background:var(--screen-plot);box-shadow:none}
 @media(forced-colors:active) {
- .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {border-color:CanvasText;box-shadow:none}
+ .analyze-population,.analyze-chart-main,.analyze-usage,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {border-color:CanvasText;box-shadow:none}
 }
 #workspace>#analyzePopulation {padding:16px 20px;margin-block:0 20px;max-width:none;min-width:0}
 #analyzePopulation:not(:has(#periodComparisonSetup:not([hidden]),#filters:not([hidden]),#filterChips:not([hidden]):not(:empty),#freshActivity:not([hidden]),#collectionNotice:not([hidden]))) {display:none}
@@ -111,7 +118,7 @@ export const analyzeLayoutStyles = `
 #analyzePopulation #collectionNotice p {font-size:var(--type-small)}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
-.analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px}
+.analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px;--day-label-gap:var(--space-md)}
 .analyze-dashboard[data-dashboard-layout=packed] {display:grid;grid-template-columns:minmax(0,1fr) minmax(32rem,36rem);grid-auto-rows:1px;gap:0 16px;align-items:start}
 .analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order])>#activityView {grid-column:1/-1;min-width:0;margin:0}
 .analyze-dashboard[data-dashboard-layout=packed]>.analyze-chart-grid {grid-column:1/-1}
@@ -142,9 +149,12 @@ export const analyzeLayoutStyles = `
 .analyze-chart-main .view-switch {display:flex;flex-wrap:wrap;gap:4px}
 .analyze-chart-main .view-switch>button {flex:0 1 auto;overflow-wrap:normal}
 #homeView .analyze-chart-main .chart-panel {border:0;background:none;box-shadow:none;max-inline-size:none;padding:var(--widget-heading-inset) 20px var(--space-2xl);flex:1}
-#chart .dimensional-scroll {padding-block-end:0}
+/* Full date line boxes and the inner scroll clearance share the existing footer inset. */
+#homeView .analyze-chart-main:has(.dimensional-scroll) .chart-panel {padding-bottom:clamp(20px,calc(20px + var(--axis-scrollbar-size,0px)),32px)}
+#chart .dimensional-scroll {padding-block-end:8px}
+#chart .dimensional-time-labels,.token-history-dates {padding-block-start:var(--day-label-gap)}
 #chart .dimensional-time-labels {min-height:0}
-#chart .dimensional-time-labels>* {padding-block-end:0;text-box:trim-end cap alphabetic}
+#chart .dimensional-time-labels>* {padding-block-end:0}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0 12px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}
@@ -168,6 +178,27 @@ ${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-off
 .analyze-trend-decision{max-width:min(32rem,calc(100vw - 2rem))}
 .analyze-trend-decision ul{padding-inline-start:1.3em;margin:0 0 1rem}
 .analyze-trend-decision li+li{margin-block-start:.5em}
+.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:0 8px;align-items:center}
+.analyze-widget-heading>.analyze-widget-toggle {grid-area:1/3;align-self:start;position:relative;isolation:isolate;display:inline-grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;box-shadow:none;color:var(--accent);text-decoration:none}
+.analyze-widget-toggle::before {content:"";position:absolute;inset:6px;border-radius:var(--radius-control);z-index:-1;pointer-events:none}
+.analyze-widget-toggle:hover::before {background:var(--hover)}
+.analyze-widget-toggle:active::before {background:var(--pill-pressed)}
+.analyze-widget-toggle:focus-visible {outline:none}
+.analyze-widget-toggle:focus-visible::before {outline:2px solid var(--focus);outline-offset:1px}
+.analyze-widget-toggle>.wire-icon {width:18px;height:18px}
+.analyze-widget[data-collapsed=true] .analyze-widget-body {display:none!important}
+.analyze-widget[data-collapsed=true] :is(.chart-panel,#outcomeChart>.percentage-card),
+.analyze-widget[data-collapsed=true]:is(.percentage-card) {padding-bottom:var(--widget-heading-inset)}
+.analyze-widget[data-collapsed=true] .analyze-widget-heading {margin-bottom:0!important}
+#activityListContext.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) auto 44px}
+#activityListContext.analyze-widget-heading>.usage-sort {grid-column:2;grid-row:1}
+@container (max-width:30rem) {
+ .analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
+ .analyze-widget-heading>.analyze-widget-toggle {grid-area:1/2}
+ .analyze-widget-heading>.analyze-trend-link:not([hidden]) {grid-area:2/1;justify-self:start}
+ #activityListContext.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
+ #activityListContext.analyze-widget-heading>.usage-sort {grid-column:1/-1;grid-row:3;justify-self:start}
+}
 #homeView #chart>.empty-state {padding:8px 0 12px;background:none;border:0;border-radius:0;text-align:start}
 #homeView #chart>.empty-state>h3 {font:inherit;color:var(--muted)}
 #homeView #chart>.empty-state>p {margin:8px 0 0}
@@ -416,7 +447,7 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 #analyzeEmptyScope .analyze-scope-summary {margin:0 0 16px;padding:12px 16px;border:1px solid var(--surface-edge);border-radius:var(--radius);background:var(--paper)}
 .analyze-reading:not(.period-comparing) .page-heading {margin:0 0 var(--space-lg);min-height:0}
 .analyze-reading:not(.period-comparing) #activityView:has(#activityListContext) #activityTitle {position:absolute!important;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.analyze-reading:not(.period-comparing) #activityView {position:relative;margin-top:24px}
+.analyze-reading:not(.period-comparing) #activityView {position:relative;margin-top:16px}
 .analyze-reading:not(.period-comparing) #activityView>.section-heading {margin:0;padding:0;border:0}
 .analyze-reading:not(.period-comparing) #homeView .analyze-chart-main>.insight-header {display:none}
 .analyze-reading:not(.period-comparing) #workspace>#analyzePopulation {display:none}

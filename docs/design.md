@@ -194,6 +194,15 @@ The time chart, tool call results and usage each span the workspace in their
 own row. Size the time plot to its date columns, with a height cap on wide
 screens. Scrolling to a different day keeps the same linear scale.
 
+Give Analyze's activity and token charts the same card surface, heading inset,
+column width and space between the baseline and its dates. Activity stacks
+recorded outcomes and labels each total above its column. Token usage uses
+one quantity color and a labeled token scale, with a baseline dot for a
+measured zero and no mark for unavailable metering. Its reading and the
+activity chart's tooltip share the floating surface, regular type and quiet
+edge: exact date first, then the recorded count. Keep the pointer and date
+axis clear; outcome colors still describe recorded completion or failure.
+
 Label dates and counts on the time chart; the selected date range
 belongs above the widgets. The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.

@@ -69,8 +69,7 @@
     border-inline-start-width: 0;
     background: var(--accent-soft);
 }
-.wire-frontend-react .analyze-dashboard { display: block; }
-.wire-frontend-react #chart .dimensional-time-labels { padding-top: 8px; }
+.wire-frontend-react .analyze-dashboard { display: block; --day-label-gap: var(--space-sm); }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
 .wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: var(--widget-heading-inset) 20px 16px; }
@@ -78,7 +77,8 @@
     grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
     gap: 0 16px;
 }
-.wire-frontend-react #frontendBreakdowns { margin-top: 24px; container: breakdowns / inline-size; }
+.wire-frontend-react #frontendBreakdowns { margin-top: 16px; container: breakdowns / inline-size; }
+.wire-frontend-react #frontendBreakdowns .percentage-section { margin-block: 0; }
 .wire-frontend-react #frontendBreakdowns .percentage-card {
     background: var(--paper);
     border: 1px solid var(--surface-edge);
@@ -92,9 +92,10 @@
     gap: 16px;
     align-items: start;
 }
+.wire-frontend-react #frontendBreakdowns .percentage-panels[data-dashboard-layout=packed] { row-gap: 0; }
 .wire-frontend-react #frontendBreakdowns .percentage-legend { row-gap: 4px; }
 .wire-frontend-react #frontendBreakdowns .percentage-value { justify-content: flex-end; }
-.wire-frontend-react #activityView { margin-top: 20px; }
+.wire-frontend-react #activityView { margin-top: 16px; }
 .wire-frontend-react #activityPager { margin-block: 12px 0; }
 .wire-frontend-react #activityPager > .frontend-record-slot > .pager { margin: 0; width: 100%; }
 .wire-frontend-react #workspace:has(#homeView[data-empty=true]) > #frontendBreakdowns,
@@ -134,6 +135,7 @@
 }
 @container analyze-view (max-width: 26rem) {
     .wire-frontend-react #homeView .analyze-chart-main .chart-panel,
+    .wire-frontend-react #homeView .analyze-usage,
     .wire-frontend-react #outcomeChart > .percentage-card {
         padding-inline: 16px;
     }

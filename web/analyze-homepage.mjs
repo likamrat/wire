@@ -11,12 +11,73 @@ export function homepageRows(order) {
 
 // The layout moves the existing hosts. Rendering, navigation and access withdrawal
 // continue to operate on the same chart, card list and pager.
-export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
+export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon, dismissHover, pack }) {
     const dashboard = document.querySelector(".analyze-dashboard"), home = document.getElementById("homeView");
     const packedBreakdowns = dashboard.querySelector(":scope > #percentageCharts");
     const grid = document.createElement("div");
     grid.className = "analyze-ordered-widgets";
     const slots = new Map(), reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    const collapsed = new Set(), widgets = new Map(), packing = new Map();
+    let publication;
+    function syncWidgets(active) {
+        for (const key of standard) {
+            const card = key === "time" ? document.querySelector(".analyze-chart-main")
+                : key === "outcomes" ? document.querySelector(".analyze-outcome-summary")
+                : key === "usage" ? document.getElementById("analyzeUsage")
+                : key === "interactions" ? document.getElementById("activityView")
+                : document.querySelector(`#percentageCharts [data-breakdown="${key}"],.analyze-ordered-widgets [data-breakdown="${key}"]`);
+            const shell = key === "time" ? card.querySelector(".chart-panel")
+                : key === "outcomes" ? card.querySelector(".percentage-card") : card;
+            const header = shell?.querySelector(":scope > .chart-heading,:scope > .percentage-card-heading,:scope > #activityListContext");
+            if (!header) continue;
+            const title = key === "interactions" ? "Interactions" : header.querySelector("h2,h3").textContent;
+            let toggle = header.querySelector(":scope > .analyze-widget-toggle");
+            if (!toggle) {
+                toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "quiet analyze-widget-toggle";
+                toggle.id = `analyzeCollapse-${key}`; header.append(toggle);
+                toggle.addEventListener("click", () => {
+                    if (!ordinary || !isCurrent(publication)) return;
+                    dismissHover();
+                    if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+                    syncWidgets(true);
+                    for (const owner of packing.values()) owner.refresh();
+                    toggle.focus({ preventScroll: true });
+                });
+            }
+            const bodies = [...shell.children].filter(node => node !== header && node.id !== "activityTitle");
+            bodies.push(...header.querySelectorAll(":scope > .percentage-denominator,:scope > .usage-sort,:scope > .activity-list-scope"));
+            const closed = active && collapsed.has(key);
+            card.classList.add("analyze-widget"); header.classList.add("analyze-widget-heading");
+            card.dataset.collapsed = String(closed);
+            toggle.hidden = !active; toggle.setAttribute("aria-expanded", String(!closed));
+            toggle.setAttribute("aria-label", `${closed ? "Expand" : "Collapse"} ${title}`);
+            toggle.replaceChildren(icon(closed ? "chevron" : "chart-collapse"));
+            toggle.setAttribute("aria-controls", bodies.map((body, index) => {
+                body.id ||= `analyzeWidget-${key}-${index}`;
+                body.classList.add("analyze-widget-body"); body.inert = closed;
+                return body.id;
+            }).join(" "));
+            widgets.set(key, { card, toggle, bodies });
+        }
+    }
+    function syncPacking() {
+        const roots = new Set([grid, document.querySelector("#frontendBreakdowns .percentage-panels")].filter(node => node?.isConnected));
+        for (const [root, owner] of packing) if (!roots.has(root)) { owner.dispose(); packing.delete(root); }
+        for (const root of roots) if (!packing.has(root)) packing.set(root, pack(root, { selector: ":scope > .analyze-widget" }));
+    }
+    const scrolls = new Set();
+    const scrollSize = new ResizeObserver(entries => {
+        for (const { target } of entries) {
+            if (!scrolls.has(target)) continue;
+            const card = target.closest(".analyze-chart-main,#analyzeUsage");
+            card.style.setProperty("--axis-scrollbar-size", `${target.offsetHeight - target.clientHeight}px`);
+        }
+    });
+    function trackScrollbars() {
+        const current = new Set(document.querySelectorAll("#chart .dimensional-scroll,#analyzeUsage .token-history-scroll"));
+        for (const node of scrolls) if (!current.has(node)) { scrollSize.unobserve(node); scrolls.delete(node); }
+        for (const node of current) if (!scrolls.has(node)) { scrolls.add(node); scrollSize.observe(node); }
+    }
     let applied = "", entered = false, frame, stopMotion, ordinary = false;
     function move(parent, node, before = null) {
         if (parent.moveBefore) parent.moveBefore(node, before);
@@ -61,6 +122,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
             }
         }
         applied = signature;
+        syncPacking();
     }
     function finish() {
         cancelAnimationFrame(frame);
@@ -122,13 +184,26 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
     prefs.subscribe(key => { if (key === "analyzeLayout") layout(); });
     return {
         present(active, token, readerOpen) {
-            ordinary = active;
+            ordinary = active; publication = token;
             layout();
+            syncWidgets(active);
+            syncPacking();
+            for (const owner of packing.values()) owner.refresh();
+            trackScrollbars();
             if (!active || dashboard.hidden || home.dataset.empty === "true") { entered = false; finish(); return; }
             if (entered) return;
             entered = true;
             if (!readerOpen && !reduced.matches) start(token);
         },
-        leave() { ordinary = entered = false; finish(); layout(); },
+        leave() {
+            ordinary = entered = false; publication = null; finish(); layout();
+            for (const { card, toggle, bodies } of widgets.values()) {
+                card.dataset.collapsed = "false"; toggle.hidden = true;
+                for (const body of bodies) body.inert = false;
+            }
+            widgets.clear(); scrollSize.disconnect(); scrolls.clear();
+            for (const owner of packing.values()) owner.dispose();
+            packing.clear();
+        },
     };
 }

@@ -102,7 +102,7 @@ list follows the same filters.
 Open **Filters** to narrow the view by Dates, Tool, Service involved, Outcome or
 Prompt author. **More filters** holds the additional choices.
 
-![Analyze Results with daily tool calls, recorded outcomes, daily token usage and the interactions behind them.](images/analyze.png)
+![Analyze Results with daily tool calls, recorded outcomes, daily token columns and collapse controls at the right of each chart heading.](images/analyze.png)
 
 ### Read the charts
 
@@ -278,11 +278,11 @@ change Analyze.
 
 **Token usage** labels each day in the chosen range, including
 days without a count. Scroll along the date axis on narrow screens or long
-ranges; periods over 90 days have earlier and later windows. Hover over a point
-to see its date and token count beside the pointer. Tap a day or use the arrow
-keys to inspect it. A dot on zero is a measured zero. For a gap,
-the date reading distinguishes activity without a count from no matching activity.
-WIRE leaves gaps between measured days; it doesn't estimate the missing usage.
+ranges; periods over 90 days have earlier and later windows. A column shows a
+positive token count; a dot on the baseline marks a measured zero. Hover over
+a column to see its date and count. Tap a day or use the arrow keys to inspect
+it. On a day without a mark, the reading distinguishes activity without a token
+count from no matching activity. WIRE doesn't estimate missing usage.
 Click or tap to hold a reading, then select its date to open the evidence in
 Trends. Choose **View by day** for the whole period.
 
@@ -318,6 +318,12 @@ preference doesn't change the charts.
 <a id="analyze-homepage-layout"></a>
 
 ### Homepage layout
+
+Use the arrow at the right of any Analyze widget, including Interactions, to
+collapse or expand it. Its heading and View trend or View by day link stay
+available. Collapsing does not hide individual interactions, change report
+selection or filter the data. Your choices stay while you browse in this page;
+reloading starts with every widget expanded.
 
 In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
 **Interactions** list. The preview outlines the section you moved and shows which

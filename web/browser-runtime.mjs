@@ -104,7 +104,7 @@ function factories() {
         mountDocumentation, createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
         createCardVisibility, renderDailyTokenChart, ...createUsageReading(usage),
-        mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows }),
+        mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows, pack: mountDashboardLayout }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync, homepageRows),
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,
