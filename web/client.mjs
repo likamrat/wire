@@ -350,7 +350,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const value = assessmentFactories.usageCalendar(slice.scenarios,selectionRows(),percentageMath.interactionIdentity,
             timestamp => time.day(timestamp,workspaceState.scope.timeContext.timeZone));
         const {from,to} = workspaceState.scope.filters;
-        if (value.range) value.range = {from:from ? dateInput(from) : value.range.from,to:to ? dateInput(to) : value.range.to};
+        if (value.range || from && to) value.range = {from:from ? dateInput(from) : value.range.from,to:to ? dateInput(to) : value.range.to};
         return value;
     }
     const analyzeTrends = assessmentFactories.createAnalyzeTrendsEntry({ time, results, authorship, categories: recordedCategories }).mount({

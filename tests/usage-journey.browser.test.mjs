@@ -14,19 +14,21 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await page.goto(runtime.url);
     if (width<500) await chooseTheme(page,"dark");
     const card=page.locator("#analyzeUsage"), date=card.locator(".token-day-date a"), slider=card.getByRole("slider",{name:"Inspect daily token usage"});
-    await expect(card.locator(".token-history-total")).toHaveText("200,000 tokens · 1 of 2 interactions measured");
+    await expect(card.locator(".token-history-total")).toHaveCount(0);
+    await expect(slider).toHaveAccessibleDescription("200,000 tokens in this period. 1 of 2 interactions measured.");
     await expect(card.locator(".token-day-reading")).toHaveAttribute("aria-hidden","true");
     await expect(card.locator(".token-day-guide")).toHaveCSS("opacity","0");
     await expect(card).not.toContainText("Recorded tokens");
     await expect(card.locator("[data-measured-day]")).toHaveCount(1);
     await expect(card.locator(".token-line")).toHaveCount(0);
     await expect(card).not.toContainText("Work IQ activity");
-    const box=await slider.boundingBox();
-    if(width<500) await slider.tap({position:{x:box.width*.98,y:box.height*.5}});
-    else await slider.hover({position:{x:box.width*.98,y:box.height*.5}});
+    const lastTick=card.locator(".token-history-dates time").last();await lastTick.scrollIntoViewIfNeeded();
+    const labelBox=await lastTick.boundingBox(),box=await slider.boundingBox(),endX=labelBox.x+labelBox.width/2,endY=box.y+box.height/2;
+    if(width<500) await page.touchscreen.tap(endX,endY);
+    else await page.mouse.move(endX,endY);
     await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable · 0 of 1 measured/);
     if(width>=500) {
-        await slider.click({position:{x:box.width*.98,y:box.height*.5}});
+        await page.mouse.click(endX,endY);
         await date.hover();await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable/);
     }
     await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching activity/);
@@ -62,11 +64,11 @@ test("a metered zero is a token point on the baseline, not an unknown or an empt
     const browser=await chromium.launch();cleanup.push(()=>browser.close());
     const page=await browser.newPage();await page.goto(runtime.url);
     const chart=page.locator("#analyzeUsage");
-    await chart.getByRole("slider").focus();
+    await chart.getByRole("slider").press("End");await chart.getByRole("slider").press("ArrowLeft");
     await expect(chart.locator(".token-day-value")).toHaveText("0 tokens");
     await expect(chart.locator(".token-point[cy='88%']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
     await chart.getByRole("slider").press("ArrowRight");
-    await expect(chart.locator(".token-day-value")).toHaveText("Token count unavailable · 0 of 1 measured");
+    await expect(chart.locator(".token-day-value")).toHaveText("Token count unavailable");
 });
 
 for(const frontend of ["react","bundled"])test(`${frontend}: daily chart readings cannot obscure a hovered point or clip date labels`,async t=>{
@@ -80,9 +82,10 @@ for(const frontend of ["react","bundled"])test(`${frontend}: daily chart reading
         await page.setViewportSize({width,height:955});
         await page.evaluate(s=>{document.documentElement.style.fontSize=`${100*s}%`;},scale);
         await card.evaluate(c=>c.scrollIntoView({block:"center"}));await page.evaluate(()=>document.fonts.ready);
-        const box=await plot.boundingBox();
-        for(const [i,fraction] of [.001,1/3,2/3,.999].entries()){
-            const x=box.x+box.width*fraction,y=box.y+box.height*.45;
+        for(let i=0;i<4;i++){
+            const tick=card.locator(".token-history-dates time").nth(i);await tick.scrollIntoViewIfNeeded();
+            const box=await plot.boundingBox(),label=await tick.boundingBox();
+            const x=label.x+label.width/2,y=box.y+box.height*.45;
             await page.mouse.move(x,y);await expect(slider).toHaveValue(String(i));
             await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","1");
             assert.deepEqual(await card.evaluate((c,{x,y})=>{
@@ -91,7 +94,8 @@ for(const frontend of ["react","bundled"])test(`${frontend}: daily chart reading
                 if(document.elementFromPoint(x,y)!==p.querySelector("input"))issues.push("hover blocked");
                 if(detail.top<box.bottom-.5)issues.push("reading overlaps plot");
                 const glyphs=n=>{const r=document.createRange();r.selectNodeContents(n);return [...r.getClientRects()];};
-                const ticks=[...c.querySelectorAll(".token-history-dates span")].filter(n=>getComputedStyle(n).visibility!=="hidden").flatMap(glyphs);
+                const view=rect(c.querySelector(".token-history-scroll"));
+                const ticks=[...c.querySelectorAll(".token-history-dates time")].flatMap(glyphs).filter(b=>b.left>=view.left && b.right<=view.right);
                 const overlap=(a,b)=>a.left<b.right-.5 && a.right>b.left+.5 && a.top<b.bottom-.5 && a.bottom>b.top+.5;
                 if(ticks.some((a,i)=>ticks.slice(i+1).some(b=>overlap(a,b)) || overlap(a,detail)))issues.push("date labels overlap");
                 const text=[...ticks,...glyphs(read.querySelector(".token-day-value")),...glyphs(read.querySelector(".token-day-date"))];
@@ -100,6 +104,31 @@ for(const frontend of ["react","bundled"])test(`${frontend}: daily chart reading
             },{x,y}),[],`${width}px / ${scale*100}% text / day ${i}`);
         }
         await page.mouse.move(0,0);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
+    }
+});
+
+test("the Analyze time axis names every selected day, including empty dates and dates beyond a full window",async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},"react");
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width:390,height:900},timezoneId:"America/Los_Angeles",hasTouch:true});
+    const chart=page.locator("#analyzeUsage"),labels=chart.locator(".token-history-dates time"), slider=chart.getByRole("slider");
+    const iso=(from,i)=>new Date(Date.parse(from+"T00:00:00Z")+i*86400000).toISOString().slice(0,10);
+    for(const [from,length] of [["2026-09-04",81],["2026-12-30",7],["2024-02-28",3],["2025-03-08",1],["2025-03-08",103]]){
+        await page.goto(new URL(`/?range=custom&from=${from}&to=${iso(from,length-1)}`,runtime.url).href);
+        const dates=Array.from({length},(_,i)=>iso(from,i));await expect(labels).toHaveCount(Math.min(length,90));
+        const read=()=>labels.evaluateAll(nodes=>nodes.map(n=>n.dateTime));
+        assert.deepEqual(await read(),dates.slice(0,90));
+        if(length>90){
+            await chart.getByRole("button",{name:"Later days"}).click();assert.deepEqual(await read(),dates.slice(90));
+            await chart.getByRole("button",{name:"Earlier days"}).click();assert.deepEqual(await read(),dates.slice(0,90));
+        }
+        await slider.press("End");await expect(slider).toHaveValue(String(length-1));
+        await expect(labels.last()).toBeInViewport();
+        await slider.press("Home");await expect(labels.first()).toBeInViewport();
+        assert.ok(await chart.evaluate(c=>c.scrollWidth<=c.clientWidth+1));
+        await slider.press("Escape");await expect(chart.locator(".token-day-reading")).toHaveCSS("opacity","0");
+        await expect(chart).not.toContainText(/interactions measured/);
     }
 });
 
@@ -140,8 +169,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
         await expect(prompts(page)).toHaveText(order);
         if (label==="Most tokens") await expect(page.locator("#activityList article .usage-chip")).toHaveText(["33,000 tokens","30,000 tokens","12,000 tokens","Tokens unavailable"]);
         assert.equal(page.url(),scope); assert.equal(await page.locator("#activityListSummary").innerText(),summary);
-        await expect(page.locator("#analyzeUsage")).toContainText("75,000");
-        await expect(page.locator("#analyzeUsage")).toContainText("3 of 4 interactions");
+        await expect(page.locator("#analyzeUsage").getByRole("slider")).toHaveAccessibleDescription("75,000 tokens in this period. 3 of 4 interactions measured.");
         assert.deepEqual(await layout(page),initialLayout);
     }
     const allRecent=["Read project brief","Draft next steps","Search for notes","Meeting outline","Consolidate changes","Find review owners","Follow-up summary","Launch notes"];
@@ -187,12 +215,11 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await page.goto(runtime.url);
     const widget=page.locator("#analyzeUsage");
     if (width < 500) await chooseTheme(page,"dark");
-    await expect(widget).toContainText("342,000");
-    await expect(widget).toContainText("7 of 8 interactions");
+    await expect(widget.getByRole("slider")).toHaveAccessibleDescription("342,000 tokens in this period. 7 of 8 interactions measured.");
     await expect(widget.locator(".token-point")).toHaveCount(4);
     await expect(widget.locator(".token-line")).toHaveCount(3);
-    await expect(widget.locator(".token-day-value")).toContainText("104,500 tokens");
-    await widget.getByRole("slider").press("ArrowLeft");await expect(widget.locator(".token-day-value")).toHaveText("30,500 tokens · 1 of 2 measured");
+    await widget.getByRole("slider").press("End");await expect(widget.locator(".token-day-value")).toContainText("104,500 tokens");
+    await widget.getByRole("slider").press("ArrowLeft");await expect(widget.locator(".token-day-value")).toHaveText("30,500 tokens (partial)");
     await widget.getByRole("slider").press("Escape");
     await page.locator("#analyzeUsageTitle").click();
     if (process.env.WIRE_USAGE_PROOFS) await widget.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-simple-line.png`)});
@@ -280,13 +307,13 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     assert.ok(!page.url().includes(modelName));
     const day=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
     await page.goto(new URL(`/?range=custom&from=${day(2)}&to=${day(2)}`,runtime.url).href);
-    await expect(widget).toContainText("30,500"); await expect(widget).toContainText("1 of 2 interactions");
+    await expect(widget.getByRole("slider")).toHaveAccessibleDescription("30,500 tokens in this period. 1 of 2 interactions measured.");
     await widget.getByRole("link",{name:/View by day/}).click();
     const periodUsage = page.locator(".trends-panel[data-family=usage]");
     await expect(periodUsage).toContainText("30,500 tokens");
     await expect(periodUsage.locator(".trends-plot svg")).toBeVisible();
     await page.goto(runtime.url);
-    await expect(widget).toContainText("342,000");
+    await expect(widget.getByRole("slider")).toHaveAccessibleDescription(/342,000 tokens/);
     await page.goto(new URL("/settings?section=analyze",runtime.url).href);
     await selectActivityOption(page,"defaultAnalyzeSort","tokens");
     await selectActivityOption(page,"defaultAnalyzeRange","7");
@@ -411,7 +438,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(content).toContainText("154,500 tokens"); await expect(content).not.toContainText("Est. USD");
     await capture("saved-reading",page.locator("#savedReportReader iframe"));
     const home = await context.newPage(); await home.goto(runtime.url);
-    await expect(home.locator("#analyzeUsageContent")).toContainText("342,000");
+    await expect(home.locator("#analyzeUsageContent").getByRole("slider")).toHaveAccessibleDescription(/342,000 tokens/);
     if (!await home.locator("#wireAccountTrigger").isVisible()) await home.locator("#navigationToggle").click();
     await home.locator("#wireAccountTrigger").click();
     await expect(home.locator("#wireAccountGate")).toHaveText("Sign out of this instance");

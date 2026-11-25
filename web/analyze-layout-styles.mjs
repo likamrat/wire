@@ -10,27 +10,25 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard>.analyze-usage {grid-column:1/-1}
 .wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
 .token-history {display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:10px;color:var(--ink);font-variant-numeric:tabular-nums;font-size:var(--type-small)}
-.token-history-scale {display:grid;position:relative;color:var(--muted);text-align:end}
+.token-history-scale {display:grid;position:relative;height:var(--plot-height);color:var(--muted);text-align:end}
 .token-history-scale span {grid-area:1 / 1;position:relative;align-self:start;transform:translateY(-50%)}
-.token-history-plot {position:relative;height:clamp(8.5rem,11vw,11rem);min-width:0;margin-inline-end:4px}
+.token-history {--plot-height:clamp(8.5rem,11vw,11rem)}
+.token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.token-history-strip {display:grid;width:max-content;min-width:100%}
+.token-history-plot {position:relative;height:var(--plot-height);min-width:0}
 .token-history-plot svg {width:100%;height:100%;display:block;overflow:visible}
-.token-history-plot:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:3px}
+.token-history-scroll:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
 .token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--muted);stroke-width:1}
 .token-line,.token-point {stroke:var(--accent);stroke-width:2;fill:var(--paper)}
 .token-day-guide {stroke:var(--muted);stroke-dasharray:2 4;opacity:0}
 .token-history[data-inspecting] .token-day-guide {opacity:.6}
 .usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:crosshair}
-.token-history-dates {grid-column:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));position:relative;container-type:inline-size;min-height:1.5em;color:var(--muted);margin-inline-end:4px}
-.token-history-dates [data-edge=center] {position:absolute;white-space:nowrap;transform:translateX(-50%)}
-.token-history-dates [data-edge=end] {grid-column:2;text-align:end}
-@container (max-width:21em){.token-history-dates [data-edge=center]:not(:only-child){visibility:hidden}}
-.token-history-caption {grid-column:1/-1;display:grid;align-items:center;margin-top:4px;min-height:2.25em}
-.token-history-total,.token-day-reading {grid-area:1/1}
-.token-history-total {margin:0;color:var(--ink)}
-.token-history-coverage {color:var(--muted)}
+.token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--muted);padding-block-end:4px}
+.token-history-dates time {min-width:3.75em;padding-inline:.35em;box-sizing:border-box;text-align:center;white-space:nowrap}
+.token-history-caption {grid-column:1/-1;display:grid;align-items:center;min-height:1.5em}
+.token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
 .token-day-reading {display:flex;gap:0 .75em;align-items:baseline;flex-wrap:wrap;opacity:0;pointer-events:none}
 .token-history[data-inspecting] .token-day-reading {opacity:1;pointer-events:auto}
-.token-history[data-inspecting] .token-history-total {visibility:hidden}
 .token-day-date {color:var(--muted)}.token-day-date a {display:inline-flex;align-items:center;min-height:24px}
 @media(pointer:coarse){.token-day-date a {min-height:44px}}
 .usage-chip.usage-missing {color:var(--muted);border-color:transparent;background:transparent}
@@ -301,6 +299,8 @@ ${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-off
 }
 #homeView[data-empty=true]>.analyze-dashboard,
 #homeView[data-empty=true]>.analyze-review {display:none}
+#homeView[data-empty=true]>.analyze-dashboard:not([hidden]):has(>#analyzeUsage .token-history) {display:block}
+#homeView[data-empty=true]>.analyze-dashboard:has(>#analyzeUsage .token-history)>:not(#analyzeUsage) {display:none}
 
 .analyze-toolbar,.workspace-command-tools {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:var(--space-sm);min-width:0;max-width:100%}
 .workspace-command-row{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-xs) var(--space-md);min-width:0}
