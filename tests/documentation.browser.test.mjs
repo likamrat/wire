@@ -283,3 +283,47 @@ test("the bundled renderer offers the same Documentation entry", async t => {
     await expect(page.locator("#docTitle")).toHaveText("Work IQ Request Explorer");
     await expect(page.locator('.docs-pager [rel="prev"]')).toHaveCount(0);
 });
+
+test("Documentation panels independently give their space to the current guide", async t => {
+    const { page } = await setup(t, { width: 1536, reducedMotion: "no-preference" });
+    await page.locator('nav a[data-nav="documentation"]').click();
+    await page.locator('.docs-tree a[data-guide="user-guide"]').click();
+    const outline = page.getByRole("navigation", { name: "On this page", exact: true });
+    await outline.getByRole("link", { name: "Trends", exact: true }).click();
+    const address = page.url(), anchor = heading(page, "trends");
+    await expect(anchor).toBeFocused();
+    await expect.poll(() => anchor.evaluate(n => Math.abs(n.getBoundingClientRect().top -
+        parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) - parseFloat(getComputedStyle(n).scrollMarginTop)))).toBeLessThan(2);
+    await inView(page, "trends");
+    const top = (await anchor.boundingBox()).y;
+    const left = page.locator('.docs-left-toggle > summary');
+    const right = page.locator('.docs-outline-inline > summary');
+    const tree = page.getByRole("navigation", { name: "Guides", exact: true });
+    const article = page.locator(".docs-article");
+    const width = async () => (await article.boundingBox()).width;
+    const initial = await width();
+    for (const [toggle, pane, other] of [[left, tree, outline], [right, outline, tree]]) {
+        await toggle.press("Enter");
+        await expect(pane).toBeHidden();
+        await expect(other).toBeVisible();
+        await expect.poll(width).toBeGreaterThan(initial + 120);
+        await expect(toggle).toBeFocused();
+        await toggle.press("Space");
+        await expect(pane).toBeVisible();
+        await expect.poll(width).toBeCloseTo(initial, 0);
+    }
+    await left.click(); await right.click();
+    await expect.poll(width).toBeGreaterThan(initial + 320);
+    await expect.poll(async () => Math.abs((await anchor.boundingBox()).y - top)).toBeLessThan(5);
+    assert.equal(page.url(), address);
+    await expect(page.locator("#guideSource-control")).toHaveAccessibleName("Documentation source: Installed version");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(tree).toBeHidden(); await expect(outline).toBeHidden();
+    await left.press("Enter"); await expect(tree).toBeVisible();
+    await right.press("Enter"); await expect(outline).toBeVisible();
+    await right.press("Space"); await left.press("Space");
+    await page.setViewportSize({ width: 1536, height: 900 });
+    await expect(tree).toBeHidden(); await expect(outline).toBeHidden();
+    await left.press("Enter"); await right.press("Enter");
+    await expect.poll(width).toBeCloseTo(initial, 0);
+});

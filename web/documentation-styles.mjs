@@ -9,12 +9,20 @@ export const documentationStyles = `
 .wire-docs .docs-icon svg,.wire-docs .docs-icon .wire-icon{inline-size:100%;block-size:100%}
 .wire-docs .docs-quiet{color:var(--muted)}
 
-.docs-grid{display:grid;grid-template-columns:248px minmax(0,1fr) 236px;gap:var(--space-lg);align-items:start;max-inline-size:1560px}
-.docs-center{min-width:0}
+.docs-grid{--docs-left-size:248px;--docs-right-size:236px;display:grid;grid-template-columns:var(--docs-left-size) minmax(0,1fr) var(--docs-right-size);grid-template-areas:"guides article outline";gap:var(--space-lg);align-items:start}
+.docs-grid:has(.docs-left-toggle[data-docked=true]:not([open])){--docs-left-size:44px}
+.docs-grid:has(.docs-outline-inline[data-docked=true]:not([open])){--docs-right-size:44px}
+.docs-grid[data-has-outline=false]{grid-template-columns:var(--docs-left-size) minmax(0,1fr);grid-template-areas:"guides article"}
+.docs-left{grid-area:guides}
+.docs-right{grid-area:outline}
+.docs-center{grid-area:article;min-width:0}
 .docs-paper{min-width:0;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:var(--space-xl) clamp(16px,4cqi,48px) var(--space-2xl)}
-.docs-left,.docs-right{position:sticky;top:var(--docs-sticky);max-block-size:calc(100dvh - var(--docs-sticky) - 16px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 2px 16px}
-.docs-left-toggle>summary,.docs-outline-inline{display:none}
-.docs-left-toggle>summary,.docs-outline-inline>summary{align-items:center;gap:var(--pill-gap);cursor:pointer;padding:6px 12px;font-weight:var(--weight-medium);min-block-size:44px;list-style:none;border-radius:var(--radius-small)}
+.docs-left,.docs-right{position:sticky;top:var(--docs-sticky);min-width:0}
+.docs-panel>nav{max-block-size:calc(100dvh - var(--docs-sticky) - 52px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 2px 8px}
+.docs-left-toggle>summary,.docs-outline-inline>summary{display:flex;align-items:center;gap:var(--pill-gap);cursor:pointer;padding:6px 10px;font-size:var(--type-reading);font-weight:var(--weight-strong);min-block-size:44px;list-style:none;border-radius:var(--radius-small)}
+.docs-panel[data-docked=true]:not([open])>summary{justify-content:center;padding-inline:0}
+.docs-panel[data-docked=true]:not([open])>summary :is(.docs-panel-label,.disclosure-icon){display:none}
+.docs-panel>summary{margin-bottom:var(--space-xs)}
 .docs-left-toggle>summary::-webkit-details-marker,.docs-outline-inline>summary::-webkit-details-marker{display:none}
 :is(.docs-left-toggle,.docs-outline-inline)>summary>.disclosure-icon{margin-inline:auto 0}
 :is(.docs-left-toggle,.docs-outline-inline)>summary:hover{background:var(--hover)}
@@ -64,7 +72,9 @@ export const documentationStyles = `
 #documentationView :is(.docs-text-button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline:2px solid var(--focus);outline-offset:2px}
 @media(forced-colors:active){#documentationView :is(.docs-text-button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline-color:Highlight}}
 
-.docs-article{font-size:var(--type-reading);line-height:var(--leading-reading);max-inline-size:76ch;overflow-wrap:anywhere}
+.docs-article{min-width:0;font-size:var(--type-reading);line-height:var(--leading-reading);overflow-wrap:anywhere}
+.docs-article>:is(ul,ol,dl,blockquote){max-inline-size:76ch}
+.docs-article>p:has(>.docs-image-frame:only-child){max-width:none}
 .docs-article>:first-child{margin-top:0}
 .docs-article h1{font-size:var(--type-title);line-height:var(--leading-heading);font-weight:var(--weight-strong);margin:0 0 var(--space-md)}
 .docs-article :is(h2,h3,h4,h5,h6){position:relative;scroll-margin-top:8px;line-height:var(--leading-section)}
@@ -159,14 +169,17 @@ export const documentationStyles = `
 .docs-error{max-inline-size:720px}
 .docs-error h1{font-size:var(--type-title);margin-top:0}
 
-@container docs (max-width:1260px) and (min-width:1081px){.docs-grid{grid-template-columns:220px minmax(0,1fr) 208px;gap:20px}}
-@container docs (max-width:1080px){.docs-grid{grid-template-columns:220px minmax(0,1fr)}.docs-right{display:none}.docs-outline-inline{display:block;margin:0 0 var(--space-lg);border:1px solid var(--docs-rule);border-radius:var(--radius-small);padding:6px}.docs-outline-inline>summary{display:flex}.docs-outline-inline .docs-outline{padding-top:4px}}
+@media(prefers-reduced-motion:no-preference){.docs-grid{transition:grid-template-columns 320ms cubic-bezier(.2,0,0,1)}}
+@container docs (max-width:1260px){.docs-grid{--docs-left-size:220px;--docs-right-size:208px}}
+@container docs (max-width:1080px){.docs-grid{grid-template-columns:var(--docs-left-size) minmax(0,1fr);grid-template-areas:"guides outline" "guides article"}
+.docs-right{position:static}.docs-right .docs-panel{border:1px solid var(--docs-rule);border-radius:var(--radius-small);background:var(--paper)}
+.docs-right .docs-panel>nav{max-block-size:none}}
 @container docs (max-width:880px){
-.docs-grid{grid-template-columns:minmax(0,1fr);gap:var(--space-md)}
-.docs-left{position:static;max-block-size:none;overflow:visible;padding:0}
-.docs-left-toggle{border:1px solid var(--docs-rule);border-radius:var(--radius-small);background:var(--paper);padding:6px}
-.docs-left-toggle>summary{display:flex}
-.docs-left-toggle .docs-tree{padding-top:6px}}
+.docs-grid,.docs-grid[data-has-outline=false]{grid-template-columns:minmax(0,1fr);grid-template-areas:"guides" "outline" "article";gap:var(--space-sm);transition:none}
+.docs-grid[data-has-outline=false]{grid-template-areas:"guides" "article"}
+.docs-left{position:static}
+.docs-left .docs-panel{border:1px solid var(--docs-rule);border-radius:var(--radius-small);background:var(--paper)}
+.docs-left .docs-panel>nav{max-block-size:none}}
 @container docs (max-width:700px){.docs-paper{padding:20px 16px 32px;border-radius:var(--radius-small)}}
 @container docs (max-width:480px){.docs-paper{padding:16px 14px 28px}}
 @media (pointer:coarse){.docs-tree a,.docs-outline a,.docs-left-toggle>summary,.docs-outline-inline>summary,.docs-source-option{min-block-size:44px}#documentationView button.doc-copy{inline-size:44px;block-size:44px}}
