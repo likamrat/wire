@@ -279,6 +279,8 @@ Weekly shares name the actual calendar week and its selected-date denominator;
 partial-week rules and week boundaries distinguish denominator changes without
 changing daily membership or the calculation. Exact tables retain every column
 in a keyboard-scrollable region with intrinsic column sizing and semantic headers.
+In narrow daily-value sheets, long headings wrap beside the pinned date column
+so a focused count keeps its full heading readable.
 Collapsed rows contain the title, applied date range and sizing controls, not
 metric totals or explanatory labels. Clicking anywhere
 on the collapsed row expands it; clicking an expanded header's non-control

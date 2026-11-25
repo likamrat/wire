@@ -485,7 +485,17 @@ test("response models keep known names on the chart and open the exact interacti
     const sheet = page.getByRole("dialog"), row = sheet.getByRole("row", { name: /Nov 23, 2026/ });
     await expect(row).toContainText("100% (8)");
     const partial = row.getByRole("button", { name: /Partial model history: 3 interactions/ });
-    await partial.focus(); await screenshot(page, "response-models-detail-narrow"); await page.keyboard.press("Enter");
+    await partial.focus();
+    const headerGeometry = await sheet.getByRole("columnheader", { name: "Partial model history (interactions)" }).evaluate(node => {
+        const clip = node.closest(".trends-exact").getBoundingClientRect();
+        const date = node.parentElement.firstElementChild.getBoundingClientRect(), text = document.createRange();
+        text.selectNodeContents(node);
+        return { left: date.right, right: clip.right,
+            lines: [...text.getClientRects()].filter(rect => rect.width && rect.height).map(rect => ({ left: rect.left, right: rect.right })) };
+    });
+    assert.ok(headerGeometry.lines.every(rect => rect.left >= headerGeometry.left - 1 && rect.right <= headerGeometry.right + 1),
+        `The focused model-history count keeps its whole column heading readable beside the sticky date: ${JSON.stringify(headerGeometry)}`);
+    await screenshot(page, "response-models-detail-narrow"); await page.keyboard.press("Enter");
     const links = sheet.getByRole("link");
     await expect(links).toHaveCount(4);
     for (const [i, count] of [[0, 2], [1, 1], [2, 1]]) await expect(links.filter({ hasText: `Review harbor note ${i}.` })).toHaveCount(count);

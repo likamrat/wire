@@ -1075,7 +1075,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         for (const label of ["Date", ...source.definitions[family].map(value => family === "usage" && value.id === "usage" ? "Tokens" : value.label),
             ...(family === "usage" ? ["Interactions metered"] : family === "timing" ? ["Calls timed"] : []), "Interactions", "Calls",
             ...coverage.map(([, label]) => `${label} (interactions)`)]) {
-            const cell = el("th", "", label); cell.scope = "col"; header.append(cell);
+            const cell = el("th");
+            if (header.children.length) cell.append(el("span", "trends-column-label", label));
+            else cell.textContent = label;
+            cell.scope = "col"; header.append(cell);
         }
         head.append(header); table.append(head, body);
         for (const day of includePeriod ? [source.totals, ...source.days] : source.days) {
@@ -1444,6 +1447,8 @@ export const trendsStyles = `
 .trends-tip-table{border-collapse:collapse}.trends-tip-table th,.trends-tip-table td{font-weight:400;text-align:right;padding:5px 8px}.trends-tip-table th:first-child,.trends-tip-table td:first-child{text-align:left;padding-left:0}
 @container (max-width:22rem){
  .trends-dialog .trends-exact :is(th,td):first-child{min-width:36cqi;width:36cqi;max-width:36cqi;white-space:normal}
+ .trends-dialog .trends-exact thead th:not(:first-child) .trends-column-label{display:block;width:max-content;max-width:calc(64cqi - 20px);white-space:normal;overflow-wrap:anywhere}
+ .trends-dialog .trends-exact [data-model-status]{scroll-margin-inline:12px}
 }
 @container trend-card (max-width:52rem){
  .trends-chart-body{grid-template-columns:minmax(0,1fr);gap:12px}
