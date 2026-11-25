@@ -8,19 +8,23 @@ const manualOnly = state => state && (!state.supported || state.phase === "manua
 const checkingMessage = "Checking for updates";
 const updatingMessage = "WIRE is updating";
 const minManualCheckMs = 3000;
+const validRelease = (release, commit) => release == null || release.commit === commit && sha(commit)
+    && /^v\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(release.tag) && release.url === `https://github.com/likamrat/wire/releases/tag/${release.tag}`
+    && typeof release.notes === "string" && release.notes.length <= 64000;
 function decode(value) {
     if (!value || typeof value.supported !== "boolean" || typeof value.automatic !== "boolean"
         || !phases.includes(value.phase) || typeof value.message !== "string"
         || ![value.installed, value.candidate, value.dismissed].every(id => id === null || sha(id))
         || value.lastChecked !== null && (!Number.isFinite(value.lastChecked) || !Number.isFinite(new Date(value.lastChecked).getTime()))
         || value.packageVersion !== undefined && typeof value.packageVersion !== "string"
+        || !validRelease(value.availableRelease,value.candidate) || !validRelease(value.installedRelease,value.installed)
         || value.refusal !== undefined && (!uuid(value.refusal?.operation) || typeof value.refusal.message !== "string")
         || value.clientEntry !== undefined && !asset(value.clientEntry)) throw new Error("WIRE returned an unreadable update status.");
     return value;
 }
 
 /** Page-owned controls never renew a capability or replay an update command. */
-export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, formatChecked }) {
+export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, formatChecked, openNotes }) {
     const $ = id => document.getElementById(id);
     const dialog = $("appUpdateFence"), notice = $("appUpdateNotice"), manual = $("appUpdateCheck"), automatic = $("appUpdateAuto");
     const entry = new URL(loadedEntry);
@@ -28,7 +32,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     let state, busy = false, expected, checkingRestart = false, allowReload = false, storageAvailable = true;
     let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "";
     let manualChecking = false, endCheckFeedback, openingStatusOnly = false, changingPreferences = false;
-    let checkingViews = false, viewResult = "";
+    let notesTag = null, notesText;
     let coordination = false, peerWatch, peerTimer;
     let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
     function receipt(value) {
@@ -39,16 +43,43 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     function render() {
         const available = state?.supported && state.phase === "available" && sha(state.candidate) && state.candidate !== state.installed;
         const shown = available && state.candidate !== state.dismissed;
-        $("appUpdateCheckViews").hidden = !available || !coordination;
-        $("appUpdateCheckViews").disabled = busy || checkingViews || Boolean(expected) || !panelVerified;
-        const viewStatus = $("appUpdateViewStatus");
-        viewStatus.hidden = !available || !viewResult;
-        if (viewStatus.textContent !== viewResult) viewStatus.textContent = viewResult;
+        const offered = available ? state.availableRelease : null, installed = state?.installedRelease;
+        for (const [id, release] of [["noticeReleaseNotes", shown && !success && !result && offered],["availableReleaseNotes",offered],["installedReleaseNotes",installed]]) {
+            const link = $(id);
+            link.hidden = !release;
+            link.textContent = release ? id === "noticeReleaseNotes" ? "What's new" : id === "availableReleaseNotes" ? "What's new in this update" : "Installed release notes" : "";
+            if (release) link.href = `/settings?section=release-notes&release=${release.tag}`;
+            else link.removeAttribute("href");
+        }
+        if (notesTag !== null) {
+            const record = [offered,installed].find(r=>r && r.tag===notesTag);
+            $("releaseReaderVersion").textContent = record?.tag ?? "";
+            $("releaseReaderStatus").textContent = record ? record === installed ? "Installed version" : "Available update"
+                : !state || state.phase === "checking" ? "Reading release information…" : "These notes are not available for this installation.";
+            const github = $("releaseReaderGitHub"); github.hidden = !record;
+            if (record) github.href = record.url; else github.removeAttribute("href");
+            const body = $("releaseNotesBody");
+            if (notesText !== record?.notes) {
+                body.replaceChildren(); notesText = record?.notes;
+                let list;
+                for (const line of (notesText ?? "").split(/\r?\n/)) {
+                    if (!line.trim() || /^## What's new in v[\d.]+\s*$/i.test(line)) continue;
+                    const bullet = /^[-*] (.+)/.exec(line), heading = /^#{1,6} (.+)/.exec(line);
+                    if (!bullet) list = null;
+                    if (bullet && !list) { list = document.createElement("ul"); body.append(list); }
+                    const node = document.createElement(bullet ? "li" : heading ? "h3" : "p");
+                    node.textContent = bullet?.[1] ?? heading?.[1] ?? line;
+                    (list ?? body).append(node);
+                }
+            }
+            $("releaseReaderApply").hidden = !record || record !== offered;
+            $("releaseReaderApply").disabled = busy || Boolean(expected) || !panelVerified;
+        }
         notice.toggleAttribute("data-install-result", Boolean(result));
         notice.inert = Boolean(expected) || !shown && !success && !result;
         if (!notice.inert) {
             notice.toggleAttribute("data-updated", Boolean(success));
-            const heading = $("appUpdateHeading"), title = success || (result ? "Update not installed" : "WIRE update available");
+            const heading = $("appUpdateHeading"), title = success || (result ? "Update not installed" : offered ? `WIRE ${offered.tag} is available` : "WIRE update available");
             if (heading.textContent !== title) heading.textContent = title;
             const detail = $("appUpdateDetail");
             const description = success ? "" : result || feedback || "Update and restart WIRE. Your saved data won’t change.";
@@ -57,7 +88,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             $("appUpdateApply").hidden = !shown || Boolean(success);
         }
         $("settingsAppUpdate").hidden = !available;
-        for (const id of ["appUpdateApply", "settingsAppUpdate"]) $(id).disabled = busy || checkingViews || Boolean(expected) || !panelVerified;
+        for (const id of ["appUpdateApply", "settingsAppUpdate"]) $(id).disabled = busy || Boolean(expected) || !panelVerified;
         $("appUpdateDismiss").disabled = busy || Boolean(expected);
         const updating = ["preparing", "restarting", "checking"].includes(state?.phase);
         const manualMode = Boolean(manualOnly(state));
@@ -71,12 +102,12 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         manual.setAttribute("aria-busy", String(manualChecking));
         manual.querySelector(".check-action-pending").hidden = !manualChecking;
         const status = feedback || (result ? `Update not installed. ${result}` : checking ? checkingMessage
-            : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
+            : offered ? `WIRE ${offered.tag} is available.` : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
         const lastCheck = available || checking || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
         const summary = [status, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
         if (line.textContent !== summary) line.textContent = summary;
         line.hidden = !summary;
-        $("appUpdateVersion").textContent = state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";
+        $("appUpdateVersion").textContent = installed ? `WIRE ${installed.tag}` : state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";
     }
     async function post(action, fields = {}) {
         const response = await fetch("/api/app-update", { ...fixed, method: "POST",
@@ -120,7 +151,6 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             if (generation !== lifetime) return;
             openingStatusOnly = false;
             state = next;
-            if (state.candidate !== previousCandidate) viewResult = "";
             coordination ||= next.coordinated === true;
             panelVerified = true;
             success = "";
@@ -181,18 +211,6 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (hold) return hold.kind;
         return !storageAvailable || unfinishedAtSuspension || changingPreferences ? "operation" : "";
     }
-    async function checkOpenViews() {
-        if (checkingViews || busy || expected || !panelVerified || !coordination || state?.phase !== "available") return;
-        const generation = lifetime, candidate = state.candidate;
-        checkingViews = true; viewResult = "Checking open views…"; render();
-        try {
-            const answer = await peerRequest("check-views", { hold: readinessHold() }, AbortSignal.timeout(15000));
-            if (typeof answer.message !== "string" || !answer.message) throw new Error("WIRE could not read the view check.");
-            if (lifetime === generation && candidate === state?.candidate && !expected) viewResult = answer.message;
-        } catch (error) {
-            if (lifetime === generation && !expected) viewResult = error.status ? error.message : "WIRE could not confirm the open views. No update was started by this check.";
-        } finally { checkingViews = false; render(); }
-    }
     async function watchPeers() {
         if (peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
         const controller = new AbortController(), generation = lifetime;
@@ -213,7 +231,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             }
             if (!hold) {
                 clearTimeout(scheduleTimer); restoredReceipt = false;
-                fence(updatingMessage); viewResult = ""; render();
+                fence(updatingMessage); render();
                 hold = readinessHold();
             }
             let acknowledgment;
@@ -273,7 +291,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                         fence("Update status does not confirm the running build. Check restart status before continuing.", true); return;
                     }
                     state = confirmed; panelVerified = true; coordination ||= confirmed.coordinated === true;
-                    finish(confirmed.packageVersion ? `WIRE updated to v${confirmed.packageVersion}` : "WIRE updated", true);
+                    finish(confirmed.installedRelease ? `WIRE updated to ${confirmed.installedRelease.tag}` : confirmed.packageVersion ? `WIRE updated to v${confirmed.packageVersion}` : "WIRE updated", true);
                     return;
                 }
                 const file = await fetch(health.clientEntry, { ...fixed, signal: AbortSignal.timeout(4000) });
@@ -308,14 +326,14 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         catch { return { kind: "operation", message: "WIRE could not verify that this panel is ready. Resolve unfinished work before updating." }; }
     }
     async function apply() {
-        if (busy || checkingViews || expected || !panelVerified || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
+        if (busy || expected || !panelVerified || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
         success = "";
         const candidate = state.candidate, hold = reason();
         if (hold || unfinishedAtSuspension) { result = hold?.message || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
         if (!uuid(runtimeId) || !sha(state.installed) || entry.origin !== location.origin || !asset(entry.pathname)) {
             result = "This panel cannot verify its installed build. Reopen WIRE at its original address before updating."; render(); return;
         }
-        busy = true; feedback = result = viewResult = ""; clearTimeout(scheduleTimer);
+        busy = true; feedback = result = ""; clearTimeout(scheduleTimer);
         try {
             if (!storageAvailable) throw new Error();
             restoredReceipt = false;
@@ -348,7 +366,6 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     window.addEventListener("pagehide", event => {
         const opening = lifetime === 0 && openingStatusOnly && !panelVerified;
         lifetime++;
-        viewResult = "";
         endCheckFeedback?.();
         peerWatch?.abort(); clearTimeout(peerTimer); peerTimer = undefined;
         clearTimeout(scheduleTimer);
@@ -372,7 +389,13 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     });
     $("appUpdateApply").addEventListener("click", apply);
     $("settingsAppUpdate").addEventListener("click", apply);
-    $("appUpdateCheckViews").addEventListener("click", checkOpenViews);
+    $("releaseReaderApply").addEventListener("click", apply);
+    for (const id of ["noticeReleaseNotes","availableReleaseNotes","installedReleaseNotes"]) $(id).addEventListener("click", e => {
+        if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        const record = id === "installedReleaseNotes" ? state?.installedRelease : state?.availableRelease;
+        if (record && !expected) openNotes(record.tag);
+    });
     $("appUpdateRecover").addEventListener("click", () => void recover(0, "", true));
     $("appUpdateDismiss").addEventListener("click", () => {
         if (success || result && state?.phase !== "available") {
@@ -408,6 +431,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     return {
         render,
+        showNotes(tag) { notesTag = tag; if (tag !== null) render(); },
         reconnecting,
         locked: () => Boolean(expected),
         beforeOwnerRetirement() { unfinishedAtSuspension ||= Boolean(reason()); },

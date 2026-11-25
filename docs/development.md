@@ -69,12 +69,43 @@ to rebase or discard someone's edits.
 
 WIRE checks when first opened after launch and daily while in use.
 
-- It compares the running app with the official `main` branch, so an app change
-  can be offered even if the package version stays the same.
-- Changes to contributor docs, tests or CI alone don't create an update notice.
+- By default it reads the latest published stable GitHub Release, verifies its
+  tag against official `main`, and installs that exact commit. A newer merge,
+  an unpublished tag, and a draft do not trigger public updates.
+- For an isolated development installation tracking **every** official main
+  push, set `WIRE_UPDATE_CHANNEL=main` in the launcher's environment before
+  starting it. A docs-only push qualifies. This does not run GitHub Actions
+  or change any other installation's channel.
 - Git uses the current user's repository access. No source approval or Copilot
   sign-in is requested.
 - A failed check isn't "up to date."
+
+An older launcher keeps its own update rules even after it has started newer
+app code. Do not pull a changed base checkout under an active update slot, clear
+its journal, or restore old data. If the old launcher cannot transition, leave
+the current installation intact pending a supported operator upgrade. A clean
+release-aware installation is not evidence of a successful legacy migration.
+
+#### Prepare a release without Actions
+
+Fetch official `main` and choose its exact commit. Run
+`npm run release:prepare -- --commit FULL_SHA` to print the proposed next patch
+version and notes. For the first release, also supply `--baseline PREVIOUSLY_DELIVERED_SHA`;
+use `--version vX.Y.Z` to override the proposed version. The baseline is excluded
+from the release range. Check the selected revision, or reuse checks of that same
+revision. `main` can continue advancing.
+
+Add `--draft` only when you intend to create a draft in `likamrat/wire` with
+the signed-in GitHub CLI account. Review the version, target and wording on
+GitHub, then publish explicitly. Prefer short `Highlights`, `Added`, `Changed`,
+`Fixed` or `Removed` sections as applicable. The reviewed GitHub body supplies
+the in-app notes. After an uncertain create or a conflicting tag, inspect the
+existing draft and its target; do not re-tag or publish blindly.
+
+The optional `scripts/release-workflow.yml.example` is **not an active workflow**.
+Only after a separate activation decision, install it in `.github/workflows/`.
+Its explicit dispatch runs broader checks on the chosen commit and invokes
+the same draft preparation. It does not trigger on pushes or publish a draft.
 
 #### What happens during an update
 
@@ -208,6 +239,7 @@ address and verifies its bytes. It doesn't update your installation.
 
 | `WIRE_UPDATE_BROWSER` | What it exercises |
 | --- | --- |
+| `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `1` | **Update and restart** in Settings, then verifies that the reloaded browser runs the new build. Needs Microsoft Edge Stable on Windows, or Playwright Chromium on WSL. |
 | `reloaded` | Settings and Analyze in two windows of the same browser profile. It replaces the disposable starter, reloads Analyze during a read, checks a missing readiness acknowledgment in both windows, then verifies each window's original destination after one restart. |
 | `manual` | Lets you try the update yourself on Windows or WSL. |
@@ -362,8 +394,8 @@ reading position.
 
 Guides that differ show **Edited**, and guides that don't exist there yet show
 **New**. In a clone of the WIRE repository they're compared with the GitHub
-main that WIRE last fetched; select **GitHub main** and **Check now** first to
-compare with the latest. A fork is compared with its own last commit.
+main that WIRE last fetched, or with the checkout's last commit if it has no
+main comparison. A fork is compared with its own last commit.
 
 The preview uses repository filenames to check links. It reads only guide and
 image contents and doesn't upload your edits. An installation started with

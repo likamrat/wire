@@ -73,10 +73,9 @@ random capabilities, TTL and the 128-panel limit still apply.
   grant. A suspended document or one with unresolved work doesn't take this
   path.
 
-**Check open views** asks the existing participants for their current hold, not
-for permission to restart. It reports a count of missing replies rather than
-guessing whether a window was closed. It neither stages a build nor creates a
-restart receipt, releases a participant or supplies readiness for a later Apply.
+**Update and restart** coordinates participants on this instance. It does not
+ask users to check each window. A missing reply is not evidence of an unsaved
+edit; do not release a participant or replay an uncertain restart.
 
 There's no general HTML fallback for other paths, files, APIs or methods. The
 localhost spelling is only an entry redirect for root navigation; fragments stay

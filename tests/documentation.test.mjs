@@ -6,7 +6,7 @@ import { documentationRepository } from "./documentation-fixture.mjs";
 import { renderGuide, resolveTargets, githubSlug } from "../lib/documentation-render.mjs";
 import { createDocumentationRoutes } from "../lib/documentation-http.mjs";
 
-test("documentation follows a newer GitHub main without a WIRE release and keeps the last fetch when offline", async t => {
+test("installed guides remain pinned; explicitly previewed branches bind text and images to one revision", async t => {
     const repo = await documentationRepository(t);
     let clock = Date.parse("2026-10-02T09:00:00Z");
     const source = repo.source({ now: () => clock });
@@ -19,14 +19,25 @@ test("documentation follows a newer GitHub main without a WIRE release and keeps
     const published = await repo.publish("docs/user-guide.md", "# Use WIRE\n\nNewer guidance from main.\n\n## Trends\n\nText.\n", "Docs only");
     assert.deepEqual(await source.check({ force: true }), { checked: true });
     const after = await source.catalog("official");
-    assert.equal(after.source.kind, "official");
-    assert.equal(after.source.commit, published);
+    assert.equal(after.source.kind, "build");
+    assert.equal(after.source.commit, repo.head());
     assert.equal(after.source.failedAt, null);
     assert.ok(after.source.checkedAt);
-    const page = await source.page(after.source.revision, "user-guide");
+    const selection = (await source.branches()).find(item=>item.branch==="main");
+    const preview = await source.catalog("branch",selection);
+    assert.equal(preview.source.commit,published);
+    const page = await source.page(preview.source.revision, "user-guide");
     assert.match(page.html, /Newer guidance from main/);
     assert.match(page.sourceUrl, new RegExp(`/blob/${published}/docs/user-guide\\.md$`));
     assert.equal(repo.head(), before.source.commit, "the running checkout is unchanged");
+    const imageFile = "docs/images/trends-overview.png";
+    const originalImage = await source.asset(before.source.revision,imageFile);
+    const nextImage = Buffer.concat([originalImage,Buffer.from("fixture illustration change")]);
+    await repo.publish(imageFile,nextImage,"Revise guide artwork");
+    await assert.rejects(source.catalog("branch",selection),{code:"documentation_branch_changed"});
+    const moved = await source.catalog("branch",(await source.branches()).find(item=>item.branch==="main"));
+    assert.deepEqual(await source.asset(moved.source.revision,imageFile),nextImage);
+    assert.deepEqual(await source.asset(preview.source.revision,imageFile),originalImage);
 
     clock += 60_000;
     assert.deepEqual(await source.check(), { checked: false }, "automatic checks are spaced out");
@@ -34,8 +45,10 @@ test("documentation follows a newer GitHub main without a WIRE release and keeps
     await rename(repo.origin, repo.origin + ".offline");
     await source.check({ force: true });
     const offline = await source.catalog("official");
-    assert.equal(offline.source.kind, "official");
-    assert.equal(offline.source.commit, published, "the last fetched main stays readable");
+    assert.equal(offline.source.kind, "build");
+    assert.equal(offline.source.commit, repo.head());
+    assert.match((await source.page(preview.source.revision,"user-guide")).html,/Newer guidance/);
+    await assert.rejects(source.branches(),/Couldn't list/);
     assert.ok(offline.source.failedAt > offline.source.checkedAt);
     assert.match(offline.source.failure, /Couldn't reach GitHub main/);
 });
@@ -108,6 +121,7 @@ test("guide images load only through a live panel's ticket from the same origin"
     const routes = createDocumentationRoutes(source, { ownerActive: () => active });
     const catalog = await routes.handle("/api/documentation/catalog", {}, "owner-a");
     const page = await routes.handle("/api/documentation/page", { revision: catalog.source.revision, guide: "rendering-check" }, "owner-a");
+    await assert.rejects(routes.handle("/api/documentation/page",{revision:catalog.source.revision,guide:"rendering-check"},"owner-b"),{status:409});
     assert.match(page.assetBase, /^\/api\/documentation\/asset\/[a-f0-9]{64}\/$/);
     await assert.rejects(routes.handle("/api/documentation/page", { revision: catalog.source.revision, guide: "../../package" }, "owner-a"), { status: 404 });
     await assert.rejects(routes.handle("/api/documentation/catalog", { source: "official", path: "/" }, "owner-a"), { status: 422 });

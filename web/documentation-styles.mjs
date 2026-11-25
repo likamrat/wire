@@ -36,6 +36,8 @@ export const documentationStyles = `
 
 .docs-source{display:grid;justify-items:start;gap:8px;margin:0 0 var(--space-lg);font-size:var(--type-caption);color:var(--muted);line-height:1.5}
 .docs-source>p{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0}
+.docs-source-label{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%}
+.docs-source-label select{max-width:100%;font:inherit;color:var(--ink)}
 .docs-sep{opacity:.6}
 .docs-commit{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:.95em;border-radius:var(--radius-small);padding:1px 6px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .docs-source-warning{display:inline-flex;align-items:center;gap:6px;color:var(--ink)}

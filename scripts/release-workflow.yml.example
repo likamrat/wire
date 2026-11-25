@@ -1,0 +1,61 @@
+# Inert here. Install under .github/workflows only after explicit activation.
+name: Prepare a WIRE release
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact official main commit to release
+        required: true
+      baseline:
+        description: Previous delivered commit (first release only)
+        required: false
+permissions:
+  contents: read
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify chosen main commit
+        env:
+          TARGET: ${{ inputs.commit }}
+        run: |
+          [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$TARGET" HEAD
+          git checkout --detach "$TARGET"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci && npm run check && npm run typecheck && npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: node --test tests/update-source.test.mjs tests/update-admission.test.mjs tests/documentation.test.mjs tests/documentation.browser.test.mjs tests/app-update.browser.test.mjs
+  draft:
+    needs: qualify
+    concurrency:
+      group: wire-release-draft
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Prepare reviewed draft (never publishes)
+        env:
+          TARGET: ${{ inputs.commit }}
+          BASELINE: ${{ inputs.baseline }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=(--commit "$TARGET" --draft)
+          if [[ -n "$BASELINE" ]]; then args+=(--baseline "$BASELINE"); fi
+          node scripts/prepare-release.mjs "${args[@]}"

@@ -17,8 +17,9 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     const doc = host.ownerDocument, win = doc.defaultView;
     const reduce = win.matchMedia("(prefers-reduced-motion: reduce)");
     let catalog = null, page = null, view = null, token = 0, spyFrame = 0, liveTimer = 0, liveVersion = null, visible = false, loading = null;
-    let sourceChoice = (() => { try { return win.sessionStorage.getItem(SOURCE_KEY) === "checkout" ? "checkout" : "official"; } catch { return "official"; } })();
-    const pages = new Map(), positions = new Map(), origins = new Map(), listeners = new AbortController();
+    let sourceChoice = (() => { try { return win.sessionStorage.getItem(SOURCE_KEY) === "checkout" ? "checkout" : "installed"; } catch { return "installed"; } })();
+    let preview = null, branchList = null;
+    const pages = new Map(), positions = new Map(), origins = new Map(), sources = new Map(), listeners = new AbortController();
 
     const el = (tag, props = {}, ...children) => {
         const node = doc.createElement(tag);
@@ -33,23 +34,12 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     };
     const glyph = role => { const span = el("span", { class: "docs-icon", "aria-hidden": "true" }); span.innerHTML = icon(role); return span; };
     const short = commit => commit?.slice(0, 7) ?? "";
-    const relative = iso => {
-        if (!iso) return "";
-        const seconds = (Date.now() - Date.parse(iso)) / 1000, format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-        for (const [unit, size] of [["year", 31536e3], ["month", 2592e3], ["day", 86400], ["hour", 3600], ["minute", 60]])
-            if (Math.abs(seconds) >= size) return format.format(-Math.round(seconds / size), unit);
-        return "just now";
-    };
     const hrefFor = (guide, fragment = "") => `/documentation${guide ? "?guide=" + encodeURIComponent(guide) : ""}${fragment ? "#" + encodeURIComponent(fragment) : ""}`;
     const guides = () => catalog?.groups.flatMap(group => group.items) ?? [];
     const base = () => catalog?.source.comparedWith === "main" ? "GitHub main" : "your last commit";
     const positionKey = () => `${win.location.pathname}${win.location.search}${win.location.hash}@${win.history.state?.evidenceView?.position ?? ""}`;
 
-    async function loadCatalog() {
-        catalog = await api("/api/documentation/catalog", { source: sourceChoice });
-        if (catalog.source.kind !== "checkout" && sourceChoice === "checkout") sourceChoice = "official";
-        return catalog;
-    }
+    const loadCatalog = () => api("/api/documentation/catalog", { source: sourceChoice, ...(sourceChoice === "branch" && preview) });
     async function loadPage(guide) {
         const key = `${catalog.source.revision}|${guide}`;
         if (!pages.has(key)) pages.set(key, api("/api/documentation/page", { revision: catalog.source.revision, guide })
@@ -211,19 +201,10 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     function sourceLine() {
         const source = catalog.source, parts = [], sep = () => el("span", { class: "docs-sep", "aria-hidden": "true" }, "·");
         const commit = value => value ? el("span", { class: "docs-commit", title: value }, glyph("doc-commit"), short(value)) : null;
-        const checkButton = label => el("button", { type: "button", class: "docs-text-button", onclick: () => refresh({ force: true }) }, label);
-        if (source.kind === "official") {
-            parts.push(el("span", {}, "From GitHub main"), sep(), commit(source.commit), sep(), el("span", {}, `published ${relative(source.published)}`));
-            if (source.failedAt && (!source.checkedAt || source.failedAt > source.checkedAt))
-                parts.push(el("span", { class: "docs-source-warning" }, glyph("doc-offline"), `${source.failure} Showing main as last fetched.`), checkButton("Try again"));
-            else if (source.checkedAt) parts.push(sep(), el("span", {}, `checked ${relative(source.checkedAt)}`), sep(), checkButton("Check now"));
-            else parts.push(sep(), el("span", { class: "docs-quiet" }, "checking GitHub…"));
+        if (source.kind === "branch") {
+            parts.push(el("span", {}, "Branch preview · guides only"), commit(source.commit));
         } else if (source.kind === "build") {
             parts.push(el("span", {}, "Guides included with this WIRE build"), sep(), commit(source.commit));
-            if (source.canCheck) parts.push(source.failedAt
-                ? el("span", { class: "docs-source-warning" }, glyph("doc-offline"), `${source.failure} These may not be the latest guides.`)
-                : el("span", { class: "docs-quiet" }, "Not checked against GitHub main yet."), checkButton(source.failedAt ? "Try again" : "Check GitHub main"));
-            else parts.push(el("span", { class: "docs-quiet" }, "This copy doesn't track the official WIRE repository, so it can't check GitHub main."));
         } else if (source.kind === "copy") {
             parts.push(el("span", {}, "Guides included with this copy of WIRE."), el("span", { class: "docs-quiet" }, "It has no Git history, so it can't check GitHub main."));
         } else {
@@ -232,11 +213,35 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
                 el("span", {}, source.compared ? changed ? `${changed} ${changed === 1 ? "guide differs" : "guides differ"} from ${base()}` : `Same as ${base()}` : "Not compared"),
                 sep(), el("span", {}, "updates when you save"));
         }
-        const choose = choice => () => { if (choice !== sourceChoice) switchSource(choice); };
-        const switcher = source.checkout ? el("div", { class: "docs-source-switch", role: "group", "aria-label": "Documentation source" },
-            el("button", { type: "button", "aria-pressed": String(sourceChoice === "official"), onclick: choose("official") }, "GitHub main"),
-            el("button", { type: "button", "aria-pressed": String(sourceChoice === "checkout"), onclick: choose("checkout"), title: "Read the guides in this folder, including changes you haven't committed" }, "This checkout")) : null;
-        return el("div", { class: `docs-source docs-source-${source.kind}` }, el("p", {}, ...parts), switcher);
+        const line = el("div", { class: `docs-source docs-source-${source.kind}` }, el("p", {}, ...parts));
+        if (!source.checkout && !source.canCheck) return line;
+        const select = el("select", {id:"guideSource"}, el("option",{value:"installed"},"Installed version"));
+        if (source.checkout) select.append(el("option",{value:"checkout"},"This checkout"));
+        if (source.canCheck) {
+            select.append(el("option",{value:"branches"},branchList ? "Reload branch list…" : "Preview a branch…"));
+            if (branchList) select.append(el("optgroup",{label:"Pushed branches"}, ...branchList.map(({branch}) => el("option",{value:`branch:${branch}`},branch))));
+        }
+        select.value = sourceChoice === "branch" ? `branch:${preview.branch}` : sourceChoice;
+        const info = el("span", {role:"status"});
+        select.addEventListener("change", async () => {
+            const value = select.value;
+            if (value === "branches") {
+                select.disabled = true; info.textContent = "Loading branches…";
+                try {
+                    const result = await api("/api/documentation/branches",{});
+                    if (!visible || !select.isConnected) return;
+                    branchList = result.branches;
+                    line.replaceWith(sourceLine());
+                    win.requestAnimationFrame(() => (host.querySelector("#guideSource-control") ?? host.querySelector("#guideSource"))?.focus({preventScroll:true}));
+                    announce(branchList.length ? "Branches loaded. Choose a branch to preview." : "No pushed branches available.");
+                } catch (error) { info.textContent = error.message; select.disabled = false; select.value = sourceChoice === "branch" ? `branch:${preview.branch}` : sourceChoice; }
+                return;
+            }
+            preview = value.startsWith("branch:") ? branchList.find(item => `branch:${item.branch}` === value) : null;
+            switchSource(preview ? "branch" : value);
+        });
+        line.prepend(el("div", {class:"docs-source-label"}, el("label",{for:"guideSource"},"Guide source"), select, info));
+        return line;
     }
 
     function pager(guide) {
@@ -343,11 +348,17 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         const mine = ++token, guide = route.guide ?? "";
         loading = guide;
         try {
-            if (!catalog) await loadCatalog();
+            if (!catalog) {
+                const next = await loadCatalog();
+                if (mine !== token || !visible) return;
+                catalog = next;
+            }
             if (mine !== token) return;
             if (guide && !guides().some(item => item.guide === guide)) throw Object.assign(new Error("There's no guide at this address in these guides. It may have been renamed."), { status: 404 });
             const data = await loadPage(guide);
             if (mine !== token || !visible) return;
+            sources.set(positionKey(), { choice:sourceChoice, preview });
+            if (sources.size > 64) sources.delete(sources.keys().next().value);
             const previousFocus = quiet && focusSelector(doc.activeElement), previousTop = win.scrollY;
             const folds = quiet ? [...host.querySelectorAll(".docs-left-toggle[open], .docs-outline-inline[open]")].map(node => node.className) : [];
             const swap = () => { view = layout(data); host.replaceChildren(view); page = data; };
@@ -357,8 +368,11 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (quiet) {
                 for (const name of folds) { const fold = view.querySelector(`.${name}`); if (fold) fold.open = true; }
                 win.scrollTo({ top: previousTop, behavior: "instant" });
-                if (previousFocus) (view.querySelector(previousFocus) ?? view.querySelector("#docTitle")).focus({ preventScroll: true });
+                if (previousFocus) win.requestAnimationFrame(() => {
+                    if (mine === token && visible) (view.querySelector(previousFocus) ?? view.querySelector("#docTitle")).focus({ preventScroll: true });
+                });
             } else if (!(restore && restoreOrigin()) && !scrollToFragment(fragment())) {
+                if (fragment()) announce("This section is no longer in the guide. Showing the beginning.");
                 win.scrollTo({ top: restore ? positions.get(positionKey()) ?? 0 : 0, behavior: "instant" });
                 view.querySelector("#docTitle")?.focus({ preventScroll: true });
             }
@@ -366,41 +380,16 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             watchCheckout();
         } catch (error) {
             if (mine !== token || !visible) return;
-            if (error?.code === "documentation_revision_changed" || error?.status === 409) { catalog = null; pages.clear(); return render(route, { restore, quiet }); }
+            if ((error?.reason ?? error?.code) === "documentation_revision_changed" && catalog) { catalog = null; pages.clear(); return render(route, { restore, quiet }); }
             page = null;
             view = el("div", { class: "docs-paper docs-error", role: "alert" },
                 el("h1", { id: "docTitle", tabindex: "-1" }, error?.status === 404 ? "Guide not found" : "Couldn't load the guides"),
-                el("p", {}, error?.status === 404 ? error.message : "WIRE couldn't read the documentation. Your activity and reports are unaffected."),
+                el("p", {}, error.message || "WIRE couldn't read the documentation."),
+                sourceChoice !== "installed" ? el("button",{type:"button",onclick:()=>{branchList=null;preview=null;switchSource("installed");}},"Read installed guides") : null,
                 el("p", {}, el("a", { href: hrefFor(""), "data-guide": "" }, "Go to the documentation index")));
             host.replaceChildren(view);
             if (!quiet) view.querySelector("#docTitle").focus({ preventScroll: true });
         } finally { if (mine === token) loading = null; }
-    }
-
-    async function refresh({ force = false } = {}) {
-        if (!catalog || !catalog.source.canCheck || sourceChoice !== "official") return;
-        const before = catalog.source.revision;
-        if (force) announce("Checking GitHub main for newer guides…");
-        try { await api("/api/documentation/check", { force }); } catch {
-            if (visible && sourceChoice === "official") announce("Couldn't check for newer guides. Try again from Documentation.");
-            return;
-        }
-        if (!visible || sourceChoice !== "official") return;
-        try {
-            const reloaded = await api("/api/documentation/catalog", { source: sourceChoice });
-            if (!visible || sourceChoice !== "official") return;
-            catalog = reloaded;
-        } catch { return; /* access changed or WIRE stopped; the page on screen stays as it was */ }
-        const changed = catalog.source.revision !== before;
-        if (changed) { pages.clear(); await render({ guide: loading ?? page?.guide ?? "" }, { quiet: true }); }
-        else {
-            const line = view?.querySelector(".docs-source");
-            const focus = line?.contains(doc.activeElement) && focusSelector(doc.activeElement);
-            line?.replaceWith(sourceLine());
-            if (focus) view.querySelector(focus)?.focus({ preventScroll: true });
-        }
-        if (changed) announce("Updated to the latest guides from GitHub main.");
-        else if (force) announce(catalog.source.failedAt && catalog.source.failedAt > (catalog.source.checkedAt ?? "") ? "Couldn't reach GitHub main." : "These are the latest guides on GitHub main.");
     }
 
     function switchSource(choice) {
@@ -462,6 +451,10 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         show(route, { restore = false } = {}) {
             const first = !visible;
             visible = true;
+            const prior = restore && sources.get(positionKey());
+            if (prior && (prior.choice !== sourceChoice || prior.preview?.commit !== preview?.commit || prior.preview?.branch !== preview?.branch)) {
+                sourceChoice = prior.choice; preview = prior.preview; catalog = null; pages.clear(); loading = null; token++;
+            }
             // The workspace re-renders often; a guide that is already loading keeps its request.
             if (loading !== null && loading === (route.guide ?? "")) return;
             if (page && page.guide === (route.guide ?? "") && catalog) {
@@ -473,10 +466,10 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
                 watchCheckout();
                 return;
             }
-            void render(route, { restore }).then(() => { if (first) void refresh(); });
+            void render(route, { restore });
         },
         hide() { visible = false; win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
-        withdraw() { visible = false; win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; pages.clear(); positions.clear(); origins.clear(); host.replaceChildren(); },
+        withdraw() { visible = false; win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; preview = branchList = null; sourceChoice = "installed"; pages.clear(); positions.clear(); origins.clear(); sources.clear(); host.replaceChildren(); },
         close() { this.withdraw(); listeners.abort(); },
     };
 }

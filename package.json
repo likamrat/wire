@@ -37,6 +37,7 @@
     "build": "node scripts/build-icon-assets.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "check": "node scripts/check.mjs",
+    "release:prepare": "node scripts/prepare-release.mjs",
     "pretest": "npm run build",
     "test": "node --test tests/*.test.mjs web/*.test.mjs web/frontend/*.test.ts",
     "test:history-compatibility": "node --test --test-name-pattern=\"history compatibility:|a managed mapping published during a read|new managed identity does not reset consumed cursors|the reviewed subset and original receipts\" tests/dynamic-collection.test.mjs tests/recollection-verified-records.browser.test.mjs",

@@ -33,11 +33,11 @@ export const settingsMarkup = `
     <h2 id="generalTitle" tabindex="-1">General</h2>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
-      <p id="appUpdateViewStatus" role="status" hidden></p>
+      <a id="availableReleaseNotes" hidden>What's new in this update</a>
+      <a id="installedReleaseNotes" hidden>Installed release notes</a>
       </div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled><span class="check-action-label">Check for updates</span><span class="check-action-pending" hidden><span class="update-spinner" aria-hidden="true"></span>Checking</span></button>
         <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
-        <button id="appUpdateCheckViews" type="button" class="quiet" hidden>Check open views</button>
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update and restart</button></div>
     </div>
     <div class="settings-task-row" id="appUpdateAutoRow" hidden><div class="settings-row-copy"><h3><label for="appUpdateAuto">Automatically check for updates</label></h3></div>
@@ -58,6 +58,14 @@ export const settingsMarkup = `
       <span class="preference-destination">Regional ${uxIcons.disclosure}</span>
     </a>
   </section>
+  <article class="settings-section release-reader" data-settings-section="release-notes" aria-labelledby="releaseNotesHeading" hidden>
+    <a class="release-back" href="/settings" data-settings-link>${uxIcons.back} General</a>
+    <header><img src="/favicon.svg" width="32" height="32" alt=""><h2 id="releaseNotesHeading" tabindex="-1">What's new in WIRE</h2></header>
+    <div class="release-meta"><strong id="releaseReaderVersion"></strong><span id="releaseReaderStatus" role="status"></span>
+      <a id="releaseReaderGitHub" target="_blank" rel="noopener noreferrer" hidden>View on GitHub ${uxIcons["doc-external"]}</a></div>
+    <div id="releaseNotesBody"></div>
+    <button type="button" class="primary app-update-action" id="releaseReaderApply" hidden>Update and restart</button>
+  </article>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
     <p class="settings-intro">Review what WIRE keeps on this device and what you can remove.</p>

@@ -1844,17 +1844,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsNavigation() {
         const section = workspaceState.route.view === "settings" ? settingsNavigation.resolve(workspaceState.route).section : "connection";
+        appUpdate?.showNotes(section === "release-notes" ? workspaceState.route.release ?? "" : null);
         $("settingsGeneralBack").hidden = workspaceState.route.view !== "settings"
             || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
         for (const pane of document.querySelectorAll("[data-settings-section]")) pane.hidden = pane.dataset.settingsSection !== section;
         for (const anchor of $("settingsCategoryNav").querySelectorAll("a[data-category]")) {
-            const selected = anchor.dataset.category === section;
+            const selected = anchor.dataset.category === (section === "release-notes" ? "general" : section);
             if (selected) anchor.setAttribute("aria-current", "page");
             else anchor.removeAttribute("aria-current");
             setRouteLink(anchor, routeFor("settings", { section: anchor.dataset.category, setting: undefined, issues: undefined }));
         }
-        setText($("settingsCategorySummary"), "Category: " + settingsNavigation.categories.find(category => category.id === section).title);
+        setText($("settingsCategorySummary"), "Category: " + (section === "release-notes" ? "General" : settingsNavigation.categories.find(category => category.id === section).title));
         const routeNotice = nativeSettingUnavailable(workspaceState.route.setting) ? sourceCollection.copilotOnly
             ? "This setting is not available in this release." : "This setting is not available for the registered Microsoft reads."
             : workspaceState.route.settingsWarning || (workspaceState.route.setting === "microsoft-connection"
@@ -1946,14 +1947,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelector(".settings-target")?.classList.remove("settings-target");
         if (compactSettings) $("settingsCategories").open = false;
         const resolved = settingsNavigation.resolve(workspaceState.route), entry = settingsNavigation.entries.find(entry => entry.id === resolved.setting);
-        let target = $(entry ? settingsTarget(entry) : settingsNavigation.categories.find(category => category.id === resolved.section).heading);
+        const heading = resolved.section === "release-notes" ? "releaseNotesHeading" : settingsNavigation.categories.find(category => category.id === resolved.section).heading;
+        let target = $(entry ? settingsTarget(entry) : heading);
         if (target?.tagName === "DETAILS") {
             target.open = true;
             presentation.setOpen(target.id, true);
             target = target.querySelector("summary");
         } else if (target?.tagName === "SELECT") target = $(target.id + "-control");
-        if (target?.disabled) target = target.closest(".ux-disabled-help") || $(settingsNavigation.categories.find(category => category.id === resolved.section).heading);
-        if (!target?.checkVisibility()) target = $(settingsNavigation.categories.find(category => category.id === resolved.section).heading);
+        if (target?.disabled) target = target.closest(".ux-disabled-help") || $(heading);
+        if (!target?.checkVisibility()) target = $(heading);
         if (!target.matches("button,input,summary,a,[tabindex]")) target.tabIndex = -1;
         if (entry) target.classList.add("settings-target");
         ux.restoreFocus(target);
@@ -12250,7 +12252,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     api.startAccess();
     const formatChecked = value => time.formatMoment(new Date(value).toISOString(), viewerTime);
-    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked, blocked() {
+    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked, openNotes: tag => navigate({view:"settings", section:"release-notes", release:tag}), blocked() {
         const report = reportJourney?.snapshot();
         if (collectionSettings?.hasDraft() || sourceSettings?.hasDraft() || assessmentUI?.hasUnfinishedChange()) {
             return { kind: "settings", message: "Save or cancel your Settings changes and resolve any unconfirmed changes before updating." };

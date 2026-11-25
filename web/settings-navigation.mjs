@@ -61,6 +61,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
     ];
     function resolve(route) {
         let section = route.section || categories[0].id, setting = route.setting, warning = "";
+        if (updates && section === "release-notes") return { view:"settings", section, warning };
         if (route.issues === "1") setting = "issues";
         else if (Object.hasOwn(sectionAliases, section)) {
             setting ||= sectionAliases[section].setting;

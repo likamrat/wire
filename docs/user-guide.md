@@ -814,11 +814,11 @@ If a window has an unfinished edit, save or cancel it there before updating. If
 a window doesn't confirm it's ready, WIRE stops before restarting. That message
 alone doesn't mean you left an edit unfinished.
 
-**Check open views** in General asks the registered views whether they have
-unfinished work, when an update is available. It doesn't install anything. If a
-view doesn't answer, keep your windows and work intact; another update click
-won't tell you which view was missing. WIRE checks again when you choose to
-restart.
+**What's new** opens the offered version's notes in WIRE. **View on GitHub**
+opens that exact GitHub Release. After a confirmed restart, **Installed release
+notes** in General opens the installed version's notes. A single click updates
+the local instance across its browsers; a WIRE instance on a different port
+with its own installation and data is unchanged.
 
 - Dismissing the notification leaves the update available in General.
 - If installation fails, General shows **Update not installed** and the
@@ -944,18 +944,15 @@ where you are. In a narrow window, both lists fold into **All guides** and
 Links, section addresses and your browser's Back and Forward work as they do on
 any web page. You can bookmark a section or share its address.
 
-The line under each title says which guides you're reading:
+**Installed version** reads the guides and images included with the running
+build. A documentation-only release uses the same **Update and restart**
+process as a code release.
 
-| You see | What it means |
-| --- | --- |
-| **From GitHub main** | The current guides from the WIRE repository. WIRE checks for newer ones when you open Documentation, at most every 15 minutes. Select **Check now** to check again. |
-| **Couldn't reach GitHub main** | The check failed. You're reading the guides WIRE last fetched, which may not be the latest. |
-| **Guides included with this WIRE build** | WIRE hasn't fetched GitHub main yet, or this copy doesn't come from the WIRE repository. |
-
-Newer guides appear without updating WIRE. A check fetches only the
-repository's main branch into WIRE's own Git data. It doesn't change your files,
-settings or installed version. Images come from the same version as the text.
-Images hosted on other sites aren't loaded; WIRE shows a link to them instead.
+In an official Git-backed installation, open **Guide source**, choose
+**Preview a branch…**, then pick a pushed branch. Its text and images come from
+one commit. Only this tab reads those guides: WIRE does not run branch code
+or change which app updates are offered. Choose **Installed version** to return.
+Images hosted on other sites aren't loaded; WIRE shows a link instead.
 
 If you're editing guides in your own clone or fork, see
 [Preview documentation changes](development.md#preview-documentation-changes).

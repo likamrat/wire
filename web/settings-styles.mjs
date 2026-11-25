@@ -1,4 +1,13 @@
 export const settingsStyles = `
+.release-reader>header,.release-meta{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.release-reader>header{margin:16px 0 8px}
+.release-meta{color:var(--muted);font-size:var(--type-small);border-bottom:1px solid var(--surface-divider);padding-bottom:16px}
+.release-reader .wire-icon{width:1em;height:1em;vertical-align:-.12em}
+#releaseNotesBody{max-width:68ch;margin:20px 0;overflow-wrap:anywhere}
+#releaseNotesBody h3{margin:20px 0 6px}
+#releaseNotesBody ul{padding-inline-start:1.4em}
+#noticeReleaseNotes,#availableReleaseNotes,#installedReleaseNotes,.release-meta a,.release-back{text-decoration:underline;text-underline-offset:3px}
+#availableReleaseNotes,#installedReleaseNotes{margin-inline-end:.75em}
 #appUpdateNotice {position:relative;box-sizing:border-box;max-width:100%;padding:var(--space-lg);margin-bottom:var(--space-lg);
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}

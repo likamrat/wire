@@ -102,12 +102,12 @@ export async function documentationRepository(t) {
         work, origin,
         head: () => git(work, "rev-parse", "HEAD"),
         // A docs-only commit published to "GitHub main", leaving the running copy untouched.
-        async publish(file, text, message = "Update guides") {
+        async publish(file, text, message = "Update guides", branch = "main") {
             git(publisher, "pull", "--quiet", "--ff-only");
             await writeFile(path.join(publisher, ...file.split("/")), text);
             git(publisher, "add", "-A");
             git(publisher, "commit", "--quiet", "-m", message);
-            git(publisher, "push", "--quiet", "origin", "HEAD:main");
+            git(publisher, "push", "--quiet", "origin", `HEAD:refs/heads/${branch}`);
             return git(publisher, "rev-parse", "HEAD");
         },
         source: (options = {}) => createDocumentationSource({ root: work, fixtureRemote: origin, ...options }),
