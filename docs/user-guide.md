@@ -32,9 +32,9 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 ## Pages and addresses
 
-**Analyze is the home page.** Open the address printed by WIRE as-is. Trends,
-Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
-`/compare` and `/settings`), so you can bookmark a page or a Settings category.
+Open the address WIRE prints to start in **Analyze**. Bookmark `/trends`,
+`/reports`, `/compare` or `/settings` to start on another page. Settings
+categories and [Documentation sections](#documentation) can be bookmarked too.
 
 Dates and filters change the results, not the address. A copied address opens
 the page in a fresh tab with its own defaults, not your filtered results. Older
@@ -51,45 +51,36 @@ instead of showing a broader result.
 
 ## Connect local history
 
-WIRE prompts you to connect when you first open an unconfigured instance.
+Choose **Review and connect** to check the source before WIRE reads your history.
+If you choose **Not now**, nothing connects. You can start later from Analyze
+or **Settings > Source access > Review source & connect**.
 
-1. Choose **Review and connect** in the welcome. **Not now** closes it and leaves
-   the connection prompt in Analyze. You can also use **Settings > Source
-   access > Review source & connect**.
-2. Check **Copilot metadata database** and **Chat history folder**. These must
-   point to the supported local Copilot installation whose history you want to read.
-   Choose **Change paths** if either location is wrong.
-3. Choose **History to include** and **Check frequency**, then select
-   **Approve source and start collection**.
-4. Choose **View activity** to open Analyze. The first read may take a few
-   minutes; activity appears as it is saved. If expected calls are missing,
-   open **Collection status** to see known history gaps.
+![Connect your Copilot history, with Review and connect and Not now.](images/first-connection.png)
 
-![The first-use welcome offers Review and connect or Not now.](images/first-connection.png)
+1. Check that **Copilot metadata database** and **Chat history folder** point
+   to the local GitHub Copilot app you want to read. Use **Change paths** to
+   correct a suggested location.
+2. Set **History to include** and **Check frequency**. When the paths and
+   settings are right, choose **Approve source and start collection**.
+3. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
+   read can take a few minutes.
 
-The welcome stays dismissed in this browser at this WIRE address. Dismissing it
-doesn't connect a source. Configured instances open normally, and Pause stays
-paused. A missing source or failed read shows its own explanation instead of
-asking you to keep waiting.
+Approval covers this instance and these local files. WIRE doesn't rerun prompts,
+make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
+Copilot replies is off by default and has its own control under **Settings >
+Privacy & saved data > Recorded replies**.
 
-If Settings reports a problem after you approve:
+If something looks wrong:
 
-- If it says the source settings were not saved, correct the paths or restore
-  local access, then approve again.
-- If it says the change is **unconfirmed**, read the current connection first.
-  Don't repeat the write.
+| What you see | What to do |
+| --- | --- |
+| A source is missing or a read failed | Read the reason in Settings. If the source settings **were not saved**, correct the paths or restore access before approving again. |
+| A change is **unconfirmed** | Check the current connection in Settings. Don't repeat the approval while its result is unknown. |
+| Some calls are missing | Open **Collection status**. It shows which history is pending, blocked, missing or only partly checked. Collection can be on before older history has finished. |
 
-Each independent instance needs its own source approval. Instances keep
-separate collection progress, settings, consent and saved reports.
-
-Collection can be on while older history is still catching up. **Collection
-status** shows pending, blocked, missing or bounded history; it doesn't
-guarantee complete coverage.
-
-Approval lets WIRE read that local history. It doesn't rerun prompts or make
-new Work IQ requests, and WIRE doesn't connect to Microsoft 365 Chat or Cowork.
-Saving Copilot reply text is a separate choice under
-**Settings > Privacy & saved data > Recorded replies**, and it starts off.
+Dismissing the welcome lasts for this browser at this WIRE address. Reopening
+a configured instance doesn't resume paused collection. A second instance has
+its own approval, settings, collection progress and saved reports.
 
 <a id="read-the-overview"></a>
 
@@ -102,12 +93,16 @@ list follows the same filters.
 Open **Filters** to narrow the view by Dates, Tool, Service involved, Outcome or
 Prompt author. **More filters** holds the additional choices.
 
-![Analyze Results with daily tool calls, recorded outcomes, daily token columns and collapse controls at the right of each chart heading.](images/analyze.png)
+![Nine days of tool calls above the results for all 23 calls: 17 completed and 6 failed. The bottom chart counts model tokens by day.](images/analyze.png)
 
 ### Read the charts
 
 When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
+
+Read a date for its daily count, or **Tool call results** for the whole period.
+In the example, November 19 had four calls. The six failures in the donut
+come from the full nine days.
 
 In **Tool call results**:
 
@@ -344,11 +339,11 @@ The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
 
-Hover highlights a card, but the card itself isn't a link. To open the
-right-hand reader, select the outcome below the prompt preview. Hover over its
-arrow or focus the link to see **View call details**.
+Select the outcome below a prompt to open the matching calls in the reader on
+the right. Hover over its arrow or focus the link for **View call details**.
+In this example, the calendar fetch completed, but `workiq-ask` timed out.
 
-![The View call details tip beside 1 tool call failed on an Analyze card, with the failed call and its returned HTTP 403 in the reader.](images/interaction.png)
+![An interaction card showing 6,000 model tokens and the timeout for call 2. The reader lists the completed fetch and the failed Ask Copilot call.](images/interaction.png)
 
 ### Calls and results
 
@@ -459,14 +454,13 @@ width. On a narrow screen, the reader uses one pane without sizing controls;
 **Close interaction** is beside the title.
 
 Choose **Maximize interaction** to give calls, long replies and tables more room
-without changing the text size. Each
-call shows its operation and outcome together, and a recorded failure reason
-stays with the call it explains. **Call details** opens that call's evidence.
+at the same text size. A failure reason stays beside its call. Choose **Call
+details** on that row to inspect its evidence.
 
 **Restore reader width** keeps your place. **Close interaction** returns to the
 previous view.
 
-![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
+![Maximized reader with a completed calendar fetch, a separate Ask Copilot timeout and Call details on each row.](images/interaction-maximized.png)
 
 ### Add to a report
 
@@ -923,11 +917,10 @@ profile is unavailable, not that collection needs a different GitHub CLI login.
 
 ## Help, Feedback and the sidebar
 
-Open **? (Help)** at the bottom of the sidebar for **Prepare a report**,
-**Find missing activity**, **Understand activity counts** or **Read tool
-results**. Select a topic to read its answer. Your browser's Back and Forward
-buttons revisit topics and earlier pages. Chart definitions and examples stay
-in the Analyze and Trends guides.
+Open **? (Help)** at the bottom of the sidebar for help with reports, missing
+activity, counts, tool results or a stopped update. Select a topic to read its
+answer. Back and Forward revisit topics and earlier pages. Chart definitions
+and examples stay in the Analyze and Trends guides.
 
 Use **Feedback** beside Help to report a WIRE bug or suggest a feature:
 
@@ -945,15 +938,16 @@ Double-click the edge or press Enter on it to restore the default.
 Select **Documentation** at the bottom of the sidebar, just above your account,
 to read these guides inside WIRE.
 
-The list on the left shows every guide, with the sections of the one you're
-reading. The list on the right shows the sections on the current page and marks
-where you are. In a narrow window, both lists fold into **All guides** and
-**On this page** above the text.
+Use **All guides** on the left to open another guide. **On this page** on the
+right jumps to a section in the current guide and marks where you're reading.
+Select either panel's heading to close it and give the article more room.
+Select its icon to reopen it. You can close both without leaving your place.
 
-![Documentation with Use WIRE selected on the left and the current Trends section marked on the right.](images/documentation-guide-tree.png)
+![The Architecture guide between All guides and On this page. Installed version is beside Documentation above both panels.](images/documentation-guide-tree.png)
 
-Links, section addresses and your browser's Back and Forward work as they do on
-any web page. You can bookmark a section or share its address.
+In a narrow window the two controls sit above the article. Open the list you
+need, then select a guide or section. You can bookmark a section, share its
+address or use Back and Forward to return to it.
 
 To inspect a screenshot or diagram, choose **Enlarge image** on it. **Actual
 size** lets you scroll through its details; **Fit image** shows the whole
@@ -961,16 +955,16 @@ picture. Use the **Close image** (X) button or press Escape to return to the
 same image in the guide. **Previous** and **Next** at the foot of a guide name
 the guides they open.
 
-**Installed version** reads the guides and images included with the running
-build. A documentation-only release uses the same **Update and restart**
-process as a code release.
+**Installed version** shows the guides and images that came with the running
+build. To preview a pushed branch in an official Git-backed installation:
 
-In an official Git-backed installation, open **Installed version** beside
-**Documentation**, then choose a pushed branch. The guide list, pages and images
-in this tab all come from that branch's selected commit. You can move between
-guides without choosing again. WIRE does not run branch code or change which
-app updates are offered. Choose **Installed version** to return.
-Images hosted on other sites aren't loaded; WIRE shows a link instead.
+1. Open **Installed version** beside **Documentation** and choose the branch.
+2. Open a guide. Every page and image in this tab now comes from that commit.
+3. To return, open the branch name and choose **Installed version**.
+
+Previewing a branch doesn't run its code or change which updates WIRE offers.
+A docs-only release uses the usual **Update and restart**. Images hosted on
+other sites appear as links instead of loading in WIRE.
 
 If you're editing guides in your own clone or fork, see
 [Preview documentation changes](development.md#preview-documentation-changes).

@@ -41,7 +41,7 @@ grant backend authority.
 
 | Entry | Contract |
 | --- | --- |
-| `GET` of `/`, `/analyze`, `/trends`, `/reports`, `/compare`, `/settings`, `/request` or `/collection-status` at the canonical `127.0.0.1` origin | Current renderer with one newly issued panel capability; named pages also accept a single trailing slash |
+| `GET` of `/`, `/analyze`, `/trends`, `/reports`, `/compare`, `/settings`, `/request`, `/collection-status`, `/help` or `/documentation` at the canonical `127.0.0.1` origin | Current renderer with one newly issued panel capability; named pages also accept a single trailing slash |
 | `GET /` with the exact `localhost` host and actual port, no Origin header | Once ready, empty redirect to the canonical root; no capability or private content |
 | `POST /api/session` | Independent-client handshake; exactly `{}` and `X-Wire-Session-Protocol: 1` |
 | Invalid/missing/duplicate protocol | 409 `WIRE_CLIENT_UPDATE_REQUIRED`, before allocating authority |

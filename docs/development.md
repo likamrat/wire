@@ -405,8 +405,9 @@ a separate store.
 
 ### Preview documentation changes
 
-To see how your guide edits read in WIRE, start your clone, fork or worktree with
-`npm run dev`. Open **Documentation** and select **This checkout**.
+To read **uncommitted edits**, start your clone, fork or worktree with
+`npm run dev`. In **Documentation**, open the source picker beside the title
+and select **This checkout**.
 
 WIRE then reads `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, the guides in
 `docs/` and their images straight from your working folder, including changes
@@ -422,6 +423,19 @@ The preview uses repository filenames to check links. It reads only guide and
 image contents and doesn't upload your edits. An installation started with
 `npm start` from a clean clone is managed by the updater and doesn't offer the
 checkout preview.
+
+To check **a pushed branch** before merging:
+
+1. Commit the guide and its local images together and push the branch to
+   `likamrat/wire`. A branch that exists only in a fork won't be listed.
+2. In an official Git-backed installation, open **Documentation**, select
+   **Installed version** and search for your branch under **Find a branch**.
+3. Select the branch, open the edited guide and enlarge the changed image.
+   Use **View this guide on GitHub** at the foot of the article to check the
+   commit. The guide list, text and images all use that revision in this tab.
+4. Open the picker again and choose **Installed version** to compare. The
+   branch preview doesn't install code. The installed guides change when you
+   [update WIRE](#when-wire-offers-an-update) to a build that includes the edit.
 
 ## Check a change
 
@@ -702,11 +716,12 @@ private evidence directory.
 - **Maximized reader:** in Analyze, open an invented interaction with a returned
   entry and a separate failed call. Choose **Maximize interaction** and keep
   both calls and the recorded reason in view for `interaction-maximized.png`.
-- **First-use connection:** run `tests/first-connection.browser.test.mjs` with
-  `WIRE_FIRST_CONNECTION_PROOFS` set to an owned private directory. It exercises
-  the welcome, deliberate source approval and first retained activity using
-  invented Copilot metadata and history. Only the welcome image is used in the
-  guide; source-review captures include temporary local paths and stay private.
+- **First-use connection:** use the unconfigured fixture from
+  `tests/first-connection.browser.test.mjs`. Its `WIRE_FIRST_CONNECTION_PROOFS`
+  captures show initial keyboard focus and the source review. For the guide,
+  click the welcome heading with the pointer and capture the dialog itself.
+  Leave focus styles intact. Don't approve a source for this image or publish
+  the review screen, which includes local paths.
 
 #### Individual controls
 

@@ -13,20 +13,13 @@
 [Trends](#trends) · [Reports](#reports) · [Compare](#compare) · [Guides](#guides) ·
 [Contributing](#contributing) · [Security](#security) · [License](#license)
 
-Synthetic evals are essential, but they will always have a blind spot: how people
-actually work with AI. People phrase requests differently, bring different context
-and take different paths through multi-turn conversations. Those choices shape
-both their own prompts and the prompts their agents generate, influencing the
-tool calls and results that follow.
+WIRE shows what happened after a person or an agent asked for something in the
+GitHub Copilot app. Open a recorded interaction to see the prompt, the Work IQ
+tools it used and the results each call returned.
 
-WIRE (Work IQ Request Explorer) was built to help you understand that blind spot
-in your own work. It puts recorded human and agent-generated prompts beside their
-Work IQ calls and results, so you can inspect personal patterns, unexpected
-behavior and failures.
-
-Those real interactions can become the basis for better synthetic eval cases.
-Product teams and customers building agents on Work IQ APIs and MCP can use
-that evidence to test the behaviors people rely on and improve their agents.
+Use those records to find patterns in your own work. If you're building an
+agent, a failed call or an unexpected follow-up can give you a concrete case
+to test that a synthetic evaluation might have missed.
 
 [![Analyze with outcome, activity and token charts, and an open reader showing a prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
@@ -135,11 +128,11 @@ See [Trends](docs/user-guide.md#trends) for the eight measures and what each cou
 
 In Analyze, choose **Add to report** on an interaction card or in the reader to
 [add it to a named draft](docs/reporting.md#keep-interactions-in-a-draft).
-To report on a pattern instead, open **Reports**, choose **New report** and set
-**Show** to a focus such as **Errors & failures**.
-[Preview the report](docs/reporting.md) before saving a local copy.
+To report on a pattern instead, open **Reports** and select **Errors & failures**
+under **New report**. [Read the preview](docs/reporting.md) and check its text
+before saving a local copy.
 
-[![Report setup with Show, Dates and Usage question beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
+[![Report choices, including Errors & failures and Custom report, beside drafts and recent reports.](docs/images/report-choices.png)](docs/reporting.md)
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
