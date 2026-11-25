@@ -29,7 +29,10 @@ export const analyzeLayoutStyles = `
 .token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--muted)}
 .token-history-dates time {min-width:3.75em;padding-inline:.35em;box-sizing:border-box;text-align:center;white-space:nowrap}
 .token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
-.token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;padding:6px 12px;background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);overflow-wrap:anywhere;opacity:0;pointer-events:none}
+.token-day-reading,#evidence-tooltip[data-tone=chart] {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
+.token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;overflow-wrap:anywhere;opacity:0;pointer-events:none}
+#evidence-tooltip[data-tone=chart] {--tooltip-gap:var(--space-md);max-width:min(18rem,calc(100% - 2 * var(--tooltip-gap)));white-space:pre-line}
+#evidence-tooltip[data-tone=chart]::first-line {color:var(--accent)}
 .token-history[data-inspecting] .token-day-reading {opacity:1}
 .token-history[data-day-actionable] .token-day-reading a {pointer-events:auto}
 .token-day-date {color:var(--muted)}.token-day-date a {display:inline-flex;align-items:center;min-height:24px}
@@ -62,7 +65,9 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard[data-custom-order]:not([hidden]) {display:block!important}
 .analyze-dashboard[data-custom-order]>.analyze-chart-grid,.analyze-dashboard[data-custom-order]>#percentageCharts {display:none!important}
 .analyze-ordered-widgets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
-.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto!important;min-width:0;margin:0}
+.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto;min-width:0;margin:0}
+#homeView .analyze-ordered-widgets>#activityView {margin:0}
+.analyze-ordered-widgets[data-dashboard-layout=packed],#frontendBreakdowns .percentage-panels[data-dashboard-layout=packed] {grid-auto-rows:1px;row-gap:0}
 .analyze-dashboard .analyze-ordered-widgets>[data-full-row] {grid-column:1/-1}
 .analyze-dashboard .analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary,.percentage-card) {border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
 .analyze-ordered-widgets>.percentage-card:not(.analyze-usage) {padding:var(--widget-heading-inset) 16px 16px;background:var(--paper);container:breakdown-card / inline-size}
@@ -172,6 +177,27 @@ ${chartAction}:focus-visible::before {outline:2px solid var(--focus);outline-off
 .analyze-trend-decision{max-width:min(32rem,calc(100vw - 2rem))}
 .analyze-trend-decision ul{padding-inline-start:1.3em;margin:0 0 1rem}
 .analyze-trend-decision li+li{margin-block-start:.5em}
+.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:0 8px;align-items:center}
+.analyze-widget-heading>.analyze-widget-toggle {grid-area:1/3;align-self:start;position:relative;isolation:isolate;display:inline-grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;box-shadow:none;color:var(--accent);text-decoration:none}
+.analyze-widget-toggle::before {content:"";position:absolute;inset:6px;border-radius:var(--radius-control);z-index:-1;pointer-events:none}
+.analyze-widget-toggle:hover::before {background:var(--hover)}
+.analyze-widget-toggle:active::before {background:var(--pill-pressed)}
+.analyze-widget-toggle:focus-visible {outline:none}
+.analyze-widget-toggle:focus-visible::before {outline:2px solid var(--focus);outline-offset:1px}
+.analyze-widget-toggle>.wire-icon {width:18px;height:18px}
+.analyze-widget[data-collapsed=true] .analyze-widget-body {display:none!important}
+.analyze-widget[data-collapsed=true] :is(.chart-panel,#outcomeChart>.percentage-card),
+.analyze-widget[data-collapsed=true]:is(.percentage-card) {padding-bottom:var(--widget-heading-inset)}
+.analyze-widget[data-collapsed=true] .analyze-widget-heading {margin-bottom:0!important}
+#activityListContext.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) auto 44px}
+#activityListContext.analyze-widget-heading>.usage-sort {grid-column:2;grid-row:1}
+@container (max-width:30rem) {
+ .analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
+ .analyze-widget-heading>.analyze-widget-toggle {grid-area:1/2}
+ .analyze-widget-heading>.analyze-trend-link:not([hidden]) {grid-area:2/1;justify-self:start}
+ #activityListContext.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
+ #activityListContext.analyze-widget-heading>.usage-sort {grid-column:1/-1;grid-row:3;justify-self:start}
+}
 #homeView #chart>.empty-state {padding:8px 0 12px;background:none;border:0;border-radius:0;text-align:start}
 #homeView #chart>.empty-state>h3 {font:inherit;color:var(--muted)}
 #homeView #chart>.empty-state>p {margin:8px 0 0}
@@ -420,7 +446,7 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 #analyzeEmptyScope .analyze-scope-summary {margin:0 0 16px;padding:12px 16px;border:1px solid var(--surface-edge);border-radius:var(--radius);background:var(--paper)}
 .analyze-reading:not(.period-comparing) .page-heading {margin:0 0 var(--space-lg);min-height:0}
 .analyze-reading:not(.period-comparing) #activityView:has(#activityListContext) #activityTitle {position:absolute!important;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.analyze-reading:not(.period-comparing) #activityView {position:relative;margin-top:24px}
+.analyze-reading:not(.period-comparing) #activityView {position:relative;margin-top:16px}
 .analyze-reading:not(.period-comparing) #activityView>.section-heading {margin:0;padding:0;border:0}
 .analyze-reading:not(.period-comparing) #homeView .analyze-chart-main>.insight-header {display:none}
 .analyze-reading:not(.period-comparing) #workspace>#analyzePopulation {display:none}

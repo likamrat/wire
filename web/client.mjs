@@ -177,7 +177,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const pageDefaults = assessmentFactories.createPageDefaults();
     const hiddenCards = assessmentFactories.createCardVisibility(window, refreshCardVisibility);
     let undoCard = null, hiddenDialog = null;
-    const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token) });
+    const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token),
+        icon: name => ux.icon(name), dismissHover: () => ux.hideTooltip() });
     const authorship = createPromptAuthorship({ screen: true });
     const requestTiming = createRequestTiming(time, authorship);
     let appUpdate;
@@ -5701,7 +5702,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             control.setAttribute("aria-label", tip);
             control.setAttribute("aria-description", tip);
             viewKey(control, `chart:time:${point.chartSource}:${point.date}:${key || "total"}`);
-            return ux.tooltip(control, tip);
+            const heading = date(point.date, true) + (point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : "");
+            const reading = key ? `${resultLabels[key]}: ${count(point[key])} of ${count(point.total)} ${chartGroupUnit(point)}`
+                : `${count(point.total)} ${chartGroupUnit(point)}`;
+            return ux.tooltip(control, `${heading}\n${reading}`, { tone: "chart", placement: "top", followPointer: true,
+                immediatePointer: true, avoid: () => document.querySelectorAll("#chart .dimensional-time-labels,.app-header") });
         }
         const chart = dimensional.timeView({
             compact: Boolean(frontendActivity),

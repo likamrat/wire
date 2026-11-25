@@ -163,6 +163,13 @@ single dated record. Explicit window controls remain available after recovery
 to preserve keyboard focus and Back; genuinely empty or undated populations
 do not acquire invented date controls.
 Local scrolling keeps all labels readable within the current window.
+Each Analyze widget, including Interactions, has one trailing collapse button.
+Keep the heading and contextual navigation available; remove the body from
+layout and keyboard navigation without discarding its day, scroll or selection
+state. Collapse is page-local, survives in-page navigation and resets on reload,
+not a new saved preference. Reflow follows natural card heights with the same
+16px gutters in ordinary and reordered layouts. At the page end, allow the
+browser to clamp scrolling rather than retaining blank space.
 Empty days mean no qualifying retained records, not proof of no activity.
 Explicit weekly/monthly links retain their grouping and exact interval drilldown,
 including after changing Dates. Date ranges select membership, not chart granularity.

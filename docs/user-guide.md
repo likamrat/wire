@@ -253,6 +253,12 @@ or the last topic read in this tab. This preference does not change the charts.
 
 ### Homepage layout
 
+Use the arrow at the right of any Analyze widget, including Interactions, to
+collapse or expand it. Its heading and View trend or View by day link stay
+available. Collapsing does not hide individual interactions, change report
+selection or filter the data. Your choices stay while you browse in this page;
+reloading starts with every widget expanded.
+
 In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
 **Interactions** list. The preview outlines the section you moved and shows which
 breakdowns share a row. The time chart, tool call results, token usage and

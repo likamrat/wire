@@ -78,7 +78,8 @@
     grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
     gap: 0 16px;
 }
-.wire-frontend-react #frontendBreakdowns { margin-top: 24px; container: breakdowns / inline-size; }
+.wire-frontend-react #frontendBreakdowns { margin-top: 16px; container: breakdowns / inline-size; }
+.wire-frontend-react #frontendBreakdowns .percentage-section { margin-block: 0; }
 .wire-frontend-react #frontendBreakdowns .percentage-card {
     background: var(--paper);
     border: 1px solid var(--surface-edge);
@@ -92,9 +93,10 @@
     gap: 16px;
     align-items: start;
 }
+.wire-frontend-react #frontendBreakdowns .percentage-panels[data-dashboard-layout=packed] { row-gap: 0; }
 .wire-frontend-react #frontendBreakdowns .percentage-legend { row-gap: 4px; }
 .wire-frontend-react #frontendBreakdowns .percentage-value { justify-content: flex-end; }
-.wire-frontend-react #activityView { margin-top: 20px; }
+.wire-frontend-react #activityView { margin-top: 16px; }
 .wire-frontend-react #activityPager { margin-block: 12px 0; }
 .wire-frontend-react #activityPager > .frontend-record-slot > .pager { margin: 0; width: 100%; }
 .wire-frontend-react #workspace:has(#homeView[data-empty=true]) > #frontendBreakdowns,

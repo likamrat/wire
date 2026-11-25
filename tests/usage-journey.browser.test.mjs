@@ -195,6 +195,39 @@ for(const frontend of ["bundled","react"])test(`${frontend}: both Analyze date a
     }
 });
 
+for(const frontend of ["react","bundled"])test(`${frontend}: activity hover uses the token reading surface without covering its date axis`,async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend);
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width:1440,height:1050},timezoneId:"UTC",reducedMotion:"reduce"});
+    await page.goto(runtime.url);
+    const target=page.locator("#chart .time-segment-link[data-segment=success]").nth(2),tip=page.locator("#evidence-tooltip");
+    for(const [width,theme,scale] of [[1440,"light",1],[1440,"dark",1],[390,"light",1],[390,"dark",2]]){
+        await page.setViewportSize({width,height:1050});await chooseTheme(page,theme);
+        await page.evaluate(scale=>{document.documentElement.style.fontSize=`${scale*100}%`;},scale);
+        await target.scrollIntoViewIfNeeded();
+        const mark=await target.boundingBox(),x=mark.x+mark.width/2,y=mark.y+mark.height/2;
+        await page.mouse.move(0,0);await page.mouse.move(x,y);
+        await expect(tip).toBeVisible();await expect(tip).toHaveAttribute("data-tone","chart");
+        await expect(tip).toContainText("Tool completed: 2 of 3 Work IQ tool calls");
+        assert.ok((await tip.textContent()).includes("\n"),"Date and count have separate reading lines");
+        const values=await tip.evaluate((node,{x,y})=>{
+            const a=getComputedStyle(node),b=getComputedStyle(document.querySelector(".token-day-reading")),box=node.getBoundingClientRect();
+            const rects=[...document.querySelectorAll("#chart .dimensional-time-labels")].map(node=>node.getBoundingClientRect());
+            const overlap=rect=>rect.left<box.right && rect.right>box.left && rect.top<box.bottom && rect.bottom>box.top;
+            const fields=["backgroundColor","color","borderTopColor","borderRadius","fontFamily","fontSize","fontWeight","paddingTop","paddingLeft","boxShadow"];
+            return {same:fields.filter(key=>a[key]!==b[key]),axisCovered:rects.some(overlap),
+                pointerCovered:x>=box.left && x<=box.right && y>=box.top && y<=box.bottom,
+                clipped:box.left<0 || box.right>Math.min(innerWidth,document.documentElement.getBoundingClientRect().width)
+                    || box.top<0 || box.bottom>innerHeight,
+                detached:Math.hypot(Math.max(0,box.left-x,x-box.right),Math.max(0,box.top-y,y-box.bottom))>30};
+        },{x,y});
+        assert.deepEqual(values,{same:[],axisCovered:false,pointerCovered:false,clipped:false,detached:false});
+        if(process.env.WIRE_USAGE_PROOFS)await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-${theme}-chart-hover.png`)});
+        await page.keyboard.press("Escape");await expect(tip).toBeHidden();
+    }
+});
+
 for(const frontend of ["react","bundled"])test(`${frontend}: tapping a scrolled day keeps the touched date and scroll position`,async t=>{
     const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
     const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend);
@@ -214,7 +247,15 @@ for(const frontend of ["react","bundled"])test(`${frontend}: tapping a scrolled 
         await expect(slider).toHaveValue(String(index));
         await expect(chart.locator(".token-day-date")).toHaveText(new Date(date+"T12:00Z").toLocaleDateString("en-US",{dateStyle:"medium",timeZone:"UTC"}));
         assert.equal(await offset(),before,"a tap must not move the date strip");
+        const fold=page.locator("#analyzeCollapse-usage");
+        await fold.tap();await expect(slider).not.toBeVisible();
+        await fold.tap();await expect(slider).toBeVisible();
+        await expect(slider).toHaveValue(String(index));
+        assert.equal(await offset(),before,"collapse and expand preserve the paged chart's horizontal position");
+        await tick.evaluate(t=>t.scrollIntoView({block:"center",inline:"nearest"}));
         if(index===55){
+            const restoredLabel=await tick.boundingBox(),restoredPlot=await slider.boundingBox();
+            const x=restoredLabel.x+restoredLabel.width/2,y=restoredPlot.y+restoredPlot.height/2;
             const session=await page.context().newCDPSession(page);
             const touch=(type,points)=>session.send("Input.dispatchTouchEvent",{type,touchPoints:points});
             await touch("touchStart",[{x,y}]);

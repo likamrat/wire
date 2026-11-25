@@ -95,13 +95,16 @@ export function createEvidenceUX(icons, operations) {
         if (!target.isConnected || !target.checkVisibility()) { hideTooltip(); return; }
         const options = tooltipOptions.get(target) || {}, anchor = options.anchor || target;
         if (!anchor.isConnected || !anchor.checkVisibility()) { hideTooltip(); return; }
-        const box = visibleTooltipBox(anchor), tip = bubble.getBoundingClientRect();
-        if (!box) { hideTooltip(); return; }
-        const width = document.documentElement.clientWidth, height = window.innerHeight;
+        const visibleBox = visibleTooltipBox(anchor), tip = bubble.getBoundingClientRect();
+        if (!visibleBox) { hideTooltip(); return; }
+        const followsPointer = options.followPointer && pointer && target.contains(document.elementFromPoint(pointer.x, pointer.y));
+        const box = followsPointer ? { left:pointer.x-2, right:pointer.x+2, top:pointer.y-2, bottom:pointer.y+2 } : visibleBox;
+        const width = options.followPointer ? Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width)
+            : document.documentElement.clientWidth, height = window.innerHeight;
         const gap = parseFloat(getComputedStyle(bubble).getPropertyValue("--tooltip-gap"));
         const owner = options.owner || target;
         const group = (owner.closest(".ux-disabled-help") || owner).parentElement;
-        const neighbors = [...(group?.querySelectorAll("button,a[href],input,select,textarea,summary,[role=button],[role=combobox]") || [])]
+        const neighbors = followsPointer ? [] : [...(group?.querySelectorAll("button,a[href],input,select,textarea,summary,[role=button],[role=combobox]") || [])]
             .filter(node => node !== owner && !node.contains(owner) && !owner.contains(node));
         const avoid = typeof options.avoid === "function" ? options.avoid() : options.avoid;
         if (active !== target || tooltipOptions.get(target) !== options) return;
@@ -430,7 +433,10 @@ export function createEvidenceUX(icons, operations) {
         restoredPage = false;
         if (bubble.contains(event.target)) { cancelClose(); return; }
         const node = trigger(event.target);
-        if (node && node === active) cancelClose();
+        if (node && node === active) {
+            cancelClose();
+            if (tooltipOptions.get(node)?.followPointer) positionTooltip();
+        }
         if (node && node === hovered) return;
         const key = identity(node);
         if (key !== suppressedPointer) suppressedPointer = null;
