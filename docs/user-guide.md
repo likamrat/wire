@@ -32,9 +32,9 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 ## Pages and addresses
 
-**Analyze is the home page.** Open the address printed by WIRE as-is. Trends,
-Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
-`/compare` and `/settings`), so you can bookmark a page or a Settings category.
+Open the address WIRE prints to start in **Analyze**. Bookmark `/trends`,
+`/reports`, `/compare` or `/settings` to start on another page. Settings
+categories and [Documentation sections](#documentation) can be bookmarked too.
 
 Dates and filters change the results, not the address. A copied address opens
 the page in a fresh tab with its own defaults, not your filtered results. Older
@@ -51,45 +51,36 @@ instead of showing a broader result.
 
 ## Connect local history
 
-WIRE prompts you to connect when you first open an unconfigured instance.
+Choose **Review and connect** to check the source before WIRE reads your history.
+If you choose **Not now**, nothing connects. You can start later from Analyze
+or **Settings > Source access > Review source & connect**.
 
-1. Choose **Review and connect** in the welcome. **Not now** closes it and leaves
-   the connection prompt in Analyze. You can also use **Settings > Source
-   access > Review source & connect**.
-2. Check **Copilot metadata database** and **Chat history folder**. These must
-   point to the supported local Copilot installation whose history you want to read.
-   Choose **Change paths** if either location is wrong.
-3. Choose **History to include** and **Check frequency**, then select
-   **Approve source and start collection**.
-4. Choose **View activity** to open Analyze. The first read may take a few
-   minutes; activity appears as it is saved. If expected calls are missing,
-   open **Collection status** to see known history gaps.
+![Connect your Copilot history, with Review and connect and Not now.](images/first-connection.png)
 
-![The first-use welcome offers Review and connect or Not now.](images/first-connection.png)
+1. Check that **Copilot metadata database** and **Chat history folder** point
+   to the local GitHub Copilot app you want to read. Use **Change paths** to
+   correct a suggested location.
+2. Set **History to include** and **Check frequency**. When the paths and
+   settings are right, choose **Approve source and start collection**.
+3. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
+   read can take a few minutes.
 
-The welcome stays dismissed in this browser at this WIRE address. Dismissing it
-doesn't connect a source. Configured instances open normally, and Pause stays
-paused. A missing source or failed read shows its own explanation instead of
-asking you to keep waiting.
+Approval covers this instance and these local files. WIRE doesn't rerun prompts,
+make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
+Copilot replies is off by default and has its own control under **Settings >
+Privacy & saved data > Recorded replies**.
 
-If Settings reports a problem after you approve:
+If something looks wrong:
 
-- If it says the source settings were not saved, correct the paths or restore
-  local access, then approve again.
-- If it says the change is **unconfirmed**, read the current connection first.
-  Don't repeat the write.
+| What you see | What to do |
+| --- | --- |
+| A source is missing or a read failed | Read the reason in Settings. If the source settings **were not saved**, correct the paths or restore access before approving again. |
+| A change is **unconfirmed** | Check the current connection in Settings. Don't repeat the approval while its result is unknown. |
+| Some calls are missing | Open **Collection status**. It shows which history is pending, blocked, missing or only partly checked. Collection can be on before older history has finished. |
 
-Each independent instance needs its own source approval. Instances keep
-separate collection progress, settings, consent and saved reports.
-
-Collection can be on while older history is still catching up. **Collection
-status** shows pending, blocked, missing or bounded history; it doesn't
-guarantee complete coverage.
-
-Approval lets WIRE read that local history. It doesn't rerun prompts or make
-new Work IQ requests, and WIRE doesn't connect to Microsoft 365 Chat or Cowork.
-Saving Copilot reply text is a separate choice under
-**Settings > Privacy & saved data > Recorded replies**, and it starts off.
+Dismissing the welcome lasts for this browser at this WIRE address. Reopening
+a configured instance doesn't resume paused collection. A second instance has
+its own approval, settings, collection progress and saved reports.
 
 <a id="read-the-overview"></a>
 
@@ -344,11 +335,11 @@ The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
 
-Hover highlights a card, but the card itself isn't a link. To open the
-right-hand reader, select the outcome below the prompt preview. Hover over its
-arrow or focus the link to see **View call details**.
+Select the outcome below a prompt to open the matching calls in the reader on
+the right. Hover over its arrow or focus the link for **View call details**.
+In this example, the calendar fetch completed, but `workiq-ask` timed out.
 
-![The View call details tip beside 1 tool call failed on an Analyze card, with the failed call and its returned HTTP 403 in the reader.](images/interaction.png)
+![An interaction card showing 6,000 model tokens and the timeout for call 2. The reader lists the completed fetch and the failed Ask Copilot call.](images/interaction.png)
 
 ### Calls and results
 
@@ -459,14 +450,13 @@ width. On a narrow screen, the reader uses one pane without sizing controls;
 **Close interaction** is beside the title.
 
 Choose **Maximize interaction** to give calls, long replies and tables more room
-without changing the text size. Each
-call shows its operation and outcome together, and a recorded failure reason
-stays with the call it explains. **Call details** opens that call's evidence.
+at the same text size. A failure reason stays beside its call. Choose **Call
+details** on that row to inspect its evidence.
 
 **Restore reader width** keeps your place. **Close interaction** returns to the
 previous view.
 
-![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
+![Maximized reader with a completed calendar fetch, a separate Ask Copilot timeout and Call details on each row.](images/interaction-maximized.png)
 
 ### Add to a report
 
@@ -923,11 +913,10 @@ profile is unavailable, not that collection needs a different GitHub CLI login.
 
 ## Help, Feedback and the sidebar
 
-Open **? (Help)** at the bottom of the sidebar for **Prepare a report**,
-**Find missing activity**, **Understand activity counts** or **Read tool
-results**. Select a topic to read its answer. Your browser's Back and Forward
-buttons revisit topics and earlier pages. Chart definitions and examples stay
-in the Analyze and Trends guides.
+Open **? (Help)** at the bottom of the sidebar for help with reports, missing
+activity, counts, tool results or a stopped update. Select a topic to read its
+answer. Back and Forward revisit topics and earlier pages. Chart definitions
+and examples stay in the Analyze and Trends guides.
 
 Use **Feedback** beside Help to report a WIRE bug or suggest a feature:
 

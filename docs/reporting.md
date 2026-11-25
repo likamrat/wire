@@ -25,27 +25,27 @@ Contributors changing report behavior should also read the
 
 ## Open a report
 
-Open **Reports** and pick a report under **New report**. For example,
-**Errors & failures** opens a preview using the dates, activity source and text
-choice shown above the list. No files are written.
-
-Choose **Custom report** at the bottom of the list to set **Show**, **Dates**,
-**Usage question**, **Activity source** and **Formats** before selecting
-**Prepare preview**. Changing these choices alone does not prepare or save.
-**Drafts** lists named selections; open a name to prepare from those interactions.
-Open a recent saved name directly, or search **Saved library**.
-
-The default, **Mask detected details**, keeps the wording with local masking.
-You can leave out prompts and replies or keep chat details instead.
-This choice applies to the readable report and its saved files.
-Read the report in the right-side preview, then choose **Save report** to write
-the selected files locally. Dates, formats, inclusion and text controls remain
-available in the preview.
-If recorded activity changes while you read, a note in the drawer tells you
-that the preview still contains the activity it was prepared with.
-If you kept chat details, the confirmation names those formats. Nothing is sent.
+To find out which calls failed, open **Reports**. Under **New report**, check
+the dates, activity source and text choice, then select **Errors & failures**.
+Read the finding and open an example in the preview. No files are written
+until you choose **Save report**.
 
 ![Report choices with Custom report last, alongside named drafts and recent reports.](images/report-choices.png)
+
+For a different starting point:
+
+- **Custom report** lets you set **Show**, **Dates**, **Usage question**,
+  **Activity source** and **Formats** before choosing **Prepare preview**.
+- **Drafts** opens a [named selection](#keep-interactions-in-a-draft).
+- A recent report opens its saved copy. Use **Saved library** to find older reports.
+
+In the preview, you can still change the dates, included activity, text and
+formats. If new activity arrives, a note tells you the preview still uses the
+original selection. **Mask detected details** is the default for both the
+readable report and its files. You can leave out prompts and replies or keep
+chat details; [check the text](#report-text-and-privacy) before saving.
+If you keep chat details, Save asks you to confirm the named formats. Files
+are saved locally.
 
 <a id="what-show-includes"></a>
 
@@ -102,17 +102,17 @@ exact calls and returned results.
 
 ### Keep interactions in a draft
 
-On Analyze, choose **Add to report** on the card or after **Source** in
-the reader. Pick an existing draft or use **Search drafts** to filter by name.
-To create one, choose **New draft**, enter its name, then **Create draft and add**.
-The card shows the draft name after the add. Choose **Open draft** in the
-confirmation to open that draft in Reports without preparing or saving it.
-If another report has unfinished choices, it stays intact in its original tab.
-To remove the interaction from just one draft, reopen
-the picker and choose that draft's **Remove** row. Other drafts and the
-recorded interaction are unchanged.
+1. In Analyze, choose **Add to report** on the interaction card or in its reader.
+2. Pick a draft by name, using **Search drafts** if needed. For a new draft,
+   choose **New draft**, enter a name, then choose **Create draft and add**.
+3. Check the draft name on the card. To continue in Reports, choose **Open
+   draft** in the confirmation. Nothing is prepared or saved, and unfinished
+   work in another tab stays there.
 
 ![Creating a named draft from the open interaction without leaving Analyze.](images/report-draft.png)
+
+To remove an interaction from one draft, reopen the picker and choose that
+draft's **Remove** row. Other drafts and the recorded interaction are unchanged.
 
 In **Reports**, choose the name in **Drafts**, then **Prepare preview**.
 The narrow layout also has a **Drafts** shortcut beside **New report**.
