@@ -15,6 +15,8 @@ WIRE keeps a local, on-device record of the user's GitHub Copilot app conversati
 | Count or compare activity: prompts, calls, returned entries, outcomes, services, authors, failure reasons | `wire_analytics` |
 | Find a specific prompt, reply, action or saved report by its words | `wire_search` |
 | Look through evidence, read a full conversation, or prepare a report | Open the WIRE canvas |
+| Package failures into a local diagnostic report and bundle | The **wire-diagnostics** skill |
+| Investigate failures, reproduce safely or file bugs | The **wire-failure-audit** skill |
 
 To open the canvas, call `open_canvas` with `canvasId: "workiq-evidence-board"` and no input. Reuse the same `instanceId` to bring an open panel back.
 

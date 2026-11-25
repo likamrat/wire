@@ -233,7 +233,18 @@ The first canvas open or WIRE tool call connects to a compatible WIRE on port
 4000, or starts one with the normal Copilot-only startup and data folder. Other
 Copilot sessions reuse that runtime; it stops when its owning session's
 extension stops. The embedded runtime can't fork Node children, so Search
-reports saved PDF text as unavailable there.
+reports saved PDF text as unavailable there. When the plugin is updated, the
+extension that started WIRE stops it within about 15 seconds, so the next
+request starts the new version.
+
+The `wire-diagnostics` and `wire-failure-audit` skills use the MCP diagnostic
+engine in `lib/mcp-diagnostics/`, a dependency-free port of the Python
+`mcp-diagnostic-bundle` and `mcp-failure-audit` scripts. Cluster IDs,
+redaction and bundle bytes match the Python reference;
+`tests/mcp-diagnostics-parity.test.mjs` checks this when `python3` and those
+skills are installed. `get_diagnostic_calls` projects only retained,
+sanitized call metadata. Saved bundles go to a `diagnostics` folder beside
+the WIRE data folder.
 
 ## Check a change
 

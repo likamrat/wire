@@ -288,6 +288,123 @@
           "query"
         ]
       }
+    },
+    {
+      "name": "wire_diagnostic_calls",
+      "description": "Read WIRE's retained Work IQ tool calls for a UTC window as MCP diagnostic records: host outcome, recorded error code and reason, HTTP and per-entry status, duration. Includes reconciled totals and coverage limits. No prompts, arguments or result bodies. Read-only.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Inclusive UTC start (ISO 8601)."
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Exclusive UTC end (ISO 8601)."
+          },
+          "tools": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Optional Work IQ tool names, e.g. workiq-fetch."
+          },
+          "sourceSessionIds": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "description": "Optional chats."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "wire_diagnostic_bundle",
+      "description": "Prepare an MCP diagnostic report and redacted bundle from WIRE's retained Work IQ calls for a UTC window. With save false (default) nothing is written: returns the draft report.md, clusters and a verdicts template. With save true, writes the report and zip to WIRE's private diagnostics folder and returns their paths. Never sends or uploads.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Inclusive UTC start (ISO 8601)."
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Exclusive UTC end (ISO 8601)."
+          },
+          "tools": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          "captureScope": {
+            "enum": [
+              "sample",
+              "failures-only",
+              "complete"
+            ],
+            "description": "complete only when every call in the window is included; WIRE supplies the reconciled totals."
+          },
+          "profile": {
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Defaults to internal."
+          },
+          "verdicts": {
+            "type": "object",
+            "description": "A filled verdicts template from a previous preparation."
+          },
+          "reviewedNarrative": {
+            "type": "boolean",
+            "description": "Include operator narrative from verdicts; only after reviewing it for content that shouldn't be shared."
+          },
+          "save": {
+            "type": "boolean",
+            "description": "Write the bundle locally. Ask the user first."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "wire_inspect_bundle",
+      "description": "Check an MCP diagnostic bundle zip without extracting it: layout, schema, checksums and cross-file counts. Returns its summary and clusters, or why it was refused. Read-only.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "Absolute path to the .zip."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
     }
   ],
   "canvases": [

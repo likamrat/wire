@@ -709,7 +709,7 @@ function validateMetric(value) {
     requireThat(value.numerator === value.counts.pass && value.denominator === value.coverage.covered, "invalid-denominator");
     if (value.unassessedReasons) {
       unique(value.unassessedReasons.map((item) => item.reason));
-      requireThat(value.unassessedReasons.reduce((sum, item) => sum + item.count, 0) === value.counts.unassessed, "unassessed-reason-count-mismatch");
+      requireThat(value.unassessedReasons.reduce((sum2, item) => sum2 + item.count, 0) === value.counts.unassessed, "unassessed-reason-count-mismatch");
       requireThat(value.unassessedReasons.every((item) => item.reason !== "evaluator-failure"), "error-is-not-unassessed");
     }
     requireThat(value.samples.length === 0 && value.pricing === null, "invalid-count-payload");
@@ -774,7 +774,7 @@ function poolMetrics(values, metricRef, createdAt) {
     eligibleUnitRefs,
     coveredUnitRefs: values.flatMap((value) => value.coveredUnitRefs),
     evidenceRefs: [...new Set(values.flatMap((value) => value.evidenceRefs))],
-    coverage: { eligible: eligibleUnitRefs.length, covered: values.reduce((sum, value) => sum + value.coverage.covered, 0) }
+    coverage: { eligible: eligibleUnitRefs.length, covered: values.reduce((sum2, value) => sum2 + value.coverage.covered, 0) }
   });
   const times = values.map((value) => value.observedTime);
   const withheld2 = times.some((value) => value.state === "withheld"), available2 = times.filter((value) => value.state === "available");
@@ -782,11 +782,11 @@ function poolMetrics(values, metricRef, createdAt) {
     state: withheld2 ? "withheld" : available2.length ? "available" : "unavailable",
     firstAt: !withheld2 && available2.length ? available2.map((value) => value.firstAt).sort()[0] : null,
     lastAt: !withheld2 && available2.length ? available2.map((value) => value.lastAt).sort().at(-1) : null,
-    datedUnits: times.reduce((sum, value) => sum + value.datedUnits, 0),
-    undatedUnits: times.reduce((sum, value) => sum + value.undatedUnits, 0)
+    datedUnits: times.reduce((sum2, value) => sum2 + value.datedUnits, 0),
+    undatedUnits: times.reduce((sum2, value) => sum2 + value.undatedUnits, 0)
   };
   if (definition.form === "counts") {
-    result.counts = Object.fromEntries(Object.keys(first.counts).map((key4) => [key4, values.reduce((sum, value) => sum + value.counts[key4], 0)]));
+    result.counts = Object.fromEntries(Object.keys(first.counts).map((key4) => [key4, values.reduce((sum2, value) => sum2 + value.counts[key4], 0)]));
     result.numerator = result.counts.pass;
     result.denominator = result.coverage.covered;
     result.value = result.denominator ? result.numerator / result.denominator : null;
@@ -801,7 +801,7 @@ function poolMetrics(values, metricRef, createdAt) {
         }] : []);
         for (const item of entries3) reasons.set(item.reason, (reasons.get(item.reason) ?? 0) + item.count);
       }
-      result.unassessedReasons = [...reasons].map(([reason2, count7]) => ({ reason: reason2, count: count7 }));
+      result.unassessedReasons = [...reasons].map(([reason2, count8]) => ({ reason: reason2, count: count8 }));
     }
   } else if (definition.form === "samples") {
     result.samples = values.flatMap((value) => value.samples);
@@ -812,7 +812,7 @@ function poolMetrics(values, metricRef, createdAt) {
   } else if (definition.form === "cost" && ["measured", "estimated"].includes(first.status)) {
     const usageRefs = values.flatMap((value) => value.pricing.usageRefs);
     unique(usageRefs);
-    result.value = values.reduce((sum, value) => sum + value.value, 0);
+    result.value = values.reduce((sum2, value) => sum2 + value.value, 0);
     result.pricing.usageRefs = usageRefs;
   }
   return validateMetric(result);
@@ -875,7 +875,7 @@ function validateReviewStatus(value) {
         }), 10)
       });
       unique(value2.causes.map((item) => item.cause));
-      requireThat(value2.calls === value2.succeeded + value2.failed + value2.other && value2.causes.reduce((sum, item) => sum + item.count, 0) === value2.failed, "invalid-execution-summary");
+      requireThat(value2.calls === value2.succeeded + value2.failed + value2.other && value2.causes.reduce((sum2, item) => sum2 + item.count, 0) === value2.failed, "invalid-execution-summary");
     },
     assessment: (value2) => shape(value2, {
       result: oneOf(["none", "assessed", "partial", "unassessed"]),
@@ -1799,7 +1799,7 @@ function validateModelEvaluationState(value) {
       shape2(criteria, ["dimension", "counts"]);
       requireThat4(["accuracy", "answer-trust", "action-trust"].includes(criteria.dimension), "invalid-model-criteria-counts");
       shape2(criteria.counts, ["met", "notMet", "insufficient", "notApplicable"]);
-      requireThat4(Object.values(criteria.counts).every((count7) => Number.isSafeInteger(count7) && count7 >= 0 && count7 <= 100), "invalid-model-criteria-counts");
+      requireThat4(Object.values(criteria.counts).every((count8) => Number.isSafeInteger(count8) && count8 >= 0 && count8 <= 100), "invalid-model-criteria-counts");
     }
     validateEvaluatorCost(record.evaluatorCost);
     records.add(record.recordRef);
@@ -5299,7 +5299,7 @@ function validateNativeBackfill(value) {
     if (Object.hasOwn(source, "coworkCursor") && (source.surface !== "cowork" || !exact(source.coworkCursor, ["parentAfter", "referenceAfter"]) || Object.values(source.coworkCursor).some((value2) => value2 !== null && !hash6(value2)))) fail();
     if (Object.hasOwn(source, "chatCursor") && (source.surface !== "chat" || !exact(source.chatCursor, ["referenceAfter"]) || source.chatCursor.referenceAfter !== null && !hash6(source.chatCursor.referenceAfter))) fail();
   }
-  if (value.sources.reduce((count7, source) => count7 + source.histories.length, 0) > NATIVE_BACKFILL_LIMIT) fail();
+  if (value.sources.reduce((count8, source) => count8 + source.histories.length, 0) > NATIVE_BACKFILL_LIMIT) fail();
   return value;
 }
 function validateNativeBackfillSummary(value) {
@@ -6009,8 +6009,8 @@ function validateNativeReportState(state) {
   return state;
 }
 function validateNativeGlobalState(state) {
-  const present3 = Object.hasOwn(state, "globalCollection");
-  if (present3 && (![6, 7].includes(state.stateVersion) || !fields4(state.globalCollection, ["revision", "paused"]) || !integer3(state.globalCollection.revision) || state.globalCollection.revision < 1 || typeof state.globalCollection.paused !== "boolean") || state.stateVersion === 6 && !present3) {
+  const present4 = Object.hasOwn(state, "globalCollection");
+  if (present4 && (![6, 7].includes(state.stateVersion) || !fields4(state.globalCollection, ["revision", "paused"]) || !integer3(state.globalCollection.revision) || state.globalCollection.revision < 1 || typeof state.globalCollection.paused !== "boolean") || state.stateVersion === 6 && !present4) {
     throw Object.assign(
       new TypeError("Invalid explicit global collection policy or persisted version."),
       { code: "GLOBAL_COLLECTION_STATE_INVALID" }
@@ -6070,9 +6070,9 @@ function validateNativeRetentionState(value) {
       if (!accounts.has(checkpoint.accountRef)) fail2();
     }
   }
-  for (const partition2 of value.partitions) {
-    if (!fields4(partition2, ["partition", "file", "revision", "lastOperationId", ...value.schemaVersion === 2 ? ["format"] : []]) || value.schemaVersion === 2 && !["screened-v1", "segments-v2"].includes(partition2.format) || !accounts.has(partition2.partition) || partitions.has(partition2.partition) || !/^[a-f0-9]{64}\.json$/.test(partition2.file) || !integer3(partition2.revision) || !uuid(partition2.lastOperationId)) fail2();
-    partitions.add(partition2.partition);
+  for (const partition3 of value.partitions) {
+    if (!fields4(partition3, ["partition", "file", "revision", "lastOperationId", ...value.schemaVersion === 2 ? ["format"] : []]) || value.schemaVersion === 2 && !["screened-v1", "segments-v2"].includes(partition3.format) || !accounts.has(partition3.partition) || partitions.has(partition3.partition) || !/^[a-f0-9]{64}\.json$/.test(partition3.file) || !integer3(partition3.revision) || !uuid(partition3.lastOperationId)) fail2();
+    partitions.add(partition3.partition);
   }
   for (const receipt of value.receipts) {
     const base = [
@@ -6099,7 +6099,7 @@ function validateNativeRetentionState(value) {
     ]) || ![1, 2].includes(receipt.schemaVersion) || segmented && (value.schemaVersion !== 2 || !validStorageIntent(receipt.storageIntent)) || !uuid(receipt.operationId) || operations.has(receipt.operationId) || !accounts.has(receipt.partition) || !hash7(receipt.ownerHash) || receipt.intent !== "native-collect-now" || !hash7(receipt.intentFingerprint) || !["registered", "committed"].includes(receipt.status) || !integer3(receipt.generation) || ["configurationRevision", "privacyRevision"].some((name) => !integer3(receipt[name]) || receipt[name] < 1) || !Number.isFinite(Date.parse(receipt.registeredAt))) fail2();
     if (Object.hasOwn(receipt, "firstFailure") && !validNativeFailure(receipt.firstFailure)) fail2();
     if (Object.hasOwn(receipt, "backfill")) validateNativeBackfillSummary(receipt.backfill);
-    if (committed && (!hash7(receipt.fingerprint) || receipt.quality !== "source-qualified-partial" || !hash7(receipt.snapshot) || !integer3(receipt.beforeRevision) || !integer3(receipt.revision) || !Number.isFinite(Date.parse(receipt.committedAt)) || !fields4(receipt.changes, ["addedCaptures", "addedObservations", "addedVariants", "addedProvenance", "reusedObservations", "suppressedObservations"]) || Object.values(receipt.changes).some((count7) => !integer3(count7)))) fail2();
+    if (committed && (!hash7(receipt.fingerprint) || receipt.quality !== "source-qualified-partial" || !hash7(receipt.snapshot) || !integer3(receipt.beforeRevision) || !integer3(receipt.revision) || !Number.isFinite(Date.parse(receipt.committedAt)) || !fields4(receipt.changes, ["addedCaptures", "addedObservations", "addedVariants", "addedProvenance", "reusedObservations", "suppressedObservations"]) || Object.values(receipt.changes).some((count8) => !integer3(count8)))) fail2();
     operations.add(receipt.operationId);
   }
   return value;
@@ -6830,7 +6830,7 @@ function createDimensionalCharts() {
     Object.freeze({ token: `service-${token2}`, light: material(lightLabel, lightMid, false), dark: material(darkLabel, darkMid, true) })
   ])));
   const outcomeTones2 = { success: "teal", failure: "pink", partial: "orange", unknown: "slate", other: "violet", transport: "cyan" };
-  function count7(value, label) {
+  function count8(value, label) {
     if (!Number.isSafeInteger(value) || value < 0) throw new TypeError(`${label} must be a nonnegative safe count.`);
     return value;
   }
@@ -6840,8 +6840,8 @@ function createDimensionalCharts() {
   }
   const geometryPolicy = Object.freeze({
     span(value, maximum, extent) {
-      count7(value, "Chart value");
-      count7(maximum, "Chart denominator");
+      count8(value, "Chart value");
+      count8(maximum, "Chart denominator");
       distance(extent);
       if (value > maximum) throw new RangeError("Chart value cannot exceed its denominator.");
       return maximum ? value / maximum * extent : 0;
@@ -6854,7 +6854,7 @@ function createDimensionalCharts() {
   function columnParts(total, values, service) {
     if (service !== void 0) return [{ key: "category", count: total, tone: tone(service) }];
     if (!values || outcomes3.some((key4) => !Number.isSafeInteger(values[key4]) || values[key4] < 0)) throw new TypeError("Every recorded result requires a nonnegative safe count.");
-    if (outcomes3.reduce((sum, key4) => sum + values[key4], 0) !== total) throw new RangeError("Recorded result counts must equal the column total.");
+    if (outcomes3.reduce((sum2, key4) => sum2 + values[key4], 0) !== total) throw new RangeError("Recorded result counts must equal the column total.");
     return ["unknown", "success", "partial", "other", "transport", "failure"].map((key4) => ({ key: key4, count: values[key4], tone: outcomeTones2[key4] }));
   }
   function flatLayout({ total, maximum, values, service, width = 84, plotHeight = 200 }) {
@@ -6879,7 +6879,7 @@ function createDimensionalCharts() {
     if (!model.height) return "";
     const id5 = `flat-time-${++sequence}`;
     const gradients = model.segments.map(({ tone: tone2, key: key4 }) => `<linearGradient id="${id5}-${key4}" class="dimensional-tone-${tone2}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="chart-fade-high"/><stop offset="1" class="chart-fade-low"/></linearGradient>`).join("");
-    const faces2 = model.segments.map(({ top, height, tone: tone2, key: key4, count: count8 }) => `<rect class="flat-time-segment dimensional-tone-${tone2}" data-segment="${key4}" data-count="${count8}" x="0" y="${top}" width="${model.width}" height="${height}" fill="url(#${id5}-${key4})"/>`).join("");
+    const faces2 = model.segments.map(({ top, height, tone: tone2, key: key4, count: count9 }) => `<rect class="flat-time-segment dimensional-tone-${tone2}" data-segment="${key4}" data-count="${count9}" x="0" y="${top}" width="${model.width}" height="${height}" fill="url(#${id5}-${key4})"/>`).join("");
     return `<svg xmlns="http://www.w3.org/2000/svg" class="flat-time-column" width="${model.width}" height="${model.height}" viewBox="0 0 ${model.width} ${model.height}" aria-hidden="true" focusable="false" data-total="${model.total}" data-maximum="${model.maximum}" data-plot-height="${model.plotHeight}"><defs>${gradients}</defs>${faces2}</svg>`;
   }
   let sequence = 0;
@@ -6931,7 +6931,7 @@ function createDimensionalCharts() {
     zero.append(total);
     return zero;
   }
-  function timeView({ points, label, summary, onSelect, createAction, createSegment, zeroDefinition, onOverflow, unit, inspect, compact = false }) {
+  function timeView({ points, label, summary, onSelect, createAction, createSegment, zeroDefinition, onOverflow, unit, inspect: inspect2, compact = false }) {
     if (typeof compact !== "boolean") throw new TypeError("Time chart presentation requires an explicit compact boolean.");
     const maximum = Math.max(1, ...points.map((point) => point.total));
     const sparse = points.length < 4;
@@ -6973,7 +6973,7 @@ function createDimensionalCharts() {
         const total = element("span", "dimensional-count", valueLabel(point.total, unit));
         total.setAttribute("aria-hidden", "true");
         action.append(stack, total);
-        if (inspect) for (const segment of stack.querySelectorAll("[data-segment]")) inspect(segment, point, segment.dataset.segment);
+        if (inspect2) for (const segment of stack.querySelectorAll("[data-segment]")) inspect2(segment, point, segment.dataset.segment);
         revealValue(action, total);
         slot.append(action);
         if (createSegment) for (const part of geometry.segments) {
@@ -7031,16 +7031,16 @@ function createDimensionalCharts() {
     for (const node of body.querySelectorAll(".dimensional-count")) observer.observe(node);
     return scroll;
   }
-  function comparisonView({ groups, serviceMode, label, summary, onSelect, createAction, onOverflow, unit, inspect, renderValue }) {
+  function comparisonView({ groups, serviceMode, label, summary, onSelect, createAction, onOverflow, unit, inspect: inspect2, renderValue }) {
     const maximum = Math.max(1, ...groups.map((group) => group.total));
     const service = (group) => group.id === "group:other" ? group.id : group.label;
     const chart = element("div", "flat-comparison");
     chart.setAttribute("role", "list");
     chart.dataset.maximum = maximum;
     for (const group of groups) {
-      const parts2 = columnParts(count7(group.total, "Comparison total"), group, serviceMode ? service(group) : void 0);
-      const cell = element("div", "flat-comparison-row");
-      cell.setAttribute("role", "listitem");
+      const parts2 = columnParts(count8(group.total, "Comparison total"), group, serviceMode ? service(group) : void 0);
+      const cell2 = element("div", "flat-comparison-row");
+      cell2.setAttribute("role", "listitem");
       const action = group.total ? createAction ? createAction(group) : element("button") : element("div");
       action.className = "flat-comparison-action";
       action.dataset.groupId = group.id;
@@ -7060,12 +7060,12 @@ function createDimensionalCharts() {
         mark.dataset.segment = part.key;
         mark.dataset.count = part.count;
         mark.style.width = geometryPolicy.span(part.count, maximum, 100) + "%";
-        if (inspect) inspect(mark, group, part.key);
+        if (inspect2) inspect2(mark, group, part.key);
         track.append(mark);
       }
       action.append(track);
-      cell.append(action);
-      chart.append(cell);
+      cell2.append(action);
+      chart.append(cell2);
     }
     onOverflow?.(false);
     return chart;
@@ -7222,7 +7222,7 @@ var init_prompt_author_styles = __esm({
 
 // lib/activity-projection.mjs
 function createActivityProjection(time2, serviceCategories2, outcomes3) {
-  const unique6 = (items) => [...new Set(items)];
+  const unique7 = (items) => [...new Set(items)];
   const compare3 = (a3, b) => a3 < b ? -1 : a3 > b ? 1 : 0;
   const identity4 = (kind2, values) => `${kind2}:${JSON.stringify(values)}`;
   const validStatus5 = (value) => Number.isInteger(value) && value >= 100 && value <= 599;
@@ -7234,24 +7234,24 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
     }
     const durations = rows.map((r) => r.durationMs).filter((v2) => Number.isFinite(v2) && v2 >= 0).sort((a3, b) => a3 - b);
     const quantile2 = (p) => durations.length ? durations[Math.max(0, Math.ceil(p * durations.length) - 1)] : null;
-    const units2 = unique6(rows.map((row) => row.countUnit).filter(Boolean));
+    const units2 = unique7(rows.map((row) => row.countUnit).filter(Boolean));
     const unlikeNativeUnits = units2.some((unit) => unit.startsWith("native-")) && units2.length > 1;
     return {
       ...t,
       successRate: unlikeNativeUnits ? { numerator: null, denominator: null, percent: null, unavailable: "different-source-unit-definitions" } : { numerator: t.success, denominator: t.count, percent: t.count ? t.success * 100 / t.count : null },
       duration: { sampleCount: durations.length, p50Ms: quantile2(0.5), p95Ms: quantile2(0.95), method: "nearest-rank; available samples only" },
-      statusBreakdown: unique6(rows.map((r) => r.status).filter(validStatus5)).sort((a3, b) => a3 - b).map((s) => ({ status: s, count: rows.filter((r) => r.status === s).length }))
+      statusBreakdown: unique7(rows.map((r) => r.status).filter(validStatus5)).sort((a3, b) => a3 - b).map((s) => ({ status: s, count: rows.filter((r) => r.status === s).length }))
     };
   }
   function coverage4(rows) {
     const dates = rows.map((r) => r.startedAt).filter(Boolean).sort();
-    const size = (key4) => unique6(rows.map((r) => r[key4]).filter(Boolean)).length;
+    const size = (key4) => unique7(rows.map((r) => r[key4]).filter(Boolean)).length;
     return {
       sessionCount: size("sourceSessionId"),
       projectCount: size("projectId"),
       scenarioCount: size("scenarioId"),
-      unscopedSessionCount: unique6(rows.filter((r) => !r.projectId).map((r) => r.sourceSessionId).filter(Boolean)).length,
-      archiveVerifiedSessionCount: unique6(rows.filter((r) => r.archiveVerified).map((r) => r.sourceSessionId).filter(Boolean)).length,
+      unscopedSessionCount: unique7(rows.filter((r) => !r.projectId).map((r) => r.sourceSessionId).filter(Boolean)).length,
+      archiveVerifiedSessionCount: unique7(rows.filter((r) => r.archiveVerified).map((r) => r.sourceSessionId).filter(Boolean)).length,
       unknownSessionRows: rows.filter((r) => !r.sourceSessionId).length,
       datedRows: dates.length,
       undatedRows: rows.length - dates.length,
@@ -7273,10 +7273,10 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
       key: g.id,
       label: g.label,
       ...summarize4(g.rows),
-      sessionCount: unique6(g.rows.map((r) => r.sourceSessionId).filter(Boolean)).length,
+      sessionCount: unique7(g.rows.map((r) => r.sourceSessionId).filter(Boolean)).length,
       sharePercent: rows.length ? g.rows.length * 100 / rows.length : 0,
       drilldownIds: g.rows.map((r) => r.id),
-      queryShapes: unique6(g.rows.map((r) => r.endpoint.queryShape.join(", "))).filter(Boolean).sort()
+      queryShapes: unique7(g.rows.map((r) => r.endpoint.queryShape.join(", "))).filter(Boolean).sort()
     })).sort((a3, b) => b.total - a3.total || compare3(a3.label, b.label));
   }
   function knownServiceMatch(row, services3) {
@@ -7301,7 +7301,7 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
     return true;
   }
   function serviceInvolvement(rows, filters) {
-    const services3 = unique6(filters.services ?? []);
+    const services3 = unique7(filters.services ?? []);
     return {
       definition: serviceCategories2.involvementDefinition,
       denominator: rows.length,
@@ -7327,10 +7327,10 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
       }
     };
   }
-  function advanceBucket(date2, bucket, count7) {
-    if (bucket !== "month") return time2.addDays(date2, count7 * (bucket === "week" ? 7 : 1));
+  function advanceBucket(date2, bucket, count8) {
+    if (bucket !== "month") return time2.addDays(date2, count8 * (bucket === "week" ? 7 : 1));
     const value = /* @__PURE__ */ new Date(date2 + "T00:00:00Z");
-    value.setUTCMonth(value.getUTCMonth() + count7, 1);
+    value.setUTCMonth(value.getUTCMonth() + count8, 1);
     return time2.calendar(value.toISOString().slice(0, 10));
   }
   function bucketDistance(from, to, bucket) {
@@ -7345,9 +7345,9 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
     const requested = timelineFrom ? time2.bucketDate(time2.calendar(timelineFrom) + "T12:00:00Z", bucket, "UTC") : advanceBucket(first, bucket, Math.max(0, total - limit));
     const from = requested < first ? first : requested;
     const offset = Math.min(total, bucketDistance(first, from, bucket));
-    const count7 = Math.max(0, Math.min(limit - Math.max(0, bucketDistance(requested, from, bucket)), total - offset));
+    const count8 = Math.max(0, Math.min(limit - Math.max(0, bucketDistance(requested, from, bucket)), total - offset));
     let key4 = from;
-    for (let index = 0; index < count7; index++) {
+    for (let index = 0; index < count8; index++) {
       const next2 = time2.nextBucket(key4, bucket), endDate = time2.addDays(next2, -1);
       const start = bounds.from ? time2.midnight(key4, context2.timeZone) : null, end = bounds.to ? time2.midnight(next2, context2.timeZone) : null;
       const from2 = bounds.from && Date.parse(bounds.from) > Date.parse(start) ? filters.from : key4;
@@ -7361,7 +7361,7 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
       from: points[0]?.date ?? null,
       to: points.at(-1)?.endDate ?? null,
       offset,
-      count: count7,
+      count: count8,
       total,
       limit
     } };
@@ -7416,10 +7416,10 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
         id: identity4("journey", [selectedRows[0].sourceSessionId, scenarioId]),
         scenarioId,
         sourceSessionId: selectedRows[0].sourceSessionId,
-        workIqCallIds: unique6(selectedRows.filter((r) => r.activityType === "workiq").map((r) => r.toolCallId).filter(Boolean)),
+        workIqCallIds: unique7(selectedRows.filter((r) => r.activityType === "workiq").map((r) => r.toolCallId).filter(Boolean)),
         graphActivityIds: graph.map((r) => r.activityId),
         relatedGraphActivityIds: graphData.map((a3) => a3.activityId),
-        precedingWorkIqCallIds: unique6(graphData.flatMap((a3) => a3.fallback?.precedingWorkIqCallIds ?? [])),
+        precedingWorkIqCallIds: unique7(graphData.flatMap((a3) => a3.fallback?.precedingWorkIqCallIds ?? [])),
         association,
         confidence: association === "explicit-transition" ? "medium" : "low",
         causeProven: false,
@@ -7431,7 +7431,7 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
   }
   function project(rows, { groupBy, limit, bucket, filters, timeContext, dateRange, timelineFrom, timelineLimit, completeTimeline }, scenarios) {
     const groups = groupRows(rows, groupBy), omitted = groups.slice(limit);
-    const units2 = unique6(rows.map((row) => row.countUnit));
+    const units2 = unique7(rows.map((row) => row.countUnit));
     const nativePopulation = scenarios.some((record) => record.recordKind === "native-conversation") || units2.some((unit) => unit?.startsWith("native-"));
     const omittedIds = new Set(omitted.flatMap((g) => g.drilldownIds));
     const otherRows = rows.filter((r) => omittedIds.has(r.id));
@@ -7444,7 +7444,7 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
       sharePercent: rows.length ? otherRows.length * 100 / rows.length : 0,
       drilldownIds: otherRows.map((r) => r.id),
       queryShapes: [],
-      sessionCount: unique6(otherRows.map((r) => r.sourceSessionId)).length
+      sessionCount: unique7(otherRows.map((r) => r.sourceSessionId)).length
     } : null;
     return {
       rows,
@@ -7482,7 +7482,7 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
       callsWithoutReportedResults: calls2.length - withResults,
       callsWithNumericStatus: withStatus,
       callsWithoutNumericStatus: calls2.length - withStatus,
-      returnedResultUnits: calls2.reduce((sum, call) => sum + call.resultIds.length, 0),
+      returnedResultUnits: calls2.reduce((sum2, call) => sum2 + call.resultIds.length, 0),
       selectedResultUnits: rows.length,
       selectedResultUnitsWithNumericStatus: rows.filter((row) => validStatus5(row.status)).length
     };
@@ -7526,7 +7526,7 @@ function createActivityProjection(time2, serviceCategories2, outcomes3) {
       rowUnits: rows.map(unitFor),
       contextOnlyScenarioIds: [...context2].filter((id5) => chosen.has(id5)),
       nativeConversationKeys: selectedNativeIds,
-      units: unique6(rows.map(unitFor)),
+      units: unique7(rows.map(unitFor)),
       native: {
         conversations: native2.length,
         messageRepresentationObservations: native2.reduce((n, record) => n + record.messages.filter((message) => !message.parentObservationKey).length, 0),
@@ -7751,7 +7751,7 @@ function createServiceCategories() {
     const ids = new Set(values.map((value) => describe(value).id));
     return entries3.filter((entry3) => ids.has(entry3.id));
   }
-  function display(value, groupCount) {
+  function display2(value, groupCount) {
     const entry3 = describe(value, groupCount);
     return entry3.id === "Unknown" ? {
       ...entry3,
@@ -7855,7 +7855,7 @@ function createServiceCategories() {
     evidenceGroups,
     describe,
     used,
-    display,
+    display: display2,
     displayEvidence,
     availabilitySummary,
     attributionReading
@@ -7901,18 +7901,18 @@ function createRecordedResults({ scope = () => null, screen = false } = {}) {
   }
   function summarize4(rows) {
     if (!Array.isArray(rows)) return null;
-    const unique6 = /* @__PURE__ */ new Map();
+    const unique7 = /* @__PURE__ */ new Map();
     for (const row of rows) {
       if (!row || typeof row.id !== "string" || !keys2.includes(row.outcome)) return null;
-      if (unique6.has(row.id) && unique6.get(row.id).outcome !== row.outcome) return null;
-      unique6.set(row.id, row);
+      if (unique7.has(row.id) && unique7.get(row.id).outcome !== row.outcome) return null;
+      unique7.set(row.id, row);
     }
-    const counts3 = { count: unique6.size, ...Object.fromEntries(keys2.map((key4) => [key4, 0])) };
-    for (const row of unique6.values()) counts3[row.outcome]++;
+    const counts3 = { count: unique7.size, ...Object.fromEntries(keys2.map((key4) => [key4, 0])) };
+    for (const row of unique7.values()) counts3[row.outcome]++;
     return counts3;
   }
   function valid2(summary) {
-    return summary && Number.isSafeInteger(summary.count) && summary.count >= 0 && keys2.every((key4) => Number.isSafeInteger(summary[key4]) && summary[key4] >= 0) && keys2.reduce((sum, key4) => sum + summary[key4], 0) === summary.count;
+    return summary && Number.isSafeInteger(summary.count) && summary.count >= 0 && keys2.every((key4) => Number.isSafeInteger(summary[key4]) && summary[key4] >= 0) && keys2.reduce((sum2, key4) => sum2 + summary[key4], 0) === summary.count;
   }
   function entries3(layer, summary) {
     if (!valid2(summary)) return null;
@@ -8030,8 +8030,8 @@ function createRecordedResults({ scope = () => null, screen = false } = {}) {
   }
   function diagnosticSummary(value, returnedStatus) {
     const parts2 = [{ ...value, statusCode: value.statusCode ?? returnedStatus }, ...value.details ?? []];
-    const unique6 = new Map(parts2.map((part) => [JSON.stringify([part.message, part.code, part.statusCode]), part]));
-    return [...unique6.values()].map((part) => diagnosticPart(part)).filter(Boolean).join("\n");
+    const unique7 = new Map(parts2.map((part) => [JSON.stringify([part.message, part.code, part.statusCode]), part]));
+    return [...unique7.values()].map((part) => diagnosticPart(part)).filter(Boolean).join("\n");
   }
   function diagnosticPart(value) {
     const message = value.message && !genericMessage(value) ? value.message : null;
@@ -8512,9 +8512,9 @@ function createRecordedResults({ scope = () => null, screen = false } = {}) {
     })) : [];
     const problems = scoped.filter((entry3) => ["failure", "partial", "transport"].includes(entry3.tone));
     const detailed = problems.length ? problems : contextual && scoped.some((entry3) => entry3.coverage || entry3.items?.some((item) => item.interpretation)) ? scoped : null;
-    const reasons = detailed ?? values.filter((entry3) => entry3.reason).map(({ reason: reason2, count: count7, key: key4, tone }) => ({
+    const reasons = detailed ?? values.filter((entry3) => entry3.reason).map(({ reason: reason2, count: count8, key: key4, tone }) => ({
       reason: reason2,
-      count: count7,
+      count: count8,
       outcome: key4,
       tone: tone ?? key4,
       ...contextual ? { items: [{ label: null, text: reason2 }] } : {}
@@ -8522,13 +8522,13 @@ function createRecordedResults({ scope = () => null, screen = false } = {}) {
     const outcome5 = ["failure", "transport", "partial", "unknown", "other", "success"].find((key4) => values.some((entry3) => (entry3.tone ?? entry3.key) === key4)) ?? null;
     return { summary, entries: values, outcome: outcome5, reasons, moreReasons: 0 };
   }
-  function unit(layer, count7, accepted = scope()) {
+  function unit(layer, count8, accepted = scope()) {
     if (accepted?.layer === layer) {
-      if (layer === "tool" && count7 === 0 && accepted.measurementEligibility?.nativeActivityDates === "unqualified") return "recorded tool calls";
-      if (accepted.unit === "source-qualified tool calls") return count7 === 1 ? "recorded tool call" : "recorded tool calls";
-      if (accepted.unit === "source-qualified returned-result observations") return count7 === 1 ? "recorded returned result" : "recorded returned results";
+      if (layer === "tool" && count8 === 0 && accepted.measurementEligibility?.nativeActivityDates === "unqualified") return "recorded tool calls";
+      if (accepted.unit === "source-qualified tool calls") return count8 === 1 ? "recorded tool call" : "recorded tool calls";
+      if (accepted.unit === "source-qualified returned-result observations") return count8 === 1 ? "recorded returned result" : "recorded returned results";
     }
-    return units2[layer]?.[count7 === 1 ? 0 : 1] || "records";
+    return units2[layer]?.[count8 === 1 ? 0 : 1] || "records";
   }
   function populationLabel(unit2) {
     const labels3 = {
@@ -8540,8 +8540,8 @@ function createRecordedResults({ scope = () => null, screen = false } = {}) {
     if (!Object.hasOwn(labels3, unit2)) throw new TypeError("Source-qualified outcome unit is unavailable.");
     return labels3[unit2];
   }
-  function columnUnit(layer, count7) {
-    const name = unit(layer, count7);
+  function columnUnit(layer, count8) {
+    const name = unit(layer, count8);
     return layer === "tool" ? name.replace(/^(Work IQ|recorded) tool /, "") : name;
   }
   function canInspect(layer, outcome5) {
@@ -8656,7 +8656,7 @@ function createCollectionStatus() {
   function nativeUnavailableMatches(snapshot, status4) {
     const value = nativeUnavailable(status4), read2 = snapshot?.nativeRead;
     const nativeRow = (row) => typeof row?.countUnit === "string" && row.countUnit.startsWith("native-") || ["microsoft-365-chat", "microsoft-365-cowork"].includes(row?.sourceId);
-    return Boolean(value && exact10(read2, ["status", "reason", "revision", "generation", "authorizationRevision"]) && read2.status === "unavailable" && read2.reason === value.reason && typeof read2.revision === "string" && /^[a-f0-9]{64}$/.test(read2.revision) && read2.generation === value.generation && read2.authorizationRevision === value.authorizationRevision && Array.isArray(snapshot.scenarios) && !snapshot.scenarios.some((record) => record?.recordKind === "native-conversation" || nativeRow(record)) && (!snapshot.analytics?.rows || Array.isArray(snapshot.analytics.rows) && !snapshot.analytics.rows.some(nativeRow)) && (!snapshot.requestActivity || Object.values(snapshot.requestActivity).every((rows) => Array.isArray(rows) && !rows.some(nativeRow))) && ["nativeConversationKeys", "contextOnlyScenarioIds"].every((key4) => snapshot.analytics?.population?.[key4] === void 0 || Array.isArray(snapshot.analytics.population[key4]) && snapshot.analytics.population[key4].length === 0) && (!snapshot.analytics?.population?.native || Object.values(snapshot.analytics.population.native).every((count7) => count7 === 0)));
+    return Boolean(value && exact10(read2, ["status", "reason", "revision", "generation", "authorizationRevision"]) && read2.status === "unavailable" && read2.reason === value.reason && typeof read2.revision === "string" && /^[a-f0-9]{64}$/.test(read2.revision) && read2.generation === value.generation && read2.authorizationRevision === value.authorizationRevision && Array.isArray(snapshot.scenarios) && !snapshot.scenarios.some((record) => record?.recordKind === "native-conversation" || nativeRow(record)) && (!snapshot.analytics?.rows || Array.isArray(snapshot.analytics.rows) && !snapshot.analytics.rows.some(nativeRow)) && (!snapshot.requestActivity || Object.values(snapshot.requestActivity).every((rows) => Array.isArray(rows) && !rows.some(nativeRow))) && ["nativeConversationKeys", "contextOnlyScenarioIds"].every((key4) => snapshot.analytics?.population?.[key4] === void 0 || Array.isArray(snapshot.analytics.population[key4]) && snapshot.analytics.population[key4].length === 0) && (!snapshot.analytics?.population?.native || Object.values(snapshot.analytics.population.native).every((count8) => count8 === 0)));
   }
   const persistenceBlockers = {
     NATIVE_RETENTION_NOT_CONFIGURED: "Microsoft activity saving is not configured.",
@@ -9178,10 +9178,10 @@ function createCallInvestigation(compareEntries) {
   function sourceToolCall(scenario, row) {
     if (!scenario?.sourceSessionId || scenario.scenarioId !== row?.scenarioId || row.sourceSessionId != null && row.sourceSessionId !== scenario.sourceSessionId) return null;
     const id5 = row.parentCallId ?? row.id;
-    const matches3 = scenario.toolCalls?.filter((call) => row.toolCallId ? call.toolCallId === row.toolCallId : call.startEventId && id5 === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`);
-    if (!matches3 || matches3.length < 2) return only2(matches3);
-    const retained = JSON.stringify(matches3[0]);
-    return matches3.every((call, index) => index === 0 || JSON.stringify(call) === retained) ? matches3[0] : null;
+    const matches4 = scenario.toolCalls?.filter((call) => row.toolCallId ? call.toolCallId === row.toolCallId : call.startEventId && id5 === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`);
+    if (!matches4 || matches4.length < 2) return only2(matches4);
+    const retained = JSON.stringify(matches4[0]);
+    return matches4.every((call, index) => index === 0 || JSON.stringify(call) === retained) ? matches4[0] : null;
   }
   function resolve(activity, records, route, revision) {
     if (route.call === void 0) return { status: "none" };
@@ -9254,8 +9254,8 @@ function createPromptAuthorship({ screen = false } = {}) {
     if (value == null || value === "" || value === "all") return [...actors];
     const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : null;
     if (!values || values.some((actor) => typeof actor !== "string")) throw new TypeError("Choose supported prompt authors.");
-    const unique6 = [...new Set(values)];
-    return [...actors.filter((actor) => unique6.includes(actor)), ...unique6.filter((actor) => !actors.includes(actor)).sort()];
+    const unique7 = [...new Set(values)];
+    return [...actors.filter((actor) => unique7.includes(actor)), ...unique7.filter((actor) => !actors.includes(actor)).sort()];
   }
   function filterValue(value) {
     const values = selection2(value);
@@ -9384,12 +9384,12 @@ function createPromptAuthorship({ screen = false } = {}) {
       detail: prefix.length > 65536 ? "host-prefix-over-bound" : "host-suffix-over-bound",
       directReference
     };
-    const stamp3 = prefix.match(/^<current_datetime>(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?(?:Z|[+-]\d\d:\d\d))<\/current_datetime>\s*/);
-    const steeringSender = !stamp3 && data.delivery === "steering" && typeof data.messageId === "string" && /^<cross_session_message>[\s\S]*<\/cross_session_message>\s*$/.test(prefix);
-    if (!stamp3 && !steeringSender) return invalidEnvelope(data.delivery === "steering" && prefix.length === 0 ? "steering-no-host-prefix" : "timestamp-or-steering-frame-unverified");
-    if (!Number.isFinite(Date.parse(event.timestamp)) || stamp3 && !Number.isFinite(Date.parse(stamp3[1]))) return invalidEnvelope("invalid-timestamp");
-    if (stamp3 && Math.abs(Date.parse(stamp3[1]) - Date.parse(event.timestamp)) > 1e3) return invalidEnvelope("timestamp-disagreement");
-    let rest = stamp3 ? prefix.slice(stamp3[0].length) : prefix, sender = false;
+    const stamp4 = prefix.match(/^<current_datetime>(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?(?:Z|[+-]\d\d:\d\d))<\/current_datetime>\s*/);
+    const steeringSender = !stamp4 && data.delivery === "steering" && typeof data.messageId === "string" && /^<cross_session_message>[\s\S]*<\/cross_session_message>\s*$/.test(prefix);
+    if (!stamp4 && !steeringSender) return invalidEnvelope(data.delivery === "steering" && prefix.length === 0 ? "steering-no-host-prefix" : "timestamp-or-steering-frame-unverified");
+    if (!Number.isFinite(Date.parse(event.timestamp)) || stamp4 && !Number.isFinite(Date.parse(stamp4[1]))) return invalidEnvelope("invalid-timestamp");
+    if (stamp4 && Math.abs(Date.parse(stamp4[1]) - Date.parse(event.timestamp)) > 1e3) return invalidEnvelope("timestamp-disagreement");
+    let rest = stamp4 ? prefix.slice(stamp4[0].length) : prefix, sender = false;
     const notice = rest.match(/^<mode_changed_notice>([\s\S]*?)<\/mode_changed_notice>\n\n/);
     if (notice) {
       const planNotice = /<plan_mode>[\s\S]*<\/plan_mode>/.test(notice[1]);
@@ -9617,7 +9617,7 @@ function createPromptAuthorship({ screen = false } = {}) {
     if (evidence?.original === "empty" && evidence.reason === null) return { state: "empty", notice: "The recorded message was empty." };
     return { state: "unavailable", notice: prompt?.status === "full" && typeof prompt.text === "string" ? "No prompt text retained" : "Prompt text unavailable" };
   }
-  function display(prompt, options) {
+  function display2(prompt, options) {
     const state = availability5(prompt);
     const noNewMessage = state.state === "automatic" || prompt?.activityState === "automatic" && prompt.status === "unavailable" && prompt.text === null && prompt.availabilityNote === "No new message was sent.";
     const captured = capture(prompt);
@@ -9631,7 +9631,7 @@ function createPromptAuthorship({ screen = false } = {}) {
   function iconRole(actor) {
     return actor === "user" ? "account" : actor === "agent" ? "report-agent" : "unobserved";
   }
-  return { version: version2, actors, unknownLabel, iconRole, interactionIdentity, selection: selection2, filterValue, validSelection, selectionLabel, originKind, read: read2, fromEvent, reviewEvent, label, display, reason: reason2, unverifiedReason, savedVersion, requestLink, correlateKickoff, merge, capture, availability: availability5 };
+  return { version: version2, actors, unknownLabel, iconRole, interactionIdentity, selection: selection2, filterValue, validSelection, selectionLabel, originKind, read: read2, fromEvent, reviewEvent, label, display: display2, reason: reason2, unverifiedReason, savedVersion, requestLink, correlateKickoff, merge, capture, availability: availability5 };
 }
 function mergePromptMetadata(prior, next2) {
   return {
@@ -10116,14 +10116,14 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
     return null;
   }
   const qualityDimensions = ["accuracy", "answer-trust", "action-trust"];
-  const units2 = (count7, unit) => `${number3(count7)} ${count7 === 1 ? unit.replace(/s$/, "") : unit}`;
-  function coverageHeadline(count7, eligible, verb) {
+  const units2 = (count8, unit) => `${number3(count8)} ${count8 === 1 ? unit.replace(/s$/, "") : unit}`;
+  function coverageHeadline(count8, eligible, verb) {
     if (!eligible) return "No eligible requests";
-    if (!count7 && verb === "assessed") return "Quality not assessed";
-    return count7 === eligible ? `All ${units2(eligible, "requests")} ${verb}` : `${number3(count7)} of ${units2(eligible, "requests")} ${verb}`;
+    if (!count8 && verb === "assessed") return "Quality not assessed";
+    return count8 === eligible ? `All ${units2(eligible, "requests")} ${verb}` : `${number3(count8)} of ${units2(eligible, "requests")} ${verb}`;
   }
   function evidenceRow(metric) {
-    const quality = qualityDimensions.includes(metric.dimension), { covered: count7, eligible } = metric.coverage;
+    const quality = qualityDimensions.includes(metric.dimension), { covered: count8, eligible } = metric.coverage;
     const timingUnits = {
       "tool-duration": "calls",
       "recorded-response-duration": "requests",
@@ -10147,14 +10147,14 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       dimension: metric.dimension,
       status: metric.status,
       label: reading(metric)?.label ?? speedLabels[metric.definitionId] ?? checkLabels[metric.checkId],
-      coverage: { count: count7, eligible, unit },
+      coverage: { count: count8, eligible, unit },
       eligible,
       provenance
     };
     if (quality) {
-      const notAssessed = eligible - count7, errors = metric.counts.evaluatorError;
+      const notAssessed = eligible - count8, errors = metric.counts.evaluatorError;
       const reasons = metric.unassessedReasons ?? (metric.counts.unassessed ? [{
-        reason: count7 === 0 && errors === 0 && metric.reason !== "no-assessed-units" ? metric.reason : null,
+        reason: count8 === 0 && errors === 0 && metric.reason !== "no-assessed-units" ? metric.reason : null,
         count: metric.counts.unassessed
       }] : []);
       const labels2 = {
@@ -10168,26 +10168,26 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       return {
         ...common2,
         kind: "quality",
-        assessed: count7,
+        assessed: count8,
         notAssessed,
         counts: { ...metric.counts },
-        headline: coverageHeadline(count7, eligible, "assessed"),
-        coverageLabel: `${number3(count7)} of ${units2(eligible, unit)} assessed`,
-        resultLabel: count7 ? `${number3(metric.counts.pass)} passed; ${number3(metric.counts.fail)} failed` : "No pass or fail verdicts",
+        headline: coverageHeadline(count8, eligible, "assessed"),
+        coverageLabel: `${number3(count8)} of ${units2(eligible, unit)} assessed`,
+        resultLabel: count8 ? `${number3(metric.counts.pass)} passed; ${number3(metric.counts.fail)} failed` : "No pass or fail verdicts",
         missingLabel: notAssessed ? `${units2(notAssessed, unit)} not assessed${errors ? `; ${units2(errors, "evaluator errors")}` : ""}` : "No requests left unassessed",
         passShare: { value: metric.value, label: metric.value === null ? "No pass percentage" : `${metric.value > 0 && metric.value * 100 < 0.01 ? "<0.01" : percentages.format(metric.value * 100)}% of assessed requests passed` },
         unassessedReasons: reasons.map((item) => ({
           ...item,
           label: labels2[item.reason] ?? (item.reason === null ? "Reason not retained for these unassessed requests" : reasonLabels[item.reason])
         })),
-        limitation: (count7 < eligible ? "Results describe only the assessed requests, not the overall quality of this selection." : "These are recorded assessments, not independent proof of correctness.") + (metric.origin === "model-assessed" ? " AI judgments can be wrong." : "") + (wording.resolve(metric).kind === "permission" ? metric.origin === "user-personal" ? " Personal authorization feedback is not an independent permission audit." : " Tool outcomes do not establish permission." : wording.resolve(metric).kind === "match" ? " Matching the request does not prove a person gave permission." : "")
+        limitation: (count8 < eligible ? "Results describe only the assessed requests, not the overall quality of this selection." : "These are recorded assessments, not independent proof of correctness.") + (metric.origin === "model-assessed" ? " AI judgments can be wrong." : "") + (wording.resolve(metric).kind === "permission" ? metric.origin === "user-personal" ? " Personal authorization feedback is not an independent permission audit." : " Tool outcomes do not establish permission." : wording.resolve(metric).kind === "match" ? " Matching the request does not prove a person gave permission." : "")
       };
     }
     if (metric.dimension === "speed") {
       return {
         ...common2,
         ...timing.fromMetric(metric),
-        headline: `${number3(count7)} of ${units2(eligible, unit)} timed`
+        headline: `${number3(count8)} of ${units2(eligible, unit)} timed`
       };
     }
     if (metric.checkId === "recorded-tool-success") return {
@@ -10196,7 +10196,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       counts: { ...metric.counts },
       headline: `${number3(metric.counts.pass)} of ${units2(eligible, "calls")} succeeded`,
       resultLabel: `${number3(metric.counts.pass)} succeeded; ${number3(metric.counts.fail)} failed`,
-      missingLabel: `${units2(eligible - count7, "calls")} without a recorded binary outcome`,
+      missingLabel: `${units2(eligible - count8, "calls")} without a recorded binary outcome`,
       successShare: { value: eligible ? metric.counts.pass / eligible : null, numerator: metric.counts.pass, denominator: eligible },
       limitation: "Recorded tool success uses all included calls, not just binary results. It does not establish answer correctness, support or permission."
     };
@@ -10204,7 +10204,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       ...common2,
       kind: "observation",
       counts: metric.counts ? { ...metric.counts } : null,
-      headline: `${number3(count7)} of ${units2(eligible, unit)} with recorded binary outcomes`,
+      headline: `${number3(count8)} of ${units2(eligible, unit)} with recorded binary outcomes`,
       resultLabel: metric.counts ? `${number3(metric.counts.pass)} positive; ${number3(metric.counts.fail)} negative` : "Local observation",
       limitation: "Tool outcomes and evidence availability do not establish answer correctness, support or permission."
     };
@@ -10239,7 +10239,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       status: attempts.length === eligible ? "available" : "partial",
       coverage: { count: attempts.length, eligible, unit: "requests" },
       counts: counts3,
-      rows: Object.entries(counts3).filter(([, count7]) => count7).map(([state, count7]) => ({ state, count: count7, label: labels2[state] })),
+      rows: Object.entries(counts3).filter(([, count8]) => count8).map(([state, count8]) => ({ state, count: count8, label: labels2[state] })),
       headline: `Assessment attempt status recorded for ${number3(attempts.length)} of ${units2(eligible, "requests")}`,
       limitation
     };
@@ -10263,7 +10263,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
         missingLabel: eligible === null ? "No metric supplied for this scope" : `${units2(eligible - assessed, "requests")} not assessed`,
         rows,
         localObservations: all.filter((metric) => metric.origin === "automatic-local").map(evidenceRow),
-        overlappingAssessments: assessedLanes.reduce((sum, metric) => sum + metric.coverage.covered, 0) > coveredRefs.size,
+        overlappingAssessments: assessedLanes.reduce((sum2, metric) => sum2 + metric.coverage.covered, 0) > coveredRefs.size,
         limitation: "Tool outcomes do not establish answer correctness, answer support or permission. " + (rows.length > 1 ? "Assessment rows may cover the same requests; do not add their counts or average their percentages." : assessed ? "Only the assessed requests have quality verdicts; missing verdicts are not failures." : "No pass or fail quality verdict is available.")
       }];
     }));
@@ -10275,7 +10275,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       execution: metrics.filter((metric) => metric.dimension === "execution").map(evidenceRow)
     };
   }
-  function present3(metric, singleInteraction = false) {
+  function present4(metric, singleInteraction = false) {
     const ratio = metric.unit === "ratio", cost = metric.unit === "USD";
     const quality = qualityDimensions.includes(metric.dimension);
     const term = quality ? wording.resolve(metric) : null;
@@ -10334,11 +10334,11 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
   }
   function format(metric) {
     validateMetric2(metric);
-    return present3(metric);
+    return present4(metric);
   }
   function singleDetail(metric) {
     validateMetric2(metric);
-    const row = present3(metric, true), quality = qualityDimensions.includes(metric.dimension);
+    const row = present4(metric, true), quality = qualityDimensions.includes(metric.dimension);
     let value = row.value, tone = "neutral";
     if (quality) {
       const term = wording.resolve(metric);
@@ -10363,7 +10363,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       const { pass, fail: fail15, unassessed, evaluatorError } = metric.counts;
       if (evaluatorError) tone = "error";
       else if (metric.coverage.eligible === 1 && fail15) tone = "negative";
-      value = !metric.coverage.eligible ? "No eligible calls" : metric.coverage.eligible === 1 ? evaluatorError ? "Completion check failed" : unassessed ? "Completion not verified" : fail15 ? "Failed" : "Completed" : [[pass, "completed"], [fail15, "failed"], [unassessed, "unverified"], [evaluatorError, "check errors"]].filter(([count7]) => count7).map(([count7, label]) => `${number3(count7)} ${label}`).join("; ");
+      value = !metric.coverage.eligible ? "No eligible calls" : metric.coverage.eligible === 1 ? evaluatorError ? "Completion check failed" : unassessed ? "Completion not verified" : fail15 ? "Failed" : "Completed" : [[pass, "completed"], [fail15, "failed"], [unassessed, "unverified"], [evaluatorError, "check errors"]].filter(([count8]) => count8).map(([count8, label]) => `${number3(count8)} ${label}`).join("; ");
     }
     return {
       label: {
@@ -10466,8 +10466,8 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
     const reported = { calls: 0, succeeded: 0, failed: 0, other: 0 };
     const completeStatus = Boolean(reviewStatus) || reviewStatuses !== null && statuses2.length === eligible.size;
     for (const status4 of statuses2) for (const key4 of Object.keys(reported)) reported[key4] += status4.execution[key4];
-    for (const status4 of statuses2) for (const { cause, count: count7 } of status4.execution.causes) {
-      causes.set(cause, (causes.get(cause) ?? 0) + count7);
+    for (const status4 of statuses2) for (const { cause, count: count8 } of status4.execution.causes) {
+      causes.set(cause, (causes.get(cause) ?? 0) + count8);
     }
     if (execution) {
       const { pass, fail: fail15, unassessed, evaluatorError } = execution.counts;
@@ -10515,7 +10515,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
         });
       }
     }
-    if ([...causes.values()].reduce((sum, count7) => sum + count7, 0) !== reported.failed) throw new TypeError("Failure reasons do not match reported failures.");
+    if ([...causes.values()].reduce((sum2, count8) => sum2 + count8, 0) !== reported.failed) throw new TypeError("Failure reasons do not match reported failures.");
     if (!reviewStatus && (reviewStatuses === null || statuses2.length < eligible.size)) operational.push({
       kind: "unavailable",
       tone: "neutral",
@@ -10533,13 +10533,13 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       "source-error-not-supplied": ["Error details not supplied", "The source supplied no supported structured error details"],
       unqualified: ["Cause not retained", "The cause was not retained; source omission and earlier collection cannot be distinguished"]
     };
-    for (const [cause, count7] of causes) operational.push({
+    for (const [cause, count8] of causes) operational.push({
       kind: "cause",
       cause,
-      count: count7,
+      count: count8,
       tone: "neutral",
       label: causeLabels2[cause][0],
-      text: `${causeLabels2[cause][1]}${singleInteraction && count7 === 1 ? "" : ` (${units2(count7, "calls")})`}.`
+      text: `${causeLabels2[cause][1]}${singleInteraction && count8 === 1 ? "" : ` (${units2(count8, "calls")})`}.`
     });
     for (const dimension of qualityDimensions) {
       const group = evidence.quality[dimension];
@@ -10613,7 +10613,7 @@ function createAssessmentPresentation({ validateMetric: validateMetric2, metricS
       }
       slots.add(slot);
     }
-    const rows = metrics.filter((metric) => metric.dimension !== "cost").map((metric) => present3(metric, singleInteraction));
+    const rows = metrics.filter((metric) => metric.dimension !== "cost").map((metric) => present4(metric, singleInteraction));
     const review = reviewStatus ? presentReviewStatus(reviewStatus) : null;
     const groups = Object.fromEntries(Object.keys(dimensionLabels).map((dimension) => [
       dimension,
@@ -11072,7 +11072,7 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
   };
   const formatNumber = (value, maximumFractionDigits = 1) => new Intl.NumberFormat(void 0, { maximumFractionDigits }).format(value);
   function nativeRows(model) {
-    const count7 = (value, state) => value !== null ? formatNumber(value, 0) : state === "source-not-present" ? "Not present" : state === "cohort-unavailable" ? "Cohort unavailable" : "Unavailable";
+    const count8 = (value, state) => value !== null ? formatNumber(value, 0) : state === "source-not-present" ? "Not present" : state === "cohort-unavailable" ? "Cohort unavailable" : "Unavailable";
     const labels3 = {
       "native-conversation": "Conversations",
       "native-tool-call": "Tool calls",
@@ -11098,8 +11098,8 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
     return rows.map((row) => ({
       source: row.sourceId === "microsoft-365-chat" ? "Microsoft 365 Chat" : "Microsoft 365 Cowork",
       label: labels3[row.unit] ?? row.unit,
-      earlier: count7(row.baselineCount, row.baselineState),
-      later: count7(row.laterCount, row.laterState),
+      earlier: count8(row.baselineCount, row.baselineState),
+      later: count8(row.laterCount, row.laterState),
       change: row.delta === null ? "Not comparable" : `${row.delta > 0 ? "+" : ""}${formatNumber(row.delta, 0)}`,
       numeric: [false, row.baselineCount !== null, row.laterCount !== null, row.delta !== null],
       empty: row.baselineCount === 0 && row.laterCount === 0,
@@ -11355,14 +11355,14 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
         "Source coverage or definitions differ; some changes cannot be compared."
       ));
       const makeTable = (rows2) => {
-        const table2 = el("table", "comparison-metrics"), head = el("thead"), header = el("tr"), body = el("tbody");
+        const table3 = el("table", "comparison-metrics"), head = el("thead"), header = el("tr"), body = el("tbody");
         for (const [index, title2] of ["Source and measure", "Earlier", "Later", "Change"].entries()) {
-          const cell = el("th", index ? "report-numeric" : "", title2);
-          cell.scope = "col";
-          header.append(cell);
+          const cell2 = el("th", index ? "report-numeric" : "", title2);
+          cell2.scope = "col";
+          header.append(cell2);
         }
         head.append(header);
-        table2.append(head);
+        table3.append(head);
         for (const row of rows2) {
           const tr = el("tr"), label = el("th", row.failure ? "report-negative" : "", row.label);
           label.scope = "row";
@@ -11375,8 +11375,8 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
           }
           body.append(tr);
         }
-        table2.append(body);
-        return table2;
+        table3.append(body);
+        return table3;
       };
       const rows = nativeRows(model), populated = rows.filter((row) => !row.empty), empty = rows.filter((row) => row.empty);
       if (populated.length) section.append(makeTable(populated));
@@ -11388,26 +11388,26 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
       panel.append(section);
     }
     function metricCell(metric, side) {
-      const cell = el("td");
+      const cell2 = el("td");
       const sideLabel = el("span", "comparison-mobile-label", side === "baseline" ? "Earlier" : "Later");
       sideLabel.setAttribute("aria-hidden", "true");
       const presentation2 = comparisonSidePresentation(metric, side);
       const value = el("strong", `comparison-metric-value ${presentation2.tone}`, presentation2.value);
-      cell.append(sideLabel, value, el("span", "comparison-meta", presentation2.note));
-      return cell;
+      cell2.append(sideLabel, value, el("span", "comparison-meta", presentation2.note));
+      return cell2;
     }
     function metricTable(metrics, label) {
-      const table2 = el("table", "comparison-metrics");
+      const table3 = el("table", "comparison-metrics");
       const caption2 = el("caption", "", label);
-      table2.append(caption2);
+      table3.append(caption2);
       const head = el("thead"), header = el("tr");
       for (const title2 of ["Measure", "Earlier report", "Later report", "Change"]) {
-        const cell = el("th", "", title2);
-        cell.scope = "col";
-        header.append(cell);
+        const cell2 = el("th", "", title2);
+        cell2.scope = "col";
+        header.append(cell2);
       }
       head.append(header);
-      table2.append(head);
+      table3.append(head);
       const body = el("tbody");
       for (const metric of metrics) {
         if (!Object.hasOwn(dimensions2, metric.metric)) throw new TypeError("Comparison contains an unknown dimension.");
@@ -11434,8 +11434,8 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
         row.append(change);
         body.append(row);
       }
-      table2.append(body);
-      return table2;
+      table3.append(body);
+      return table3;
     }
     let patternTable;
     const tool = model.layerComparisons?.[model.primaryLayer] ?? model.toolComparison;
@@ -11471,37 +11471,37 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
       }
       section.append(pair);
       if (tool.patterns.length) {
-        const table2 = el("table", "comparison-patterns");
-        table2.append(el("caption", "", "The same technical patterns, side by side"));
+        const table3 = el("table", "comparison-patterns");
+        table3.append(el("caption", "", "The same technical patterns, side by side"));
         const head = el("thead"), header = el("tr");
         for (const title2 of ["Pattern", "Earlier failures", "Later failures", "Change"]) {
-          const cell = el("th", "", title2);
-          cell.scope = "col";
-          header.append(cell);
+          const cell2 = el("th", "", title2);
+          cell2.scope = "col";
+          header.append(cell2);
         }
         head.append(header);
-        table2.append(head);
+        table3.append(head);
         const body = el("tbody"), displays = new Map((model.patternDisplays ?? []).map((item) => [item.patternId, item]));
         for (const pattern2 of tool.patterns) {
           const row = el("tr"), name = el("th");
           name.scope = "row";
-          const display = displays.get(pattern2.patternId);
-          const label = display?.available ? `${display.workload} \xB7 ${display.tool}` : "Pattern details unavailable";
+          const display2 = displays.get(pattern2.patternId);
+          const label = display2?.available ? `${display2.workload} \xB7 ${display2.tool}` : "Pattern details unavailable";
           const title2 = el(typeof onInspectPattern === "function" ? "button" : "span", "comparison-pattern-title", label);
           if (typeof onInspectPattern === "function") {
             title2.type = "button";
             title2.addEventListener("click", () => onInspectPattern(pattern2.patternId));
           }
           name.append(title2);
-          if (display?.endpoints?.length) name.append(el("span", "comparison-meta comparison-endpoint", display.endpoints.map((endpoint2) => endpoint2.pathTemplate).join(" \xB7 ")));
-          if (display?.targetShape === "unavailable") name.append(el("span", "comparison-meta", "Tool-level match; endpoint not recorded"));
+          if (display2?.endpoints?.length) name.append(el("span", "comparison-meta comparison-endpoint", display2.endpoints.map((endpoint2) => endpoint2.pathTemplate).join(" \xB7 ")));
+          if (display2?.targetShape === "unavailable") name.append(el("span", "comparison-meta", "Tool-level match; endpoint not recorded"));
           row.append(name);
           for (const [side, totals] of [["Earlier", pattern2.baseline], ["Later", pattern2.later]]) {
-            const cell = el("td"), mobile2 = el("span", "comparison-mobile-label", side);
+            const cell2 = el("td"), mobile2 = el("span", "comparison-mobile-label", side);
             mobile2.setAttribute("aria-hidden", "true");
-            cell.append(mobile2, el("strong", "", totals.count ? formatValue(totals.failureRate.percent, "percent") : "Not present"));
-            if (totals.count) cell.append(el("span", "comparison-meta", `${formatNumber(totals.failure, 0)} of ${formatNumber(totals.count, 0)} ${evidence.unitLabel}`));
-            row.append(cell);
+            cell2.append(mobile2, el("strong", "", totals.count ? formatValue(totals.failureRate.percent, "percent") : "Not present"));
+            if (totals.count) cell2.append(el("span", "comparison-meta", `${formatNumber(totals.failure, 0)} of ${formatNumber(totals.count, 0)} ${evidence.unitLabel}`));
+            row.append(cell2);
           }
           const delta2 = el("td"), mobile = el("span", "comparison-mobile-label", "Change");
           mobile.setAttribute("aria-hidden", "true");
@@ -11511,8 +11511,8 @@ function createReportComparison(wording = createAssessmentWording(), duration3 =
           row.append(delta2);
           body.append(row);
         }
-        table2.append(body);
-        patternTable = table2;
+        table3.append(body);
+        patternTable = table3;
       }
       panel.append(section);
     }
@@ -11704,10 +11704,10 @@ function excerptRange(text6, range, needle) {
   let radius = 96;
   while (true) {
     const slice = alignedRange(text6, Math.max(0, range.start - radius), Math.min(text6.length, range.end + radius));
-    const excerpt = text6.slice(slice.start, slice.end);
-    const before = normalizeSearchText(excerpt.slice(0, range.start - slice.start)).length;
-    const through = normalizeSearchText(excerpt.slice(0, range.end - slice.start)).length;
-    if (normalizeSearchText(excerpt).slice(before, through).includes(needle)) return slice;
+    const excerpt2 = text6.slice(slice.start, slice.end);
+    const before = normalizeSearchText(excerpt2.slice(0, range.start - slice.start)).length;
+    const through = normalizeSearchText(excerpt2.slice(0, range.end - slice.start)).length;
+    if (normalizeSearchText(excerpt2).slice(before, through).includes(needle)) return slice;
     if (slice.start === 0 && slice.end === text6.length) throw new TypeError("Text Search match lost its original context.");
     radius *= 2;
   }
@@ -11725,13 +11725,13 @@ async function rankTextSearch(items, query, types, signal) {
       const at2 = field.normalized.indexOf(needle);
       if (at2 < 0) continue;
       const range = await originalRange(field.text, field.normalized, at2, needle.length, signal);
-      const excerpt = excerptRange(field.text, range, needle);
+      const excerpt2 = excerptRange(field.text, range, needle);
       hits.push({
         id: item.id,
         revision: item.revision,
         tier: field.field === "title" ? field.normalized === needle ? 2 : 1 : 0,
-        textMatch: { field: field.field, ...range, excerptStart: excerpt.start },
-        excerptEnd: excerpt.end
+        textMatch: { field: field.field, ...range, excerptStart: excerpt2.start },
+        excerptEnd: excerpt2.end
       });
       break;
     }
@@ -11844,11 +11844,11 @@ function createSearchWireContract({ matchPolicyId, types }) {
   }
   function validResults(event) {
     if (!fields8(event, ["schemaVersion", "panelId", "epoch", "event", "purpose", "requestId", "matches", "status"]) || event.schemaVersion !== schemaVersion || event.event !== "results" || !queryPurpose(event.purpose)) return false;
-    const match = event.matches, stamp3 = match?.receipt, status4 = event.status;
-    if (!fields8(match, ["receipt", "hits", "total"]) || !validReceipt(stamp3) || stamp3.queryPurpose !== event.purpose || stamp3.panelId !== event.panelId || stamp3.epoch !== event.epoch || stamp3.requestId !== event.requestId || status4?.mode !== "text" || status4.indexId !== stamp3.indexId || ["modelId", "model", "linguistics", "chunks", "related"].some((key4) => Object.hasOwn(status4, key4)) || status4.corpus?.generation !== stamp3.generation || !["ready", "partial"].includes(status4.corpus.state) || !Array.isArray(match.hits) || match.total !== match.hits.length) return false;
+    const match = event.matches, stamp4 = match?.receipt, status4 = event.status;
+    if (!fields8(match, ["receipt", "hits", "total"]) || !validReceipt(stamp4) || stamp4.queryPurpose !== event.purpose || stamp4.panelId !== event.panelId || stamp4.epoch !== event.epoch || stamp4.requestId !== event.requestId || status4?.mode !== "text" || status4.indexId !== stamp4.indexId || ["modelId", "model", "linguistics", "chunks", "related"].some((key4) => Object.hasOwn(status4, key4)) || status4.corpus?.generation !== stamp4.generation || !["ready", "partial"].includes(status4.corpus.state) || !Array.isArray(match.hits) || match.total !== match.hits.length) return false;
     const seen = /* @__PURE__ */ new Set();
     for (const hit of match.hits) {
-      if (!hit || typeof hit.id !== "string" || !hit.id || seen.has(hit.id) || !hash21(hit.revision) || !stamp3.queryTypes.includes(hit.type) || typeof hit.title !== "string" || typeof hit.source?.label !== "string" || typeof hit.excerpt !== "string" || hit.match !== "text" || Object.hasOwn(hit, "purpose") || !validTextMatch(hit)) return false;
+      if (!hit || typeof hit.id !== "string" || !hit.id || seen.has(hit.id) || !hash21(hit.revision) || !stamp4.queryTypes.includes(hit.type) || typeof hit.title !== "string" || typeof hit.source?.label !== "string" || typeof hit.excerpt !== "string" || hit.match !== "text" || Object.hasOwn(hit, "purpose") || !validTextMatch(hit)) return false;
       seen.add(hit.id);
     }
     return true;
@@ -11901,8 +11901,8 @@ function createReportIdentity() {
     if (typeof value?.title === "string" && value.title.trim()) return value.title.trim();
     const label = defaultTitle(value);
     if (typeof preparedLabel === "string" && preparedLabel.trim() && preparedLabel !== "Time not recorded") return `${label} \xB7 ${preparedLabel.trim()}`;
-    const count7 = value?.selectionScope?.requestGroups;
-    return Number.isSafeInteger(count7) && count7 >= 0 ? `${label} \xB7 ${count7} ${count7 === 1 ? "interaction" : "interactions"}` : label;
+    const count8 = value?.selectionScope?.requestGroups;
+    return Number.isSafeInteger(count8) && count8 >= 0 ? `${label} \xB7 ${count8} ${count8 === 1 ? "interaction" : "interactions"}` : label;
   }
   function legacyCandidate(value) {
     const formats3 = { html: "html", pdf: "pdf", json: "json", markdown: "md" };
@@ -11944,13 +11944,13 @@ function retainResponseTimingEvent(event) {
   };
 }
 function recordedResponseTiming(events, prompt) {
-  const unique6 = /* @__PURE__ */ new Map();
+  const unique7 = /* @__PURE__ */ new Map();
   for (const event of events) {
-    const previous = unique6.get(event.id);
+    const previous = unique7.get(event.id);
     if (previous && JSON.stringify(previous) !== JSON.stringify(event)) return unavailable2("conflicting-timing-events");
-    if (!previous) unique6.set(event.id, event);
+    if (!previous) unique7.set(event.id, event);
   }
-  events = [...unique6.values()];
+  events = [...unique7.values()];
   const start = events.findIndex((event) => event.type === "user.message" && event.id === prompt?.sourceEventId && event.timestamp === prompt.sourceTimestamp);
   if (start < 0) return unavailable2("prompt-not-in-window");
   const next2 = events.findIndex((event, index) => index > start && event.type === "user.message");
@@ -12034,10 +12034,10 @@ function graphTargetParts(value) {
 function isSharedDriveItemPath(value) {
   return typeof value === "string" && /^\/shares\/(?!\.{1,2}\/)[^/\\?#]+\/driveItem\/?$/.test(value);
 }
-function exchangeIdConversionPath(path31) {
-  if (typeof path31 !== "string") return null;
-  if (/^\/me\/translateExchangeIds\/?$/.test(path31)) return "/me/translateExchangeIds";
-  if (/^\/users\/(?!\.{1,2}\/)[^/\\?#]+\/translateExchangeIds\/?$/.test(path31)) return "/users/{id}/translateExchangeIds";
+function exchangeIdConversionPath(path32) {
+  if (typeof path32 !== "string") return null;
+  if (/^\/me\/translateExchangeIds\/?$/.test(path32)) return "/me/translateExchangeIds";
+  if (/^\/users\/(?!\.{1,2}\/)[^/\\?#]+\/translateExchangeIds\/?$/.test(path32)) return "/users/{id}/translateExchangeIds";
   return null;
 }
 function routeShape(value) {
@@ -12207,7 +12207,7 @@ function normalizeEndpoint(value, { method = null, apiVersion = null } = {}) {
   const version2 = VERSIONS.has(apiVersion) ? apiVersion : input.version;
   const wireMethod = METHODS2.has(method) ? method : null;
   const queryShape = [...new Set(input.query.map((q2) => QUERY_KEYS3.has(q2) ? q2 : "{query-key}"))].sort();
-  let path31 = "[endpoint unavailable]";
+  let path32 = "[endpoint unavailable]";
   if (input.path !== null) {
     const raw = input.path.replace(/(\/(?:root|items\/[^/]+)):[\s\S]*?:/g, "$1/{path}").split("/").filter(Boolean);
     const parts2 = [];
@@ -12240,10 +12240,10 @@ function normalizeEndpoint(value, { method = null, apiVersion = null } = {}) {
         expectEntity = false;
       }
     }
-    path31 = isSharedDriveItemPath(input.path) ? "/shares/{id}/driveItem" : exchangeIdConversionPath(input.path) ?? `/${parts2.join("/")}`;
+    path32 = isSharedDriveItemPath(input.path) ? "/shares/{id}/driveItem" : exchangeIdConversionPath(input.path) ?? `/${parts2.join("/")}`;
   }
-  const label = [wireMethod, version2, path31].filter(Boolean).join(" ");
-  return { id: key("endpoint", [wireMethod, version2, path31]), label, path: path31, method: wireMethod, apiVersion: version2, queryShape };
+  const label = [wireMethod, version2, path32].filter(Boolean).join(" ");
+  return { id: key("endpoint", [wireMethod, version2, path32]), label, path: path32, method: wireMethod, apiVersion: version2, queryShape };
 }
 function specialEndpoint(name, label) {
   return { id: `operation:${name}`, label, path: null, method: null, apiVersion: null, queryShape: [] };
@@ -12339,7 +12339,8 @@ function collectToolCalls(scenarios, warn, exclusions) {
       targets: targets.map((target) => normalizeEndpoint(target)),
       identityBasis: present2(tc.toolCallId) ? "source-session-and-tool-call" : "source-session-and-start-event",
       archiveVerified: Boolean(s.sourceEligibility) && s.sourceEligibility.archivedAt == null,
-      resultMetadata: (tc.apiResults ?? []).filter(hasResultMetadata)
+      resultMetadata: (tc.apiResults ?? []).filter(hasResultMetadata),
+      source: tc
     };
     if (!tc.toolCallId) warn("event-identity-fallback", "Some calls use source chat + start event because a toolCallId is absent.", 1);
     for (const id5 of identities2) aliases.set(id5, row);
@@ -12349,15 +12350,15 @@ function collectToolCalls(scenarios, warn, exclusions) {
   if (exclusions.duplicateRecords) warn("deduplicated-records", "Overlapping call records are counted once; full history takes precedence over legacy snapshots.", exclusions.duplicateRecords);
   return calls2;
 }
-function publicToolRow({ resultMetadata: resultMetadata2, ...row }) {
+function publicToolRow({ resultMetadata: resultMetadata2, source, ...row }) {
   return row;
 }
 function reportedRows(calls2) {
   return calls2.flatMap((call) => {
     const pathBearing = call.resultMetadata.some((r) => r.path != null || r.requestedApiPath != null);
     const divergent = call.targetCount === 1 && pathBearing && call.resultMetadata.some((r) => {
-      const path31 = r.requestedApiPath ?? r.path;
-      return path31 != null && normalizeEndpoint(path31).path !== call.endpoint.path;
+      const path32 = r.requestedApiPath ?? r.path;
+      return path32 != null && normalizeEndpoint(path32).path !== call.endpoint.path;
     });
     return call.resultMetadata.map((r, offset) => {
       const explicitPath = r.requestedApiPath ?? r.path;
@@ -12499,9 +12500,9 @@ function collectAnalysisRows(scenarios, options = {}) {
   if (!Array.isArray(scenarios)) throw new TypeError("scenarios must be an array.");
   const { layer, groupBy, limit, filters } = validateOptions(options);
   const warnings = /* @__PURE__ */ new Map();
-  const warn = (code2, message, count7 = 0) => {
+  const warn = (code2, message, count8 = 0) => {
     const previous = warnings.get(code2);
-    warnings.set(code2, { code: code2, message, count: (previous?.count ?? 0) + count7 });
+    warnings.set(code2, { code: code2, message, count: (previous?.count ?? 0) + count8 });
   };
   const exclusions = { synthetic: 0, unidentifiable: 0, legacyUnidentifiable: 0, duplicateRecords: 0, nonWorkIq: 0, unverifiedHttp: 0, filteredOut: 0, missingFilterDate: 0, legacyScenarios: 0 };
   const scopedScenarios = scenarios.filter((s) => filters.scope === "legacy" ? s.isLegacy === true || s.collectionInactive === true : filters.scope === "history" ? s.isLegacy !== true && s.collectionInactive !== true : true);
@@ -12596,7 +12597,77 @@ function buildAnalytics(scenarios, options = {}) {
     denominatorNote: layer === "reported-api" ? "Returned metadata units only; not all requested paths or tool executions." : layer === "http" ? "Unique owned recorder records, including explicitly separate no-response attempts." : "Unique source chat + toolCallId (or start-event fallback); owned HTTP is separate."
   };
 }
-var OUTCOMES, TOOLS, METHODS2, VERSIONS, SEGMENTS2, ENTITY_COLLECTIONS, FUNCTIONS, QUERY_KEYS3, PARAMETERS, recognizedOperations, key, present2, validStatus, duration, compare;
+function diagnosticError(failure5, status4) {
+  const recorded4 = failure5.diagnostic, detail = (value) => ({
+    ...value.code ? { code: value.code } : {},
+    ...validStatus(value.statusCode) ? { statusCode: value.statusCode } : {},
+    ...value.message ? { message: value.message } : {}
+  });
+  return {
+    ...failure5.code ?? recorded4?.code ? { code: failure5.code ?? recorded4.code } : {},
+    ...failure5.messageSignal ? { subcode: failure5.messageSignal } : {},
+    ...status4 ?? (validStatus(recorded4?.statusCode) ? recorded4.statusCode : null) ? { statusCode: status4 ?? recorded4.statusCode } : {},
+    ...recorded4?.message ? { message: recorded4.message } : {},
+    ...recorded4?.details?.length ? { details: recorded4.details.map(detail) } : {}
+  };
+}
+function buildDiagnosticCalls(scenarios, { from, to, tools: tools2, sourceSessionIds } = {}) {
+  const filters = {
+    scope: "all",
+    ...from ? { from } : {},
+    ...to ? { to } : {},
+    ...tools2?.length ? { tools: tools2 } : {},
+    ...sourceSessionIds?.length ? { sourceSessionIds } : {}
+  };
+  const { calls: calls2, rows, exclusions } = collectAnalysisRows(scenarios, { layer: "tool", groupBy: "tool", limit: 100, filters });
+  const byId = new Map(calls2.map((call) => [call.id, call]));
+  const records = rows.map((row) => {
+    const tc = byId.get(row.id).source, failure5 = tc.failureEvidence, result = tc.resultEvidence;
+    const entries3 = (tc.apiResults ?? []).filter(hasResultMetadata).map((entry3) => ({
+      ...validStatus(entry3.statusCode) ? { statusCode: entry3.statusCode } : {},
+      ...entry3.errorCode ? { error: { code: entry3.errorCode } } : {}
+    }));
+    const status4 = validStatus(result?.statusCode) ? result.statusCode : null;
+    return {
+      ts: row.startedAt,
+      session_id: row.sourceSessionId,
+      call_id: row.toolCallId ?? row.id,
+      server: "workiq",
+      tool: row.tool,
+      outcome: hostOutcome(tc),
+      args: row.targets.length ? { entityUrls: row.targets.map((target) => target.path).filter(Boolean) } : {},
+      ...failure5 ? { error: diagnosticError(failure5, status4) } : {},
+      ...status4 ? { status_code: status4 } : {},
+      ...entries3.length ? { result: { results: entries3 } } : {},
+      ...row.durationMs != null ? { duration_ms: row.durationMs } : {}
+    };
+  }).sort((a3, b) => compare(a3.ts ?? "", b.ts ?? "") || compare(a3.session_id ?? "", b.session_id ?? "") || compare(a3.call_id, b.call_id));
+  const truncated = records.length > DIAGNOSTIC_LIMIT;
+  return {
+    schemaVersion: 1,
+    server: "workiq",
+    unit: "Work IQ tool calls",
+    window: { from: from ?? null, to: to ?? null },
+    totals: {
+      calls: records.length,
+      hostFailures: records.filter((record) => record.outcome === "fail").length,
+      unknown: records.filter((record) => record.outcome === "unknown").length
+    },
+    coverage: {
+      complete: !truncated,
+      truncated,
+      returned: Math.min(records.length, DIAGNOSTIC_LIMIT),
+      exclusions,
+      limitations: [
+        "Successful result bodies are not retained, so failures embedded in successful calls can only be found from retained per-entry status.",
+        "Server request IDs are not retained; correlate by session, call and timestamp.",
+        "Counts cover only approved, collected history in this WIRE store."
+      ]
+    },
+    records: records.slice(0, DIAGNOSTIC_LIMIT)
+  };
+}
+var OUTCOMES, TOOLS, METHODS2, VERSIONS, SEGMENTS2, ENTITY_COLLECTIONS, FUNCTIONS, QUERY_KEYS3, PARAMETERS, recognizedOperations, key, present2, validStatus, duration, compare, DIAGNOSTIC_LIMIT, hostOutcome;
 var init_analytics = __esm({
   "lib/analytics.mjs"() {
     "use strict";
@@ -12620,6 +12691,8 @@ var init_analytics = __esm({
     validStatus = (value) => Number.isInteger(value) && value >= 100 && value <= 599;
     duration = (value) => Number.isFinite(value) && value >= 0 ? value : null;
     compare = (a3, b) => a3 < b ? -1 : a3 > b ? 1 : 0;
+    DIAGNOSTIC_LIMIT = 5e3;
+    hostOutcome = (tc) => tc.toolSucceeded === true || tc.reportedOutcome === "succeeded" ? "ok" : tc.toolSucceeded === false || tc.reportedOutcome === "failed" ? "fail" : "unknown";
   }
 });
 
@@ -12883,19 +12956,19 @@ function classifyWorkload(endpoint2, tool = null, targets = []) {
     const workloads = [...new Set(targets.map((t) => classifyWorkload(t, tool)))];
     return workloads.length === 1 ? workloads[0] : "Multiple workloads";
   }
-  const path31 = typeof endpoint2 === "string" ? normalizeEndpoint(endpoint2).path : endpoint2?.path ?? "";
-  if (path31 === "/shares/{id}/driveItem") return "Files";
-  if (exchangeIdConversionPath(path31)) return "Unknown";
-  if (/\$(?:metadata|batch)(?:\/|$)/.test(path31)) return "Platform metadata";
-  if (/\/(?:teams|chats|channels|onlineMeetings|joinedTeams|teamwork)(?:\/|$)/.test(path31)) return "Teams";
-  if (/\/(?:calendar|calendarView|calendars|events|getSchedule|findMeetingTimes)(?:\/|$)/.test(path31)) return "Calendar";
-  if (/\/(?:drive|drives|sites|files|workbook|worksheets|lists)(?:\/|$)/.test(path31)) return "Files";
-  if (/\/(?:messages|mailFolders|sendMail|mailboxSettings)(?:\/|$)/.test(path31)) return "Mail";
-  if (/\/(?:planner|todo|tasks|plans|buckets)(?:\/|$)/.test(path31)) return "Tasks";
-  if (/\/(?:onenote|notebooks|sections|pages)(?:\/|$)/.test(path31)) return "Notes";
-  if (/\/(?:people|contacts|contactFolders|users|photo|photos|presence)(?:\/|$)/.test(path31) || path31 === "/me" || /^\/me\/(?:manager|directReports)(?:\/|$)/.test(path31)) return "People";
-  if (/\/(?:groups|directoryObjects|applications|servicePrincipals|organization|directoryRoles)(?:\/|$)/.test(path31)) return "Directory";
-  if (/\/(?:search|query)(?:\/|$)/.test(path31) || tool === "workiq-retrieve") return "Search";
+  const path32 = typeof endpoint2 === "string" ? normalizeEndpoint(endpoint2).path : endpoint2?.path ?? "";
+  if (path32 === "/shares/{id}/driveItem") return "Files";
+  if (exchangeIdConversionPath(path32)) return "Unknown";
+  if (/\$(?:metadata|batch)(?:\/|$)/.test(path32)) return "Platform metadata";
+  if (/\/(?:teams|chats|channels|onlineMeetings|joinedTeams|teamwork)(?:\/|$)/.test(path32)) return "Teams";
+  if (/\/(?:calendar|calendarView|calendars|events|getSchedule|findMeetingTimes)(?:\/|$)/.test(path32)) return "Calendar";
+  if (/\/(?:drive|drives|sites|files|workbook|worksheets|lists)(?:\/|$)/.test(path32)) return "Files";
+  if (/\/(?:messages|mailFolders|sendMail|mailboxSettings)(?:\/|$)/.test(path32)) return "Mail";
+  if (/\/(?:planner|todo|tasks|plans|buckets)(?:\/|$)/.test(path32)) return "Tasks";
+  if (/\/(?:onenote|notebooks|sections|pages)(?:\/|$)/.test(path32)) return "Notes";
+  if (/\/(?:people|contacts|contactFolders|users|photo|photos|presence)(?:\/|$)/.test(path32) || path32 === "/me" || /^\/me\/(?:manager|directReports)(?:\/|$)/.test(path32)) return "People";
+  if (/\/(?:groups|directoryObjects|applications|servicePrincipals|organization|directoryRoles)(?:\/|$)/.test(path32)) return "Directory";
+  if (/\/(?:search|query)(?:\/|$)/.test(path32) || tool === "workiq-retrieve") return "Search";
   return "Unknown";
 }
 function commandText(data) {
@@ -13031,8 +13104,8 @@ function visibleStatus(completion2, siteCount, eligible) {
   if (/^\s*(?:diff --git|@@|\+\+\+|---)|\b(?:testTransport|mockFetch|fixture)\b/m.test(text6)) return { status: null, basis: "none" };
   const statuses2 = [...text6.matchAll(HTTP_STATUS)].map((m) => Number(m[1]));
   if (validStatus2(structuredStatus)) statuses2.push(structuredStatus);
-  const unique6 = [...new Set(statuses2)];
-  return unique6.length === 1 ? { status: unique6[0], basis: "explicit-output-status" } : { status: null, basis: "none" };
+  const unique7 = [...new Set(statuses2)];
+  return unique7.length === 1 ? { status: unique7[0], basis: "explicit-output-status" } : { status: null, basis: "none" };
 }
 function completeGraphActivity(activity, completion2, siteCount) {
   const result = visibleStatus(completion2, siteCount, activity.outputStatusEligible === true);
@@ -13067,9 +13140,9 @@ function extractGraphActivities(events, source, options = {}) {
   const since = options.since ? Date.parse(options.since) : -Infinity;
   const until = options.until ? Date.parse(options.until) : Infinity;
   if (Number.isNaN(since) || Number.isNaN(until) || since > until) throw new TypeError("Invalid extraction time window.");
-  const unique6 = /* @__PURE__ */ new Map();
-  for (const e of events) if (e?.id && !unique6.has(e.id)) unique6.set(e.id, e);
-  const rows = [...unique6.values()];
+  const unique7 = /* @__PURE__ */ new Map();
+  for (const e of events) if (e?.id && !unique7.has(e.id)) unique7.set(e.id, e);
+  const rows = [...unique7.values()];
   const explicitPrompt = createPromptLinks(rows);
   const firstPromptEventId = options.firstPromptEventId !== void 0 ? options.firstPromptEventId : !options.partialWindow && events[0]?.type === "session.start" && events[0].data?.sessionId === source.sessionId && events[0].data.version === 1 ? events.reduce(observeFirstPrompt, void 0) ?? null : null;
   const completions = new Map(rows.filter((e) => e.type === "tool.execution_complete").map((e) => [e.data?.toolCallId, e]));
@@ -13122,8 +13195,8 @@ function extractGraphActivities(events, source, options = {}) {
       workIq.push({ toolCallId: data.toolCallId, succeeded: completed?.data?.success ?? null, startedAt: event.timestamp, completedAt: completed?.timestamp ?? null });
       continue;
     }
-    const stamp3 = Date.parse(event.timestamp);
-    if (!Number.isFinite(stamp3) || stamp3 < since || stamp3 > until) continue;
+    const stamp4 = Date.parse(event.timestamp);
+    if (!Number.isFinite(stamp4) || stamp4 < since || stamp4 > until) continue;
     const isShell = SHELL_TOOLS.test(tool);
     const isCode = CODE_TOOLS.test(tool);
     const isGraph = GRAPH_TOOLS.test(tool) || /^(?:graph|msgraph|microsoft-graph)$/.test(data.mcpServerName ?? "");
@@ -13205,8 +13278,8 @@ function extractGraphActivities(events, source, options = {}) {
     const literalStatusEcho = /\b(?:echo|Write-Output|print|console\.log)\s*\(?\s*['"][^'"]*(?:HTTP\/[123]|status(?:Code|_code)?\s*[:=])[^'"]*[1-5]\d{2}/i.test(text6);
     const status4 = visibleStatus(completed, requestSites.length, !literalStatusEcho && (isShell && sourceKind === "inline-command" || isGraph));
     const transition = selectedPrompt === prompt && (explicitTransition(prompt?.data?.content ?? "") || transitionEvent !== null);
-    const preceding = (selectedPrompt !== prompt ? [] : workIq.length ? workIq : transition ? previousWorkIq : []).filter((c) => Date.parse(c.startedAt) < stamp3 && stamp3 - Date.parse(c.startedAt) <= 30 * 60 * 1e3);
-    const failures = preceding.filter((c) => c.succeeded === false && c.completedAt && Date.parse(c.completedAt) <= stamp3);
+    const preceding = (selectedPrompt !== prompt ? [] : workIq.length ? workIq : transition ? previousWorkIq : []).filter((c) => Date.parse(c.startedAt) < stamp4 && stamp4 - Date.parse(c.startedAt) <= 30 * 60 * 1e3);
+    const failures = preceding.filter((c) => c.succeeded === false && c.completedAt && Date.parse(c.completedAt) <= stamp4);
     const association = transition && preceding.length ? "explicit-transition" : failures.length ? "same-prompt-after-failure" : preceding.length ? "same-prompt-sequence" : "none";
     for (let i = 0; i < inspected.sites.length; i++) {
       if (activityCount >= maxActivities) {
@@ -13552,7 +13625,7 @@ function normalizeMetricFact(fact3) {
   };
   if (fact3.counts !== void 0 && fact3.counts !== null) {
     const names = ["pass", "fail", "unassessed", "evaluatorError"];
-    if (!fact3.counts || Object.getPrototypeOf(fact3.counts) !== Object.prototype || Object.keys(fact3.counts).length !== names.length || names.some((key4) => !count(fact3.counts[key4])) || names.reduce((sum, key4) => sum + fact3.counts[key4], 0) !== coverage4.eligible || fact3.counts.pass + fact3.counts.fail !== coverage4.count) {
+    if (!fact3.counts || Object.getPrototypeOf(fact3.counts) !== Object.prototype || Object.keys(fact3.counts).length !== names.length || names.some((key4) => !count(fact3.counts[key4])) || names.reduce((sum2, key4) => sum2 + fact3.counts[key4], 0) !== coverage4.eligible || fact3.counts.pass + fact3.counts.fail !== coverage4.count) {
       throw new TypeError("Assessment counts do not match metric coverage.");
     }
     result.counts = Object.fromEntries(names.map((key4) => [key4, fact3.counts[key4]]));
@@ -13764,7 +13837,7 @@ function validateReportContext(value, records, mode) {
   require2(used.size === keys2.size && value.entries.every((entry3) => groups.has(entry3.scenarioRef)));
   const coverage4 = value.coverage;
   shape3(coverage4, ["groups", "entries", "included", "omitted", "unavailable", "partial", "authorExcludedGroups", "sourceBytes", "projectedBytes"], ["noNewMessage"]);
-  require2(Object.values(coverage4).every(integer4) && coverage4.groups === groups.size && coverage4.entries === value.entries.length && coverage4.included === value.entries.filter((entry3) => entry3.text !== null).length && coverage4.omitted === value.entries.filter((entry3) => entry3.omitted).length && coverage4.unavailable === value.entries.filter((entry3) => entry3.status === "unavailable" && entry3.activityState !== "automatic").length && (coverage4.noNewMessage ?? 0) === value.entries.filter((entry3) => entry3.activityState === "automatic").length && coverage4.partial === value.entries.filter((entry3) => entry3.status === "partial").length && coverage4.authorExcludedGroups === value.anchors.reduce((sum, anchor) => sum + anchor.authorExcludedGroups, 0) && coverage4.sourceBytes <= REPORT_CONTEXT_LIMITS.bytes && coverage4.projectedBytes === value.entries.reduce((sum, entry3) => sum + Buffer.byteLength(entry3.text ?? ""), 0) && coverage4.projectedBytes <= REPORT_CONTEXT_LIMITS.bytes);
+  require2(Object.values(coverage4).every(integer4) && coverage4.groups === groups.size && coverage4.entries === value.entries.length && coverage4.included === value.entries.filter((entry3) => entry3.text !== null).length && coverage4.omitted === value.entries.filter((entry3) => entry3.omitted).length && coverage4.unavailable === value.entries.filter((entry3) => entry3.status === "unavailable" && entry3.activityState !== "automatic").length && (coverage4.noNewMessage ?? 0) === value.entries.filter((entry3) => entry3.activityState === "automatic").length && coverage4.partial === value.entries.filter((entry3) => entry3.status === "partial").length && coverage4.authorExcludedGroups === value.anchors.reduce((sum2, anchor) => sum2 + anchor.authorExcludedGroups, 0) && coverage4.sourceBytes <= REPORT_CONTEXT_LIMITS.bytes && coverage4.projectedBytes === value.entries.reduce((sum2, entry3) => sum2 + Buffer.byteLength(entry3.text ?? ""), 0) && coverage4.projectedBytes <= REPORT_CONTEXT_LIMITS.bytes);
   return value;
 }
 var REPORT_CONTEXT_BOUNDARY, REPORT_CONTEXT_LIMITATION, REPORT_CONTEXT_SEPARATION, REPORT_CONTEXT_LIMITS, ref6, copyKey, changeCategories, integer4;
@@ -13797,9 +13870,9 @@ var init_report_context_shape = __esm({
 });
 
 // lib/native-chat-observation-contract.mjs
-function validateNativeChatSource(value, envelope3, path31, fail15) {
-  const reject = (code2, at2 = path31) => fail15(`chat-source-${code2}`, at2);
-  function shape9(row, required, optional2 = [], at2 = path31) {
+function validateNativeChatSource(value, envelope3, path32, fail15) {
+  const reject = (code2, at2 = path32) => fail15(`chat-source-${code2}`, at2);
+  function shape9(row, required, optional2 = [], at2 = path32) {
     if (!object4(row) || required.some((name) => !has(row, name))) reject("missing-field", at2);
     if (Object.keys(row).some((name) => !required.includes(name) && !optional2.includes(name))) reject("unsupported-field", at2);
   }
@@ -13914,9 +13987,9 @@ function validateNativeChatSource(value, envelope3, path31, fail15) {
     reject("parser-provenance-unqualified");
   }
   shape9(value.source, ["sourceDocument", "pointer"], ["responsePointer"]);
-  string(value.source.sourceDocument, path31);
+  string(value.source.sourceDocument, path32);
   for (const name of ["pointer", "responsePointer"]) if (has(value.source, name)) {
-    string(value.source[name], path31, 1800);
+    string(value.source[name], path32, 1800);
     if (!value.source[name].startsWith("/")) reject("invalid-source-pointer");
   }
   const original = (suffix) => ({ sourceDocument: value.source.sourceDocument, pointer: value.source.pointer + suffix });
@@ -13925,17 +13998,17 @@ function validateNativeChatSource(value, envelope3, path31, fail15) {
   shape9(value.identity, [...identityFields, "responseRequestId"]);
   for (const name of identityFields) {
     const fact3 = value.identity[name];
-    field(fact3, "text", original(`/${name}`), `${path31}.identity.${name}`);
+    field(fact3, "text", original(`/${name}`), `${path32}.identity.${name}`);
     if (fact3.availability === "recorded" && fact3.value.trim()) {
       if (envelope3.record[name] !== fact3.value) reject("carrier-identity-conflict");
     } else if (envelope3.record[name] != null && envelope3.record[name] !== "") reject("carrier-identity-conflict");
   }
   if (value.identity.messageId.availability !== "recorded") reject("message-identity-required");
   const responseId = value.identity.responseRequestId;
-  shape9(responseId, ["availability", "source"], ["value", "reason"], `${path31}.identity.responseRequestId`);
+  shape9(responseId, ["availability", "source"], ["value", "reason"], `${path32}.identity.responseRequestId`);
   const responseSource = responseId.reason === "envelope-request-not-supplied" ? original("") : { sourceDocument: value.source.sourceDocument, pointer: `${value.source.responsePointer}/requestId` };
   if (responseId.reason !== "envelope-request-not-supplied" && !has(value.source, "responsePointer")) reject("response-reference-required");
-  field(responseId, "text", responseSource, `${path31}.identity.responseRequestId`);
+  field(responseId, "text", responseSource, `${path32}.identity.responseRequestId`);
   function taskFields(fields8, atSource, at2, child = false) {
     const names = child ? childText : taskText;
     shape9(
@@ -13976,10 +14049,10 @@ function validateNativeChatSource(value, envelope3, path31, fail15) {
       }
     }
   }
-  list2(value.observations, `${path31}.observations`, 200);
+  list2(value.observations, `${path32}.observations`, 200);
   const coordinates = /* @__PURE__ */ new Set();
   for (const [index, row] of value.observations.entries()) {
-    const at2 = `${path31}.observations[${index}]`, kind2 = row?.kind;
+    const at2 = `${path32}.observations[${index}]`, kind2 = row?.kind;
     const task = taskKinds.includes(kind2), invocation = ["native-invocation", "unsupported-native-invocation"].includes(kind2);
     const required = task ? ["historicalProjection", "readModel"] : kind2 === "clarification" || kind2 === "unsupported-trigger-extension" ? ["invocations", "readModel"] : kind2 === "confirmation" ? ["submitActions", "readModel"] : ["trigger-plugin", "provider-progress"].includes(kind2) ? ["readModel"] : [];
     shape9(row, ["kind", "source", "fields", ...required], kind2 === "unsupported-native-invocation" ? ["readModel"] : [], at2);
@@ -14100,13 +14173,13 @@ function validateNativeChatSource(value, envelope3, path31, fail15) {
       }
     }
   }
-  list2(value.limitations, `${path31}.limitations`, 1e4);
+  list2(value.limitations, `${path32}.limitations`, 1e4);
   for (const limitation of value.limitations) {
-    shape9(limitation, ["code", "source"], [], path31);
-    string(limitation.code, path31, 128);
+    shape9(limitation, ["code", "source"], [], path32);
+    string(limitation.code, path32, 128);
     if (!/^[a-z][A-Za-z0-9-]*$/.test(limitation.code)) reject("invalid-limitation");
     const source = limitation.source;
-    location3(source, source, path31);
+    location3(source, source, path32);
     if (source.sourceDocument !== value.source.sourceDocument || !(source.pointer === value.source.pointer || source.pointer.startsWith(value.source.pointer + "/") || source.pointer === `${value.source.responsePointer}/requestId`)) reject("source-coordinate-conflict");
   }
   return value;
@@ -14199,14 +14272,14 @@ function splitObservation(record) {
     for (const [name, child] of Object.entries(value)) if (name !== "value") collect(child);
   }
   collect(record);
-  function strip(value, path31 = []) {
-    if (Array.isArray(value)) return value.map((child, index) => strip(child, [...path31, String(index)]));
+  function strip(value, path32 = []) {
+    if (Array.isArray(value)) return value.map((child, index) => strip(child, [...path32, String(index)]));
     if (!object5(value)) return value;
     const result = {};
     for (const [name, child] of Object.entries(value)) {
-      const reference3 = name === "evidence" || name === "source" && object5(child) && typeof child.sourceDocument === "string" && typeof child.pointer === "string" || path31[0] === "coverage" && (name === "path" || name === "subject" && sourceDocuments.has(child));
-      if (reference3) references.push({ path: [...path31, name], value: child });
-      else result[name] = name === "value" ? structuredClone(child) : strip(child, [...path31, name]);
+      const reference3 = name === "evidence" || name === "source" && object5(child) && typeof child.sourceDocument === "string" && typeof child.pointer === "string" || path32[0] === "coverage" && (name === "path" || name === "subject" && sourceDocuments.has(child));
+      if (reference3) references.push({ path: [...path32, name], value: child });
+      else result[name] = name === "value" ? structuredClone(child) : strip(child, [...path32, name]);
     }
     return result;
   }
@@ -14336,7 +14409,7 @@ var init_native_retention_contract = __esm({
     exact3 = (value, keys2) => object5(value) && Object.keys(value).length === keys2.length && keys2.every((key4) => Object.hasOwn(value, key4));
     hash8 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
     same = (a3, b) => encoded(a3) === encoded(b);
-    safeKeys = (path31) => Array.isArray(path31) && path31.length > 0 && path31.length <= 64 && path31.every((key4) => typeof key4 === "string" && !["__proto__", "constructor", "prototype", "value"].includes(key4));
+    safeKeys = (path32) => Array.isArray(path32) && path32.length > 0 && path32.length <= 64 && path32.every((key4) => typeof key4 === "string" && !["__proto__", "constructor", "prototype", "value"].includes(key4));
     validatedDocuments = /* @__PURE__ */ new WeakMap();
     validatedRecords = /* @__PURE__ */ new WeakSet();
     isValidatedNativeRetainedRecord = (record) => validatedRecords.has(record);
@@ -14531,43 +14604,43 @@ function nativeWriterAdmission() {
     syntheticEvidenceCanClearBlockers: false
   };
 }
-function shape4(value, required, optional2, path31) {
-  if (!object7(value)) fail4("expected-object", path31);
-  for (const name of required) if (!Object.hasOwn(value, name)) fail4("missing-field", `${path31}.${name}`);
-  for (const name of Object.keys(value)) if (![...required, ...optional2].includes(name)) fail4("unsupported-field", path31);
+function shape4(value, required, optional2, path32) {
+  if (!object7(value)) fail4("expected-object", path32);
+  for (const name of required) if (!Object.hasOwn(value, name)) fail4("missing-field", `${path32}.${name}`);
+  for (const name of Object.keys(value)) if (![...required, ...optional2].includes(name)) fail4("unsupported-field", path32);
 }
-function text2(value, path31, max = 1024) {
-  if (typeof value !== "string" || !value.trim() || byteLength(value) > max) fail4("invalid-text", path31);
-  if (nativeValueHasCredentials(value, path31)) fail4("credential-bearing-metadata", path31);
+function text2(value, path32, max = 1024) {
+  if (typeof value !== "string" || !value.trim() || byteLength(value) > max) fail4("invalid-text", path32);
+  if (nativeValueHasCredentials(value, path32)) fail4("credential-bearing-metadata", path32);
   return value;
 }
-function member2(value, values, path31) {
-  if (!values.includes(value)) fail4("unsupported-value", path31);
+function member2(value, values, path32) {
+  if (!values.includes(value)) fail4("unsupported-value", path32);
 }
-function integer5(value, path31) {
-  if (!Number.isSafeInteger(value) || value < 0) fail4("invalid-count", path31);
+function integer5(value, path32) {
+  if (!Number.isSafeInteger(value) || value < 0) fail4("invalid-count", path32);
 }
-function normalizeNativeMessageTime(value, path31 = "$") {
+function normalizeNativeMessageTime(value, path32 = "$") {
   const instant8 = recordedCalendarInstant(value);
-  if (instant8 === null) fail4("invalid-native-message-time", path31);
+  if (instant8 === null) fail4("invalid-native-message-time", path32);
   return instant8;
 }
-function normalizeNativeObservationTime(value, unit, path31 = "$") {
-  if (unit === "iso8601") return normalizeNativeMessageTime(value, path31);
-  if (unit !== "epoch-ms" || !Number.isSafeInteger(value)) fail4("invalid-native-observation-time", path31);
+function normalizeNativeObservationTime(value, unit, path32 = "$") {
+  if (unit === "iso8601") return normalizeNativeMessageTime(value, path32);
+  if (unit !== "epoch-ms" || !Number.isSafeInteger(value)) fail4("invalid-native-observation-time", path32);
   try {
     const instant8 = new Date(value).toISOString();
     time.instant(instant8);
     return instant8;
   } catch (error) {
     if (!(error instanceof RangeError)) throw error;
-    fail4("invalid-native-observation-time", path31);
+    fail4("invalid-native-observation-time", path32);
   }
 }
-function assertJsonInput(root, path31 = "$") {
+function assertJsonInput(root, path32 = "$") {
   const measured = /* @__PURE__ */ new WeakMap(), active = /* @__PURE__ */ new WeakSet();
   const bytesWithinBound = (bytes2) => {
-    if (bytes2 > NATIVE_READ_LIMITS.bytes) fail4("record-byte-bound", path31);
+    if (bytes2 > NATIVE_READ_LIMITS.bytes) fail4("record-byte-bound", path32);
     return bytes2;
   };
   function stringBytes(value) {
@@ -14588,29 +14661,29 @@ function assertJsonInput(root, path31 = "$") {
     return bytes2;
   }
   function measure(value, depth) {
-    if (depth > NATIVE_JSON_LIMITS.depth) fail4("json-structure-bound", path31);
-    if (value === void 0 || ["function", "symbol", "bigint"].includes(typeof value) || typeof value === "number" && !Number.isFinite(value)) fail4("non-json-value", path31);
+    if (depth > NATIVE_JSON_LIMITS.depth) fail4("json-structure-bound", path32);
+    if (value === void 0 || ["function", "symbol", "bigint"].includes(typeof value) || typeof value === "number" && !Number.isFinite(value)) fail4("non-json-value", path32);
     if (value === null || typeof value !== "object") {
       return { bytes: typeof value === "string" ? stringBytes(value) : value === null ? 4 : String(value).length, nodes: 1, height: 0 };
     }
     const proto = Object.getPrototypeOf(value);
-    if (proto !== null && proto !== Object.prototype && proto !== Array.prototype) fail4("non-json-object", path31);
-    if (active.has(value)) fail4("non-json-input", path31);
+    if (proto !== null && proto !== Object.prototype && proto !== Array.prototype) fail4("non-json-object", path32);
+    if (active.has(value)) fail4("non-json-input", path32);
     const cached = measured.get(value);
     if (cached) {
-      if (depth + cached.height > NATIVE_JSON_LIMITS.depth) fail4("json-structure-bound", path31);
+      if (depth + cached.height > NATIVE_JSON_LIMITS.depth) fail4("json-structure-bound", path32);
       return cached;
     }
     active.add(value);
     const array = Array.isArray(value);
-    if (array && value.length > NATIVE_JSON_LIMITS.nodes) fail4("json-structure-bound", path31);
+    if (array && value.length > NATIVE_JSON_LIMITS.nodes) fail4("json-structure-bound", path32);
     let bytes2 = 2, nodes = 1, height = 0, entries3 = 0;
     for (const name of Reflect.ownKeys(value)) {
-      if (typeof name !== "string") fail4("non-json-value", path31);
+      if (typeof name !== "string") fail4("non-json-value", path32);
       if (array && name === "length") continue;
       const descriptor2 = Object.getOwnPropertyDescriptor(value, name);
-      if (descriptor2.get || descriptor2.set) fail4("non-json-accessor", path31);
-      if (array && (!/^(0|[1-9]\d*)$/.test(name) || Number(name) >= value.length)) fail4("non-json-array-field", path31);
+      if (descriptor2.get || descriptor2.set) fail4("non-json-accessor", path32);
+      if (array && (!/^(0|[1-9]\d*)$/.test(name) || Number(name) >= value.length)) fail4("non-json-array-field", path32);
       const child = measure(descriptor2.value, depth + 1);
       nodes += child.nodes;
       height = Math.max(height, child.height + 1);
@@ -14618,9 +14691,9 @@ function assertJsonInput(root, path31 = "$") {
         bytes2 = bytesWithinBound(bytes2 + (entries3 ? 1 : 0) + (array ? 0 : stringBytes(name) + 1) + child.bytes);
         entries3++;
       }
-      if (nodes > NATIVE_JSON_LIMITS.nodes) fail4("json-structure-bound", path31);
+      if (nodes > NATIVE_JSON_LIMITS.nodes) fail4("json-structure-bound", path32);
     }
-    if (array && entries3 !== value.length) fail4("non-json-value", path31);
+    if (array && entries3 !== value.length) fail4("non-json-value", path32);
     active.delete(value);
     const result = { bytes: bytes2, nodes, height };
     measured.set(value, result);
@@ -14635,8 +14708,8 @@ function withinSerializedString(serialized2, finding) {
   }
   return true;
 }
-function nativeCredentialFinding(value, path31 = "$") {
-  assertJsonInput(value, path31);
+function nativeCredentialFinding(value, path32 = "$") {
+  assertJsonInput(value, path32);
   const json = JSON.stringify(value);
   const serialized2 = findCredentialFindings(json).find((finding) => finding.mandatory && (finding.category !== "credential_urls" || withinSerializedString(json, finding)));
   if (serialized2) return { scanDomain: "serialized-structure", credentialCategory: serialized2.category };
@@ -14662,75 +14735,75 @@ function nativeCredentialFinding(value, path31 = "$") {
   }
   return null;
 }
-function nativeValueHasCredentials(value, path31 = "$") {
-  return nativeCredentialFinding(value, path31) !== null;
+function nativeValueHasCredentials(value, path32 = "$") {
+  return nativeCredentialFinding(value, path32) !== null;
 }
-function screenRetainedValue(value, path31, stage) {
+function screenRetainedValue(value, path32, stage) {
   const finding = nativeCredentialFinding(value);
   if (!finding) return;
-  const error = new NativeReadModelError("credential-bearing-retained-observations", path31);
+  const error = new NativeReadModelError("credential-bearing-retained-observations", path32);
   retentionDiagnostics.set(error, Object.freeze({ code: error.code, ...finding }));
   throw annotateNativeRetentionDiagnostic(error, stage);
 }
-function refs2(value, path31) {
+function refs2(value, path32) {
   const rows = Array.isArray(value) ? value : [value];
-  if (!rows.length || rows.length > 32) fail4("invalid-evidence-references", path31);
+  if (!rows.length || rows.length > 32) fail4("invalid-evidence-references", path32);
   for (const [index, row] of rows.entries()) {
-    shape4(row, ["sourceDocument", "pointer"], ["nativeEventId"], `${path31}[${index}]`);
-    text2(row.sourceDocument, `${path31}[${index}].sourceDocument`);
-    text2(row.pointer, path31, 2048);
-    if (!row.pointer.startsWith("/")) fail4("invalid-source-pointer", path31);
-    if (row.nativeEventId !== void 0) text2(row.nativeEventId, `${path31}[${index}].nativeEventId`);
+    shape4(row, ["sourceDocument", "pointer"], ["nativeEventId"], `${path32}[${index}]`);
+    text2(row.sourceDocument, `${path32}[${index}].sourceDocument`);
+    text2(row.pointer, path32, 2048);
+    if (!row.pointer.startsWith("/")) fail4("invalid-source-pointer", path32);
+    if (row.nativeEventId !== void 0) text2(row.nativeEventId, `${path32}[${index}].nativeEventId`);
   }
   return rows;
 }
-function fact(value, evidence, path31) {
-  shape4(value, ["availability"], ["value", "reason", "scope", "unit", "basis", "boundary", "comparableToUserResponseLatency"], path31);
-  member2(value.availability, availability, `${path31}.availability`);
+function fact(value, evidence, path32) {
+  shape4(value, ["availability"], ["value", "reason", "scope", "unit", "basis", "boundary", "comparableToUserResponseLatency"], path32);
+  member2(value.availability, availability, `${path32}.availability`);
   const carriesValue = ["recorded", "recorded-empty", "explicit-null"].includes(value.availability);
-  if (carriesValue !== Object.hasOwn(value, "value")) fail4("availability-value-conflict", path31);
-  if (value.availability === "explicit-null" && value.value !== null) fail4("expected-explicit-null", path31);
-  if (value.availability === "recorded-empty" && value.value !== "") fail4("expected-recorded-empty-string", path31);
-  if (value.availability === "recorded" && value.value === null) fail4("use-explicit-null", path31);
-  if (!carriesValue && !value.reason) fail4("missing-qualification", path31);
-  if (value.reason !== void 0) text2(value.reason, `${path31}.reason`, 2048);
-  for (const name of ["scope", "unit", "basis", "boundary"]) if (value[name] !== void 0) text2(value[name], `${path31}.${name}`, 256);
-  if (value.comparableToUserResponseLatency !== void 0 && typeof value.comparableToUserResponseLatency !== "boolean") fail4("invalid-timing-qualification", path31);
-  if (value.value !== void 0 && nativeValueHasCredentials(value.value, path31)) fail4("credential-bearing-fact", path31);
-  if (value.value !== void 0 && byteLength(JSON.stringify(value.value)) > NATIVE_READ_LIMITS.textBytes) fail4("fact-byte-bound", path31);
-  return { ...value, evidence: refs2(evidence, `${path31}.evidence`) };
+  if (carriesValue !== Object.hasOwn(value, "value")) fail4("availability-value-conflict", path32);
+  if (value.availability === "explicit-null" && value.value !== null) fail4("expected-explicit-null", path32);
+  if (value.availability === "recorded-empty" && value.value !== "") fail4("expected-recorded-empty-string", path32);
+  if (value.availability === "recorded" && value.value === null) fail4("use-explicit-null", path32);
+  if (!carriesValue && !value.reason) fail4("missing-qualification", path32);
+  if (value.reason !== void 0) text2(value.reason, `${path32}.reason`, 2048);
+  for (const name of ["scope", "unit", "basis", "boundary"]) if (value[name] !== void 0) text2(value[name], `${path32}.${name}`, 256);
+  if (value.comparableToUserResponseLatency !== void 0 && typeof value.comparableToUserResponseLatency !== "boolean") fail4("invalid-timing-qualification", path32);
+  if (value.value !== void 0 && nativeValueHasCredentials(value.value, path32)) fail4("credential-bearing-fact", path32);
+  if (value.value !== void 0 && byteLength(JSON.stringify(value.value)) > NATIVE_READ_LIMITS.textBytes) fail4("fact-byte-bound", path32);
+  return { ...value, evidence: refs2(evidence, `${path32}.evidence`) };
 }
-function validateField(name, value, path31) {
+function validateField(name, value, path32) {
   for (const metadata3 of ["scope", "unit", "basis", "boundary", "comparableToUserResponseLatency"]) {
     const allowed = name === "model" && metadata3 === "scope" || name === "callElapsed" && metadata3 !== "scope" || messageTimeFields.has(name) && metadata3 === "scope" || name === "observationTime" && ["scope", "unit", "basis"].includes(metadata3);
-    if (value[metadata3] !== void 0 && !allowed) fail4("field-qualification-conflict", path31);
+    if (value[metadata3] !== void 0 && !allowed) fail4("field-qualification-conflict", path32);
   }
-  if (messageTimeFields.has(name) && value.scope !== "message") fail4("message-time-scope-required", path31);
-  if (name === "observationTime" && (value.scope !== "observation" || value.basis !== "cowork.data.ts" || value.unit !== void 0 && !["iso8601", "epoch-ms"].includes(value.unit))) fail4("observation-time-qualification-conflict", path31);
-  if (value.availability === "recorded-empty" && name !== "input" && !messageTimeFields.has(name) && name !== "observationTime") fail4("unsupported-empty-fact", path31);
+  if (messageTimeFields.has(name) && value.scope !== "message") fail4("message-time-scope-required", path32);
+  if (name === "observationTime" && (value.scope !== "observation" || value.basis !== "cowork.data.ts" || value.unit !== void 0 && !["iso8601", "epoch-ms"].includes(value.unit))) fail4("observation-time-qualification-conflict", path32);
+  if (value.availability === "recorded-empty" && name !== "input" && !messageTimeFields.has(name) && name !== "observationTime") fail4("unsupported-empty-fact", path32);
   if (value.availability !== "recorded") return;
   const data = value.value;
-  if (messageTimeFields.has(name)) return normalizeNativeMessageTime(data, path31);
-  if (name === "observationTime") return normalizeNativeObservationTime(data, value.unit, path31);
+  if (messageTimeFields.has(name)) return normalizeNativeMessageTime(data, path32);
+  if (name === "observationTime") return normalizeNativeObservationTime(data, value.unit, path32);
   if (name === "message") {
-    shape4(data, ["author", "representation", "text"], [], path31);
-    member2(data.author, ["user", "assistant", "tool", "unknown"], path31);
-    member2(data.representation, ["plain-text", "card-text", "reply-fragment", "follow-up"], path31);
-    if (typeof data.text !== "string" || byteLength(data.text) > NATIVE_READ_LIMITS.textBytes) fail4("invalid-message-text", path31);
-  } else if (name === "toolName") text2(data, path31, 256);
-  else if (name === "approval" && typeof data !== "boolean") fail4("invalid-approval-fact", path31);
+    shape4(data, ["author", "representation", "text"], [], path32);
+    member2(data.author, ["user", "assistant", "tool", "unknown"], path32);
+    member2(data.representation, ["plain-text", "card-text", "reply-fragment", "follow-up"], path32);
+    if (typeof data.text !== "string" || byteLength(data.text) > NATIVE_READ_LIMITS.textBytes) fail4("invalid-message-text", path32);
+  } else if (name === "toolName") text2(data, path32, 256);
+  else if (name === "approval" && typeof data !== "boolean") fail4("invalid-approval-fact", path32);
   else if (name === "model") {
-    text2(data, path31, 256);
-    member2(value.scope, ["snapshot", "turn", "call", "subagent"], `${path31}.scope`);
+    text2(data, path32, 256);
+    member2(value.scope, ["snapshot", "turn", "call", "subagent"], `${path32}.scope`);
   } else if (name === "callElapsed") {
-    if (!Number.isFinite(data) || data < 0 || value.unit !== "ms") fail4("invalid-duration", path31);
-    text2(value.boundary, `${path31}.boundary`, 256);
-    text2(value.basis, `${path31}.basis`, 256);
-    if (value.comparableToUserResponseLatency !== false) fail4("unqualified-timing-comparison", path31);
+    if (!Number.isFinite(data) || data < 0 || value.unit !== "ms") fail4("invalid-duration", path32);
+    text2(value.boundary, `${path32}.boundary`, 256);
+    text2(value.basis, `${path32}.basis`, 256);
+    if (value.comparableToUserResponseLatency !== false) fail4("unqualified-timing-comparison", path32);
   } else if (name === "failure") {
-    shape4(data, ["code", "messageStatus"], ["messageSignal", "reason", "diagnostic"], path31);
-    if (data.code !== null && (typeof data.code !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(data.code) || textFindings(data.code).some((f2) => f2.mandatory || f2.category === "opaque_identifiers"))) fail4("unsafe-error-code", path31);
-    member2(data.messageStatus, ["not-supplied", "text-excluded", "size-excluded", "sensitive-excluded", "unsupported-format", "recorded", "redacted"], path31);
+    shape4(data, ["code", "messageStatus"], ["messageSignal", "reason", "diagnostic"], path32);
+    if (data.code !== null && (typeof data.code !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(data.code) || textFindings(data.code).some((f2) => f2.mandatory || f2.category === "opaque_identifiers"))) fail4("unsafe-error-code", path32);
+    member2(data.messageStatus, ["not-supplied", "text-excluded", "size-excluded", "sensitive-excluded", "unsupported-format", "recorded", "redacted"], path32);
     if (data.reason !== void 0) member2(data.reason, [
       "error-code-recorded",
       "error-details-excluded",
@@ -14738,63 +14811,63 @@ function validateField(name, value, path31) {
       "result-content-excluded",
       "no-structured-error",
       "unsupported-error-format"
-    ], path31);
+    ], path32);
     if (data.diagnostic !== void 0) {
       const checked = retainedErrorDiagnostic(data.diagnostic);
-      if (!checked || checked.source !== "native-tool-error" || checked.status !== data.messageStatus || key2(stable2(checked)) !== key2(stable2(data.diagnostic))) fail4("unqualified-native-diagnostic", path31);
-    } else if (["recorded", "redacted"].includes(data.messageStatus)) fail4("native-diagnostic-required", path31);
+      if (!checked || checked.source !== "native-tool-error" || checked.status !== data.messageStatus || key2(stable2(checked)) !== key2(stable2(data.diagnostic))) fail4("unqualified-native-diagnostic", path32);
+    } else if (["recorded", "redacted"].includes(data.messageStatus)) fail4("native-diagnostic-required", path32);
     if (data.messageSignal != null) {
-      member2(data.messageSignal, ["access-denial", "request-timeout", "pending-call-dropped-before-response"], path31);
-      if (data.messageStatus !== "text-excluded") fail4("failure-signal-exclusion-conflict", path31);
+      member2(data.messageSignal, ["access-denial", "request-timeout", "pending-call-dropped-before-response"], path32);
+      if (data.messageStatus !== "text-excluded") fail4("failure-signal-exclusion-conflict", path32);
     }
   } else if (name === "resultEvidence") {
     const checked = normalizeResultEvidence(data);
-    if (!checked || checked.source !== "native-tool-result" || checked.applicationError !== null || checked.statusCode !== null || checked.resultCount !== null || checked.diagnostic !== void 0 || key2(stable2(checked)) !== key2(stable2(data))) fail4("unqualified-native-result-evidence", path31);
+    if (!checked || checked.source !== "native-tool-result" || checked.applicationError !== null || checked.statusCode !== null || checked.resultCount !== null || checked.diagnostic !== void 0 || key2(stable2(checked)) !== key2(stable2(data))) fail4("unqualified-native-result-evidence", path32);
   } else if (name === "resultReferences") {
-    shape4(data, ["nativeField", "cardinality", "itemFieldTypes"], [], path31);
-    if (data.nativeField !== "wr") fail4("unqualified-reference-channel", path31);
-    integer5(data.cardinality, path31);
-    if (!object7(data.itemFieldTypes)) fail4("invalid-reference-shape", path31);
+    shape4(data, ["nativeField", "cardinality", "itemFieldTypes"], [], path32);
+    if (data.nativeField !== "wr") fail4("unqualified-reference-channel", path32);
+    integer5(data.cardinality, path32);
+    if (!object7(data.itemFieldTypes)) fail4("invalid-reference-shape", path32);
     for (const [field, types] of Object.entries(data.itemFieldTypes)) {
-      member2(field, ["u", "t", "s", "tp", "d", "ic", "fn", "au", "did", "iid", "sl"], path31);
-      if (!object7(types)) fail4("invalid-reference-field-types", path31);
-      let count7 = 0;
+      member2(field, ["u", "t", "s", "tp", "d", "ic", "fn", "au", "did", "iid", "sl"], path32);
+      if (!object7(types)) fail4("invalid-reference-field-types", path32);
+      let count8 = 0;
       for (const [type, n] of Object.entries(types)) {
-        member2(type, ["string", "number", "boolean", "object", "array", "null"], path31);
-        integer5(n, path31);
-        count7 += n;
+        member2(type, ["string", "number", "boolean", "object", "array", "null"], path32);
+        integer5(n, path32);
+        count8 += n;
       }
-      if (count7 > data.cardinality) fail4("reference-cardinality-conflict", path31);
+      if (count8 > data.cardinality) fail4("reference-cardinality-conflict", path32);
     }
   }
 }
-function nativeIdentity(record, surface, path31, parserVersion) {
-  if (!object7(record)) fail4("invalid-native-record", path31);
+function nativeIdentity(record, surface, path32, parserVersion) {
+  if (!object7(record)) fail4("invalid-native-record", path32);
   if (surface === "chat") {
-    text2(record.messageId, `${path31}.messageId`);
+    text2(record.messageId, `${path32}.messageId`);
     for (const name of ["storageMessageId", "requestId", "messageType", "splitChildStorageMessageId"]) {
-      if (record[name] != null && record[name] !== "") text2(record[name], `${path31}.${name}`);
+      if (record[name] != null && record[name] !== "") text2(record[name], `${path32}.${name}`);
     }
     const stored = typeof record.storageMessageId === "string" && record.storageMessageId.length > 0;
     let calls2 = [];
     if (record.invocation !== void 0) {
-      if (typeof record.invocation !== "string" || byteLength(record.invocation) > NATIVE_READ_LIMITS.textBytes) fail4("unsupported-invocation", path31);
+      if (typeof record.invocation !== "string" || byteLength(record.invocation) > NATIVE_READ_LIMITS.textBytes) fail4("unsupported-invocation", path32);
       try {
         const outer = JSON.parse(record.invocation);
-        assertJsonInput(outer, `${path31}.invocation.decoded`);
-        if (!Array.isArray(outer)) fail4("unsupported-invocation", path31);
+        assertJsonInput(outer, `${path32}.invocation.decoded`);
+        if (!Array.isArray(outer)) fail4("unsupported-invocation", path32);
         calls2 = outer.map((row) => typeof row === "string" ? JSON.parse(row) : row);
-        assertJsonInput(calls2, `${path31}.invocation.calls`);
+        assertJsonInput(calls2, `${path32}.invocation.calls`);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
-        fail4("malformed-invocation", path31);
+        fail4("malformed-invocation", path32);
       }
       for (const call of calls2) {
-        if (!object7(call) || call.type !== "function" || !object7(call.function)) fail4("unsupported-invocation", path31);
-        text2(call.id, path31);
-        text2(call.function.name, path31, 256);
+        if (!object7(call) || call.type !== "function" || !object7(call.function)) fail4("unsupported-invocation", path32);
+        text2(call.id, path32);
+        text2(call.function.name, path32, 256);
       }
-      if (new Set(calls2.map((call) => call.id)).size !== calls2.length) fail4("ambiguous-native-call-id", path31);
+      if (new Set(calls2.map((call) => call.id)).size !== calls2.length) fail4("ambiguous-native-call-id", path32);
     }
     const links2 = calls2.map((call) => ({ kind: "tool-call", nativeId: call.id, field: "invocation.id" }));
     if (record.splitChildStorageMessageId) links2.push({
@@ -14820,13 +14893,13 @@ function nativeIdentity(record, surface, path31, parserVersion) {
     };
   }
   if (record.task) {
-    text2(record.task.sessionId, `${path31}.task.sessionId`);
-    const taskId = record.task.taskId == null || record.task.taskId === "" ? null : text2(record.task.taskId, `${path31}.task.taskId`);
+    text2(record.task.sessionId, `${path32}.task.sessionId`);
+    const taskId = record.task.taskId == null || record.task.taskId === "" ? null : text2(record.task.taskId, `${path32}.task.taskId`);
     const threadIds = [...new Set([record.task.ic3ThreadId, record.snapshot?.ic3ThreadId].filter((value) => value != null && value !== ""))];
-    for (const threadId of threadIds) text2(threadId, `${path31}.threadId`);
+    for (const threadId of threadIds) text2(threadId, `${path32}.threadId`);
     const links2 = record.task.parentConversationId ? [{
       kind: "parent-conversation",
-      nativeId: text2(record.task.parentConversationId, `${path31}.task.parentConversationId`),
+      nativeId: text2(record.task.parentConversationId, `${path32}.task.parentConversationId`),
       field: "task.parentConversationId"
     }] : [];
     return {
@@ -14843,14 +14916,14 @@ function nativeIdentity(record, surface, path31, parserVersion) {
       callSources: []
     };
   }
-  text2(record.id, `${path31}.id`);
-  text2(record.event, `${path31}.event`);
-  if (!object7(record.data)) fail4("invalid-native-data", path31);
-  if (["ts", "tx"].includes(record.event) && record.data.tn != null) text2(record.data.tn, `${path31}.data.tn`, 256);
+  text2(record.id, `${path32}.id`);
+  text2(record.event, `${path32}.event`);
+  if (!object7(record.data)) fail4("invalid-native-data", path32);
+  if (["ts", "tx"].includes(record.event) && record.data.tn != null) text2(record.data.tn, `${path32}.data.tn`, 256);
   const links = [];
   const add = (kind2, field) => {
     if (record.data[field] == null || record.data[field] === "") return;
-    links.push({ kind: kind2, nativeId: text2(record.data[field], `${path31}.data.${field}`), field });
+    links.push({ kind: kind2, nativeId: text2(record.data[field], `${path32}.data.${field}`), field });
   };
   if (["ts", "tx"].includes(record.event)) add("tool-call", "tid");
   if (["ts", "tx"].includes(record.event)) add("parent-tool-call", "pid");
@@ -14879,26 +14952,26 @@ function nativeIdentity(record, surface, path31, parserVersion) {
     }] : []
   };
 }
-function outcome(value, unit, states, evidence, path31) {
-  shape4(value, ["unit", "state", "basis"], ["aggregateToolSuccess"], path31);
-  if (value.unit !== unit) fail4("outcome-unit-conflict", path31);
-  member2(value.state, states, `${path31}.state`);
-  text2(value.basis, `${path31}.basis`, 256);
-  if (value.aggregateToolSuccess !== void 0 && value.aggregateToolSuccess !== false) fail4("task-is-not-tool-aggregate", path31);
-  return { ...value, evidence: refs2(evidence, `${path31}.evidence`) };
+function outcome(value, unit, states, evidence, path32) {
+  shape4(value, ["unit", "state", "basis"], ["aggregateToolSuccess"], path32);
+  if (value.unit !== unit) fail4("outcome-unit-conflict", path32);
+  member2(value.state, states, `${path32}.state`);
+  text2(value.basis, `${path32}.basis`, 256);
+  if (value.aggregateToolSuccess !== void 0 && value.aggregateToolSuccess !== false) fail4("task-is-not-tool-aggregate", path32);
+  return { ...value, evidence: refs2(evidence, `${path32}.evidence`) };
 }
-function qualifiedFields(values, evidenceReferences, path31, allowed = fieldNames) {
-  if (!object7(values) || !object7(evidenceReferences)) fail4("invalid-qualified-fields", path31);
+function qualifiedFields(values, evidenceReferences, path32, allowed = fieldNames) {
+  if (!object7(values) || !object7(evidenceReferences)) fail4("invalid-qualified-fields", path32);
   const fields8 = {};
   for (const [name, value] of Object.entries(values)) {
-    member2(name, allowed, `${path31}.qualifiedFields`);
-    fields8[name] = fact(value, evidenceReferences[name], `${path31}.qualifiedFields.${name}`);
-    const calendarInstant = validateField(name, fields8[name], `${path31}.qualifiedFields.${name}`);
+    member2(name, allowed, `${path32}.qualifiedFields`);
+    fields8[name] = fact(value, evidenceReferences[name], `${path32}.qualifiedFields.${name}`);
+    const calendarInstant = validateField(name, fields8[name], `${path32}.qualifiedFields.${name}`);
     if (calendarInstant !== void 0) fields8[name].calendarInstant = calendarInstant;
   }
   return fields8;
 }
-function decodeNativeInput(value, path31) {
+function decodeNativeInput(value, path32) {
   let decoded = value;
   if (typeof decoded === "string") {
     try {
@@ -14907,135 +14980,135 @@ function decodeNativeInput(value, path31) {
       if (!(error instanceof SyntaxError)) throw error;
     }
   }
-  assertJsonInput(decoded, path31);
+  assertJsonInput(decoded, path32);
   return decoded;
 }
-function validateCallSourceFields(fields8, callSource, scope, identity4, path31) {
-  if (fields8.toolName?.availability === "recorded" && fields8.toolName.value !== callSource?.name) fail4("native-tool-name-conflict", path31);
-  if (fields8.input && scope.surface === "cowork" && identity4.nativeType !== "ts") fail4("input-source-record-unqualified", path31);
+function validateCallSourceFields(fields8, callSource, scope, identity4, path32) {
+  if (fields8.toolName?.availability === "recorded" && fields8.toolName.value !== callSource?.name) fail4("native-tool-name-conflict", path32);
+  if (fields8.input && scope.surface === "cowork" && identity4.nativeType !== "ts") fail4("input-source-record-unqualified", path32);
   if (fields8.input && (scope.surface === "chat" || identity4.nativeType === "ts")) {
     const knownInput = ["recorded", "recorded-empty", "explicit-null"].includes(fields8.input.availability);
-    if (knownInput && !callSource?.inputPresent) fail4("input-not-recorded-by-source", path31);
+    if (knownInput && !callSource?.inputPresent) fail4("input-not-recorded-by-source", path32);
     if (knownInput) {
-      const decoded = decodeNativeInput(callSource.input, `${path31}.qualifiedFields.input.decoded`);
-      if (nativeValueHasCredentials(decoded, `${path31}.qualifiedFields.input.decoded`)) fail4("credential-bearing-fact", path31);
-      if (key2(stable2(fields8.input.value)) !== key2(stable2(callSource.input)) && key2(stable2(fields8.input.value)) !== key2(stable2(decoded))) fail4("input-source-conflict", path31);
+      const decoded = decodeNativeInput(callSource.input, `${path32}.qualifiedFields.input.decoded`);
+      if (nativeValueHasCredentials(decoded, `${path32}.qualifiedFields.input.decoded`)) fail4("credential-bearing-fact", path32);
+      if (key2(stable2(fields8.input.value)) !== key2(stable2(callSource.input)) && key2(stable2(fields8.input.value)) !== key2(stable2(decoded))) fail4("input-source-conflict", path32);
     }
-    if (fields8.input.availability === "absent-in-response" && callSource?.inputPresent) fail4("input-absence-conflict", path31);
+    if (fields8.input.availability === "absent-in-response" && callSource?.inputPresent) fail4("input-absence-conflict", path32);
   }
 }
-function validateObservationContext(envelope3, path31) {
+function validateObservationContext(envelope3, path32) {
   const scope = envelope3.scope;
-  shape4(scope, ["harness", "surface", "account", "conversationId"], [], `${path31}.scope`);
-  if (scope.harness !== "microsoft-365-copilot") fail4("unsupported-harness", path31);
-  member2(scope.surface, ["chat", "cowork"], path31);
-  shape4(scope.account, ["tenantId", "subjectId", "verification"], [], `${path31}.scope.account`);
-  text2(scope.account.tenantId, path31);
-  text2(scope.account.subjectId, path31);
-  text2(scope.conversationId, path31);
-  member2(scope.account.verification, ["verified", "unqualified", "conflicting"], `${path31}.scope.account.verification`);
-  shape4(envelope3.capture, ["captureId", "capturedAt", "generation", "parserVersion", "sourceSchema", "operation"], ["origin", "bodyDigest"], `${path31}.capture`);
-  for (const name of ["captureId", "parserVersion", "sourceSchema", "operation"]) text2(envelope3.capture[name], `${path31}.capture.${name}`);
-  if (typeof envelope3.capture.capturedAt !== "string" || !Number.isFinite(Date.parse(envelope3.capture.capturedAt))) fail4("invalid-capture-time", path31);
-  integer5(envelope3.capture.generation, `${path31}.capture.generation`);
+  shape4(scope, ["harness", "surface", "account", "conversationId"], [], `${path32}.scope`);
+  if (scope.harness !== "microsoft-365-copilot") fail4("unsupported-harness", path32);
+  member2(scope.surface, ["chat", "cowork"], path32);
+  shape4(scope.account, ["tenantId", "subjectId", "verification"], [], `${path32}.scope.account`);
+  text2(scope.account.tenantId, path32);
+  text2(scope.account.subjectId, path32);
+  text2(scope.conversationId, path32);
+  member2(scope.account.verification, ["verified", "unqualified", "conflicting"], `${path32}.scope.account.verification`);
+  shape4(envelope3.capture, ["captureId", "capturedAt", "generation", "parserVersion", "sourceSchema", "operation"], ["origin", "bodyDigest"], `${path32}.capture`);
+  for (const name of ["captureId", "parserVersion", "sourceSchema", "operation"]) text2(envelope3.capture[name], `${path32}.capture.${name}`);
+  if (typeof envelope3.capture.capturedAt !== "string" || !Number.isFinite(Date.parse(envelope3.capture.capturedAt))) fail4("invalid-capture-time", path32);
+  integer5(envelope3.capture.generation, `${path32}.capture.generation`);
   if (envelope3.capture.origin !== void 0) {
-    text2(envelope3.capture.origin, path31);
+    text2(envelope3.capture.origin, path32);
     let origin;
     try {
       origin = new URL(envelope3.capture.origin);
     } catch {
-      fail4("invalid-source-origin", path31);
+      fail4("invalid-source-origin", path32);
     }
-    if (origin.protocol !== "https:" || origin.username || origin.password || origin.search || origin.hash || !["", "/"].includes(origin.pathname)) fail4("invalid-source-origin", path31);
+    if (origin.protocol !== "https:" || origin.username || origin.password || origin.search || origin.hash || !["", "/"].includes(origin.pathname)) fail4("invalid-source-origin", path32);
   }
-  if (envelope3.capture.bodyDigest !== void 0 && !/^[a-f0-9]{64}$/.test(envelope3.capture.bodyDigest)) fail4("invalid-source-digest", path31);
-  shape4(envelope3.ordering, ["pageOrdinal", "recordOrdinal", "completeness"], ["frameOrdinal", "nativeEventId", "sequence", "sequenceScope"], `${path31}.ordering`);
-  for (const name of ["pageOrdinal", "recordOrdinal", "frameOrdinal", "sequence"]) if (envelope3.ordering[name] !== void 0) integer5(envelope3.ordering[name], path31);
-  if (envelope3.ordering.nativeEventId !== void 0) text2(envelope3.ordering.nativeEventId, path31);
-  if (envelope3.ordering.sequenceScope !== void 0) member2(envelope3.ordering.sequenceScope, ["conversation", "request", "unknown"], path31);
-  member2(envelope3.ordering.completeness, ["response-only", "first-page-only", "drained-exposed-history", "gapped-domain-unqualified", "unknown"], path31);
+  if (envelope3.capture.bodyDigest !== void 0 && !/^[a-f0-9]{64}$/.test(envelope3.capture.bodyDigest)) fail4("invalid-source-digest", path32);
+  shape4(envelope3.ordering, ["pageOrdinal", "recordOrdinal", "completeness"], ["frameOrdinal", "nativeEventId", "sequence", "sequenceScope"], `${path32}.ordering`);
+  for (const name of ["pageOrdinal", "recordOrdinal", "frameOrdinal", "sequence"]) if (envelope3.ordering[name] !== void 0) integer5(envelope3.ordering[name], path32);
+  if (envelope3.ordering.nativeEventId !== void 0) text2(envelope3.ordering.nativeEventId, path32);
+  if (envelope3.ordering.sequenceScope !== void 0) member2(envelope3.ordering.sequenceScope, ["conversation", "request", "unknown"], path32);
+  member2(envelope3.ordering.completeness, ["response-only", "first-page-only", "drained-exposed-history", "gapped-domain-unqualified", "unknown"], path32);
   return scope;
 }
-function validateObservationCoverage(coverage4, path31) {
-  if (!Array.isArray(coverage4) || coverage4.length > 100) fail4("invalid-coverage", path31);
+function validateObservationCoverage(coverage4, path32) {
+  if (!Array.isArray(coverage4) || coverage4.length > 100) fail4("invalid-coverage", path32);
   for (const row of coverage4) {
-    shape4(row, ["kind", "meaning"], ["subject", "path", "observedMissingIntegers", "inferredLostEvents"], `${path31}.coverage`);
-    text2(row.kind, path31, 100);
-    text2(row.meaning, path31, 2048);
-    for (const name of ["subject", "path"]) if (row[name] !== void 0) text2(row[name], path31, 2048);
-    if (row.observedMissingIntegers !== void 0) integer5(row.observedMissingIntegers, path31);
-    if (row.inferredLostEvents != null) fail4("sequence-loss-not-established", path31);
+    shape4(row, ["kind", "meaning"], ["subject", "path", "observedMissingIntegers", "inferredLostEvents"], `${path32}.coverage`);
+    text2(row.kind, path32, 100);
+    text2(row.meaning, path32, 2048);
+    for (const name of ["subject", "path"]) if (row[name] !== void 0) text2(row[name], path32, 2048);
+    if (row.observedMissingIntegers !== void 0) integer5(row.observedMissingIntegers, path32);
+    if (row.inferredLostEvents != null) fail4("sequence-loss-not-established", path32);
   }
 }
-function validateMessageTimeReferences(fields8, chatSource, identity4, path31) {
+function validateMessageTimeReferences(fields8, chatSource, identity4, path32) {
   for (const [name, original] of messageTimeFields) if (fields8[name]) {
-    if (!chatSource) fail4("message-time-source-unqualified", path31);
+    if (!chatSource) fail4("message-time-source-unqualified", path32);
     if (fields8[name].evidence.some((reference3) => reference3.sourceDocument !== chatSource.source.sourceDocument || reference3.pointer !== `${chatSource.source.pointer}/${original}` || reference3.nativeEventId !== void 0 && reference3.nativeEventId !== identity4.observationId)) {
-      fail4("message-time-reference-conflict", path31);
+      fail4("message-time-reference-conflict", path32);
     }
   }
 }
-function validateObservationTimeReference(fields8, scope, identity4, path31) {
+function validateObservationTimeReference(fields8, scope, identity4, path32) {
   const value = fields8.observationTime;
   if (!value) return;
-  if (scope.surface !== "cowork" || identity4.namespace !== "event") fail4("observation-time-source-unqualified", path31);
+  if (scope.surface !== "cowork" || identity4.namespace !== "event") fail4("observation-time-source-unqualified", path32);
   const [reference3] = value.evidence;
-  if (value.evidence.length !== 1 || reference3.nativeEventId !== identity4.id || !reference3.pointer.endsWith("/data/ts") || /~(?![01])/.test(reference3.pointer) || reference3.pointer.split("/").includes("*")) fail4("observation-time-reference-conflict", path31);
+  if (value.evidence.length !== 1 || reference3.nativeEventId !== identity4.id || !reference3.pointer.endsWith("/data/ts") || /~(?![01])/.test(reference3.pointer) || reference3.pointer.split("/").includes("*")) fail4("observation-time-reference-conflict", path32);
 }
-function validateNativeResultFields(fields8, scope, identity4, capture, path31) {
+function validateNativeResultFields(fields8, scope, identity4, capture, path32) {
   const diagnostic2 = fields8.failure?.value?.diagnostic, result = fields8.resultEvidence;
   if (!diagnostic2 && !result) return;
   if (scope.surface !== "cowork" || identity4.nativeType !== "tx" || ![NATIVE_COWORK_LEGACY_RESULT_FACTS_PARSER, NATIVE_COWORK_RESULT_FACTS_PARSER].includes(capture.parserVersion)) {
-    fail4("native-result-source-unqualified", path31);
+    fail4("native-result-source-unqualified", path32);
   }
   const exactReference = (ref11) => ref11.nativeEventId === identity4.id && !/~(?![01])/.test(ref11.pointer) && !ref11.pointer.split("/").includes("*");
   if (diagnostic2) {
     if (diagnostic2.code !== void 0 || diagnostic2.statusCode !== void 0 || diagnostic2.details !== void 0) {
-      fail4("native-error-format-unqualified", path31);
+      fail4("native-error-format-unqualified", path32);
     }
     if (fields8.failure.evidence.length !== 1 || fields8.failure.evidence.some((ref11) => !exactReference(ref11) || !ref11.pointer.endsWith("/data/err"))) {
-      fail4("native-error-reference-unqualified", path31);
+      fail4("native-error-reference-unqualified", path32);
     }
   }
   if (result) {
-    if (result.availability !== "recorded") fail4("native-result-source-unqualified", path31);
+    if (result.availability !== "recorded") fail4("native-result-source-unqualified", path32);
     if (result.value.description !== void 0 && capture.parserVersion !== NATIVE_COWORK_RESULT_FACTS_PARSER) {
-      fail4("native-description-source-unqualified", path31);
+      fail4("native-description-source-unqualified", path32);
     }
     if (result.evidence.length > 2 || result.evidence.some((ref11) => !exactReference(ref11) || !/\/data(?:\/out|\/d)?$/.test(ref11.pointer)) || new Set(result.evidence.map((ref11) => key2(ref11.sourceDocument, ref11.pointer.replace(/\/(?:out|d)$/, "")))).size !== 1 || new Set(result.evidence.map((ref11) => ref11.pointer)).size !== result.evidence.length) {
-      fail4("native-result-reference-unqualified", path31);
+      fail4("native-result-reference-unqualified", path32);
     }
     const outputRecorded = !["not-supplied", "unsupported-format"].includes(result.value.contentStatus);
     const descriptionRecorded = result.value.description && result.value.description.status !== "not-supplied";
     if (outputRecorded && !result.evidence.some((ref11) => ref11.pointer.endsWith("/data/out")) || descriptionRecorded && !result.evidence.some((ref11) => ref11.pointer.endsWith("/data/d"))) {
-      fail4("native-result-reference-unqualified", path31);
+      fail4("native-result-reference-unqualified", path32);
     }
   }
 }
 function validateEnvelope(envelope3, index) {
-  const path31 = `$[${index}]`;
-  shape4(envelope3, ["contractVersion", "scope", "capture", "record", "ordering", "qualifiedFields", "evidenceReferences", "coverage"], ["outcomes", "checkpoint", "callFacts", "chatSource", "messageParts"], path31);
-  if (envelope3.contractVersion !== NATIVE_READ_CONTRACT) fail4("unsupported-contract", path31);
-  const scope = validateObservationContext(envelope3, path31);
-  if (!object7(envelope3.qualifiedFields) || !object7(envelope3.evidenceReferences)) fail4("invalid-qualified-fields", path31);
-  shape4(envelope3.evidenceReferences, [], [...fieldNames, "taskOutcome", "toolOutcome", "returnedResults"], `${path31}.evidenceReferences`);
-  const fields8 = qualifiedFields(envelope3.qualifiedFields, envelope3.evidenceReferences, path31);
-  validateObservationCoverage(envelope3.coverage, path31);
-  const identity4 = nativeIdentity(envelope3.record, scope.surface, `${path31}.record`, envelope3.capture.parserVersion);
-  validateNativeResultFields(fields8, scope, identity4, envelope3.capture, path31);
-  validateObservationTimeReference(fields8, scope, identity4, path31);
+  const path32 = `$[${index}]`;
+  shape4(envelope3, ["contractVersion", "scope", "capture", "record", "ordering", "qualifiedFields", "evidenceReferences", "coverage"], ["outcomes", "checkpoint", "callFacts", "chatSource", "messageParts"], path32);
+  if (envelope3.contractVersion !== NATIVE_READ_CONTRACT) fail4("unsupported-contract", path32);
+  const scope = validateObservationContext(envelope3, path32);
+  if (!object7(envelope3.qualifiedFields) || !object7(envelope3.evidenceReferences)) fail4("invalid-qualified-fields", path32);
+  shape4(envelope3.evidenceReferences, [], [...fieldNames, "taskOutcome", "toolOutcome", "returnedResults"], `${path32}.evidenceReferences`);
+  const fields8 = qualifiedFields(envelope3.qualifiedFields, envelope3.evidenceReferences, path32);
+  validateObservationCoverage(envelope3.coverage, path32);
+  const identity4 = nativeIdentity(envelope3.record, scope.surface, `${path32}.record`, envelope3.capture.parserVersion);
+  validateNativeResultFields(fields8, scope, identity4, envelope3.capture, path32);
+  validateObservationTimeReference(fields8, scope, identity4, path32);
   if (fields8.observationTime) {
-    const value = fields8.observationTime, present3 = Object.hasOwn(envelope3.record.data, "ts");
-    if (["recorded", "recorded-empty", "explicit-null"].includes(value.availability) && (!present3 || value.value !== envelope3.record.data.ts) || value.availability === "absent-in-response" && present3) fail4("observation-time-source-conflict", path31);
+    const value = fields8.observationTime, present4 = Object.hasOwn(envelope3.record.data, "ts");
+    if (["recorded", "recorded-empty", "explicit-null"].includes(value.availability) && (!present4 || value.value !== envelope3.record.data.ts) || value.availability === "absent-in-response" && present4) fail4("observation-time-source-conflict", path32);
   }
-  if (nativeValueHasCredentials(envelope3.record, `${path31}.record`)) fail4("credential-bearing-native-carrier", `${path31}.record`);
+  if (nativeValueHasCredentials(envelope3.record, `${path32}.record`)) fail4("credential-bearing-native-carrier", `${path32}.record`);
   const messageParts = [];
   if (envelope3.messageParts !== void 0) {
-    if (scope.surface !== "cowork" || !["rc", "aq", "aa"].includes(identity4.nativeType) || !Array.isArray(envelope3.messageParts) || envelope3.messageParts.length > 256) fail4("unsupported-message-parts", `${path31}.messageParts`);
-    if (envelope3.messageParts.length && fields8.message) fail4("duplicate-message-location", path31);
+    if (scope.surface !== "cowork" || !["rc", "aq", "aa"].includes(identity4.nativeType) || !Array.isArray(envelope3.messageParts) || envelope3.messageParts.length > 256) fail4("unsupported-message-parts", `${path32}.messageParts`);
+    if (envelope3.messageParts.length && fields8.message) fail4("duplicate-message-location", path32);
     const seen = /* @__PURE__ */ new Set();
     for (const [ordinal, part] of envelope3.messageParts.entries()) {
-      const at2 = `${path31}.messageParts[${ordinal}]`;
+      const at2 = `${path32}.messageParts[${ordinal}]`;
       shape4(part, ["message", "evidence"], [], at2);
       if (!object7(part.evidence)) fail4("message-part-single-reference-required", at2);
       const message = fact(part.message, part.evidence, `${at2}.message`);
@@ -15050,35 +15123,35 @@ function validateEnvelope(envelope3, index) {
       messageParts.push(message);
     }
   }
-  if (envelope3.chatSource !== void 0 && nativeValueHasCredentials(envelope3.chatSource, `${path31}.chatSource`)) {
-    fail4("chat-source-credential-bearing-fact", `${path31}.chatSource`);
+  if (envelope3.chatSource !== void 0 && nativeValueHasCredentials(envelope3.chatSource, `${path32}.chatSource`)) {
+    fail4("chat-source-credential-bearing-fact", `${path32}.chatSource`);
   }
-  const chatSource = envelope3.chatSource === void 0 ? void 0 : validateNativeChatSource(envelope3.chatSource, envelope3, `${path31}.chatSource`, fail4);
-  validateMessageTimeReferences(fields8, chatSource, identity4, path31);
+  const chatSource = envelope3.chatSource === void 0 ? void 0 : validateNativeChatSource(envelope3.chatSource, envelope3, `${path32}.chatSource`, fail4);
+  validateMessageTimeReferences(fields8, chatSource, identity4, path32);
   for (const [name, original] of messageTimeFields) if (fields8[name]) {
-    const value = fields8[name], present3 = Object.hasOwn(envelope3.record, original);
-    if (["recorded", "recorded-empty", "explicit-null"].includes(value.availability) && (!present3 || value.value !== envelope3.record[original]) || value.availability === "absent-in-response" && present3) fail4("message-time-source-conflict", path31);
+    const value = fields8[name], present4 = Object.hasOwn(envelope3.record, original);
+    if (["recorded", "recorded-empty", "explicit-null"].includes(value.availability) && (!present4 || value.value !== envelope3.record[original]) || value.availability === "absent-in-response" && present4) fail4("message-time-source-conflict", path32);
   }
   if (chatSource && identity4.callSources.length) {
     for (const [index2, row] of chatSource.observations.entries()) if (row.kind === "native-invocation") {
       const source = identity4.callSources[Number(row.source.decodedPointer.slice(1))];
-      const at2 = `${path31}.chatSource.observations[${index2}]`;
+      const at2 = `${path32}.chatSource.observations[${index2}]`;
       if (!source || row.fields.nativeCallId.availability !== "recorded" || row.fields.nativeCallId.value !== source.id) {
         fail4("chat-source-native-call-conflict", at2);
       }
       validateCallSourceFields({ toolName: row.fields.toolName, input: row.fields.input }, source, scope, identity4, at2);
     }
   }
-  if (identity4.namespace === "event" && envelope3.ordering.nativeEventId !== void 0 && envelope3.ordering.nativeEventId !== identity4.id) fail4("order-event-identity-conflict", path31);
-  if (identity4.namespace === "event" && /^seq:\d+$/.test(identity4.id) && envelope3.ordering.sequence !== void 0 && envelope3.ordering.sequence !== Number(identity4.id.slice(4))) fail4("order-sequence-conflict", path31);
-  if (identity4.callSources.length > 1 && (Object.keys(fields8).some((name) => !["message", "approval"].includes(name) && !messageTimeFields.has(name) && !(name === "model" && ["snapshot", "turn"].includes(fields8.model.scope))) || envelope3.outcomes?.tool || envelope3.outcomes?.nestedApi)) fail4("ambiguous-call-facts", path31);
-  validateCallSourceFields(fields8, identity4.callSources[0], scope, identity4, path31);
+  if (identity4.namespace === "event" && envelope3.ordering.nativeEventId !== void 0 && envelope3.ordering.nativeEventId !== identity4.id) fail4("order-event-identity-conflict", path32);
+  if (identity4.namespace === "event" && /^seq:\d+$/.test(identity4.id) && envelope3.ordering.sequence !== void 0 && envelope3.ordering.sequence !== Number(identity4.id.slice(4))) fail4("order-sequence-conflict", path32);
+  if (identity4.callSources.length > 1 && (Object.keys(fields8).some((name) => !["message", "approval"].includes(name) && !messageTimeFields.has(name) && !(name === "model" && ["snapshot", "turn"].includes(fields8.model.scope))) || envelope3.outcomes?.tool || envelope3.outcomes?.nestedApi)) fail4("ambiguous-call-facts", path32);
+  validateCallSourceFields(fields8, identity4.callSources[0], scope, identity4, path32);
   const callFacts = [];
   if (envelope3.callFacts !== void 0) {
-    if (scope.surface !== "chat" || !Array.isArray(envelope3.callFacts) || envelope3.callFacts.length > 100) fail4("unsupported-call-facts", path31);
+    if (scope.surface !== "chat" || !Array.isArray(envelope3.callFacts) || envelope3.callFacts.length > 100) fail4("unsupported-call-facts", path32);
     const seen = /* @__PURE__ */ new Set();
     for (const [ordinal, row] of envelope3.callFacts.entries()) {
-      const at2 = `${path31}.callFacts[${ordinal}]`;
+      const at2 = `${path32}.callFacts[${ordinal}]`;
       shape4(row, ["nativeCallId", "qualifiedFields", "evidenceReferences"], [], at2);
       text2(row.nativeCallId, `${at2}.nativeCallId`);
       if (seen.has(row.nativeCallId)) fail4("duplicate-call-facts", at2);
@@ -15094,71 +15167,71 @@ function validateEnvelope(envelope3, index) {
   }
   const nativeInputs = scope.surface === "cowork" && identity4.nativeType === "ts" && Object.hasOwn(envelope3.record.data, "inp") ? [envelope3.record.data.inp] : identity4.callSources.filter((source) => source.inputPresent).map((source) => source.input);
   for (const input of nativeInputs) {
-    if (nativeValueHasCredentials(decodeNativeInput(input, `${path31}.record.input.decoded`), `${path31}.record.input.decoded`)) {
-      fail4("credential-bearing-native-carrier", `${path31}.record`);
+    if (nativeValueHasCredentials(decodeNativeInput(input, `${path32}.record.input.decoded`), `${path32}.record.input.decoded`)) {
+      fail4("credential-bearing-native-carrier", `${path32}.record`);
     }
   }
-  if (fields8.approval && (scope.surface !== "cowork" || identity4.nativeType !== "taa" || fields8.approval.availability !== "recorded" || fields8.approval.value !== envelope3.record.data.approved)) fail4("approval-not-established", path31);
+  if (fields8.approval && (scope.surface !== "cowork" || identity4.nativeType !== "taa" || fields8.approval.availability !== "recorded" || fields8.approval.value !== envelope3.record.data.approved)) fail4("approval-not-established", path32);
   if (fields8.message?.availability === "recorded" && scope.surface === "chat") {
     const actor = { user: "user", bot: "assistant", tool: "tool" }[envelope3.record.author] || "unknown";
-    if (fields8.message.value.author !== actor) fail4("native-message-author-conflict", path31);
+    if (fields8.message.value.author !== actor) fail4("native-message-author-conflict", path32);
   }
   if (fields8.resultReferences?.availability === "recorded" && Object.hasOwn(envelope3.record.data || {}, "wr")) {
     const raw = envelope3.record.data.wr;
-    if (!Array.isArray(raw) || raw.length !== fields8.resultReferences.value.cardinality) fail4("reference-source-cardinality-conflict", path31);
+    if (!Array.isArray(raw) || raw.length !== fields8.resultReferences.value.cardinality) fail4("reference-source-cardinality-conflict", path32);
   }
   if (envelope3.checkpoint !== void 0) {
     shape4(
       envelope3.checkpoint,
       ["status", "operation", "selector", "direction", "privateContinuationRef", "generation"],
       ["lastObservedEventId", "committedCursor", "stableHeadQualified"],
-      `${path31}.checkpoint`
+      `${path32}.checkpoint`
     );
-    integer5(envelope3.checkpoint.generation, path31);
-    if (envelope3.checkpoint.committedCursor != null) fail4("cursor-not-reader-data", path31);
+    integer5(envelope3.checkpoint.generation, path32);
+    if (envelope3.checkpoint.committedCursor != null) fail4("cursor-not-reader-data", path32);
   }
   const outcomes3 = {}, supplied = envelope3.outcomes || {};
-  shape4(supplied, [], ["task", "tool", "nestedApi"], `${path31}.outcomes`);
+  shape4(supplied, [], ["task", "tool", "nestedApi"], `${path32}.outcomes`);
   if (supplied.task) {
     const sourceState2 = envelope3.record.task?.state;
-    if (identity4.nativeType !== "task-snapshot") fail4("task-outcome-source-unqualified", path31);
-    if (identity4.nativeType === "task-snapshot" && supplied.task.state !== (sourceState2 || "unknown")) fail4("native-task-state-conflict", path31);
+    if (identity4.nativeType !== "task-snapshot") fail4("task-outcome-source-unqualified", path32);
+    if (identity4.nativeType === "task-snapshot" && supplied.task.state !== (sourceState2 || "unknown")) fail4("native-task-state-conflict", path32);
     outcomes3.task = outcome(
       supplied.task,
       "native-task",
       ["running", "needs_user_input", "pending_activity", "completed", "failed", "cancelled", "unknown"],
       envelope3.evidenceReferences.taskOutcome,
-      `${path31}.outcomes.task`
+      `${path32}.outcomes.task`
     );
   }
   if (supplied.tool) {
     const actual = scope.surface === "cowork" && identity4.nativeType === "tx" ? envelope3.record.data.ok === true ? "succeeded" : envelope3.record.data.ok === false ? "failed" : "unknown" : "unknown";
-    if (!identity4.callIds.length || supplied.tool.state !== actual) fail4("native-tool-outcome-not-established", path31);
+    if (!identity4.callIds.length || supplied.tool.state !== actual) fail4("native-tool-outcome-not-established", path32);
     outcomes3.tool = outcome(
       supplied.tool,
       "native-tool",
       ["succeeded", "failed", "cancelled", "unknown"],
       envelope3.evidenceReferences.toolOutcome,
-      `${path31}.outcomes.tool`
+      `${path32}.outcomes.tool`
     );
   }
   if (supplied.nestedApi) {
     const nested = supplied.nestedApi;
-    shape4(nested, ["unit", "availability", "observed", "declaredRequestCount", "declaredRequestCountIsSuccessDenominator"], [], `${path31}.outcomes.nestedApi`);
-    if (nested.unit !== "nested-api-result" || nested.declaredRequestCountIsSuccessDenominator !== false) fail4("nested-unit-or-denominator-conflict", path31);
-    member2(nested.availability, availability, path31);
-    if (nested.declaredRequestCount !== null) integer5(nested.declaredRequestCount, path31);
-    if (!Array.isArray(nested.observed) || nested.observed.length > 100) fail4("invalid-returned-results", path31);
-    if (nested.observed.length && nested.availability !== "recorded") fail4("returned-result-availability-conflict", path31);
+    shape4(nested, ["unit", "availability", "observed", "declaredRequestCount", "declaredRequestCountIsSuccessDenominator"], [], `${path32}.outcomes.nestedApi`);
+    if (nested.unit !== "nested-api-result" || nested.declaredRequestCountIsSuccessDenominator !== false) fail4("nested-unit-or-denominator-conflict", path32);
+    member2(nested.availability, availability, path32);
+    if (nested.declaredRequestCount !== null) integer5(nested.declaredRequestCount, path32);
+    if (!Array.isArray(nested.observed) || nested.observed.length > 100) fail4("invalid-returned-results", path32);
+    if (nested.observed.length && nested.availability !== "recorded") fail4("returned-result-availability-conflict", path32);
     for (const row of nested.observed) {
-      shape4(row, ["index", "indexKind", "statusCode", "errorCode", "paginationPresent", "evidenceLevel"], [], path31);
-      integer5(row.index, path31);
-      if (row.indexKind !== "response-array-position" || row.evidenceLevel !== "intermediary-reported") fail4("unqualified-returned-result", path31);
-      if (row.statusCode !== null && (!Number.isInteger(row.statusCode) || row.statusCode < 100 || row.statusCode > 599)) fail4("invalid-status", path31);
-      if (row.errorCode !== null && (typeof row.errorCode !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(row.errorCode) || textFindings(row.errorCode).some((f2) => f2.mandatory || f2.category === "opaque_identifiers"))) fail4("unsafe-error-code", path31);
-      if (row.paginationPresent !== null && row.paginationPresent !== true) fail4("unknown-pagination-is-not-false", path31);
+      shape4(row, ["index", "indexKind", "statusCode", "errorCode", "paginationPresent", "evidenceLevel"], [], path32);
+      integer5(row.index, path32);
+      if (row.indexKind !== "response-array-position" || row.evidenceLevel !== "intermediary-reported") fail4("unqualified-returned-result", path32);
+      if (row.statusCode !== null && (!Number.isInteger(row.statusCode) || row.statusCode < 100 || row.statusCode > 599)) fail4("invalid-status", path32);
+      if (row.errorCode !== null && (typeof row.errorCode !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(row.errorCode) || textFindings(row.errorCode).some((f2) => f2.mandatory || f2.category === "opaque_identifiers"))) fail4("unsafe-error-code", path32);
+      if (row.paginationPresent !== null && row.paginationPresent !== true) fail4("unknown-pagination-is-not-false", path32);
     }
-    outcomes3.nestedApi = { ...nested, evidence: refs2(envelope3.evidenceReferences.returnedResults, `${path31}.outcomes.nestedApi`) };
+    outcomes3.nestedApi = { ...nested, evidence: refs2(envelope3.evidenceReferences.returnedResults, `${path32}.outcomes.nestedApi`) };
   }
   const { callSources, ...publicIdentity } = identity4;
   publicIdentity.nativeCalls = callSources.map((call) => {
@@ -15196,7 +15269,7 @@ function sourceObservationRecords(envelopes) {
   }
   if (byteLength(serialized2) > NATIVE_READ_LIMITS.bytes) fail4("record-byte-bound", "$");
   const records = JSON.parse(serialized2).map(validateEnvelope);
-  if (records.reduce((count7, record) => count7 + (record.fields.message ? 1 : 0) + (record.messageParts?.length ?? 0), 0) > NATIVE_READ_LIMITS.records) {
+  if (records.reduce((count8, record) => count8 + (record.fields.message ? 1 : 0) + (record.messageParts?.length ?? 0), 0) > NATIVE_READ_LIMITS.records) {
     fail4("message-view-count-bound", "$");
   }
   return records;
@@ -15370,49 +15443,49 @@ function projectObservationRecords(records, inputOrdinals) {
 function projectNativeReadModel(envelopes) {
   return projectObservationRecords(sourceObservationRecords(envelopes));
 }
-function retainedFields(values, path31, allowed = fieldNames) {
-  if (!object7(values)) fail4("invalid-retained-fields", path31);
+function retainedFields(values, path32, allowed = fieldNames) {
+  if (!object7(values)) fail4("invalid-retained-fields", path32);
   const input = {}, evidence = {};
   for (const [name, value] of Object.entries(values)) {
-    if (!object7(value) || !Object.hasOwn(value, "evidence")) fail4("retained-evidence-required", path31);
+    if (!object7(value) || !Object.hasOwn(value, "evidence")) fail4("retained-evidence-required", path32);
     const { evidence: references, ...field } = value;
     if (messageTimeFields.has(name) || name === "observationTime") {
       const { calendarInstant, ...original } = field;
-      const expected2 = original.availability === "recorded" ? name === "observationTime" ? normalizeNativeObservationTime(original.value, original.unit, path31) : normalizeNativeMessageTime(original.value, path31) : void 0;
+      const expected2 = original.availability === "recorded" ? name === "observationTime" ? normalizeNativeObservationTime(original.value, original.unit, path32) : normalizeNativeMessageTime(original.value, path32) : void 0;
       if (Object.hasOwn(field, "calendarInstant") !== (expected2 !== void 0) || calendarInstant !== expected2) {
-        fail4(name === "observationTime" ? "retained-observation-time-conflict" : "retained-message-time-conflict", path31);
+        fail4(name === "observationTime" ? "retained-observation-time-conflict" : "retained-message-time-conflict", path32);
       }
       input[name] = original;
     } else input[name] = field;
     evidence[name] = references;
   }
-  return qualifiedFields(input, evidence, path31, allowed);
+  return qualifiedFields(input, evidence, path32, allowed);
 }
-function retainedIdentity(value, scope, path31) {
+function retainedIdentity(value, scope, path32) {
   shape4(
     value,
     ["namespace", "id", "observationId", "nativeType", "requestId", "callIds", "links", "nativeCalls"],
     ["taskId", "sessionId", "threadIds"],
-    path31
+    path32
   );
-  member2(value.namespace, scope.surface === "chat" ? ["storage-message", "message-observation"] : ["event", "task", "session"], path31);
-  for (const name of ["id", "observationId", "nativeType"]) text2(value[name], `${path31}.${name}`);
-  if (value.requestId !== null) text2(value.requestId, `${path31}.requestId`);
-  if (!Array.isArray(value.callIds) || value.callIds.length > 100 || new Set(value.callIds).size !== value.callIds.length || !Array.isArray(value.nativeCalls) || value.nativeCalls.length !== value.callIds.length) fail4("invalid-retained-call-identities", path31);
-  for (const id5 of value.callIds) text2(id5, path31);
+  member2(value.namespace, scope.surface === "chat" ? ["storage-message", "message-observation"] : ["event", "task", "session"], path32);
+  for (const name of ["id", "observationId", "nativeType"]) text2(value[name], `${path32}.${name}`);
+  if (value.requestId !== null) text2(value.requestId, `${path32}.requestId`);
+  if (!Array.isArray(value.callIds) || value.callIds.length > 100 || new Set(value.callIds).size !== value.callIds.length || !Array.isArray(value.nativeCalls) || value.nativeCalls.length !== value.callIds.length) fail4("invalid-retained-call-identities", path32);
+  for (const id5 of value.callIds) text2(id5, path32);
   if (scope.surface === "cowork" && value.namespace === "event" && (value.callIds.length > 1 || value.callIds.length && !["ts", "tx"].includes(value.nativeType))) {
-    fail4("retained-call-source-conflict", path31);
+    fail4("retained-call-source-conflict", path32);
   }
   const names = /* @__PURE__ */ new Set();
   for (const call of value.nativeCalls) {
-    shape4(call, ["nativeCallId", "nativeToolName"], [], path31);
-    if (!value.callIds.includes(call.nativeCallId) || names.has(call.nativeCallId)) fail4("invalid-retained-call-identities", path31);
+    shape4(call, ["nativeCallId", "nativeToolName"], [], path32);
+    if (!value.callIds.includes(call.nativeCallId) || names.has(call.nativeCallId)) fail4("invalid-retained-call-identities", path32);
     names.add(call.nativeCallId);
-    if (call.nativeToolName !== null) text2(call.nativeToolName, path31, 256);
+    if (call.nativeToolName !== null) text2(call.nativeToolName, path32, 256);
   }
-  if (!Array.isArray(value.links) || value.links.length > 200) fail4("invalid-retained-links", path31);
+  if (!Array.isArray(value.links) || value.links.length > 200) fail4("invalid-retained-links", path32);
   for (const link of value.links) {
-    shape4(link, ["kind", "nativeId", "field"], ["qualification"], path31);
+    shape4(link, ["kind", "nativeId", "field"], ["qualification"], path32);
     member2(link.kind, [
       "tool-call",
       "parent-tool-call",
@@ -15422,101 +15495,101 @@ function retainedIdentity(value, scope, path31) {
       "agent-reference",
       "approval",
       "agent-announcement"
-    ], path31);
-    for (const name of ["nativeId", "field"]) text2(link[name], path31);
-    if (link.qualification !== void 0) text2(link.qualification, path31, 256);
-    if (link.kind === "tool-call" && !value.callIds.includes(link.nativeId) && !(scope.surface === "cowork" && value.nativeType === "ta")) fail4("retained-call-link-conflict", path31);
+    ], path32);
+    for (const name of ["nativeId", "field"]) text2(link[name], path32);
+    if (link.qualification !== void 0) text2(link.qualification, path32, 256);
+    if (link.kind === "tool-call" && !value.callIds.includes(link.nativeId) && !(scope.surface === "cowork" && value.nativeType === "ta")) fail4("retained-call-link-conflict", path32);
   }
-  if (value.callIds.some((id5) => !value.links.some((link) => link.kind === "tool-call" && link.nativeId === id5 && link.field === (scope.surface === "chat" ? "invocation.id" : "tid")))) fail4("retained-call-link-conflict", path31);
+  if (value.callIds.some((id5) => !value.links.some((link) => link.kind === "tool-call" && link.nativeId === id5 && link.field === (scope.surface === "chat" ? "invocation.id" : "tid")))) fail4("retained-call-link-conflict", path32);
   if (["task", "session"].includes(value.namespace)) {
     if (scope.surface !== "cowork" || value.nativeType !== "task-snapshot" || value.callIds.length || !Object.hasOwn(value, "taskId") || !Object.hasOwn(value, "sessionId") || !Array.isArray(value.threadIds)) {
-      fail4("retained-task-identity-conflict", path31);
+      fail4("retained-task-identity-conflict", path32);
     }
-    text2(value.sessionId, path31);
-    if (value.taskId !== null) text2(value.taskId, path31);
-    if (value.namespace === "task" !== (value.taskId !== null)) fail4("retained-task-identity-conflict", path31);
-    if (value.id !== (value.taskId ?? value.sessionId) || value.observationId !== value.sessionId) fail4("retained-task-identity-conflict", path31);
-    for (const id5 of value.threadIds) text2(id5, path31);
-  } else if (["taskId", "sessionId", "threadIds"].some((name) => Object.hasOwn(value, name))) fail4("retained-task-identity-conflict", path31);
-  if (value.namespace === "message-observation" && value.id !== value.observationId || value.namespace === "event" && value.id !== value.observationId) fail4("retained-observation-identity-conflict", path31);
+    text2(value.sessionId, path32);
+    if (value.taskId !== null) text2(value.taskId, path32);
+    if (value.namespace === "task" !== (value.taskId !== null)) fail4("retained-task-identity-conflict", path32);
+    if (value.id !== (value.taskId ?? value.sessionId) || value.observationId !== value.sessionId) fail4("retained-task-identity-conflict", path32);
+    for (const id5 of value.threadIds) text2(id5, path32);
+  } else if (["taskId", "sessionId", "threadIds"].some((name) => Object.hasOwn(value, name))) fail4("retained-task-identity-conflict", path32);
+  if (value.namespace === "message-observation" && value.id !== value.observationId || value.namespace === "event" && value.id !== value.observationId) fail4("retained-observation-identity-conflict", path32);
   return value;
 }
-function retainedOutcomes(value, identity4, scope, path31) {
-  shape4(value, [], ["task", "tool", "nestedApi"], path31);
+function retainedOutcomes(value, identity4, scope, path32) {
+  shape4(value, [], ["task", "tool", "nestedApi"], path32);
   const output = {};
   for (const name of ["task", "tool"]) if (value[name]) {
     const { evidence, ...item } = value[name];
-    if (name === "task" && identity4.nativeType !== "task-snapshot" || name === "tool" && !identity4.callIds.length) fail4("retained-outcome-source-conflict", path31);
+    if (name === "task" && identity4.nativeType !== "task-snapshot" || name === "tool" && !identity4.callIds.length) fail4("retained-outcome-source-conflict", path32);
     output[name] = outcome(
       item,
       name === "task" ? "native-task" : "native-tool",
       name === "task" ? ["running", "needs_user_input", "pending_activity", "completed", "failed", "cancelled", "unknown"] : ["succeeded", "failed", "unknown"],
       evidence,
-      path31
+      path32
     );
     if (name === "tool" && item.state !== "unknown" && (scope.surface !== "cowork" || identity4.nativeType !== "tx")) {
-      fail4("retained-outcome-source-conflict", path31);
+      fail4("retained-outcome-source-conflict", path32);
     }
   }
   if (value.nestedApi) {
     const { evidence, ...nested } = value.nestedApi;
-    shape4(nested, ["unit", "availability", "observed", "declaredRequestCount", "declaredRequestCountIsSuccessDenominator"], [], path31);
-    if (nested.unit !== "nested-api-result" || nested.declaredRequestCountIsSuccessDenominator !== false) fail4("nested-unit-or-denominator-conflict", path31);
-    member2(nested.availability, availability, path31);
-    if (nested.declaredRequestCount !== null) integer5(nested.declaredRequestCount, path31);
-    if (!Array.isArray(nested.observed) || nested.observed.length > 100) fail4("invalid-returned-results", path31);
+    shape4(nested, ["unit", "availability", "observed", "declaredRequestCount", "declaredRequestCountIsSuccessDenominator"], [], path32);
+    if (nested.unit !== "nested-api-result" || nested.declaredRequestCountIsSuccessDenominator !== false) fail4("nested-unit-or-denominator-conflict", path32);
+    member2(nested.availability, availability, path32);
+    if (nested.declaredRequestCount !== null) integer5(nested.declaredRequestCount, path32);
+    if (!Array.isArray(nested.observed) || nested.observed.length > 100) fail4("invalid-returned-results", path32);
     for (const row of nested.observed) {
-      shape4(row, ["index", "indexKind", "statusCode", "errorCode", "paginationPresent", "evidenceLevel"], [], path31);
-      integer5(row.index, path31);
-      if (row.indexKind !== "response-array-position" || row.evidenceLevel !== "intermediary-reported") fail4("unsupported-result-evidence", path31);
-      if (row.statusCode !== null && (!Number.isInteger(row.statusCode) || row.statusCode < 100 || row.statusCode > 599)) fail4("invalid-status", path31);
-      if (row.errorCode !== null && (typeof row.errorCode !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(row.errorCode) || textFindings(row.errorCode).some((f2) => f2.mandatory || f2.category === "opaque_identifiers"))) fail4("unsafe-error-code", path31);
-      if (row.paginationPresent !== null && row.paginationPresent !== true) fail4("unknown-pagination-is-not-false", path31);
+      shape4(row, ["index", "indexKind", "statusCode", "errorCode", "paginationPresent", "evidenceLevel"], [], path32);
+      integer5(row.index, path32);
+      if (row.indexKind !== "response-array-position" || row.evidenceLevel !== "intermediary-reported") fail4("unsupported-result-evidence", path32);
+      if (row.statusCode !== null && (!Number.isInteger(row.statusCode) || row.statusCode < 100 || row.statusCode > 599)) fail4("invalid-status", path32);
+      if (row.errorCode !== null && (typeof row.errorCode !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(row.errorCode) || textFindings(row.errorCode).some((f2) => f2.mandatory || f2.category === "opaque_identifiers"))) fail4("unsafe-error-code", path32);
+      if (row.paginationPresent !== null && row.paginationPresent !== true) fail4("unknown-pagination-is-not-false", path32);
     }
-    output.nestedApi = { ...nested, evidence: refs2(evidence, path31) };
+    output.nestedApi = { ...nested, evidence: refs2(evidence, path32) };
   }
   return output;
 }
 function retainedObservation(value, index) {
-  const path31 = `$retained[${index}]`;
+  const path32 = `$retained[${index}]`;
   shape4(
     value,
     ["scope", "capture", "ordering", "identity", "fields", "outcomes", "callFacts", "coverage"],
     ["chatSource", "messageParts", "retention"],
-    path31
+    path32
   );
-  const scope = validateObservationContext(value, path31);
-  validateObservationCoverage(value.coverage, path31);
-  const identity4 = retainedIdentity(value.identity, scope, `${path31}.identity`);
-  if (identity4.namespace === "event" && value.ordering.nativeEventId !== void 0 && value.ordering.nativeEventId !== identity4.id) fail4("order-event-identity-conflict", path31);
-  if (identity4.namespace === "event" && /^seq:\d+$/.test(identity4.id) && value.ordering.sequence !== void 0 && value.ordering.sequence !== Number(identity4.id.slice(4))) fail4("order-sequence-conflict", path31);
-  const fields8 = retainedFields(value.fields, path31);
-  validateNativeResultFields(fields8, scope, identity4, value.capture, path31);
-  const outcomes3 = retainedOutcomes(value.outcomes, identity4, scope, `${path31}.outcomes`);
+  const scope = validateObservationContext(value, path32);
+  validateObservationCoverage(value.coverage, path32);
+  const identity4 = retainedIdentity(value.identity, scope, `${path32}.identity`);
+  if (identity4.namespace === "event" && value.ordering.nativeEventId !== void 0 && value.ordering.nativeEventId !== identity4.id) fail4("order-event-identity-conflict", path32);
+  if (identity4.namespace === "event" && /^seq:\d+$/.test(identity4.id) && value.ordering.sequence !== void 0 && value.ordering.sequence !== Number(identity4.id.slice(4))) fail4("order-sequence-conflict", path32);
+  const fields8 = retainedFields(value.fields, path32);
+  validateNativeResultFields(fields8, scope, identity4, value.capture, path32);
+  const outcomes3 = retainedOutcomes(value.outcomes, identity4, scope, `${path32}.outcomes`);
   if (identity4.callIds.length > 1 && (Object.keys(fields8).some((name) => !["message", "approval"].includes(name) && !messageTimeFields.has(name) && !(name === "model" && ["snapshot", "turn"].includes(fields8.model.scope))) || outcomes3.tool || outcomes3.nestedApi)) {
-    fail4("ambiguous-call-facts", path31);
+    fail4("ambiguous-call-facts", path32);
   }
-  if (fields8.input && scope.surface === "cowork" && identity4.nativeType !== "ts") fail4("input-source-record-unqualified", path31);
+  if (fields8.input && scope.surface === "cowork" && identity4.nativeType !== "ts") fail4("input-source-record-unqualified", path32);
   if (!identity4.callIds.length && (fields8.toolName?.availability === "recorded" || ["recorded", "recorded-empty", "explicit-null"].includes(fields8.input?.availability))) {
-    fail4("retained-call-source-conflict", path31);
+    fail4("retained-call-source-conflict", path32);
   }
   if (fields8.approval && (scope.surface !== "cowork" || identity4.nativeType !== "taa" || fields8.approval.availability !== "recorded")) {
-    fail4("approval-not-established", path31);
+    fail4("approval-not-established", path32);
   }
   const callFacts = [];
-  if (!Array.isArray(value.callFacts) || value.callFacts.length > 100) fail4("unsupported-call-facts", path31);
+  if (!Array.isArray(value.callFacts) || value.callFacts.length > 100) fail4("unsupported-call-facts", path32);
   const seenCalls = /* @__PURE__ */ new Set();
   for (const item of value.callFacts) {
-    shape4(item, ["nativeCallId", "fields"], [], path31);
-    if (scope.surface !== "chat" || !identity4.callIds.includes(item.nativeCallId) || seenCalls.has(item.nativeCallId)) fail4("invalid-retained-call-fact", path31);
+    shape4(item, ["nativeCallId", "fields"], [], path32);
+    if (scope.surface !== "chat" || !identity4.callIds.includes(item.nativeCallId) || seenCalls.has(item.nativeCallId)) fail4("invalid-retained-call-fact", path32);
     seenCalls.add(item.nativeCallId);
-    const individual = retainedFields(item.fields, path31, ["toolName", "input"]);
-    if (Object.keys(individual).some((name) => fields8[name])) fail4("duplicate-call-fact-location", path31);
+    const individual = retainedFields(item.fields, path32, ["toolName", "input"]);
+    if (Object.keys(individual).some((name) => fields8[name])) fail4("duplicate-call-fact-location", path32);
     callFacts.push({ nativeCallId: item.nativeCallId, fields: individual });
   }
   for (const call of identity4.nativeCalls) {
     const name = callFacts.find((item) => item.nativeCallId === call.nativeCallId)?.fields.toolName ?? fields8.toolName;
-    if (name?.availability === "recorded" && name.value !== call.nativeToolName || name && name.availability !== "recorded" && call.nativeToolName !== null) fail4("native-tool-name-conflict", path31);
+    if (name?.availability === "recorded" && name.value !== call.nativeToolName || name && name.availability !== "recorded" && call.nativeToolName !== null) fail4("native-tool-name-conflict", path32);
   }
   let chatSource;
   if (value.chatSource !== void 0) {
@@ -15532,40 +15605,40 @@ function retainedObservation(value, index) {
     chatSource = validateNativeChatSource(
       value.chatSource,
       { scope, record, capture: value.capture, ordering: value.ordering },
-      `${path31}.chatSource`,
+      `${path32}.chatSource`,
       fail4
     );
     for (const item of chatSource.observations) if (item.kind === "native-invocation" && identity4.nativeCalls.length) {
       const call = identity4.nativeCalls[Number(item.source.decodedPointer.slice(1))];
       if (!call || item.fields.nativeCallId.availability !== "recorded" || item.fields.nativeCallId.value !== call.nativeCallId) {
-        fail4("chat-source-native-call-conflict", path31);
+        fail4("chat-source-native-call-conflict", path32);
       }
     }
   }
-  validateMessageTimeReferences(fields8, chatSource, identity4, path31);
-  validateObservationTimeReference(fields8, scope, identity4, path31);
+  validateMessageTimeReferences(fields8, chatSource, identity4, path32);
+  validateObservationTimeReference(fields8, scope, identity4, path32);
   let messageParts;
   if (value.messageParts !== void 0) {
     if (scope.surface !== "cowork" || !["rc", "aq", "aa"].includes(identity4.nativeType) || !Array.isArray(value.messageParts) || value.messageParts.length > 256 || value.messageParts.length && fields8.message) {
-      fail4("unsupported-message-parts", path31);
+      fail4("unsupported-message-parts", path32);
     }
     const seen = /* @__PURE__ */ new Set();
     messageParts = value.messageParts.map((item) => {
       const { evidence, ...data } = item;
-      const message = fact(data, evidence, path31);
-      validateField("message", message, path31);
-      if (message.evidence.length !== 1 || message.evidence[0].nativeEventId !== identity4.id || message.availability === "recorded" && message.value.author !== "unknown") fail4("message-part-source-event-conflict", path31);
+      const message = fact(data, evidence, path32);
+      validateField("message", message, path32);
+      if (message.evidence.length !== 1 || message.evidence[0].nativeEventId !== identity4.id || message.availability === "recorded" && message.value.author !== "unknown") fail4("message-part-source-event-conflict", path32);
       const reference3 = message.evidence[0];
-      if (/~(?![01])/.test(reference3.pointer) || reference3.pointer.split("/").includes("*")) fail4("message-part-exact-pointer-required", path31);
+      if (/~(?![01])/.test(reference3.pointer) || reference3.pointer.split("/").includes("*")) fail4("message-part-exact-pointer-required", path32);
       const id5 = key2(reference3.sourceDocument, reference3.pointer, message.value?.representation ?? null);
-      if (seen.has(id5)) fail4("duplicate-message-part", path31);
+      if (seen.has(id5)) fail4("duplicate-message-part", path32);
       seen.add(id5);
       return message;
     });
   }
   if (value.retention !== void 0) {
-    shape4(value.retention, ["variant", "current", "captureCount"], [], path31);
-    if (!/^[a-f0-9]{64}$/.test(value.retention.variant) || typeof value.retention.current !== "boolean" || !Number.isSafeInteger(value.retention.captureCount) || value.retention.captureCount < 1) fail4("invalid-retained-variant", path31);
+    shape4(value.retention, ["variant", "current", "captureCount"], [], path32);
+    if (!/^[a-f0-9]{64}$/.test(value.retention.variant) || typeof value.retention.current !== "boolean" || !Number.isSafeInteger(value.retention.captureCount) || value.retention.captureCount < 1) fail4("invalid-retained-variant", path32);
   }
   return {
     scope,
@@ -15611,7 +15684,7 @@ function projectNativeRetainedEntries(value) {
   );
 }
 function projectQualifiedRetainedRecords(records, readback, inputOrdinals) {
-  if (records.reduce((count7, record) => count7 + (record.fields.message ? 1 : 0) + (record.messageParts?.length ?? 0), 0) > NATIVE_READ_LIMITS.records) {
+  if (records.reduce((count8, record) => count8 + (record.fields.message ? 1 : 0) + (record.messageParts?.length ?? 0), 0) > NATIVE_READ_LIMITS.records) {
     fail4("native-retained-read-bound", "$retained");
   }
   const model = projectObservationRecords(records, inputOrdinals);
@@ -15687,15 +15760,15 @@ var init_native_read_model = __esm({
       "conversation"
     );
     NativeReadModelError = class extends TypeError {
-      constructor(code2, path31) {
-        super(`${code2} at ${path31}`);
+      constructor(code2, path32) {
+        super(`${code2} at ${path32}`);
         this.name = "NativeReadModelError";
         this.code = code2;
-        this.path = path31;
+        this.path = path32;
       }
     };
-    fail4 = (code2, path31) => {
-      throw new NativeReadModelError(code2, path31);
+    fail4 = (code2, path32) => {
+      throw new NativeReadModelError(code2, path32);
     };
   }
 });
@@ -16315,11 +16388,11 @@ function buildExportCatalog(scenarios) {
   const aliases = new Map(candidates2.map((s) => [s.scenarioId, /* @__PURE__ */ new Set([s.scenarioId])]));
   const used = /* @__PURE__ */ new Set();
   const sourceCount = scenarios.reduce((n, s) => n + (s.toolCalls?.length || 0) + (s.graphActivities?.length || 0) + (s.httpRecords?.length || 0), 0);
-  function retain(layer, field, matches3) {
+  function retain(layer, field, matches4) {
     const rows = analytics[layer].rows;
     for (const s of candidates2) for (const item of s[field] || []) {
       if (synthetic(s, item)) continue;
-      const row = rows.find((r) => matches3(r, s, item));
+      const row = rows.find((r) => matches4(r, s, item));
       if (!row) continue;
       aliases.get(row.scenarioId).add(s.scenarioId);
       const key4 = layer + row.id;
@@ -16676,7 +16749,7 @@ function buildAssessmentModel(state, { records = state.evidence ?? [], source = 
       }
       const endpoints = (row.targets?.length ? row.targets : row.endpoint?.path ? [row.endpoint] : []).filter((e) => e.path && e.path !== "[endpoint unavailable]").slice(0, 100).map((e) => ({ pathTemplate: e.path, method: e.method ?? null, apiVersion: e.apiVersion ?? null, queryKeys: e.queryShape ?? [] }));
       const tool = row.kind === "owned-http" ? "owned-http" : row.tool;
-      const display = {
+      const display2 = {
         tool,
         workload: row.workload ?? "Unknown",
         attribution: row.kind === "returned-api-entry" ? "returned-entry-unattributed" : row.kind === "owned-http" ? "owned-request" : row.kind.includes("graph") ? "recorded-site" : row.workload === "Discovery" ? tool === "workiq-get_schema" ? "schema-reference" : "discovery" : endpoints.length > 1 ? "requested-batch-targets" : endpoints.length ? "requested-single-target" : "unavailable",
@@ -16688,15 +16761,15 @@ function buildAssessmentModel(state, { records = state.evidence ?? [], source = 
         method: row.endpoint?.method ?? null,
         apiVersion: row.endpoint?.apiVersion ?? null,
         targetShape: endpoints.length > 1 ? "multiple" : endpoints.length ? "single" : "unavailable",
-        display
+        display: display2
       };
       patterns2.push({ pattern: { version: 3, normalizer: "wire-safe-technical-pattern-v3", key: assessmentHash(structural), ...structural }, memberRefs: [ref11] });
     }
     const aliases = groupAliases.get(record.scenarioId);
-    const excluded = aliases.reduce((sum, id5) => {
+    const excluded = aliases.reduce((sum2, id5) => {
       const item = exclusions.get(id5);
-      for (const key4 of ["raw", "conflicted", "unidentifiable"]) sum[key4] += item?.[key4] ?? 0;
-      return sum;
+      for (const key4 of ["raw", "conflicted", "unidentifiable"]) sum2[key4] += item?.[key4] ?? 0;
+      return sum2;
     }, { raw: 0, conflicted: 0, unidentifiable: 0 });
     const duplicate = excluded.raw - excluded.conflicted - excluded.unidentifiable - members.filter((m) => m.kind === "tool-call").length;
     if (duplicate < 0) throw new ContractError("inconsistent-canonical-membership");
@@ -17355,8 +17428,8 @@ function projectReportResultObservation(observationRef, {
   return observation;
 }
 function inspectReportResultFacts(manifest, snapshot) {
-  const present3 = Object.hasOwn(manifest, "resultFacts") || Object.hasOwn(manifest, "resultFactsHash") || snapshot && Object.hasOwn(snapshot, "resultFacts");
-  if (!present3) return null;
+  const present4 = Object.hasOwn(manifest, "resultFacts") || Object.hasOwn(manifest, "resultFactsHash") || snapshot && Object.hasOwn(snapshot, "resultFacts");
+  if (!present4) return null;
   const facts = validateReportResultFacts(manifest.resultFacts, { memberRefs: reportResultMemberRefs(manifest) });
   const namespace = (manifest.evaluationFacts ?? manifest.nativeEvidence?.githubEvaluationFacts)?.namespace?.ref;
   if (namespace && facts.namespace !== namespace || typeof manifest.resultFactsHash !== "string" || createHash8("sha256").update(JSON.stringify(facts)).digest("hex") !== manifest.resultFactsHash || snapshot && JSON.stringify(snapshot.resultFacts) !== JSON.stringify(facts)) {
@@ -18440,7 +18513,7 @@ function resultTextCoverage(copies) {
     omitted: copies.filter((copy) => copy.omitted).length,
     unavailable: copies.filter((copy) => copy.status === "unavailable").length,
     edited: copies.filter((copy) => copy.representation === "edited-copy").length,
-    bytes: copies.reduce((sum, copy) => sum + Buffer.byteLength(copy.text ?? ""), 0)
+    bytes: copies.reduce((sum2, copy) => sum2 + Buffer.byteLength(copy.text ?? ""), 0)
   };
 }
 function validateReportResultText(value, facts) {
@@ -18540,14 +18613,14 @@ var init_report_result_text_shape = __esm({
 
 // lib/native-report-copy-shape.mjs
 function validateNativeReportCopies(value, scenarioRefs, { promptMode = "masked", recordedContext: recordedContext2 = false, allowEmpty = false } = {}) {
-  const require9 = (condition) => {
+  const require10 = (condition) => {
     if (!condition) throw new TypeError("Invalid frozen native report copies.");
   };
-  const shape9 = (item, keys3) => require9(item && Object.getPrototypeOf(item) === Object.prototype && Object.keys(item).length === keys3.length && keys3.every((key4) => Object.hasOwn(item, key4)));
+  const shape9 = (item, keys3) => require10(item && Object.getPrototypeOf(item) === Object.prototype && Object.keys(item).length === keys3.length && keys3.every((key4) => Object.hasOwn(item, key4)));
   const reference3 = (ref11) => typeof ref11 === "string" && /^scenario-[a-f0-9]{16}$/.test(ref11);
-  require9(Array.isArray(scenarioRefs) && (scenarioRefs.length > 0 || allowEmpty === true) && scenarioRefs.every(reference3) && new Set(scenarioRefs).size === scenarioRefs.length);
+  require10(Array.isArray(scenarioRefs) && (scenarioRefs.length > 0 || allowEmpty === true) && scenarioRefs.every(reference3) && new Set(scenarioRefs).size === scenarioRefs.length);
   const selected = new Set(scenarioRefs), keys2 = /* @__PURE__ */ new Set();
-  require9(["none", "masked", "original"].includes(promptMode) && typeof recordedContext2 === "boolean");
+  require10(["none", "masked", "original"].includes(promptMode) && typeof recordedContext2 === "boolean");
   const context2 = recordedContext2 && promptMode !== "none";
   const sourceKinds = /* @__PURE__ */ new Set([
     "provider-progress",
@@ -18578,7 +18651,7 @@ function validateNativeReportCopies(value, scenarioRefs, { promptMode = "masked"
     "manual"
   ]);
   shape9(value, ["copies", "unavailableFacts", "coverage"]);
-  require9(Array.isArray(value.copies) && Array.isArray(value.unavailableFacts));
+  require10(Array.isArray(value.copies) && Array.isArray(value.unavailableFacts));
   scanTree([value, scenarioRefs]);
   for (const copy of value.copies) {
     shape9(copy, [
@@ -18596,27 +18669,27 @@ function validateNativeReportCopies(value, scenarioRefs, { promptMode = "masked"
       "representation",
       "exclusion"
     ]);
-    require9(typeof copy.key === "string" && /^native-copy-[a-f0-9]{16}$/.test(copy.key) && !keys2.has(copy.key) && selected.has(copy.scenarioRef));
-    require9(availability2.has(copy.availability) && ["user", "assistant", "tool", "unknown"].includes(copy.author) && copy.purpose === (copy.author === "user" ? "prompt" : "context") && typeof copy.omitted === "boolean" && (copy.text === null || typeof copy.text === "string") && Array.isArray(copy.changes));
-    require9(copy.kind === "native-message" ? recorded2(copy.availability) ? ["plain-text", "card-text", "reply-fragment", "follow-up"].includes(copy.representationKind) : copy.representationKind === null && copy.author === "unknown" : sourceKinds.has(copy.kind) && copy.author === "unknown" && copy.representationKind === "source-field");
-    require9(typeof copy.sourceRef === "string" && (copy.kind === "native-message" ? /^native-observation-[a-f0-9]{16}$/.test(copy.sourceRef) : /^native-fact-[a-f0-9]{16}$/.test(copy.sourceRef)));
+    require10(typeof copy.key === "string" && /^native-copy-[a-f0-9]{16}$/.test(copy.key) && !keys2.has(copy.key) && selected.has(copy.scenarioRef));
+    require10(availability2.has(copy.availability) && ["user", "assistant", "tool", "unknown"].includes(copy.author) && copy.purpose === (copy.author === "user" ? "prompt" : "context") && typeof copy.omitted === "boolean" && (copy.text === null || typeof copy.text === "string") && Array.isArray(copy.changes));
+    require10(copy.kind === "native-message" ? recorded2(copy.availability) ? ["plain-text", "card-text", "reply-fragment", "follow-up"].includes(copy.representationKind) : copy.representationKind === null && copy.author === "unknown" : sourceKinds.has(copy.kind) && copy.author === "unknown" && copy.representationKind === "source-field");
+    require10(typeof copy.sourceRef === "string" && (copy.kind === "native-message" ? /^native-observation-[a-f0-9]{16}$/.test(copy.sourceRef) : /^native-fact-[a-f0-9]{16}$/.test(copy.sourceRef)));
     const selectedCopy = copy.purpose === "prompt" || context2;
-    require9(copy.exclusion === (selectedCopy ? null : "context-not-selected") && (selectedCopy && promptMode !== "none" || copy.omitted) && (!copy.omitted && recorded2(copy.availability) || copy.text === null));
-    require9(copy.omitted ? copy.representation === "omitted" && copy.changes.length === 0 : copy.text === null ? copy.representation === "unavailable" && !recorded2(copy.availability) && copy.changes.length === 0 : copy.representation === "edited-copy" || (promptMode === "masked" ? copy.representation === "masked-copy" : copy.representation === (copy.changes.length ? "original-with-mandatory-or-manual-removals" : "retained-original")));
+    require10(copy.exclusion === (selectedCopy ? null : "context-not-selected") && (selectedCopy && promptMode !== "none" || copy.omitted) && (!copy.omitted && recorded2(copy.availability) || copy.text === null));
+    require10(copy.omitted ? copy.representation === "omitted" && copy.changes.length === 0 : copy.text === null ? copy.representation === "unavailable" && !recorded2(copy.availability) && copy.changes.length === 0 : copy.representation === "edited-copy" || (promptMode === "masked" ? copy.representation === "masked-copy" : copy.representation === (copy.changes.length ? "original-with-mandatory-or-manual-removals" : "retained-original")));
     for (const change of copy.changes) {
       shape9(change, ["category", "mandatory"]);
-      require9(changes.has(change.category) && typeof change.mandatory === "boolean");
+      require10(changes.has(change.category) && typeof change.mandatory === "boolean");
     }
-    if (copy.text !== null) require9(!textFindings(copy.text).some((finding) => finding.mandatory || promptMode === "masked" && finding.category !== "sensitivity_markings"));
+    if (copy.text !== null) require10(!textFindings(copy.text).some((finding) => finding.mandatory || promptMode === "masked" && finding.category !== "sensitivity_markings"));
     keys2.add(copy.key);
   }
   for (const fact3 of value.unavailableFacts) {
     shape9(fact3, ["ref", "scenarioRef", "kind", "availability"]);
-    require9(typeof fact3.ref === "string" && /^native-fact-[a-f0-9]{16}$/.test(fact3.ref) && !keys2.has(fact3.ref) && selected.has(fact3.scenarioRef) && ["trigger-plugin", "unsupported-task", "unsupported-trigger-extension", "unsupported-native-invocation"].includes(fact3.kind) && fact3.availability === (fact3.kind === "trigger-plugin" ? "unqualified" : "unsupported"));
+    require10(typeof fact3.ref === "string" && /^native-fact-[a-f0-9]{16}$/.test(fact3.ref) && !keys2.has(fact3.ref) && selected.has(fact3.scenarioRef) && ["trigger-plugin", "unsupported-task", "unsupported-trigger-extension", "unsupported-native-invocation"].includes(fact3.kind) && fact3.availability === (fact3.kind === "trigger-plugin" ? "unqualified" : "unsupported"));
     keys2.add(fact3.ref);
   }
   shape9(value.coverage, ["total", "included", "omitted", "unavailable", "contextExcluded"]);
-  require9(Object.entries(nativeCopyCoverage(value.copies)).every(([name, count7]) => value.coverage[name] === count7));
+  require10(Object.entries(nativeCopyCoverage(value.copies)).every(([name, count8]) => value.coverage[name] === count8));
   return value;
 }
 var availability2, recorded2, nativeCopyCoverage;
@@ -18744,7 +18817,7 @@ function validateNativeReportEvidence(value, records) {
         shape7(item.shapeCounts, [], ["u", "t", "s", "tp", "d", "ic", "fn", "au", "did", "iid", "sl"]);
         for (const types of Object.values(item.shapeCounts)) {
           shape7(types, [], ["string", "number", "boolean", "object", "array", "null"]);
-          require6(Object.values(types).every(count3) && Object.values(types).reduce((sum, value2) => sum + value2, 0) <= item.cardinality);
+          require6(Object.values(types).every(count3) && Object.values(types).reduce((sum2, value2) => sum2 + value2, 0) <= item.cardinality);
         }
       } else require6(item.cardinality === null && item.shapeCounts === null);
       references.add(item.observationRef);
@@ -18808,12 +18881,12 @@ function validateNativeReportEvidence(value, records) {
   const generated = /* @__PURE__ */ new Set([value.githubEvaluationFactsHash, ...hasFacts ? evaluationGeneratedHashes(value.githubEvaluationFacts) : []]);
   const metadata3 = { ...value, disclosure: { ...value.disclosure, copies: copies.copies.map(({ text: text6, ...copy }) => copy) } };
   const findings = scanTree(metadata3, generated);
-  require6(!Object.entries(findings.categories).some(([name, count7]) => count7 && name !== "sensitivity_markings"));
+  require6(!Object.entries(findings.categories).some(([name, count8]) => count8 && name !== "sensitivity_markings"));
   return value;
 }
 function inspectNativeReportNamespace(manifest, snapshot, expectedHash) {
-  const present3 = [manifest, snapshot].some((value) => value && (Object.hasOwn(value, "nativeEvidence") || Object.hasOwn(value, "nativeEvidenceHash") || value.records?.some((record) => record?.recordKind === "native-conversation")));
-  if (!present3 && expectedHash === void 0) return null;
+  const present4 = [manifest, snapshot].some((value) => value && (Object.hasOwn(value, "nativeEvidence") || Object.hasOwn(value, "nativeEvidenceHash") || value.records?.some((record) => record?.recordKind === "native-conversation")));
+  if (!present4 && expectedHash === void 0) return null;
   for (const value of [manifest, snapshot].filter(Boolean)) {
     require6(value.schemaVersion === 3 && value.kind === "report" && !["evaluationFacts", "evaluationFactsHash"].some((key4) => Object.hasOwn(value, key4)) && Object.hasOwn(value, "nativeEvidence") && value.nativeEvidence.disclosure.promptMode === value.promptMode);
   }
@@ -19083,16 +19156,16 @@ function normalizeReportOptions(input = {}) {
   };
 }
 function mask(text6, mode, terms) {
-  const matches3 = textFindings(text6).filter((f2) => f2.mandatory || mode === "masked" && f2.category !== "sensitivity_markings");
+  const matches4 = textFindings(text6).filter((f2) => f2.mandatory || mode === "masked" && f2.category !== "sensitivity_markings");
   for (const term of terms) {
     const literal2 = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
     for (const match of text6.matchAll(literal2)) {
-      matches3.push({ start: match.index, end: match.index + match[0].length, category: "manual", mandatory: false });
+      matches4.push({ start: match.index, end: match.index + match[0].length, category: "manual", mandatory: false });
     }
   }
-  matches3.sort((a3, b) => a3.start - b.start || b.end - a3.end);
+  matches4.sort((a3, b) => a3.start - b.start || b.end - a3.end);
   const ranges = [];
-  for (const item of matches3) {
+  for (const item of matches4) {
     const last = ranges.at(-1);
     if (last && item.start < last.end) {
       last.end = Math.max(last.end, item.end);
@@ -19927,7 +20000,7 @@ function assertProjectedBundle(bundle2, { pendingPdf = false } = {}) {
     generated,
     bundle2.records.map(({ prompts, ...record }) => ({ ...record, ...prompts ? { prompts: prompts.map(({ text: text6, ...prompt }) => prompt) } : {} }))
   );
-  const blocking = Object.entries(result.categories).filter(([name, count7]) => count7 && name !== "sensitivity_markings");
+  const blocking = Object.entries(result.categories).filter(([name, count8]) => count8 && name !== "sensitivity_markings");
   if (blocking.length) throw new BoardError(`Projected export contains blocked categories: ${blocking.map(([name]) => name).join(", ")}. Nothing exported.`, 422);
   return { allProjectedTextScanned: true, allFilesHashBound: true, blockedCategoryCount: 0, note: "Prompt copies and technical metadata were pattern-scanned. PDF is generated offline from the same escaped HTML; file hashes bind every format. This is not semantic privacy certification." };
 }
@@ -20202,7 +20275,7 @@ async function scanRecordedGraphHistory(options) {
       partialWindow: modelWindowPartial,
       firstPromptEventId: firstPromptEventId ?? null
     });
-    for (const [name, count7] of Object.entries(result.exclusions)) add(name, count7);
+    for (const [name, count8] of Object.entries(result.exclusions)) add(name, count8);
     row.scanned = true;
     row.disposition = "scanned";
     row.graphActivities = result.coverage.graphActivities;
@@ -20364,12 +20437,12 @@ function statMetadataFile(file, { optional: optional2 = false, ...options } = {}
   }
 }
 function metadataReadVersion(databaseFile) {
-  const stamp3 = (file, optional2 = false) => {
+  const stamp4 = (file, optional2 = false) => {
     const info = statMetadataFile(file, { bigint: true, optional: optional2 });
     return info ? [info.size.toString(), info.mtimeNs.toString()] : null;
   };
-  const wal = stamp3(databaseFile + "-wal", true);
-  return createHash18("sha256").update(JSON.stringify([stamp3(databaseFile), wal])).digest("hex");
+  const wal = stamp4(databaseFile + "-wal", true);
+  return createHash18("sha256").update(JSON.stringify([stamp4(databaseFile), wal])).digest("hex");
 }
 function sourcePromptCreation(workspaces) {
   const active = workspaces.filter((workspace2) => !workspace2.archived_at), workspace = active[0];
@@ -20380,40 +20453,40 @@ function validateMapping(db, version2) {
     throw sourceError(`Unsupported Copilot app metadata version ${version2}. This read-only adapter requires generation ${minimumSchemaVersion} or later with the supported source mapping; no history was replaced.`, 422, "source_mapping_unsupported");
   }
   let creatorColumns = false;
-  for (const [table2, required] of Object.entries(columns)) {
-    const definition = db.prepare(`PRAGMA main.table_list(${table2})`).get();
-    if (definition?.type !== "table") throw mappingError(table2, version2, "required ordinary table missing");
-    const actual = db.prepare(`PRAGMA main.table_xinfo(${table2})`).all();
+  for (const [table3, required] of Object.entries(columns)) {
+    const definition = db.prepare(`PRAGMA main.table_list(${table3})`).get();
+    if (definition?.type !== "table") throw mappingError(table3, version2, "required ordinary table missing");
+    const actual = db.prepare(`PRAGMA main.table_xinfo(${table3})`).all();
     const byName = new Map(actual.map((column) => [column.name, column]));
     const incompatible = required.filter((name) => !textColumn(byName.get(name)));
-    if (incompatible.length) throw mappingError(table2, version2, `required ordinary TEXT columns missing or incompatible (${incompatible.join(", ")})`);
+    if (incompatible.length) throw mappingError(table3, version2, `required ordinary TEXT columns missing or incompatible (${incompatible.join(", ")})`);
     if (byName.get("id").pk !== 1 || actual.filter((column) => column.pk).length !== 1) {
-      throw mappingError(table2, version2, "id must remain the sole primary key");
+      throw mappingError(table3, version2, "id must remain the sole primary key");
     }
-    if (table2 === "workspaces") creatorColumns = ["created_by", "creator_session_id"].every((name) => textColumn(byName.get(name)));
+    if (table3 === "workspaces") creatorColumns = ["created_by", "creator_session_id"].every((name) => textColumn(byName.get(name)));
   }
   return creatorColumns;
 }
 function readMetadataProjection(databaseFile) {
   let db;
   try {
-    let validateRow2 = function(table2, row) {
-      if (columns[table2].some((name) => row[name] !== null && typeof row[name] !== "string")) {
-        throw mappingError(table2, version2, "required values must remain text or null");
+    let validateRow2 = function(table3, row) {
+      if (columns[table3].some((name) => row[name] !== null && typeof row[name] !== "string")) {
+        throw mappingError(table3, version2, "required values must remain text or null");
       }
-    }, readPages2 = function(table2, fields8, limit) {
-      const total = db.prepare(`SELECT count(*) AS n FROM ${table2}`).get().n;
+    }, readPages2 = function(table3, fields8, limit) {
+      const total = db.prepare(`SELECT count(*) AS n FROM ${table3}`).get().n;
       const rows = [];
       let after = "";
       while (rows.length < Math.min(total, limit)) {
-        const page = db.prepare(`SELECT ${fields8} FROM ${table2} WHERE id > ? ORDER BY id LIMIT ?`).all(after, Math.min(DISCOVERY_LIMITS.pageSize, limit - rows.length));
+        const page = db.prepare(`SELECT ${fields8} FROM ${table3} WHERE id > ? ORDER BY id LIMIT ?`).all(after, Math.min(DISCOVERY_LIMITS.pageSize, limit - rows.length));
         pages++;
         if (!page.length) break;
-        for (const row of page) validateRow2(table2, row);
+        for (const row of page) validateRow2(table3, row);
         rows.push(...page);
         after = page.at(-1).id;
       }
-      if (rows.length < Math.min(total, limit)) throw mappingError(table2, version2, "IDs cannot be completely enumerated");
+      if (rows.length < Math.min(total, limit)) throw mappingError(table3, version2, "IDs cannot be completely enumerated");
       return { total, rows };
     };
     var validateRow = validateRow2, readPages = readPages2;
@@ -20517,9 +20590,9 @@ function readMetadataProjection(databaseFile) {
 }
 function validateMetadataProjection(value) {
   const invalid3 = () => sourceError("The source reader returned an invalid metadata projection. Last good evidence was retained.", 503, "source_metadata_invalid");
-  const count7 = (number3) => Number.isSafeInteger(number3) && number3 >= 0;
+  const count8 = (number3) => Number.isSafeInteger(number3) && number3 >= 0;
   const text6 = (value2) => value2 === null || typeof value2 === "string";
-  if (!value || value.adapter !== SOURCE_ADAPTER || !Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < minimumSchemaVersion || !Number.isFinite(Date.parse(value.checkedAt)) || JSON.stringify(value.limits) !== JSON.stringify(DISCOVERY_LIMITS) || !Array.isArray(value.roster) || value.roster.length > DISCOVERY_LIMITS.maxSessions || !Array.isArray(value.unmappedWorkspaces) || value.unmappedWorkspaces.length > DISCOVERY_LIMITS.maxWorkspaces || !value.counts || !["sessions", "enumerated", "eligible", "workspaces", "unmappedWorkspaces", "pages", "skippedByLimit"].every((key4) => count7(value.counts[key4])) || value.counts.enumerated !== value.roster.length || value.counts.workspaces > DISCOVERY_LIMITS.maxWorkspaces || value.counts.sessions - value.roster.length !== value.counts.skippedByLimit || value.counts.unmappedWorkspaces !== value.unmappedWorkspaces.length) throw invalid3();
+  if (!value || value.adapter !== SOURCE_ADAPTER || !Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < minimumSchemaVersion || !Number.isFinite(Date.parse(value.checkedAt)) || JSON.stringify(value.limits) !== JSON.stringify(DISCOVERY_LIMITS) || !Array.isArray(value.roster) || value.roster.length > DISCOVERY_LIMITS.maxSessions || !Array.isArray(value.unmappedWorkspaces) || value.unmappedWorkspaces.length > DISCOVERY_LIMITS.maxWorkspaces || !value.counts || !["sessions", "enumerated", "eligible", "workspaces", "unmappedWorkspaces", "pages", "skippedByLimit"].every((key4) => count8(value.counts[key4])) || value.counts.enumerated !== value.roster.length || value.counts.workspaces > DISCOVERY_LIMITS.maxWorkspaces || value.counts.sessions - value.roster.length !== value.counts.skippedByLimit || value.counts.unmappedWorkspaces !== value.unmappedWorkspaces.length) throw invalid3();
   const dispositions = /* @__PURE__ */ new Set([
     "eligible",
     "unmapped-invalid-id",
@@ -20542,7 +20615,7 @@ function validateMetadataProjection(value) {
     if (row.activeWorkspaceIds.some((id5) => !workspaceIds.has(id5))) throw invalid3();
     observed[row.disposition] = (observed[row.disposition] ?? 0) + 1;
   }
-  if (new Set(value.roster.map((row) => row.sessionId)).size !== value.roster.length || value.counts.eligible !== value.roster.filter((row) => row.eligible).length || value.unmappedWorkspaces.some((row) => !row || !text6(row.appId) || !text6(row.sessionId) || row.disposition !== "missing-or-out-of-bound-session-mapping") || !value.counts.dispositions || Object.keys(value.counts.dispositions).length !== Object.keys(observed).length || Object.entries(observed).some(([key4, count8]) => value.counts.dispositions[key4] !== count8) || Buffer.byteLength(JSON.stringify({
+  if (new Set(value.roster.map((row) => row.sessionId)).size !== value.roster.length || value.counts.eligible !== value.roster.filter((row) => row.eligible).length || value.unmappedWorkspaces.some((row) => !row || !text6(row.appId) || !text6(row.sessionId) || row.disposition !== "missing-or-out-of-bound-session-mapping") || !value.counts.dispositions || Object.keys(value.counts.dispositions).length !== Object.keys(observed).length || Object.entries(observed).some(([key4, count9]) => value.counts.dispositions[key4] !== count9) || Buffer.byteLength(JSON.stringify({
     schemaVersion: SOURCE_METADATA_READER_VERSION,
     platform: "win32",
     projection: value,
@@ -20569,8 +20642,8 @@ var init_source_metadata = __esm({
     };
     textColumn = (column) => column?.type.toUpperCase() === "TEXT" && column.hidden === 0;
     sourceError = (message, status4, code2) => Object.assign(new Error(message), { status: status4, code: code2 });
-    mappingError = (table2, version2, detail) => sourceError(
-      `Unsupported ${table2} mapping in Copilot app metadata version ${version2}: ${detail}. No history was replaced.`,
+    mappingError = (table3, version2, detail) => sourceError(
+      `Unsupported ${table3} mapping in Copilot app metadata version ${version2}: ${detail}. No history was replaced.`,
       422,
       "source_mapping_unsupported"
     );
@@ -20614,10 +20687,10 @@ function readSourceProfileProjection(file) {
       project_account_hints: { project_id: "TEXT" }
     };
     if (!Number.isSafeInteger(version2) || version2 < 207) return unavailableSourceProfile("app-profile-schema-unsupported");
-    for (const [table2, fields8] of Object.entries(mappings)) {
-      if (db.prepare(`PRAGMA main.table_list(${table2})`).get()?.type !== "table") return unavailableSourceProfile("app-profile-schema-unsupported");
-      const columns2 = new Map(db.prepare(`PRAGMA main.table_xinfo(${table2})`).all().map((column) => [column.name, column]));
-      if (Object.entries(fields8).some(([name, type]) => columns2.get(name)?.type.toUpperCase() !== type || columns2.get(name)?.hidden !== 0) || columns2.get(table2 === "app_state" ? "key" : table2 === "project_account_hints" ? "project_id" : "id")?.pk !== 1) {
+    for (const [table3, fields8] of Object.entries(mappings)) {
+      if (db.prepare(`PRAGMA main.table_list(${table3})`).get()?.type !== "table") return unavailableSourceProfile("app-profile-schema-unsupported");
+      const columns2 = new Map(db.prepare(`PRAGMA main.table_xinfo(${table3})`).all().map((column) => [column.name, column]));
+      if (Object.entries(fields8).some(([name, type]) => columns2.get(name)?.type.toUpperCase() !== type || columns2.get(name)?.hidden !== 0) || columns2.get(table3 === "app_state" ? "key" : table3 === "project_account_hints" ? "project_id" : "id")?.pk !== 1) {
         return unavailableSourceProfile("app-profile-schema-unsupported");
       }
     }
@@ -20724,8 +20797,8 @@ async function readSourceMetadata(files, { run = execute, profileOnly = false, i
     throw sourceReadFailure(error);
   }
 }
-async function readSourceMetadataOnce(files, { run, profileOnly, includeIdentity, verify, observeSelection = false, expectedIdentity }) {
-  if (verify) await verify();
+async function readSourceMetadataOnce(files, { run, profileOnly, includeIdentity, verify: verify2, observeSelection = false, expectedIdentity }) {
+  if (verify2) await verify2();
   files.assertCurrent();
   const before = sourceMetadataStamp(files);
   const databaseIdentity = () => {
@@ -20735,7 +20808,7 @@ async function readSourceMetadataOnce(files, { run, profileOnly, includeIdentity
   const beforeIdentity = databaseIdentity();
   const sourceIdentity = (profileOnly || includeIdentity) && createHash20("sha256").update(beforeIdentity).digest("hex");
   if (expectedIdentity && sourceIdentity !== expectedIdentity) throw metadataChanged();
-  let stamp3 = before;
+  let stamp4 = before;
   let projection5, changed2 = false;
   if (!files.windowsDatabase) {
     try {
@@ -20753,8 +20826,8 @@ async function readSourceMetadataOnce(files, { run, profileOnly, includeIdentity
     }
     const script = translated?.stdout?.replace(/\r?\n$/, "");
     if (!script || /[\u0000-\u001f]/.test(script) || !/^(?:[a-z]:[\\/]|\\\\)/i.test(script)) throw helperUnavailable();
-    if (verify) {
-      await verify();
+    if (verify2) {
+      await verify2();
       files.assertCurrent();
       if (databaseIdentity() !== beforeIdentity) throw metadataChanged();
     }
@@ -20795,14 +20868,14 @@ async function readSourceMetadataOnce(files, { run, profileOnly, includeIdentity
     if (Object.hasOwn(response, "changedDuringRead") && (!observeSelection || response.changedDuringRead !== true)) {
       throw failure2("source_metadata_invalid", "The source reader returned an unexpected read fence.");
     }
-    stamp3 = sourceMetadataStamp(files);
-    changed2 = metadataReadVersion(files.databaseFile()) !== response.readVersion || sourceMetadataStamp(files) !== stamp3 || response.changedDuringRead === true;
+    stamp4 = sourceMetadataStamp(files);
+    changed2 = metadataReadVersion(files.databaseFile()) !== response.readVersion || sourceMetadataStamp(files) !== stamp4 || response.changedDuringRead === true;
     if (databaseIdentity() !== beforeIdentity) throw metadataChanged();
     projection5 = response.projection;
   }
-  if (verify) await verify();
+  if (verify2) await verify2();
   files.assertCurrent();
-  changed2 = sourceMetadataStamp(files) !== stamp3 || changed2;
+  changed2 = sourceMetadataStamp(files) !== stamp4 || changed2;
   if (databaseIdentity() !== beforeIdentity) throw metadataChanged();
   if (changed2 && !profileOnly && !observeSelection) throw metadataChanged(expectedIdentity ? "Source metadata changed again during selected-chat verification. Its stamp was not accepted." : void 0);
   try {
@@ -20810,7 +20883,7 @@ async function readSourceMetadataOnce(files, { run, profileOnly, includeIdentity
   } catch (error) {
     throw Object.assign(new BoardError(error.message, error.status ?? 503), { code: error.code });
   }
-  return { changed: changed2, value: { ...projection5, metadataStamp: stamp3, ...sourceIdentity ? { sourceIdentity } : {} } };
+  return { changed: changed2, value: { ...projection5, metadataStamp: stamp4, ...sourceIdentity ? { sourceIdentity } : {} } };
 }
 var execute, helper, failure2, sourceReadFailure, metadataChanged, helperUnavailable, helperEnvironment;
 var init_source_reader = __esm({
@@ -21301,9 +21374,9 @@ function completeWorkIqCall(call, end, server, returnedPaths = false) {
   };
 }
 function extractScenarios(events, source, since, until, { partialWindow = false, modelEvents = events, firstPromptEventId, retainedEvents = false } = {}) {
-  const unique6 = /* @__PURE__ */ new Map();
-  for (const event of events) if (event?.id && !unique6.has(event.id)) unique6.set(event.id, event);
-  const rows = [...unique6.values()];
+  const unique7 = /* @__PURE__ */ new Map();
+  for (const event of events) if (event?.id && !unique7.has(event.id)) unique7.set(event.id, event);
+  const rows = [...unique7.values()];
   const explicitPrompt = createPromptLinks(rows);
   if (firstPromptEventId === void 0) firstPromptEventId = !partialWindow && events[0]?.type === "session.start" && events[0].data?.sessionId === source.sessionId && events[0].data.version === 1 ? events.reduce(observeFirstPrompt, void 0) ?? null : null;
   const sourcePrompt = (event) => promptRecord(event, {
@@ -21419,7 +21492,7 @@ function extractScenarios(events, source, since, until, { partialWindow = false,
       responseTiming: recordedResponseTiming(rows, record.userPrompt),
       ...originalModelEvidence ? { originalModelEvidence } : {}
     };
-  }), skippedCredentials, missingResults, duplicateCalls, deduplicatedEvents: events.length - unique6.size };
+  }), skippedCredentials, missingResults, duplicateCalls, deduplicatedEvents: events.length - unique7.size };
 }
 async function scanHistory({ inventoryPath, appDbPath, sessionRoot, since, until = (/* @__PURE__ */ new Date()).toISOString(), maxSessions = 500 }) {
   if (!Number.isFinite(Date.parse(since)) || !Number.isFinite(Date.parse(until))) throw new Error("Valid bounded history dates are required.");
@@ -21721,12 +21794,12 @@ function recoverSameReadCompletions({
     let child = completion2, chainValid = true;
     const chain4 = [];
     while (Object.hasOwn(child.event, "parentId")) {
-      const parentId = child.event.parentId, matches3 = byId.get(parentId);
-      if (!id2(parentId) || matches3?.length !== 1) {
+      const parentId = child.event.parentId, matches4 = byId.get(parentId);
+      if (!id2(parentId) || matches4?.length !== 1) {
         chainValid = false;
         break;
       }
-      const parent = matches3[0], parentTime = instant5(parent.event.timestamp);
+      const parent = matches4[0], parentTime = instant5(parent.event.timestamp);
       if (!parent.original && parent.event.type !== "hook.start" || !rootEnvelope(parent.event) || parent.offset >= child.offset || parent.offset < startEntry.offset || parentTime === null || parentTime > instant5(child.event.timestamp) || !isHook(parent.event) && !sameScope(start, parent.event)) {
         chainValid = false;
         break;
@@ -21824,13 +21897,13 @@ var init_completion_recovery = __esm({
     };
     credential = (value) => textFindings(JSON.stringify(value)).some((finding) => finding.mandatory);
     incomplete = (call) => call.completionEventId === null && call.completedAt === null && call.durationMs === null && call.reportedOutcome === "unknown" && call.toolSucceeded === null && Array.isArray(call.apiResults) && call.apiResults.length === 0 && (!Object.hasOwn(call, "failureEvidence") || call.failureEvidence === null);
-    scopeValue = (event, path31) => {
-      const parent = path31.length === 1 ? event : event.data;
-      const key4 = path31.at(-1);
+    scopeValue = (event, path32) => {
+      const parent = path32.length === 1 ? event : event.data;
+      const key4 = path32.at(-1);
       return { present: Object.hasOwn(parent ?? {}, key4), value: parent?.[key4] };
     };
-    sameScope = (start, end) => scopeFields.every((path31) => {
-      const a3 = scopeValue(start, path31), b = scopeValue(end, path31);
+    sameScope = (start, end) => scopeFields.every((path32) => {
+      const a3 = scopeValue(start, path32), b = scopeValue(end, path32);
       return a3.present === b.present && (!a3.present || id2(a3.value) && id2(b.value) && a3.value === b.value);
     });
     rootEnvelope = (event) => id2(event.id) && typeof event.type === "string" && chainTypes.has(event.type) && Object.keys(event).every((key4) => rootKeys3.has(key4)) && event.data && typeof event.data === "object" && !Array.isArray(event.data) && (!Object.hasOwn(event, "parentId") || id2(event.parentId));
@@ -22014,7 +22087,7 @@ function backfillProgressSummary(checkpoint) {
   if (!checkpoint) return { pendingSources: 0, remainingBytes: 0, visitedSources: 0, blockedSources: 0 };
   const { sources } = validateBackfillCheckpoint(checkpoint).backfill;
   const pending = sources.filter((row) => ["pending", "reading"].includes(row.phase));
-  const remainingBytes = pending.reduce((sum, row) => sum + row.endOffset - row.offset, 0);
+  const remainingBytes = pending.reduce((sum2, row) => sum2 + row.endOffset - row.offset, 0);
   if (!Number.isSafeInteger(remainingBytes)) throw new RangeError("Backfill byte summary exceeds the supported integer range.");
   return {
     pendingSources: pending.length,
@@ -22159,13 +22232,13 @@ function validateNativeSegmentedBlock(block) {
     if (block.tree !== null) descriptor(block.tree);
   } else if (block.kind === "page") {
     if (!exact5(block, [...common, "level", "children"]) || !Number.isSafeInteger(block.level) || block.level < 1 || block.level > NATIVE_SEGMENTED_LIMITS.treeDepth || !Array.isArray(block.children) || !block.children.length || block.children.length > NATIVE_SEGMENTED_LIMITS.pageChildren) fail6("page-bound");
-    let last = null, count7 = 0;
+    let last = null, count8 = 0;
     for (const child of block.children) {
       descriptor(child);
       if (child.level !== block.level - 1 || last !== null && last >= child.firstKey) fail6("page-order-invalid");
       last = child.lastKey;
-      count7 += child.count;
-      if (!Number.isSafeInteger(count7)) fail6("count-invalid");
+      count8 += child.count;
+      if (!Number.isSafeInteger(count8)) fail6("count-invalid");
     }
   } else if (block.kind === "segment") {
     if (!exact5(block, [...common, "entries"]) || !Array.isArray(block.entries) || !block.entries.length || block.entries.length > NATIVE_SEGMENTED_LIMITS.segmentEntries) fail6("segment-bound");
@@ -22465,7 +22538,7 @@ function validateCheckpoint(value, file, validateBackfillCheckpoint2) {
   };
   const object16 = (item) => item !== null && typeof item === "object" && !Array.isArray(item);
   const only2 = (item, keys2) => object16(item) && Object.keys(item).every((key4) => keys2.includes(key4));
-  const count7 = (item) => Number.isSafeInteger(item) && item >= 0;
+  const count8 = (item) => Number.isSafeInteger(item) && item >= 0;
   if (!object16(value) || ![1, 2].includes(value.schemaVersion) || !Array.isArray(value.events)) invalid3();
   if (value.schemaVersion === 1 && (value.completionReferences !== void 0 || value.events.some(hasCompletionReference))) invalid3();
   if (value.schemaVersion === 2) {
@@ -22494,7 +22567,7 @@ function validateCheckpoint(value, file, validateBackfillCheckpoint2) {
     if (validated !== value || value.backfillSource !== file.source) invalid3();
   }
   if (file.checkpointStaging || extendedPending) {
-    if (!only2(value, ["schemaVersion", "cursor", "events", "diagnostics", "backfillSource", "backfill"]) || !contextFits(value.events) || value.events.some((event) => !validEventEnvelope(event) && !isHistoryGap(event) || event.type === "session.start" && event.data?.sessionId !== file.source) || !only2(value.diagnostics, ["credentialExclusions", "contextEvictions", "unsupportedPromptContents"]) || !Object.values(value.diagnostics).every(count7)) invalid3();
+    if (!only2(value, ["schemaVersion", "cursor", "events", "diagnostics", "backfillSource", "backfill"]) || !contextFits(value.events) || value.events.some((event) => !validEventEnvelope(event) && !isHistoryGap(event) || event.type === "session.start" && event.data?.sessionId !== file.source) || !only2(value.diagnostics, ["credentialExclusions", "contextEvictions", "unsupportedPromptContents"]) || !Object.values(value.diagnostics).every(count8)) invalid3();
     const cursor = value.cursor;
     if (!only2(cursor, [
       "identity",
@@ -22509,7 +22582,7 @@ function validateCheckpoint(value, file, validateBackfillCheckpoint2) {
       "logBytes",
       "backlogBytes",
       "anchor"
-    ]) || typeof cursor.identity !== "string" || !/^[A-Za-z0-9_.:-]{1,1024}$/.test(cursor.identity) || !/^[a-f0-9]{64}$/.test(cursor.anchor ?? "") || typeof cursor.skipping !== "boolean" || !["offset", "droppedBytes", "rotations", "malformedLines", "oversizedLines", "partialBytes", "logBytes", "backlogBytes"].every((key4) => count7(cursor[key4])) || cursor.offset > cursor.logBytes || cursor.backlogBytes !== cursor.logBytes - cursor.offset || (extendedPending ? cursor.partialBytes >= TAIL_LIMITS.chunkBytes : cursor.partialBytes > TAIL_LIMITS.maxLineBytes) || cursor.partialBytes > cursor.backlogBytes || cursor.skipping && cursor.partialBytes !== 0 || extendedPending && (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(file.source ?? "") || cursor.skipReason !== void 0) || cursor.skipReason !== void 0 && !["oversized-line", "initial-window", "unavailable"].includes(cursor.skipReason)) invalid3();
+    ]) || typeof cursor.identity !== "string" || !/^[A-Za-z0-9_.:-]{1,1024}$/.test(cursor.identity) || !/^[a-f0-9]{64}$/.test(cursor.anchor ?? "") || typeof cursor.skipping !== "boolean" || !["offset", "droppedBytes", "rotations", "malformedLines", "oversizedLines", "partialBytes", "logBytes", "backlogBytes"].every((key4) => count8(cursor[key4])) || cursor.offset > cursor.logBytes || cursor.backlogBytes !== cursor.logBytes - cursor.offset || (extendedPending ? cursor.partialBytes >= TAIL_LIMITS.chunkBytes : cursor.partialBytes > TAIL_LIMITS.maxLineBytes) || cursor.partialBytes > cursor.backlogBytes || cursor.skipping && cursor.partialBytes !== 0 || extendedPending && (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(file.source ?? "") || cursor.skipReason !== void 0) || cursor.skipReason !== void 0 && !["oversized-line", "initial-window", "unavailable"].includes(cursor.skipReason)) invalid3();
   }
   return extendedPending;
 }
@@ -22962,7 +23035,7 @@ async function deletionMaterializations(root, files, markers, scope, remaining, 
       } else if (path14.basename(file.relative) !== next2) actions2.push({ ...file, text: null, destination: file.relative });
     } else actions2.push({ ...file, text: null, destination: file.relative });
   }
-  const matches3 = (at2) => {
+  const matches4 = (at2) => {
     if (scope.scope === "all") return true;
     try {
       time.instant(at2);
@@ -23021,7 +23094,7 @@ async function deletionMaterializations(root, files, markers, scope, remaining, 
       continue;
     } else if (file.kind === "http") {
       if (recordUnits(inventoryRecords([file])[0]).some((unit) => unit.aliases.some((id5) => blocked.has(id5)))) next2 = null;
-    } else if (file.kind === "attempt" && matches3(next2.startedAt)) next2 = null;
+    } else if (file.kind === "attempt" && matches4(next2.startedAt)) next2 = null;
     if (!["snapshot", "native-snapshot", "native-segment"].includes(file.kind) && JSON.stringify(next2) !== JSON.stringify(file.value)) actions2.push({ ...file, text: next2 === null ? null : JSON.stringify(next2), destination: file.relative });
   }
   actions2.push(...linked.actions);
@@ -23069,13 +23142,13 @@ async function artifactDeletionPlan(root, state, input, { ignoreStagingOperation
     if (!descriptor2 || !artifactIdPattern.test(descriptor2.bundleId ?? "") || !["report", "comparison"].includes(descriptor2.kind) || bulk && descriptor2.kind !== "report" || !["files", "bundle-root"].includes(descriptor2.layout) || !Array.isArray(descriptor2.files) || !descriptor2.files.length || descriptor2.files.length > 1e3 || descriptor2.files.some((file) => !safeArtifactName(file.name) || !/^[a-f0-9]{64}$/.test(file.sha256)) || new Set(descriptor2.files.map((file) => file.name.toLowerCase())).size !== descriptor2.files.length || !Array.isArray(descriptor2.dependentComparisons) || descriptor2.dependentComparisons.some((item) => !artifactIdPattern.test(item.bundleId ?? ""))) {
       throw new BoardError("Invalid saved artifact deletion inventory.", 422);
     }
-    const matches3 = state.exports.filter((entry3) => entry3.bundleId === descriptor2.bundleId);
-    if (matches3.length !== 1 || (matches3[0].kind ?? "report") !== descriptor2.kind) throw new BoardError("Saved artifact identity changed. Preview again.", 409);
+    const matches4 = state.exports.filter((entry3) => entry3.bundleId === descriptor2.bundleId);
+    if (matches4.length !== 1 || (matches4[0].kind ?? "report") !== descriptor2.kind) throw new BoardError("Saved artifact identity changed. Preview again.", 409);
     const key4 = artifactDeletionKey(descriptor2.kind, descriptor2.bundleId);
     if (state.artifactDeletion?.identities?.includes(key4)) throw new BoardError("This saved artifact was already deleted.", 404);
     ids.add(descriptor2.bundleId);
     keys2.push(key4);
-    indexed.push(matches3[0]);
+    indexed.push(matches4[0]);
   }
   const marker = artifactDeletionState(state.artifactDeletion, keys2);
   const areas = await managedAreas(root), actions2 = [], assets = [];
@@ -23427,15 +23500,15 @@ async function correctionContext(dir, index, sourceId2) {
   }
   if (!info.isFile() || info.nlink !== 1 || info.size > TAIL_LIMITS.maxPendingPromptBytes + TAIL_LIMITS.maxContextBytes + 65536) return null;
   const handle = await open7(file, "r");
-  let bytes2, stamp3;
+  let bytes2, stamp4;
   try {
     const opened = await handle.stat(), openedStamp = sourceFileStamp(opened);
-    stamp3 = sourceFileStamp(await lstat3(file));
-    if (!opened.isFile() || opened.nlink !== 1 || ["dev", "ino", "birthtimeMs", "size", "mtimeMs"].some((key4) => opened[key4] !== info[key4]) || openedStamp !== stamp3 || process.platform !== "win32" && sourceFileStamp(info) !== stamp3) throw changed("before reading");
+    stamp4 = sourceFileStamp(await lstat3(file));
+    if (!opened.isFile() || opened.nlink !== 1 || ["dev", "ino", "birthtimeMs", "size", "mtimeMs"].some((key4) => opened[key4] !== info[key4]) || openedStamp !== stamp4 || process.platform !== "win32" && sourceFileStamp(info) !== stamp4) throw changed("before reading");
     bytes2 = Buffer.alloc(info.size);
     const read2 = await handle.read(bytes2, 0, bytes2.length, 0);
     if (read2.bytesRead !== bytes2.length || sourceFileStamp(await handle.stat()) !== openedStamp) throw changed("while reading");
-    if (sourceFileStamp(await lstat3(file)) !== stamp3) throw changed("at its saved path");
+    if (sourceFileStamp(await lstat3(file)) !== stamp4) throw changed("at its saved path");
   } finally {
     await handle.close();
   }
@@ -23447,7 +23520,7 @@ async function correctionContext(dir, index, sourceId2) {
   const indexFile = path16.join(root, "index.json"), indexStamp = sourceFileStamp(await lstat3(indexFile));
   const prefixStamp = backfill && sourceFileStamp(await lstat3(backfill.file));
   const assertCurrent2 = () => {
-    if (sourceFileStamp(lstatSync(file)) !== stamp3 || sourceFileStamp(lstatSync(indexFile)) !== indexStamp || backfill && sourceFileStamp(lstatSync(backfill.file)) !== prefixStamp) throw changed("before publication");
+    if (sourceFileStamp(lstatSync(file)) !== stamp4 || sourceFileStamp(lstatSync(indexFile)) !== indexStamp || backfill && sourceFileStamp(lstatSync(backfill.file)) !== prefixStamp) throw changed("before publication");
   };
   return {
     events: [...checkpoint.events, ...prefix],
@@ -23646,12 +23719,12 @@ async function commitRecordedAnswers(session, candidates2, expected2) {
         counts3.suppressed++;
         continue;
       }
-      const matches3 = [...model.internals].filter(([, item]) => item.record.sourceSessionId === candidate.sourceSessionId && candidate.messageEventId && item.record.userPrompt?.sourceEventId === candidate.messageEventId);
-      if (matches3.length !== 1) {
+      const matches4 = [...model.internals].filter(([, item]) => item.record.sourceSessionId === candidate.sourceSessionId && candidate.messageEventId && item.record.userPrompt?.sourceEventId === candidate.messageEventId);
+      if (matches4.length !== 1) {
         counts3.unassociated++;
         continue;
       }
-      const interactionRef = matches3[0][0], view = model.details.get(interactionRef);
+      const interactionRef = matches4[0][0], view = model.details.get(interactionRef);
       const observationRef = assessmentRef(state, "observation", [candidate.sourceSessionId, candidate.sourceEventId, "answer", personal.consent.revision]);
       if (existing.has(observationRef)) continue;
       const credentials = textFindings(candidate.text).some((finding) => finding.mandatory);
@@ -23675,7 +23748,7 @@ async function commitRecordedAnswers(session, candidates2, expected2) {
         credentialScreen: "passed",
         utf8Bytes: Buffer.byteLength(text6),
         retainedItemCount: prior.length,
-        retainedTotalBytes: prior.reduce((sum, c) => sum + c.observation.payload.utf8Bytes, 0)
+        retainedTotalBytes: prior.reduce((sum2, c) => sum2 + c.observation.payload.utf8Bytes, 0)
       });
       if (!decision.allowed) {
         counts3.excluded++;
@@ -23997,10 +24070,10 @@ async function qualifyRetainedMetadata(config, source, records, previous, budget
     throw new TypeError("Response timing requires an approved eligible source.");
   }
   const targets = records.filter((record) => record.sourceSessionId === source.sessionId && !record.assessmentMembershipPruned && record.userPrompt?.sourceEventId && Number.isFinite(Date.parse(record.userPrompt.sourceTimestamp)) && record.userPrompt.sourceTimestamp >= since && record.userPrompt.sourceTimestamp <= (/* @__PURE__ */ new Date()).toISOString()).map((record) => ({ sourceEventId: record.userPrompt.sourceEventId, sourceTimestamp: record.userPrompt.sourceTimestamp }));
-  const unique6 = [...new Map(targets.map((prompt) => [prompt.sourceEventId, prompt])).values()];
+  const unique7 = [...new Map(targets.map((prompt) => [prompt.sourceEventId, prompt])).values()];
   const version2 = models ? 2 : 1, field = models ? "models" : "timings";
-  const signature = hash5(JSON.stringify(unique6));
-  if (!unique6.length) return { bytesRead: 0, checkpoint: { version: version2, signature, status: "complete", [field]: {} } };
+  const signature = hash5(JSON.stringify(unique7));
+  if (!unique7.length) return { bytesRead: 0, checkpoint: { version: version2, signature, status: "complete", [field]: {} } };
   const state = previous?.version === version2 && previous.signature === signature ? structuredClone(previous) : {
     version: version2,
     signature,
@@ -24011,13 +24084,13 @@ async function qualifyRetainedMetadata(config, source, records, previous, budget
     ...models ? { until: (/* @__PURE__ */ new Date()).toISOString() } : {}
   };
   if (state.status === "complete") return { bytesRead: 0, checkpoint: state };
-  const targetPrompt = (event) => event?.type === "user.message" && unique6.some((prompt) => event.id === prompt.sourceEventId && event.timestamp === prompt.sourceTimestamp);
+  const targetPrompt = (event) => event?.type === "user.message" && unique7.some((prompt) => event.id === prompt.sourceEventId && event.timestamp === prompt.sourceTimestamp);
   const messageIds = new Set(state.context.filter(targetPrompt).map((event) => event.data.messageId).filter((id5) => typeof id5 === "string"));
   let selectedInterval = targetPrompt(state.context.findLast((event) => event.type === "user.message"));
   let bytesRead = 0;
   const finish = () => {
     if (models) {
-      for (const prompt2 of unique6) {
+      for (const prompt2 of unique7) {
         const record = records.find((record2) => record2.sourceSessionId === source.sessionId && record2.userPrompt?.sourceEventId === prompt2.sourceEventId);
         const matched = state.context.some((event) => event.type === "user.message" && event.id === prompt2.sourceEventId && event.timestamp === prompt2.sourceTimestamp);
         state.models[prompt2.sourceEventId] = matched ? recordedInteractionModels(state.context, record) ?? null : null;
@@ -24026,7 +24099,7 @@ async function qualifyRetainedMetadata(config, source, records, previous, budget
       return;
     }
     if (!state.context.length) return;
-    const prompt = unique6.find((value) => value.sourceEventId === state.context[0].id);
+    const prompt = unique7.find((value) => value.sourceEventId === state.context[0].id);
     if (prompt) state.timings[prompt.sourceEventId] = recordedResponseTiming(state.context, prompt);
     state.context = [];
   };
@@ -24055,7 +24128,7 @@ async function qualifyRetainedMetadata(config, source, records, previous, budget
       }
       state.context = [];
       state.status = "complete";
-      state.timings = Object.fromEntries(unique6.map((prompt) => [
+      state.timings = Object.fromEntries(unique7.map((prompt) => [
         prompt.sourceEventId,
         { schemaVersion: 1, status: "unavailable", reason: "source-lines-skipped" }
       ]));
@@ -24098,7 +24171,7 @@ async function qualifyRetainedMetadata(config, source, records, previous, budget
       }
       if (event.type === "user.message") {
         finish();
-        if (unique6.some((prompt) => prompt.sourceEventId === event.id && prompt.sourceTimestamp === event.timestamp)) state.context = [event];
+        if (unique7.some((prompt) => prompt.sourceEventId === event.id && prompt.sourceTimestamp === event.timestamp)) state.context = [event];
       } else if (state.context.length) {
         if (state.context.length >= TAIL_LIMITS.maxContextEvents) {
           state.timings[state.context[0].id] = { schemaVersion: 1, status: "unavailable", reason: "timing-context-limit" };
@@ -24114,7 +24187,7 @@ async function qualifyRetainedMetadata(config, source, records, previous, budget
       }
       finish();
       state.status = "complete";
-      if (!models) for (const prompt of unique6) state.timings[prompt.sourceEventId] ??= { schemaVersion: 1, status: "unavailable", reason: "prompt-not-in-bounded-window" };
+      if (!models) for (const prompt of unique7) state.timings[prompt.sourceEventId] ??= { schemaVersion: 1, status: "unavailable", reason: "prompt-not-in-bounded-window" };
       break;
     }
   }
@@ -24808,8 +24881,8 @@ async function createMicrosoftSession(context2, {
   }
   function nativeConfigurationCapability() {
     const value = snapshot();
-    const partition2 = value.authorization.microsoftPartition;
-    const canSave = nativeRead && value.authorization.retained && PARTITION.test(partition2 ?? "");
+    const partition3 = value.authorization.microsoftPartition;
+    const canSave = nativeRead && value.authorization.retained && PARTITION.test(partition3 ?? "");
     let account = null;
     if (canSave && state.connection === "connected") {
       try {
@@ -24827,7 +24900,7 @@ async function createMicrosoftSession(context2, {
     return Object.freeze({
       generation: state.generation,
       authorizationRevision,
-      partition: partition2,
+      partition: partition3,
       settings: Object.freeze({ ...settings2 }),
       account,
       ...sourceAware ? { globalRevision: globalGate?.revision ?? null } : {},
@@ -25407,13 +25480,13 @@ function isNativeArtifactMutationAdmission(guard, context2, owner2) {
   const held = guards.get(guard);
   return Boolean(held && held.context === context2 && held.owner === owner2);
 }
-function qualify(state, scope, membership, partition2) {
+function qualify(state, scope, membership, partition3) {
   const bulk = exact7(scope, ["scope"]) && scope.scope === "all-reports";
   if (!bulk && (!exact7(scope, ["artifactKind", "artifactId"]) || !["report", "comparison"].includes(scope.artifactKind) || !bundle(scope.artifactId)) || !bulk && membership !== null) fail9("NATIVE_ARTIFACT_MUTATION_SELECTION_INVALID", 422);
   if (membership !== null && (!Array.isArray(membership) || !membership.length || membership.length > 1e4 || membership.some((id5) => !bundle(id5)) || new Set(membership).size !== membership.length)) fail9("NATIVE_ARTIFACT_MUTATION_SELECTION_INVALID", 422);
   const ids = bulk ? membership ?? state.exports.filter((row) => kind(row) === "report").map((row) => row.bundleId) : [scope.artifactId];
   if (!ids.length || ids.length > 1e4 || new Set(ids).size !== ids.length) fail9("NATIVE_ARTIFACT_MUTATION_SELECTION_INVALID", 422);
-  const currentAccount = accountRef(state, partition2);
+  const currentAccount = accountRef(state, partition3);
   function entry3(id5) {
     const rows = state.exports.filter((row2) => row2.bundleId === id5);
     if (rows.length !== 1) fail9();
@@ -25638,7 +25711,7 @@ var init_native_artifact_mutation = __esm({
     };
     native = (row) => Object.hasOwn(row, "nativeSourceBinding") || Object.hasOwn(row, "nativeEvidenceHash") || Object.hasOwn(row, "nativeComparisonHash");
     kind = (row) => row.kind ?? "report";
-    accountRef = (state, partition2) => partition2 ? createHmac7("sha256", state.pseudonymKey).update(JSON.stringify(["native-report-account-v1", partition2])).digest("hex") : null;
+    accountRef = (state, partition3) => partition3 ? createHmac7("sha256", state.pseudonymKey).update(JSON.stringify(["native-report-account-v1", partition3])).digest("hex") : null;
     preservedState = (state) => {
       const { exports, artifactDeletion, deletion, revision, ...preserved } = state;
       return nativeRetentionHash(preserved);
@@ -26054,12 +26127,12 @@ function comparisonBodyHtml(model, snapshot) {
   }).join("")}</tbody></table>`;
   const displays = new Map((model.patternDisplays ?? []).map((pattern2) => [pattern2.patternId, pattern2]));
   const patterns2 = primary?.patterns.map((pattern2) => {
-    const display = displays.get(pattern2.patternId);
-    const label = display?.available ? display.workload : "Pattern unavailable";
+    const display2 = displays.get(pattern2.patternId);
+    const label = display2?.available ? display2.workload : "Pattern unavailable";
     const counts3 = (total) => total.count ? `${formatter4.formatValue(total.failureRate.percent, "percent")}<span class="comparison-meta report-cell-text">${total.failure} of ${total.count} ${escapeReportText(current ? operationFailureLabel(model.primaryLayer) : `${evidence.unitLabel} recorded errors`)}</span>` : reportTextCell("Not present");
     const change = pattern2.change.failure;
-    return `<tr><th scope="row">${escapeReportText(label)}${(display?.endpoints ?? []).map((endpoint2) => `<span class="comparison-meta">${escapeReportText(endpoint2.pathTemplate)}</span>`).join("")}</th>
-            <td><span class="comparison-mobile-label">Tool</span>${escapeReportText(display?.available ? display.tool : "Unavailable")}</td>
+    return `<tr><th scope="row">${escapeReportText(label)}${(display2?.endpoints ?? []).map((endpoint2) => `<span class="comparison-meta">${escapeReportText(endpoint2.pathTemplate)}</span>`).join("")}</th>
+            <td><span class="comparison-mobile-label">Tool</span>${escapeReportText(display2?.available ? display2.tool : "Unavailable")}</td>
             <td class="report-numeric"><span class="comparison-mobile-label">Earlier</span>${counts3(pattern2.baseline)}</td><td class="report-numeric"><span class="comparison-mobile-label">Later</span>${counts3(pattern2.later)}</td><td class="report-numeric"><span class="comparison-mobile-label">Change</span>${change === null ? reportTextCell("Not comparable") : change === 0 ? reportTextCell("Unchanged") : escapeReportText(`${change > 0 ? "+" : "\u2212"}${formatter4.formatValue(Math.abs(change), "percentage-points")}`)}</td></tr>`;
   }).join("") ?? "";
   const scores = primary ? [["Earlier", primary.raw.baseline], ["Later", primary.raw.later]].map(([label, total]) => {
@@ -26532,7 +26605,7 @@ var init_native_report_output = __esm({
     escape3 = escapeReportText;
     formatter2 = createReportComparison();
     nativeReportHeader = reportBrandHeader;
-    nativeShare = (count7, total) => total ? formatter2.formatValue(count7 * 100 / total, "percent") : "Not applicable";
+    nativeShare = (count8, total) => total ? formatter2.formatValue(count8 * 100 / total, "percent") : "Not applicable";
     productReportStyles = `
 @media screen{
  .example-calls{min-width:36rem}
@@ -26704,15 +26777,15 @@ function reportFinding(snapshot) {
   const groups = errors.length || population.focus.outcome === "errors" ? errors : snapshot.reportPatterns.groups.filter((g) => g.kind === "operation");
   const populationLine = population.focus.outcome === "errors" ? `${denominator} of ${population.reference.length} interactions had recorded errors.` : plain8 ? population.reference.length === denominator ? denominator ? `This report includes ${numberOf(denominator, "interaction")}.` : "There are no interactions in the activity you chose." : `This report includes ${denominator} of the ${numberOf(population.reference.length, "interaction")} in the activity you chose.` : `${numberOf(denominator, "interaction")} included from ${numberOf(population.reference.length, "eligible interaction")}.`;
   const rows = groups.slice(0, 5).map((group2) => {
-    const matches3 = group2.callRefs.map((ref11) => results3.get(ref11));
-    const display = patterns2.get(group2.patternKey), tool = display.tool || "Tool", completions = new Set(matches3.map((x2) => x2.call.completion));
-    const completion2 = completions.size === 1 ? outcome4(matches3[0].call.completion) : "Mixed completion";
+    const matches4 = group2.callRefs.map((ref11) => results3.get(ref11));
+    const display2 = patterns2.get(group2.patternKey), tool = display2.tool || "Tool", completions = new Set(matches4.map((x2) => x2.call.completion));
+    const completion2 = completions.size === 1 ? outcome4(matches4[0].call.completion) : "Mixed completion";
     const statuses2 = group2.signals.filter((s) => s.kind === "returned-api-error" && s.status != null);
     const singleton = group2.signals.find((s) => s.kind === "result-status");
     const conflicts = group2.signals.some((s) => s.kind.startsWith("conflicting-"));
-    const noHttp = matches3.every(({ call: call2 }) => call2.observations.length && call2.observations.every((o2) => o2.statusCode == null && o2.statusConflict == null && !o2.returnedEntries?.length && o2.errorStatusCode == null));
+    const noHttp = matches4.every(({ call: call2 }) => call2.observations.length && call2.observations.every((o2) => o2.statusCode == null && o2.statusConflict == null && !o2.returnedEntries?.length && o2.errorStatusCode == null));
     const errorLabel = reportPatternError(group2);
-    const label = group2.kind === "operation" ? plain8 && tool === "workiq-ask" && !display.endpoints.length ? "Asked Copilot (workiq-ask)" : [tool, ...display.endpoints.map((e) => e.pathTemplate)].join(" / ") : conflicts ? `${tool} \xB7 ${reportPatternError(group2)}` : statuses2.length ? `${tool} \xB7 ${completion2.toLowerCase()} \xB7 returned HTTP ${[...new Set(statuses2.map((s) => s.status))].join(", ")}` : singleton ? `${tool} \xB7 result status ${singleton.status}` : /^(?:failure|call failed)$/i.test(errorLabel) ? `${tool} \xB7 ${completion2.toLowerCase()}${noHttp ? "; no HTTP status saved" : ""}` : `${tool} \xB7 ${errorLabel}`;
+    const label = group2.kind === "operation" ? plain8 && tool === "workiq-ask" && !display2.endpoints.length ? "Asked Copilot (workiq-ask)" : [tool, ...display2.endpoints.map((e) => e.pathTemplate)].join(" / ") : conflicts ? `${tool} \xB7 ${reportPatternError(group2)}` : statuses2.length ? `${tool} \xB7 ${completion2.toLowerCase()} \xB7 returned HTTP ${[...new Set(statuses2.map((s) => s.status))].join(", ")}` : singleton ? `${tool} \xB7 result status ${singleton.status}` : /^(?:failure|call failed)$/i.test(errorLabel) ? `${tool} \xB7 ${completion2.toLowerCase()}${noHttp ? "; no HTTP status saved" : ""}` : `${tool} \xB7 ${errorLabel}`;
     return { id: group2.id, label, count: group2.interactionRefs.length, completion: completion2, tool };
   });
   const lead = rows[0], group = groups[0];
@@ -27063,9 +27136,9 @@ function renderMarkdownReport(sanitizedRecords, options = {}) {
   );
   return lines.join("\n");
 }
-function reportIntro(snapshot, count7, compact = false) {
-  if (!snapshot) return `${count7} selected evidence ${count7 === 1 ? "record" : "records"}. Evidence layers use separate units, never added together.`;
-  const included = snapshot.selectionScope?.requestGroups ?? count7;
+function reportIntro(snapshot, count8, compact = false) {
+  if (!snapshot) return `${count8} selected evidence ${count8 === 1 ? "record" : "records"}. Evidence layers use separate units, never added together.`;
+  const included = snapshot.selectionScope?.requestGroups ?? count8;
   if (snapshot.reportPopulation) {
     const dates = snapshot.dateSelection;
     const period = dates.range === "capture" ? "All retained dates" : `${time.formatDate(dates.from, snapshot.timeContext, true)} to ${time.formatDate(dates.to, snapshot.timeContext, true)}`;
@@ -27089,8 +27162,8 @@ function reportIntro(snapshot, count7, compact = false) {
     ["Timezone", time.label(snapshot.timeContext)]
   ]);
 }
-function exampleReading(snapshot, count7, total) {
-  return `${count7} of ${total} interactions; failed or unknown calls first. Prompt-to-call links are inferred, not proof of intent. Examples add no counts.${snapshot?.formats.includes("json") ? "" : " Selected excerpts, not complete records."}`;
+function exampleReading(snapshot, count8, total) {
+  return `${count8} of ${total} interactions; failed or unknown calls first. Prompt-to-call links are inferred, not proof of intent. Examples add no counts.${snapshot?.formats.includes("json") ? "" : " Selected excerpts, not complete records."}`;
 }
 function boundedExampleNote(example, snapshot) {
   return `${example.hiddenBefore} earlier and ${example.hiddenAfter} later calls are outside this bounded example. ${snapshot?.formats.includes("json") ? "Complete projected records: product-report.json." : "Operation detail is an aggregate summary, not the omitted full records."}`;
@@ -27306,9 +27379,9 @@ function patternsHtml(snapshot, records) {
   if (!sections.length) return '<section id="patterns"><h2>Patterns</h2><p>No qualified Work IQ call patterns were retained for these interactions. The included evidence is listed below.</p></section>';
   const interactionNumbers = new Map(records.map((record, i) => [record.scenarioId, i + 1]));
   const interactions = (group) => {
-    const [target] = group.interactionRefs, count7 = group.interactionRefs.length;
-    const label = `${count7} matching ${count7 === 1 ? "interaction" : "interactions"}: go to Interaction ${interactionNumbers.get(target)}`;
-    return `<a class="report-count-link" href="#${escapeHtml(target)}" aria-label="${label}" title="${label}">${count7}</a>`;
+    const [target] = group.interactionRefs, count8 = group.interactionRefs.length;
+    const label = `${count8} matching ${count8 === 1 ? "interaction" : "interactions"}: go to Interaction ${interactionNumbers.get(target)}`;
+    return `<a class="report-count-link" href="#${escapeHtml(target)}" aria-label="${label}" title="${label}">${count8}</a>`;
   };
   const ordinals = new Map(snapshot.resultFacts.calls.map((call, i) => [call.ref, i + 1]));
   const calls2 = (group) => {
@@ -27630,14 +27703,14 @@ function periodReportDisplay(value, snapshot) {
   ];
   const timing = value.comparison.matchingCallTiming ? ["median", "p95"].map((key4) => {
     const item = value.comparison.matchingCallTiming[key4];
-    const display = (side) => {
+    const display2 = (side) => {
       const presented = matchingTimingPresentation(side, key4, snapshot);
       return `${presented.value}; ${presented.note}`;
     };
     return [
       key4 === "median" ? "Median tool latency" : "P95 tool latency",
-      display(item.baseline),
-      display(item.later),
+      display2(item.baseline),
+      display2(item.later),
       key4 === "p95" && Math.min(item.baseline.coverage.count, item.later.coverage.count) < 2 ? "Not comparable" : delta(item, snapshot)
     ];
   }) : [];
@@ -27680,7 +27753,7 @@ function periodReportDisplay(value, snapshot) {
   };
 }
 function table(caption2, headers2, rows) {
-  return `<table class="native-table"><caption>${escape4(caption2)}</caption><thead><tr>${headers2.map((label) => `<th scope="col">${escape4(label)}</th>`).join("")}</tr></thead><tbody>${rows.map((cells) => `<tr>${cells.map((cell, index) => index ? `<td data-label="${escape4(headers2[index])}">${escape4(cell)}</td>` : `<th scope="row">${escape4(cell)}</th>`).join("")}</tr>`).join("")}</tbody></table>`;
+  return `<table class="native-table"><caption>${escape4(caption2)}</caption><thead><tr>${headers2.map((label) => `<th scope="col">${escape4(label)}</th>`).join("")}</tr></thead><tbody>${rows.map((cells) => `<tr>${cells.map((cell2, index) => index ? `<td data-label="${escape4(headers2[index])}">${escape4(cell2)}</td>` : `<th scope="row">${escape4(cell2)}</th>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 function nativePeriodRows(value) {
   return value.nativePeriods?.summary.flatMap((item) => {
@@ -27737,32 +27810,32 @@ function sideNotes(side) {
   ];
 }
 function renderLegacyPeriodReportHtml(snapshot) {
-  const value = validatePeriodReport(snapshot.periodComparison, snapshot.records), display = periodReportDisplay(value, snapshot);
-  const title2 = snapshot.title || display.title;
+  const value = validatePeriodReport(snapshot.periodComparison, snapshot.records), display2 = periodReportDisplay(value, snapshot);
+  const title2 = snapshot.title || display2.title;
   const sides = Object.entries(value.periods).map(([key4, side], index) => {
     const label = index ? "Period B" : "Period A", model = nativeReportEvidence({ evaluationFacts: side.facts });
     return `<section id="${key4}"><h3>${label}</h3>${nativeFindingsHtml(model).replace('id="findings"', `id="${key4}-findings"`)}
-            <ul class="native-bars">${tools(side).map(([tool, count7]) => `<li><div class="native-bar-heading"><span>${escape4(tool)}</span><strong>${escape4(share(count7, side.rows.length))}</strong></div><div class="native-bar-track"><span class="native-bar" style="width:${count7 * 100 / side.rows.length}%"></span></div></li>`).join("")}</ul>
+            <ul class="native-bars">${tools(side).map(([tool, count8]) => `<li><div class="native-bar-heading"><span>${escape4(tool)}</span><strong>${escape4(share(count8, side.rows.length))}</strong></div><div class="native-bar-track"><span class="native-bar" style="width:${count8 * 100 / side.rows.length}%"></span></div></li>`).join("")}</ul>
             <details><summary>Matching records (${side.rows.length})</summary>${table(
       `${label}: records in the selected date range`,
       ["Record / interaction", "Tool / services", "Outcome", value.definitions.layer === "tool" ? "Tool latency" : "Recorded duration"],
-      matchingRows(side, snapshot, display.labels)
+      matchingRows(side, snapshot, display2.labels)
     )}</details></section>`;
   }).join("");
   const copies = snapshot.promptMode === "none" ? "" : snapshot.records.map((record, index) => `<details class="prompt-record" id="${escape4(record.scenarioId)}"><summary>Interaction ${index + 1}</summary>${record.prompts.map((prompt) => promptCopyHtml(prompt, "h4", snapshot)).join("")}</details>`).join("");
   return `<!doctype html><html lang="en" data-evidence-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><title>WIRE - ${escape4(title2)}</title><style>${nativeReportStyles}</style></head><body><main>
-        ${nativeReportHeader(title2, snapshot)}<p class="report-meta">${escape4(display.dates)}<br>Prepared ${escape4(snapshot.preparedAtDisplay)}</p>
-        <p class="report-summary">${escape4(display.finding)}</p>
+        ${nativeReportHeader(title2, snapshot)}<p class="report-meta">${escape4(display2.dates)}<br>Prepared ${escape4(snapshot.preparedAtDisplay)}</p>
+        <p class="report-summary">${escape4(display2.finding)}</p>
         <nav class="report-nav" aria-label="Report sections"><a href="#numbers">Activity</a><a href="#full-interaction">Timing</a>${copies ? '<a href="#copies">Report text</a>' : ""}<a href="#definitions">Coverage</a></nav>
-        <section id="numbers"><h2>Activity</h2><p class="reading-note">${escape4(value.scope.population)}</p>${table("Matching records and full retained interactions; separate populations", headers, display.rows)}
+        <section id="numbers"><h2>Activity</h2><p class="reading-note">${escape4(value.scope.population)}</p>${table("Matching records and full retained interactions; separate populations", headers, display2.rows)}
         <h3>Matching tools and records</h3><div class="native-breakdowns period-breakdowns">${sides}</div></section>
         <section id="full-interaction"><h2>${value.definitions.metricProjectionVersion === 4 ? "Timing" : value.definitions.metricProjectionVersion === 3 ? "Personal feedback and recorded timing" : "Full-interaction checks and timing"}</h2>
-        ${display.timing.length ? table("Matching tool latency: call start to recorded completion", headers, display.timing) : ""}
-        <p class="reading-note">${escape4(value.scope.findings)}</p>${table("Full retained interactions: recorded measurements", headers, display.metrics)}<p class="reading-note">${sampleNoteFor(value)}</p></section>
+        ${display2.timing.length ? table("Matching tool latency: call start to recorded completion", headers, display2.timing) : ""}
+        <p class="reading-note">${escape4(value.scope.findings)}</p>${table("Full retained interactions: recorded measurements", headers, display2.metrics)}<p class="reading-note">${sampleNoteFor(value)}</p></section>
         ${reportContextHtml(snapshot)}${copies ? `<section id="copies"><h2>Report text</h2><p class="reading-note">Supporting copies, not a third comparison population.</p>${copies}</section>` : ""}
-        <details id="definitions" class="reading-notes"><summary>Coverage and definitions</summary><p>${escape4(display.scope)}</p>
+        <details id="definitions" class="reading-notes"><summary>Coverage and definitions</summary><p>${escape4(display2.scope)}</p>
         ${Object.entries(value.periods).map(([, side], index) => `<h3>Period ${index ? "B" : "A"}</h3>${sideNotes(side).map((note) => `<p>${escape4(note)}</p>`).join("")}`).join("")}
-        ${[...display.notes.filter((note) => note !== value.scope.population && note !== value.scope.authorPolicy), ...formatter3.readingNotesFor(value)].map((note) => `<p>${escape4(note)}</p>`).join("")}</details>
+        ${[...display2.notes.filter((note) => note !== value.scope.population && note !== value.scope.authorPolicy), ...formatter3.readingNotesFor(value)].map((note) => `<p>${escape4(note)}</p>`).join("")}</details>
         ${reportNotesHtml(snapshot)}<footer class="report-footer">WIRE - Saved local report. No history collection${value.definitions.metricProjectionVersion === 4 ? "" : " or new assessment"} was performed for this report.</footer></main></body></html>`;
 }
 function periodChangeHtml(value, unit, snapshot) {
@@ -27777,7 +27850,7 @@ function periodOutcomesHtml(value, labels2) {
   const { baseline: a3, later: b } = value.periods;
   const volumeChange = b.rows.length - a3.rows.length;
   const keys2 = Object.keys(labels2).filter((key4) => a3.totals[key4] || b.totals[key4]);
-  const percent2 = (count7, total) => total ? `${number2(count7)} (${(count7 * 100 / total).toFixed(2)}%)` : `${number2(count7)} (Not applicable)`;
+  const percent2 = (count8, total) => total ? `${number2(count8)} (${(count8 * 100 / total).toFixed(2)}%)` : `${number2(count8)} (Not applicable)`;
   const change = value.comparison.outcomes.change.failure;
   const finding = value.definitions.layer === "code-reference" ? "Execution not observed" : change === null ? "Failure share is not comparable" : `${periodChangeHtml(change, "pp")} ${change > 0 ? "higher failure share" : change < 0 ? "lower failure share" : "failure share unchanged"}`;
   const bars = [a3, b].map((side, index) => {
@@ -27928,7 +28001,7 @@ function periodCoverageHtml(value, snapshot, labels2, overlap) {
 function renderPeriodReportHtml(snapshot) {
   const value = validatePeriodReport(snapshot.periodComparison, snapshot.records);
   if (value.definitions.metricProjectionVersion !== 4) return renderLegacyPeriodReportHtml(snapshot);
-  const display = periodReportDisplay(value, snapshot), sides = Object.values(value.periods);
+  const display2 = periodReportDisplay(value, snapshot), sides = Object.values(value.periods);
   const github = !value.nativePeriods || sides.some((side) => side.rows.length);
   const githubRecords = snapshot.records.filter((record) => record.recordKind !== "native-conversation");
   const overlap = {
@@ -27958,18 +28031,18 @@ function renderPeriodReportHtml(snapshot) {
   })).join("") + resultTextHtml(snapshot.resultText, periodResultTextFacts(value)) : "";
   return `<!doctype html><html lang="en" data-evidence-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">
-        <title>WIRE - ${escape4(snapshot.title || display.title)}</title><style>${nativeReportStyles}${periodReportStyles}</style></head><body class="period-comparison-document"><main>
-        ${nativeReportHeader(snapshot.title || display.title, snapshot)}${periods}
+        <title>WIRE - ${escape4(snapshot.title || display2.title)}</title><style>${nativeReportStyles}${periodReportStyles}</style></head><body class="period-comparison-document"><main>
+        ${nativeReportHeader(snapshot.title || display2.title, snapshot)}${periods}
         ${nativePeriodsHtml(value)}
         ${resultEvidence}
         <nav class="report-nav" aria-label="Report sections"><a href="${github ? "#numbers" : "#microsoft-periods"}">Comparison</a>${github ? '<a href="#full-interaction">Whole-interaction timing</a><a href="#evidence">Evidence</a>' : ""}${copies ? '<a href="#copies">Report text</a>' : ""}${snapshot.nativeEvidence ? '<a href="#microsoft-evidence">Microsoft evidence</a>' : ""}<a href="#definitions">Coverage</a></nav>
-        ${github ? `<section id="numbers">${value.nativePeriods ? "<h2>GitHub activity</h2>" : ""}${unequal}${overlapNote}<div class="comparison-visuals">${periodOutcomesHtml(value, display.labels)}${periodTimingHtml(value, snapshot)}</div></section>
-        ${periodWholeTimingHtml(value, snapshot)}${periodEvidenceHtml(value, snapshot, display.labels)}` : '<p class="reading-note">No GitHub records match these periods. Microsoft timing and service targets are not inferred from message dates or tool names.</p>'}
-        ${reportContextHtml(snapshot)}${copies}${snapshot.nativeEvidence ? microsoftEvidenceHtml(snapshot.nativeEvidence) : ""}${periodCoverageHtml(value, snapshot, display.labels, overlap)}
+        ${github ? `<section id="numbers">${value.nativePeriods ? "<h2>GitHub activity</h2>" : ""}${unequal}${overlapNote}<div class="comparison-visuals">${periodOutcomesHtml(value, display2.labels)}${periodTimingHtml(value, snapshot)}</div></section>
+        ${periodWholeTimingHtml(value, snapshot)}${periodEvidenceHtml(value, snapshot, display2.labels)}` : '<p class="reading-note">No GitHub records match these periods. Microsoft timing and service targets are not inferred from message dates or tool names.</p>'}
+        ${reportContextHtml(snapshot)}${copies}${snapshot.nativeEvidence ? microsoftEvidenceHtml(snapshot.nativeEvidence) : ""}${periodCoverageHtml(value, snapshot, display2.labels, overlap)}
         ${reportNotesHtml(snapshot)}<footer class="report-footer">WIRE - Saved local report. No history collection was performed for this report.</footer></main></body></html>`;
 }
 function renderPeriodReportMarkdown(snapshot) {
-  const value = validatePeriodReport(snapshot.periodComparison, snapshot.records), display = periodReportDisplay(value, snapshot);
+  const value = validatePeriodReport(snapshot.periodComparison, snapshot.records), display2 = periodReportDisplay(value, snapshot);
   const resultEvidence = value.definitions.resultProjectionVersion === 1 ? [
     ...resultComparisonMarkdown(value.resultComparison),
     ...Object.values(value.periods).flatMap((side, index) => reportResultMarkdown(
@@ -27981,11 +28054,11 @@ function renderPeriodReportMarkdown(snapshot) {
   ] : [];
   if (value.nativePeriods && Object.values(value.periods).every((side) => !side.rows.length)) {
     return [
-      `# ${escapeReportMarkdown(snapshot.title || display.title)}`,
+      `# ${escapeReportMarkdown(snapshot.title || display2.title)}`,
       "",
       snapshot.preparedAtDisplay,
       "",
-      display.dates,
+      display2.dates,
       "",
       "## Microsoft activity",
       "",
@@ -27998,7 +28071,7 @@ function renderPeriodReportMarkdown(snapshot) {
       ...resultEvidence,
       "## Scope and coverage",
       "",
-      display.scope,
+      display2.scope,
       "",
       nativePeriodNotes(value),
       "",
@@ -28006,7 +28079,7 @@ function renderPeriodReportMarkdown(snapshot) {
       ""
     ].join("\n");
   }
-  const outcomeKeys = Object.keys(display.labels).filter((key4) => value.periods.baseline.totals[key4] || value.periods.later.totals[key4]);
+  const outcomeKeys = Object.keys(display2.labels).filter((key4) => value.periods.baseline.totals[key4] || value.periods.later.totals[key4]);
   const activityCell = (text6, row, column) => column === 3 && row >= 2 && value.comparison.outcomes.change[outcomeKeys[row - 2]] === null ? reportTextCell(text6) : escape4(text6);
   const timingCell = (text6, row, column) => {
     const key4 = row ? "p95" : "median", item = value.comparison.matchingCallTiming[key4];
@@ -28029,15 +28102,15 @@ function renderPeriodReportMarkdown(snapshot) {
     ...Object.values(value.periods).map((side, index) => [`Period ${index ? "B" : "A"}`, `${side.range.from} to ${side.range.to}`]),
     ["Timezone", value.timeContext.timeZone],
     ["Prepared", snapshot.preparedAtDisplay]
-  ]) : `${display.dates}
+  ]) : `${display2.dates}
 
 Prepared ${snapshot.preparedAtDisplay}.`;
   const lines = [
-    snapshot.title ? `# ${escapeReportMarkdown(snapshot.title)}` : `# WIRE - ${display.title}`,
+    snapshot.title ? `# ${escapeReportMarkdown(snapshot.title)}` : `# WIRE - ${display2.title}`,
     "",
     intro,
     "",
-    display.finding,
+    display2.finding,
     "",
     ...resultEvidence,
     "## Activity",
@@ -28046,7 +28119,7 @@ Prepared ${snapshot.preparedAtDisplay}.`;
     "",
     "Matching records and full retained interactions; separate populations.",
     "",
-    ...markdownTable(headers, display.rows, [1, 2, 3], activityCell)
+    ...markdownTable(headers, display2.rows, [1, 2, 3], activityCell)
   ];
   if (value.nativePeriods) lines.push(
     "## Microsoft activity",
@@ -28058,10 +28131,10 @@ Prepared ${snapshot.preparedAtDisplay}.`;
   lines.push(
     value.definitions.metricProjectionVersion === 4 ? "## Timing" : value.definitions.metricProjectionVersion === 3 ? "## Personal feedback and recorded timing" : "## Full-interaction checks and timing",
     "",
-    ...display.timing.length ? ["Matching tool latency: call start to recorded completion.", "", ...markdownTable(headers, display.timing, [1, 2, 3], timingCell)] : [],
+    ...display2.timing.length ? ["Matching tool latency: call start to recorded completion.", "", ...markdownTable(headers, display2.timing, [1, 2, 3], timingCell)] : [],
     value.scope.findings,
     "",
-    ...markdownTable(headers, display.metrics, [1, 2, 3], metricCell),
+    ...markdownTable(headers, display2.metrics, [1, 2, 3], metricCell),
     sampleNoteFor(value),
     "",
     "## Exact matching evidence",
@@ -28074,10 +28147,10 @@ Prepared ${snapshot.preparedAtDisplay}.`;
       `### ${label}`,
       "",
       ...nativeFindingsMarkdown(nativeReportEvidence({ evaluationFacts: side.facts })).slice(3),
-      ...markdownTable(["Tool", "Matching records"], tools(side).map(([tool, count7]) => [tool, share(count7, side.rows.length)]), [1]),
+      ...markdownTable(["Tool", "Matching records"], tools(side).map(([tool, count8]) => [tool, share(count8, side.rows.length)]), [1]),
       ...markdownTable(
         ["Record / interaction", ...separate ? ["Tool", "Services"] : ["Tool / services"], "Outcome", value.definitions.layer === "tool" ? "Tool latency" : "Recorded duration"],
-        matchingRows(side, snapshot, display.labels, separate),
+        matchingRows(side, snapshot, display2.labels, separate),
         [separate ? 4 : 3],
         (text6, row, column) => column === (separate ? 4 : 3) && side.rows[row].durationMs === null ? reportTextCell(text6) : escape4(text6)
       )
@@ -28095,12 +28168,12 @@ Prepared ${snapshot.preparedAtDisplay}.`;
   lines.push(
     "## Coverage and definitions",
     "",
-    display.scope,
+    display2.scope,
     "",
     ...Object.values(value.periods).flatMap((side, index) => [`### Period ${index ? "B" : "A"}`, "", ...sideNotes(side), ""]),
     `Within every service: ${value.selection.withinServices.join(", ") || "No additional refinement"}.`,
     "",
-    ...[...display.notes.filter((note) => note !== value.scope.population && note !== value.scope.authorPolicy), ...formatter3.readingNotesFor(value)].flatMap((note) => [note, ""])
+    ...[...display2.notes.filter((note) => note !== value.scope.population && note !== value.scope.authorPolicy), ...formatter3.readingNotesFor(value)].flatMap((note) => [note, ""])
   );
   return [...lines, PRODUCT_TITLE, ""].join("\n");
 }
@@ -28213,7 +28286,7 @@ var init_period_report_output = __esm({
     millisecondsFormatter2 = createReportComparison(void 0, millisecondsTiming2.duration);
     duration2 = (value, snapshot) => snapshot?.presentation?.schemaVersion === 3 ? millisecondsTiming2.duration(value) : value === null ? "Not measured" : `${exactNumber(value)} ms`;
     durationChange = (value) => millisecondsFormatter2.formatChange(value, "ms");
-    share = (count7, total) => `${count7} / ${total} (${total ? number2(count7 * 100 / total) + "%" : "Not applicable"})`;
+    share = (count8, total) => `${count8} / ${total} (${total ? number2(count8 * 100 / total) + "%" : "Not applicable"})`;
     signed = (value) => `${value > 0 ? "+" : ""}${number2(value)}`;
     count5 = (value, singular) => `${number2(value)} ${singular}${Math.abs(value) === 1 ? "" : "s"}`;
     delta = (comparison, snapshot) => comparison?.delta ? comparison.delta.unit === "ms" && snapshot?.presentation?.schemaVersion === 3 ? durationChange(comparison.delta.value) : `${signed(comparison.delta.value)} ${comparison.delta.unit === "percentage-points" ? "percentage points" : comparison.delta.unit}` : comparison?.status === "incompatible" ? "Different metric definitions; not comparable" : "Not comparable";
@@ -28239,10 +28312,10 @@ var init_period_report_output = __esm({
     });
     sampleNote = "Compare each value with its assessed or timed sample count. Unequal coverage can reflect different subsets; it does not establish overall improvement. Differences are descriptive, not causal.";
     sampleNoteFor = (value) => value.definitions.metricProjectionVersion === 4 ? "Recorded timings keep their own request or call counts. Different coverage does not establish overall improvement. Differences are descriptive, not causal." : sampleNote;
-    markdownTable = (headers2, rows, numeric = [], cell = escape4) => [
+    markdownTable = (headers2, rows, numeric = [], cell2 = escape4) => [
       `| ${headers2.map(escape4).join(" | ")} |`,
       `|${headers2.map((_2, index) => numeric.includes(index) ? "---:" : "---").join("|")}|`,
-      ...rows.map((cells, row) => `| ${cells.map((value, column) => cell(value, row, column)).join(" | ")} |`),
+      ...rows.map((cells, row) => `| ${cells.map((value, column) => cell2(value, row, column)).join(" | ")} |`),
       ""
     ];
     headers = ["Measure", "Period A", "Period B", "Observed difference"];
@@ -28594,14 +28667,14 @@ ${H.join(`
             let g = i();
             e = e.substring(t[0].length);
             let k = t[2].split(`
-`, 1)[0], P2 = t[1].length, R = this.options.pedantic ? X(k, P2) : k.replace(this.rules.other.leadingSpaceTab, (W) => X(W, P2)), m = e.split(`
+`, 1)[0], P2 = t[1].length, R = this.options.pedantic ? X(k, P2) : k.replace(this.rules.other.leadingSpaceTab, (W2) => X(W2, P2)), m = e.split(`
 `, 1)[0], E2 = !R.trim(), b = 0;
             if (this.options.pedantic ? (b = 2, d = R.trimStart()) : E2 ? b = P2 + 1 : (b = R.search(this.rules.other.nonSpaceChar), b = b > 4 ? 1 : b, d = R.slice(b), b += P2), E2 && this.rules.other.blankLine.test(m) && (e = e.substring(m.length + 1), p = true), !p) {
-              let W = this.rules.other.nextBulletRegex(b), ue = this.rules.other.hrRegex(b), pe = this.rules.other.fencesBeginRegex(b), ce = this.rules.other.headingBeginRegex(b), $e = this.rules.other.htmlBeginRegex(b), Le = this.rules.other.blockquoteBeginRegex(b);
+              let W2 = this.rules.other.nextBulletRegex(b), ue = this.rules.other.hrRegex(b), pe = this.rules.other.fencesBeginRegex(b), ce = this.rules.other.headingBeginRegex(b), $e = this.rules.other.htmlBeginRegex(b), Le = this.rules.other.blockquoteBeginRegex(b);
               for (; e; ) {
                 let he = e.split(`
 `, 1)[0], G;
-                if (m = he, this.options.pedantic ? (m = m.replace(this.rules.other.listReplaceNesting, "  "), G = m) : G = m.replace(this.rules.other.leadingSpaceTab, (Ae) => X(Ae)), pe.test(m) || ce.test(m) || $e.test(m) || Le.test(m) || W.test(m) || ue.test(m)) break;
+                if (m = he, this.options.pedantic ? (m = m.replace(this.rules.other.listReplaceNesting, "  "), G = m) : G = m.replace(this.rules.other.leadingSpaceTab, (Ae) => X(Ae)), pe.test(m) || ce.test(m) || $e.test(m) || Le.test(m) || W2.test(m) || ue.test(m)) break;
                 if (G.search(this.rules.other.nonSpaceChar) >= b || !m.trim()) d += `
 ` + G.slice(b);
                 else {
@@ -30187,9 +30260,9 @@ async function readSavedArtifactFile(session, state, bundleId2, kind2, format) {
 async function readSavedComparison(session, state, bundleId2) {
   const entry3 = savedArtifact(state, bundleId2, "comparison");
   const { manifest } = await readComparisonManifest(session, entry3);
-  const display = restoreOneSidedMetricDisplay(manifest.comparison, manifest.sourceFacts, manifest.comparisonHash);
+  const display2 = restoreOneSidedMetricDisplay(manifest.comparison, manifest.sourceFacts, manifest.comparisonHash);
   return {
-    ...display,
+    ...display2,
     ...manifest.title !== void 0 ? { canonicalTitle: manifest.title } : {},
     artifact: describeSavedArtifact(entry3, state),
     sources: entry3.sourceReports.map((source) => {
@@ -30822,12 +30895,12 @@ function projectReportContext(collected, options, selectedReview) {
     unavailable: entries3.filter((entry3) => entry3.status === "unavailable" && entry3.activityState !== "automatic").length,
     ...entries3.some((entry3) => entry3.activityState === "automatic") ? { noNewMessage: entries3.filter((entry3) => entry3.activityState === "automatic").length } : {},
     partial: entries3.filter((entry3) => entry3.status === "partial").length,
-    authorExcludedGroups: collected.anchors.reduce((sum, anchor) => sum + anchor.authorExcludedGroups, 0),
-    sourceBytes: review.reduce((sum, entry3) => sum + Buffer.byteLength(entry3.original ?? ""), 0),
-    projectedBytes: entries3.reduce((sum, entry3) => sum + Buffer.byteLength(entry3.text ?? ""), 0)
+    authorExcludedGroups: collected.anchors.reduce((sum2, anchor) => sum2 + anchor.authorExcludedGroups, 0),
+    sourceBytes: review.reduce((sum2, entry3) => sum2 + Buffer.byteLength(entry3.original ?? ""), 0),
+    projectedBytes: entries3.reduce((sum2, entry3) => sum2 + Buffer.byteLength(entry3.text ?? ""), 0)
   };
   const copies = new Map([...selectedReview, ...review].map((entry3) => [entry3.key, entry3]));
-  if (copies.size > REPORT_CONTEXT_LIMITS.entries || [...copies.values()].some((entry3) => typeof entry3.original !== "string" && entry3.original !== null) || [...copies.values()].reduce((sum, entry3) => sum + Buffer.byteLength(entry3.original ?? ""), 0) > REPORT_CONTEXT_LIMITS.bytes || [...copies.values()].reduce((sum, entry3) => sum + Buffer.byteLength(entry3.text ?? ""), 0) > REPORT_CONTEXT_LIMITS.bytes) {
+  if (copies.size > REPORT_CONTEXT_LIMITS.entries || [...copies.values()].some((entry3) => typeof entry3.original !== "string" && entry3.original !== null) || [...copies.values()].reduce((sum2, entry3) => sum2 + Buffer.byteLength(entry3.original ?? ""), 0) > REPORT_CONTEXT_LIMITS.bytes || [...copies.values()].reduce((sum2, entry3) => sum2 + Buffer.byteLength(entry3.text ?? ""), 0) > REPORT_CONTEXT_LIMITS.bytes) {
     throw new BoardError("Selected and contextual copies exceed the 3000-copy or 4 MiB UTF-8 text budget. Narrow the report.", 422);
   }
   return {
@@ -30910,9 +30983,9 @@ function projectNativeReportCopies(records, key4, input = {}) {
     });
     if (selected && options.promptMode !== "none") review.push(projected);
   }
-  function appendField(record, fact3, path31, field) {
+  function appendField(record, fact3, path32, field) {
     if (!field) fail11();
-    append(record, JSON.stringify([fact3.key, path31]), {
+    append(record, JSON.stringify([fact3.key, path32]), {
       kind: fact3.kind,
       author: "unknown",
       representation: "source-field",
@@ -30928,17 +31001,17 @@ function projectNativeReportCopies(records, key4, input = {}) {
       return;
     }
     if (!Array.isArray(field.value)) fail11();
-    const text6 = (path31, value) => appendField(record, fact3, path31, { availability: field.availability, value });
+    const text6 = (path32, value) => appendField(record, fact3, path32, { availability: field.availability, value });
     for (const [index, question] of field.value.entries()) {
-      const path31 = `questions/${index}`;
-      if (typeof question === "string") text6(path31, question);
+      const path32 = `questions/${index}`;
+      if (typeof question === "string") text6(path32, question);
       else {
         if (!question || !Array.isArray(question.options)) fail11();
-        text6(`${path31}/question`, question.question);
+        text6(`${path32}/question`, question.question);
         for (const [optionIndex, option] of question.options.entries()) {
           for (const name of ["label", "submitResponse", "description"]) {
             if (name !== "description" || option.description !== void 0) {
-              text6(`${path31}/options/${optionIndex}/${name}`, option[name]);
+              text6(`${path32}/options/${optionIndex}/${name}`, option[name]);
             }
           }
         }
@@ -31601,9 +31674,9 @@ function retainedTextTitle(text6, fallback) {
   const first = text6.search(/\S/u);
   if (first < 0) return fallback;
   const start = titleGraphemes.segment(text6).containing(first).index;
-  let end = start, count7 = 0;
+  let end = start, count8 = 0;
   for (const part of titleGraphemes.segment(text6.slice(start))) {
-    if (++count7 > 120) break;
+    if (++count8 > 120) break;
     if (/\S/u.test(part.segment)) end = start + part.index + part.segment.length;
   }
   return text6.slice(start, end);
@@ -31969,16 +32042,16 @@ ${legacy.content}`), coverage: { ...legacy.coverage, ...native2.coverage } };
     if (JSON.stringify(paired) !== JSON.stringify(manifest.periodComparison) || corpusHash(paired) !== manifest.periodComparisonHash || snapshot.evaluationFacts !== void 0 || manifest.evaluationFacts !== void 0) {
       throw new ReportContentError("report-period-integrity");
     }
-    const display = periodReportDisplay(paired);
+    const display2 = periodReportDisplay(paired);
     add(
-      display.title,
-      display.dates,
-      display.finding,
-      display.scope,
-      ...display.notes,
-      ...display.rows.flat(),
-      ...display.timing.flat(),
-      ...display.metrics.flat()
+      display2.title,
+      display2.dates,
+      display2.finding,
+      display2.scope,
+      ...display2.notes,
+      ...display2.rows.flat(),
+      ...display2.timing.flat(),
+      ...display2.metrics.flat()
     );
     for (const side of Object.values(paired.periods)) {
       add(comparisonDocumentText(side.facts));
@@ -32009,9 +32082,9 @@ ${legacy.content}`), coverage: { ...legacy.coverage, ...native2.coverage } };
       add(`Saved review-status coverage: ${facts.reviewStatuses.length} of ${facts.memberships.length} interactions`);
       for (const { reviewStatus: { execution, assessment } } of facts.reviewStatuses) {
         add(`Recorded tool status: calls ${execution.calls}; succeeded ${execution.succeeded}; failed ${execution.failed}; other ${execution.other}`);
-        for (const { cause, count: count7 } of execution.causes) {
+        for (const { cause, count: count8 } of execution.causes) {
           const label = ["workiq-sign-in-required", "request-timeout", "access-denial"].includes(cause) ? "Recorded operational cause" : "Recorded reason availability";
-          add(`${label}: ${cause}; count ${count7}`);
+          add(`${label}: ${cause}; count ${count8}`);
         }
         add(`Saved assessment status: ${assessment.result}`, `Saved assessment attempt: ${assessment.latestAttempt}`);
         if (assessment.unavailableReason !== null) add(`Saved assessment availability: ${assessment.unavailableReason}`);
@@ -32128,8 +32201,8 @@ async function extractReportFile(document2, { signal } = {}) {
     const text6 = inspectReportResultText(document2.manifest, document2.snapshot);
     const populations = facts ? [facts] : Object.values(document2.snapshot.periodComparison?.periods ?? {}).flatMap((side) => side.resultFacts ? [side.resultFacts] : []);
     const resultParts = populations.flatMap((facts2) => {
-      const display = reportResultContent(facts2);
-      return [display.boundary, ...display.groups.map((group) => group.summary), ...display.calls.flatMap((call) => [call.title, ...call.lines])];
+      const display2 = reportResultContent(facts2);
+      return [display2.boundary, ...display2.groups.map((group) => group.summary), ...display2.calls.flatMap((call) => [call.title, ...call.lines])];
     });
     if (text6) resultParts.push(...text6.copies.filter((copy) => copy.text !== null).map((copy) => copy.text));
     content = corpusText([content, ...resultParts].join("\n"));
@@ -32540,9 +32613,9 @@ function createCorpusSources(session, { source: sourceFor2, nativeReader, report
           completeness = "unavailable";
         }
         const author = promptAuthorship.read(message.source);
-        const display = promptAuthorship.display(message.source);
+        const display2 = promptAuthorship.display(message.source);
         entries3.push(entry2(type, message.key, {
-          title: display.automatic ? display.label : message.kind === "prompt" ? "Recorded request" : "Retained follow-up",
+          title: display2.automatic ? display2.label : message.kind === "prompt" ? "Recorded request" : "Retained follow-up",
           content: completeness === "unavailable" ? "" : message.source.text,
           source: retainedSource(record),
           target: type === "interaction" && completeness !== "unavailable" ? { ...target, focus: "selectedContext" } : target,
@@ -32634,7 +32707,7 @@ function createCorpusSources(session, { source: sourceFor2, nativeReader, report
       issue("replies", "retained", !source.available ? "source-unavailable" : model.consent.state === "revoked" ? "revoked" : "not-authorized");
     } else if (source.available && model.consent.state === "enabled") {
       const authority = stamp2(state, source, native2?.revision, replyEvidence);
-      const verify = async () => {
+      const verify2 = async () => {
         check();
         const current2 = await loadBoardState(session, { readOnly: true });
         const evidence = current2.evidenceFile || current2.evidence || [];
@@ -32644,7 +32717,7 @@ function createCorpusSources(session, { source: sourceFor2, nativeReader, report
       };
       const batchSize = 8;
       for (let offset = 0; offset < captures2.length; offset += batchSize) {
-        await verify();
+        await verify2();
         const batch = captures2.slice(offset, offset + batchSize);
         const read2 = await Promise.allSettled(batch.map(async (capture) => {
           check();
@@ -32667,7 +32740,7 @@ function createCorpusSources(session, { source: sourceFor2, nativeReader, report
             coverage: { completeness: result.completeness, finality: result.finality, author: "assistant" }
           });
         }));
-        await verify();
+        await verify2();
         for (const [i, result] of read2.entries()) {
           if (result.status === "fulfilled") entries3.push(result.value);
           else issue("reply", batch[i].observation.observationRef, corpusErrorCode(assessmentError(result.reason)));
@@ -32869,8 +32942,8 @@ function createNativeRetainedViews(context2, persistence, lifecycle) {
     signal?.throwIfAborted();
   }
   function cursor(input, request2, reader, key4, kind2) {
-    const { page, revision, at: at2, sourceRevision, ...selector2 } = input;
-    const selectionRef = reference2(key4, "native-public-view-v1", [kind2, selector2]);
+    const { page, revision, at: at2, sourceRevision, ...selector3 } = input;
+    const selectionRef = reference2(key4, "native-public-view-v1", [kind2, selector3]);
     const basis2 = {
       owner: request2.owner,
       revision: reader.revision,
@@ -33223,13 +33296,13 @@ function createNativeRetainedViews(context2, persistence, lifecycle) {
           totals.taskStates += Number(Boolean(record.outcomes.task));
           const message = record.fields.message ?? record.messageParts?.find((part) => part.availability === "recorded");
           if ((!finish || includeRecognition) && message?.availability === "recorded" && typeof message.value?.text === "string" && (!recognition || message.value.author === "user" && recognition.kind !== "prompt")) {
-            const display = corpusText(message.value.text);
+            const display2 = corpusText(message.value.text);
             recognition = {
               kind: message.value.author === "user" ? "prompt" : message.value.author === "assistant" ? "reply" : "context",
               text: previewText(message.value.text, "Recorded message is empty."),
               // Keep the existing private-value projection and the page byte bound.
               // The membership / report reference below still uses its original title.
-              cardText: !finish && display.trim() && bytes(display) <= maximumResponseBytes / (4 * input.page.limit) ? display : null
+              cardText: !finish && display2.trim() && bytes(display2) <= maximumResponseBytes / (4 * input.page.limit) ? display2 : null
             };
           }
           if ((!finish || includeRecognition) && !recognition) for (const fact3 of record.chatSource?.observations ?? []) {
@@ -33437,9 +33510,9 @@ function createNativeRetainedViews(context2, persistence, lifecycle) {
     const available2 = ["tools", "outcomes", "sources", "conversations"].includes(input.dimension);
     const options = /* @__PURE__ */ new Map();
     let optionBytes = 0, unavailable6 = 0;
-    function add(value, label, count7) {
+    function add(value, label, count8) {
       if (value === null) {
-        unavailable6 += count7;
+        unavailable6 += count8;
         return;
       }
       if (!options.has(value)) {
@@ -33447,7 +33520,7 @@ function createNativeRetainedViews(context2, persistence, lifecycle) {
         if (optionBytes > NATIVE_READ_LIMITS.bytes) fail14("NATIVE_VIEW_INVENTORY_TOO_LARGE", 413);
         options.set(value, { value, label, count: 0 });
       }
-      options.get(value).count += count7;
+      options.get(value).count += count8;
     }
     return query({
       schemaVersion: 1,
@@ -33466,9 +33539,9 @@ function createNativeRetainedViews(context2, persistence, lifecycle) {
         if (input.dimension === "tools") add(row.tool, row.tool, 1);
         if (input.dimension === "outcomes") add(row.outcome, row.outcome, 1);
       },
-      onMember(unit, publicId, count7, recognition) {
-        if (input.dimension === "sources") add(unit.sourceId, title(unit.sourceId), count7);
-        if (input.dimension === "conversations") add(publicId, title(unit.sourceId) + (recognition ? ": " + recognition : ": Message text unavailable"), count7);
+      onMember(unit, publicId, count8, recognition) {
+        if (input.dimension === "sources") add(unit.sourceId, title(unit.sourceId), count8);
+        if (input.dimension === "conversations") add(publicId, title(unit.sourceId) + (recognition ? ": " + recognition : ": Message text unavailable"), count8);
       },
       finish(header2, cursor2, id5) {
         const page = pageBuilder(input.page.limit, cursor2.after);
@@ -33610,8 +33683,8 @@ function createNativeRetainedViews(context2, persistence, lifecycle) {
           retain(selected, row.id);
           retain(parents, row.scenarioId);
         },
-        onMember(unit, _publicId, count7) {
-          if (name === "undated" && count7 === 0) {
+        onMember(unit, _publicId, count8) {
+          if (name === "undated" && count8 === 0) {
             retain(contexts, unit.unitKey);
             retain(parents, unit.unitKey);
           }
@@ -34615,8 +34688,8 @@ async function createRuntimeAccess(context2, {
           await assertCollectorLockOwned(directory2);
           const check = () => {
             checkNativeAdmission(guarded);
-            const stamp3 = lifecycle.assertGlobalCollectionAdmission(token2);
-            if (stamp3.owner !== admission.owner || stamp3.expectedRevision !== input.expectedRevision || stamp3.paused !== !input.enabled) throw failure3("wire_access_global_collection_stale", 409);
+            const stamp4 = lifecycle.assertGlobalCollectionAdmission(token2);
+            if (stamp4.owner !== admission.owner || stamp4.expectedRevision !== input.expectedRevision || stamp4.paused !== !input.enabled) throw failure3("wire_access_global_collection_stale", 409);
           };
           check();
           guarded.dispatched();
@@ -35622,9 +35695,9 @@ async function createCollector(session, { timers = true, onCommitted = () => {
           files.assertCurrent();
           if (!publicationSources.size) return;
           for (const frame of publicationSources.values()) {
-            const stamp3 = sourceFileStamp(statSync2(files.historyFile(frame.sourceId)));
-            if (stamp3 !== frame.stamp) {
-              const before = frame.stamp.split(":"), current = stamp3.split(":");
+            const stamp4 = sourceFileStamp(statSync2(files.historyFile(frame.sourceId)));
+            if (stamp4 !== frame.stamp) {
+              const before = frame.stamp.split(":"), current = stamp4.split(":");
               throw changedSource(before.slice(0, 3).join(":") !== current.slice(0, 3).join(":") ? "history-identity" : before[3] !== current[3] ? "history-size" : "history-times");
             }
           }
@@ -35648,10 +35721,10 @@ async function createCollector(session, { timers = true, onCommitted = () => {
           assertAcquisitionCurrent();
         };
         const checkPublication = () => preparePublicationCheck(assertPublicationCurrent, revalidateMetadata);
-        const bindPublicationSource = (source, file, stamp3) => {
+        const bindPublicationSource = (source, file, stamp4) => {
           const membership = sourceMembership(source), prior = publicationSources.get(source.sessionId);
           if (prior && prior.membership !== membership) throw changedSource("membership");
-          publicationSources.set(source.sessionId, { file, sourceId: source.sessionId, stamp: stamp3, membership });
+          publicationSources.set(source.sessionId, { file, sourceId: source.sessionId, stamp: stamp4, membership });
         };
         let backfillPrevious = null, backfillNext = null, backfillState = null, backfillProblem = null;
         const fingerprint4 = hash5(JSON.stringify([config.appDbPath, config.sessionRoot, config.windowDays]));
@@ -35678,7 +35751,7 @@ async function createCollector(session, { timers = true, onCommitted = () => {
           try {
             file = files.historyFile(id5);
             const info = await stat2(file);
-            const stamp3 = [info.size, info.mtimeMs, info.ctimeMs, info.ino, info.birthtimeMs].join(":");
+            const stamp4 = [info.size, info.mtimeMs, info.ctimeMs, info.ino, info.birthtimeMs].join(":");
             let saved, projectedSaved;
             if (registeredReferenceSource(index, fingerprint4, id5)) {
               saved = await readJson(checkpointPath);
@@ -35690,7 +35763,7 @@ async function createCollector(session, { timers = true, onCommitted = () => {
               );
               bindPublicationSource(source, file, sourceFileStamp(info));
             }
-            if (index.sources[id5]?.fileStamp === stamp3 && index.sources[id5].cursor?.backlogBytes === index.sources[id5].cursor?.partialBytes && !index.sources[id5].error) {
+            if (index.sources[id5]?.fileStamp === stamp4 && index.sources[id5].cursor?.backlogBytes === index.sources[id5].cursor?.partialBytes && !index.sources[id5].error) {
               index.sources[id5].lastCheckedAt = until;
               index.sources[id5].lastAttemptAt = until;
               checked++;
@@ -35751,9 +35824,9 @@ async function createCollector(session, { timers = true, onCommitted = () => {
               });
               const retained = restoreRetainedInteractionModelMetadata(tail.reset ? [] : saved?.events ?? [], records, id5).map((event) => event.type === "user.message" && event.data?.wirePromptAuthorship === void 0 ? { ...event, data: { ...event.data, wirePromptAuthorship: { actor: "unknown", basis: "legacy-missing" } } } : event);
               const modelEvents = filterDeletedEvents(retained.concat(incoming), id5, state.deletion);
-              const unique6 = /* @__PURE__ */ new Map();
+              const unique7 = /* @__PURE__ */ new Map();
               for (const event of modelEvents) {
-                const previous = unique6.get(event.id);
+                const previous = unique7.get(event.id);
                 if (hasCompletionReference(previous)) {
                   if (previous.type !== event.type || previous.timestamp !== event.timestamp || previous.data.toolCallId !== event.data?.toolCallId || previous.data.success !== event.data?.success) {
                     throw new BoardError("A source event conflicts with a retained completion reference.", 409);
@@ -35761,13 +35834,13 @@ async function createCollector(session, { timers = true, onCommitted = () => {
                   continue;
                 }
                 const conflict2 = previous?.type === "user.message" && event.type === "user.message" && (previous.timestamp !== event.timestamp || previous.data?.content !== event.data?.content || previous.data?.wirePromptCapture?.conflict);
-                unique6.set(event.id, conflict2 && event.data?.wirePromptCapture ? { ...event, data: {
+                unique7.set(event.id, conflict2 && event.data?.wirePromptCapture ? { ...event, data: {
                   ...event.data,
                   wirePromptCapture: { ...event.data.wirePromptCapture, conflict: true },
                   wirePromptAuthorship: promptAuthorship.merge(promptRecord(previous), promptRecord(event))
                 } } : event);
               }
-              const compactEvents = filterDeletedEvents([...unique6.values()], id5, state.deletion);
+              const compactEvents = filterDeletedEvents([...unique7.values()], id5, state.deletion);
               const referenceEvents = new Map((projectedSaved ?? []).map((event) => [event.id, event]));
               const events = compactEvents.map((event) => hasCompletionReference(event) ? referenceEvents.get(event.id) : event);
               if (events.some((event) => !event)) throw new BoardError("A retained completion reference could not be resolved.", 409);
@@ -35862,7 +35935,7 @@ async function createCollector(session, { timers = true, onCommitted = () => {
             index.sources[id5] = {
               scanned: true,
               logBytes: info.size,
-              fileStamp: stamp3,
+              fileStamp: stamp4,
               cursor: tail.cursor,
               diagnostics,
               ...index.sources[id5]?.backfill ? { backfill: index.sources[id5].backfill } : {},
@@ -36365,7 +36438,7 @@ async function createCollector(session, { timers = true, onCommitted = () => {
           for (const sourceId2 of sourceIds) {
             const source = roster.find((source2) => source2.sessionId === sourceId2);
             const owned2 = selected.filter((record) => record.sourceSessionId === sourceId2);
-            const stamp3 = fileStamp(await stat2(files.historyFile(sourceId2)));
+            const stamp4 = fileStamp(await stat2(files.historyFile(sourceId2)));
             const result = await qualifyRetainedInteractionModels(
               config,
               source,
@@ -36375,8 +36448,8 @@ async function createCollector(session, { timers = true, onCommitted = () => {
               since
             );
             modelQualification.bytesRead += result.bytesRead;
-            const changed2 = fileStamp(await stat2(files.historyFile(sourceId2))) !== stamp3;
-            stamps.push({ sourceId: sourceId2, stamp: stamp3 });
+            const changed2 = fileStamp(await stat2(files.historyFile(sourceId2))) !== stamp4;
+            stamps.push({ sourceId: sourceId2, stamp: stamp4 });
             for (const record of owned2) {
               const evidence = result.checkpoint.models[record.userPrompt.sourceEventId];
               const fact3 = evidence ? interactionModelFact({ ...record, originalModelEvidence: evidence }) : null;
@@ -36742,7 +36815,7 @@ async function createCollector(session, { timers = true, onCommitted = () => {
       revision ??= state.revision;
       const activeIds = discovery ? new Set(discovery.roster.filter((r) => r.eligible).map((r) => r.sessionId)) : null;
       const sources = Object.entries(index.sources).filter(([id5]) => !activeIds || activeIds.has(id5)).map(([, value]) => value);
-      const sum = (read2) => sources.reduce((total, row) => total + (read2(row) ?? 0), 0);
+      const sum2 = (read2) => sources.reduce((total, row) => total + (read2(row) ?? 0), 0);
       const cursors = Object.entries(index.sources).map(([sessionId, value]) => ({ sessionId, ...value }));
       const history2 = historyStatus.coverage(discovery?.roster, cursors, (state.evidence ?? []).map((row) => row.sourceSessionId));
       for (const issue of history2.issues) {
@@ -36778,15 +36851,15 @@ async function createCollector(session, { timers = true, onCommitted = () => {
         cadence: { pollSeconds: config?.pollSeconds ?? 5, reconciliationSeconds: 30, browserPollSeconds: 5 },
         metrics: {
           ...index.metrics,
-          backlogBytes: sum((r) => r.cursor?.backlogBytes),
+          backlogBytes: sum2((r) => r.cursor?.backlogBytes),
           partialSources: sources.filter((r) => r.cursor?.partialBytes).length,
           truncatedSources: sources.filter((r) => r.cursor?.droppedBytes).length,
-          rotations: sum((r) => r.cursor?.rotations),
-          malformedLines: sum((r) => (r.cursor?.malformedLines ?? 0) + (r.backfill?.malformedLines ?? 0)),
-          oversizedLines: sum((r) => (r.cursor?.oversizedLines ?? 0) + (r.backfill?.oversizedLines ?? 0)),
-          credentialExclusions: sum((r) => r.diagnostics?.credentialExclusions),
-          unsupportedPromptContents: sum((r) => r.diagnostics?.unsupportedPromptContents),
-          contextEvictions: sum((r) => (r.diagnostics?.contextEvictions ?? 0) + (r.backfill?.contextEvictions ?? 0))
+          rotations: sum2((r) => r.cursor?.rotations),
+          malformedLines: sum2((r) => (r.cursor?.malformedLines ?? 0) + (r.backfill?.malformedLines ?? 0)),
+          oversizedLines: sum2((r) => (r.cursor?.oversizedLines ?? 0) + (r.backfill?.oversizedLines ?? 0)),
+          credentialExclusions: sum2((r) => r.diagnostics?.credentialExclusions),
+          unsupportedPromptContents: sum2((r) => r.diagnostics?.unsupportedPromptContents),
+          contextEvictions: sum2((r) => (r.diagnostics?.contextEvictions ?? 0) + (r.backfill?.contextEvictions ?? 0))
         },
         discovery: discovery ?? null,
         sourceErrors: discovery ? history2.summary.unavailable : null,
@@ -37009,9 +37082,9 @@ function checkpointIndex(rows, witness) {
     const signature = hash19(text6);
     witness.update(signature);
     for (const ref11 of refs4) {
-      const matches3 = index.get(ref11) ?? [];
-      if (matches3.length <= 4) matches3.push(signature);
-      index.set(ref11, matches3);
+      const matches4 = index.get(ref11) ?? [];
+      if (matches4.length <= 4) matches4.push(signature);
+      index.set(ref11, matches4);
     }
     if (index.size > limits.indexKeys) bound2();
   }
@@ -37130,11 +37203,11 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
   const uses = /* @__PURE__ */ new Map(), turns2 = /* @__PURE__ */ new Map(), names = /* @__PURE__ */ new Set(), externalNames = /* @__PURE__ */ new Set(), hooks = [], proposals = [];
   const contextRefs = /* @__PURE__ */ new Map(), parentTaskRefs = /* @__PURE__ */ new Set();
   let openTurn, lastModeNotice, openHook, lastJournalCompletion, lifecycle, setup, lastTaskPrompt;
-  let window2 = [], firstPrompt, boot, bootEnd, sourceIdentity, stamp3, size, offset = 0, parts2 = 0, entries3 = 0, projected = 0;
+  let window2 = [], firstPrompt, boot, bootEnd, sourceIdentity, stamp4, size, offset = 0, parts2 = 0, entries3 = 0, projected = 0;
   let starts = 0, resultBytes = 0, terminal = false;
   let requireDistinctOriginals = false, distinctOriginals = true;
   const used = (key4) => uses.get(key4) ?? 0;
-  const count7 = (key4) => {
+  const count8 = (key4) => {
     uses.set(key4, used(key4) + 1);
     if (uses.size + contextRefs.size > limits.indexKeys) bound2();
   };
@@ -37157,7 +37230,7 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
     const j2 = p.journal ??= { hops: 0 };
     if (!j2.hops) {
       const parent = hash19(p.event.id);
-      count7(parent);
+      count8(parent);
       p.refs.push(parent);
     }
     const sig = turn ? timingSignature(e) : null;
@@ -37167,7 +37240,7 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
       j2.turn = e.data.turnId;
       j2.signature = sig;
       const turnKey = contextKey(j2.turn);
-      count7(turnKey);
+      count8(turnKey);
       p.refs.push(turnKey);
     }
     j2.last = e.id;
@@ -37187,7 +37260,7 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
       const sig = timingSignature(e);
       claimContext(contextKey(e.id), [sig]);
       for (const ref11 of [hash19(close.id), hash19(close.turn)]) {
-        count7(ref11);
+        count8(ref11);
         close.proposal.refs.push(ref11);
       }
       close.proposal.signatures.push(sig);
@@ -37302,7 +37375,7 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
     }
     const refs4 = [e.id, d.hookInvocationId, input.toolCallId].map(hash19);
     if (new Set(refs4).size !== refs4.length) refuse("ambiguous hook identities");
-    for (const key4 of refs4) count7(key4);
+    for (const key4 of refs4) count8(key4);
     hooks.push({ refs: refs4, name: hash19(input.toolName) });
     openHook = !projected2 && !Object.hasOwn(input, "toolResult") && permittedContextId(input.toolCallId) && !credential3(input.toolName) && boundedMetadata(e, item) ? { refs: refs4, timestamp: e.timestamp, endOffset: item.endOffset } : null;
     window2 = [];
@@ -37532,7 +37605,7 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
     if (origin && !matchesNext(window2, e, false, managed)) refuse("journal parent, initiating message or turn disagrees");
     const followsNotice = e.type === P && lastModeNotice?.endOffset === item.offset && id4(e.parentId) && hash19(e.parentId) === lastModeNotice.key && lastModeNotice.timestamp >= since && lastModeNotice.timestamp <= e.timestamp;
     const refs4 = rawRefs(e, causalParent || origin || followsNotice || followsSetup).map(hash19);
-    for (const key4 of refs4) count7(key4);
+    for (const key4 of refs4) count8(key4);
     if (id4(e.data.turnId)) {
       const k = hash19(e.data.turnId);
       turns2.set(k, (turns2.get(k) ?? 0) + 1);
@@ -37553,13 +37626,13 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
     terminal = true;
     const c = tail?.cursor, r = tail?.recovery;
     if (++parts2 > limits.parts) bound2();
-    if (!r || !c || tail.reset || c.rotations !== 0 || c.droppedBytes !== 0 || c.skipping || c.malformedLines !== 0 || tail.fenceTruncated || tail.fenceAnchor !== void 0 || r.readStart !== offset || ![c.offset, c.logBytes, c.partialBytes, r.readEnd].every(Number.isSafeInteger) || c.partialBytes < 0 || c.offset < offset || r.readEnd !== c.offset + c.partialBytes || r.readEnd > c.logBytes || r.readEnd - offset > TAIL_LIMITS.chunkBytes || c.backlogBytes !== c.logBytes - c.offset || typeof r.sourceIdentity !== "string" || !r.sourceIdentity || r.sourceIdentity !== c.identity || typeof r.sourceStamp !== "string" || !r.sourceStamp || sourceIdentity !== void 0 && (r.sourceIdentity !== sourceIdentity || r.sourceStamp !== stamp3 || c.logBytes !== size) || !Array.isArray(r.original) || !Array.isArray(r.projected)) refuse("incomplete or changed source coverage");
+    if (!r || !c || tail.reset || c.rotations !== 0 || c.droppedBytes !== 0 || c.skipping || c.malformedLines !== 0 || tail.fenceTruncated || tail.fenceAnchor !== void 0 || r.readStart !== offset || ![c.offset, c.logBytes, c.partialBytes, r.readEnd].every(Number.isSafeInteger) || c.partialBytes < 0 || c.offset < offset || r.readEnd !== c.offset + c.partialBytes || r.readEnd > c.logBytes || r.readEnd - offset > TAIL_LIMITS.chunkBytes || c.backlogBytes !== c.logBytes - c.offset || typeof r.sourceIdentity !== "string" || !r.sourceIdentity || r.sourceIdentity !== c.identity || typeof r.sourceStamp !== "string" || !r.sourceStamp || sourceIdentity !== void 0 && (r.sourceIdentity !== sourceIdentity || r.sourceStamp !== stamp4 || c.logBytes !== size) || !Array.isArray(r.original) || !Array.isArray(r.projected)) refuse("incomplete or changed source coverage");
     if (c.logBytes > TAIL_LIMITS.initialFileBytes || (entries3 += r.original.length + r.projected.length) > limits.entries) bound2();
     if (sourceIdentity === void 0) {
       witness.update(JSON.stringify([r.sourceIdentity, r.sourceStamp, c.logBytes]));
     }
     sourceIdentity = r.sourceIdentity;
-    stamp3 = r.sourceStamp;
+    stamp4 = r.sourceStamp;
     size = c.logBytes;
     const part = { start: null, hooks: [] };
     let i = 0, j2 = 0;
@@ -37583,8 +37656,8 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
     for (const name of externalNames) if (names.has(name)) refuse("an external request shares an observed tool name");
     if (!distinctOriginals && (proposals.length > 0 || requireDistinctOriginals)) refuse("an original could conceal a conflicting identity");
     for (const [key4, signatures] of contextRefs) {
-      const matches3 = checkpoint.get(key4) ?? [];
-      if (used(key4) || turns2.has(key4) || names.has(key4) || new Set(matches3).size !== matches3.length || matches3.some((sig) => !signatures.includes(sig))) refuse("context is not independently disjoint");
+      const matches4 = checkpoint.get(key4) ?? [];
+      if (used(key4) || turns2.has(key4) || names.has(key4) || new Set(matches4).size !== matches4.length || matches4.some((sig) => !signatures.includes(sig))) refuse("context is not independently disjoint");
     }
     if (hooks.some((h2) => h2.refs.some((key4) => used(key4) !== 1 || turns2.has(key4)) || names.has(h2.name))) {
       refuse("a hook may refer to another observed invocation");
@@ -37597,8 +37670,8 @@ function createExactEvidence(source, scope, { deletion, checkpointEvents, existi
       if ([...expected2].some(([key4, n]) => used(key4) !== n)) continue;
       const callKey = hash19(record.toolCalls[0].toolCallId);
       if ([...expected2.keys()].some((key4) => {
-        const matches3 = checkpoint.get(key4) ?? [];
-        return matches3.length > 4 || new Set(matches3).size !== matches3.length || matches3.some((sig) => !signatures.includes(sig) && !(key4 === callKey && promptEvidence.permits(callKey, sig)));
+        const matches4 = checkpoint.get(key4) ?? [];
+        return matches4.length > 4 || new Set(matches4).size !== matches4.length || matches4.some((sig) => !signatures.includes(sig) && !(key4 === callKey && promptEvidence.permits(callKey, sig)));
       })) continue;
       records.push(record);
     }
@@ -37764,16 +37837,16 @@ function createRuntimeClient(origin = RUNTIME_ORIGIN, { requireEnforced = false 
     ),
     { code: "WIRE_CANVAS_BINDING_CHANGED" }
   );
-  const readOnly = /* @__PURE__ */ new Set(["get_state", "reload_snapshot", "get_summary", "get_analytics", "get_snapshot"]);
-  async function request2(path31, input, capability) {
-    const response = await fetch(origin + path31, {
+  const readOnly = /* @__PURE__ */ new Set(["get_state", "reload_snapshot", "get_summary", "get_analytics", "get_snapshot", "get_diagnostic_calls"]);
+  async function request2(path32, input, capability) {
+    const response = await fetch(origin + path32, {
       redirect: "error",
       method: input === void 0 ? "GET" : "POST",
       headers: {
         Origin: origin,
         ...input === void 0 ? {} : { "Content-Type": "application/json" },
         ...capability ? { "X-Board-Capability": capability } : {},
-        ...path31 === "/api/session" ? { "X-Wire-Session-Protocol": "1" } : {}
+        ...path32 === "/api/session" ? { "X-Wire-Session-Protocol": "1" } : {}
       },
       ...input === void 0 ? {} : { body: JSON.stringify(input) },
       signal: AbortSignal.timeout(["refresh_history", "preview_export"].includes(input?.action) ? 12e4 : 1e4)
@@ -40500,11 +40573,11 @@ function createOperationIcons(entityCollections = graphEntityCollections) {
     if (layer !== "tool" || !["workiq-do_action", "workiq-call_function"].includes(row?.tool)) return [];
     const operations = /* @__PURE__ */ new Map();
     for (const target of row.targets?.length ? row.targets : [row.endpoint]) {
-      const path31 = target?.path;
-      if (typeof path31 !== "string" || !path31.startsWith("/")) continue;
-      const tail = path31.slice(path31.lastIndexOf("/") + 1);
+      const path32 = target?.path;
+      if (typeof path32 !== "string" || !path32.startsWith("/")) continue;
+      const tail = path32.slice(path32.lastIndexOf("/") + 1);
       const name = /^(?:microsoft\.graph\.)?([a-zA-Z][a-zA-Z0-9]*)(?:\([^/]*\))?$/.exec(tail)?.[1];
-      if (tail === name && collections.has(path31.split("/").at(-2))) continue;
+      if (tail === name && collections.has(path32.split("/").at(-2))) continue;
       if (name && Object.hasOwn(graph, name)) {
         operations.set(name, { label: graph[name][1], operationRole: graphRole(name) });
       }
@@ -42361,8 +42434,8 @@ function createWorkspaceState({ isCurrent, releaseReading }) {
       return Object.freeze({ authority, navigation: navigationGeneration, reading: readingIntent });
     },
     intentCurrent(intent) {
-      const matches3 = () => intent.navigation === navigationGeneration && intent.reading === readingIntent;
-      return matches3() && isCurrent(intent.authority) === true && matches3();
+      const matches4 = () => intent.navigation === navigationGeneration && intent.reading === readingIntent;
+      return matches4() && isCurrent(intent.authority) === true && matches4();
     },
     beginRead(authority) {
       const generation2 = readGeneration;
@@ -42515,10 +42588,10 @@ function createAnalysisSlice(localSearch, projection5) {
     }
     const legacyIds = legacyScenarioIds(snapshot, search), legacy = legacyIds ? new Set(legacyIds) : null;
     const hasQuery = Boolean(legacy) || Boolean(membership);
-    const matches3 = new Set(membership?.scenarioIds);
+    const matches4 = new Set(membership?.scenarioIds);
     const actionIds = new Set(membership?.actionIds);
     const withinLegacy = (row) => !legacy || legacy.has(row.scenarioId);
-    const searchRows = (rows2) => hasQuery ? rows2.filter((row) => withinLegacy(row) && (!membership || matches3.has(row.scenarioId) || actionIds.has(row.id))) : rows2;
+    const searchRows = (rows2) => hasQuery ? rows2.filter((row) => withinLegacy(row) && (!membership || matches4.has(row.scenarioId) || actionIds.has(row.id))) : rows2;
     const refineRows = (rows2) => searchRows(rows2).filter((row) => withinServices.every((service) => row.serviceAssociation?.services.includes(service)));
     const rows = refineRows(base.rows);
     const population = base.population?.scenarioIds;
@@ -42529,7 +42602,7 @@ function createAnalysisSlice(localSearch, projection5) {
     }
     const context2 = new Set(contextIds);
     const matched = new Set(rows.map((row) => row.scenarioId).filter((id5) => records.has(id5)));
-    const scenarioIds = population ? population.filter((id5) => matched.has(id5) || !withinServices.length && (!legacy || legacy.has(id5)) && (!membership || matches3.has(id5)) && records.get(id5).recordKind === "native-conversation" && (context2.has(id5) || !records.get(id5).nativeConversation.calls.length)) : [...matched];
+    const scenarioIds = population ? population.filter((id5) => matched.has(id5) || !withinServices.length && (!legacy || legacy.has(id5)) && (!membership || matches4.has(id5)) && records.get(id5).recordKind === "native-conversation" && (context2.has(id5) || !records.get(id5).nativeConversation.calls.length)) : [...matched];
     let analytics = base;
     if (hasQuery || withinServices.length) {
       if (population && typeof projection5.narrowPopulation !== "function") {
@@ -42558,8 +42631,8 @@ function createAnalysisSlice(localSearch, projection5) {
           noResponseRecordCount: rows.filter((row) => !row.observedGraphHttp).length
         } : base.httpCoverage,
         warnings: base.warnings.flatMap((warning) => {
-          const count7 = warning.code === "undated-activity" ? rows.filter((row) => !row.startedAt).length : warning.code === "recorded-sites-not-wire-counts" ? rows.length : null;
-          return count7 === null ? [warning] : count7 ? [{ ...warning, count: count7 }] : [];
+          const count8 = warning.code === "undated-activity" ? rows.filter((row) => !row.startedAt).length : warning.code === "recorded-sites-not-wire-counts" ? rows.length : null;
+          return count8 === null ? [warning] : count8 ? [{ ...warning, count: count8 }] : [];
         })
       };
     }
@@ -43793,7 +43866,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
   }
   function identifyInteraction() {
     const scenario = workspaceState.evidence.scenarios.find((item) => item.scenarioId === workspaceState.route.request);
-    $2("contextSidebarTitle").textContent = scenario ? excerpt(scenario) : "Interaction unavailable";
+    $2("contextSidebarTitle").textContent = scenario ? excerpt2(scenario) : "Interaction unavailable";
     $2("contextSidebarTitle").setAttribute("data-interaction-identity", "");
   }
   function restoreSidebarPosition(saved, valid2) {
@@ -44229,7 +44302,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const listeners = pageEvents ? { signal: AbortSignal.any([signal, pageEvents.signal]) } : void 0;
       const page = presentation.page(key4, items.length, size), start = page * size;
       const pager = viewKey(el("div", "pager list-pager"), "pager:" + key4);
-      const label = viewKey(el("span", "", items.length ? `${count7(start + 1)}-${count7(Math.min(start + size, items.length))} of ${count7(items.length)} ${noun}` : `0 ${noun}`), "position:" + key4);
+      const label = viewKey(el("span", "", items.length ? `${count8(start + 1)}-${count8(Math.min(start + size, items.length))} of ${count8(items.length)} ${noun}` : `0 ${noun}`), "position:" + key4);
       label.tabIndex = -1;
       label.id = "pager-position-" + encodeURIComponent(key4);
       label.dataset.pagePosition = "";
@@ -44267,7 +44340,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
           const numberField = el("span", "number-field");
           numberField.style.setProperty("--number-digits", String(Math.max(2, String(pages).length)));
           numberField.append(input);
-          fieldLabel.append(numberField, el("span", "", `of ${count7(pages)}`));
+          fieldLabel.append(numberField, el("span", "", `of ${count8(pages)}`));
           const go2 = el("button", "", "Go to page");
           go2.type = "submit";
           form.append(fieldLabel, go2);
@@ -44329,7 +44402,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     control.replaceChildren(...choices);
   }
-  function count7(value) {
+  function count8(value) {
     return Number.isFinite(value) ? value.toLocaleString() : "Not recorded";
   }
   function localQuery(id5) {
@@ -44849,7 +44922,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const text6 = String(value ?? "").replace(/\s+/g, " ").trim();
     return text6.length > length ? text6.slice(0, length).trimEnd() + "..." : text6;
   }
-  function excerpt(scenario) {
+  function excerpt2(scenario) {
     if (hiddenCards.has(scenario.scenarioId)) return "Hidden card";
     if (nativeActivity.isNative(scenario)) return nativeActivity.recognition(scenario).text;
     return textAccess.excerpt(scenario.userPrompt);
@@ -44859,17 +44932,17 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (technical) list2.classList.add("technical-facts");
     for (const [label, value] of pairs) {
       if (omitMissing && (value == null || value === "")) continue;
-      const cell = el("dd");
+      const cell2 = el("dd");
       if (value != null && ["Tool call ID", "Parent invocation", "Parallel group", "Copilot chat ID", "Source event"].includes(label)) {
-        cell.append(copyIdentifiers ? ux.inlineCode(String(value), { label: "Copy " + label.toLowerCase() }) : el("code", "reader-identifier", String(value)));
-      } else cell.textContent = value == null ? missing[label]?.label ?? "Not recorded" : String(value);
+        cell2.append(copyIdentifiers ? ux.inlineCode(String(value), { label: "Copy " + label.toLowerCase() }) : el("code", "reader-identifier", String(value)));
+      } else cell2.textContent = value == null ? missing[label]?.label ?? "Not recorded" : String(value);
       const term = el("dt", "", label);
       const explanation = inlineHelp || label === "Snapshot revision" ? (value == null ? missing[label]?.help : null) ?? help.facts[label] : void 0;
       if (explanation) {
         if (inlineHelp) term.replaceChildren(metadata3.item(label, { help: explanation }));
         else term.append(ux.helpButton(label, explanation));
       }
-      list2.append(term, cell);
+      list2.append(term, cell2);
     }
     return list2;
   }
@@ -45620,7 +45693,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }[key4]?.includes(value) === true;
   }
   function routeAddress(next2, privateSelection = false, snapshot = workspaceState.evidence) {
-    const { path: path31, params, privateFields, viewScope } = paths.project(canonicalRoute(next2), publicField);
+    const { path: path32, params, privateFields, viewScope } = paths.project(canonicalRoute(next2), publicField);
     let bookmark;
     if (next2.view === "request" && !next2.searchOwned && !privateSelection && !next2.nativeSource && !next2.call && !next2.nativeGroup && Object.keys(privateFields).every((key4) => key4 === "request")) {
       const index = bookmarkIndex(snapshot);
@@ -45633,7 +45706,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     const privateDestination = Object.keys(privateFields).some((key4) => !paths.isScope(key4) && key4 !== "trendEntry") || next2.trendEntry && trendOrigin(next2) || next2.savedAuthority === "search" || privateSelection && (next2.view === "request" || next2.bundle);
     if (privateDestination || incomingNavigationKey === "required" && (privateSelection || incomingNavigationError)) params.set("privateView", "required");
-    return { url: path31 + (params.size ? "?" + params : ""), privateFields, viewScope, bookmark };
+    return { url: path32 + (params.size ? "?" + params : ""), privateFields, viewScope, bookmark };
   }
   function setRouteLink(node, next2, privateSelection = Boolean(next2.search?.trim() || next2.analysisQuery != null)) {
     linkTargets.set(node, next2);
@@ -46214,7 +46287,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const values = heading && !compact ? el(inline ? "span" : "div", "result-values") : node;
     if (compact) {
       node.classList.add("result-inline");
-      const described = rows && !singleRecord ? entries3.map((entry3) => `${count7(entry3.count)} ${entry3.label}${entry3.reason ? ": " + failureReasonText(entry3.reason) : ""}`).join("; ") : "";
+      const described = rows && !singleRecord ? entries3.map((entry3) => `${count8(entry3.count)} ${entry3.label}${entry3.reason ? ": " + failureReasonText(entry3.reason) : ""}`).join("; ") : "";
       node.setAttribute("aria-label", `${heading || scope}: ${results3.countLabel(layer, summary.count, total)}${described ? ". " + described : ""}`);
     } else if (heading) {
       node.classList.add("result-with-heading");
@@ -46233,7 +46306,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       else item.append(ux.icon(`${singleRecord && recordLabel ? results3.icon(entry3.key) : entry3.icon}-compact`), el(
         "span",
         "recorded-result-label",
-        `${singleRecord && entry3.count === 1 ? "" : count7(entry3.count) + " "}${singleRecord && summary.count === 1 && recordLabel ? recordLabel : entry3.label}`
+        `${singleRecord && entry3.count === 1 ? "" : count8(entry3.count) + " "}${singleRecord && summary.count === 1 && recordLabel ? recordLabel : entry3.label}`
       ));
       if (entry3.reason) {
         item.classList.add("result-explained");
@@ -46268,7 +46341,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       }
       if (actionable) {
         viewKey(item, `session-result:${scope}:${sessionId}:${layer}:${entry3.key}`);
-        const label2 = layer === "tool" ? `View ${count7(entry3.count)} Work IQ tool call${entry3.count === 1 ? "" : "s"} ${entry3.key === "success" ? "with recorded completion" : "needing attention"}` : `View ${count7(entry3.count)} ${results3.unit(layer, entry3.count)}: ${entry3.label}`;
+        const label2 = layer === "tool" ? `View ${count8(entry3.count)} Work IQ tool call${entry3.count === 1 ? "" : "s"} ${entry3.key === "success" ? "with recorded completion" : "needing attention"}` : `View ${count8(entry3.count)} ${results3.unit(layer, entry3.count)}: ${entry3.label}`;
         item.setAttribute("aria-label", `${label2} in ${layer === "http" ? "recorder source" : "chat"} ${sessionSource(sessionId)?.name}. Current date, service and request scope.`);
         ux.tooltip(item, `${label2} in this ${layer === "http" ? "recorder source" : "Copilot chat"} and scope. ${help.resultHelp(entry3.key, layer)} Nothing is retried or executed.`);
       }
@@ -46282,7 +46355,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const matching = results3.summarize(rows);
     const node = resultLine(workspaceState.scope.layer, matching, { total: full?.count ?? null, scope: "Matching results only", pillsOnly: compact });
     if (compact && full && matching && matching.count !== full.count) {
-      node.prepend(el("span", "card-result-scope", `${count7(matching.count)} of ${count7(full.count)} ${results3.unit(workspaceState.scope.layer, full.count)} in this view`));
+      node.prepend(el("span", "card-result-scope", `${count8(matching.count)} of ${count8(full.count)} ${results3.unit(workspaceState.scope.layer, full.count)} in this view`));
     }
     return node;
   }
@@ -46301,27 +46374,27 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     if (!shown) host.append(el("p", "muted", "No canonical activity recorded for this request."));
   }
-  function recordedPathValue(path31, missing = "Not recorded") {
-    if (path31 === null) return el("span", "muted", missing);
-    const code2 = el("code", "api-path"), parts2 = path31.split(/(?<=[/?&=])/u);
+  function recordedPathValue(path32, missing = "Not recorded") {
+    if (path32 === null) return el("span", "muted", missing);
+    const code2 = el("code", "api-path"), parts2 = path32.split(/(?<=[/?&=])/u);
     parts2.forEach((part, index) => {
       code2.append(document.createTextNode(part));
       if (index < parts2.length - 1) code2.append(el("wbr"));
     });
     return code2;
   }
-  function pathField(list2, label, path31, missing = "Not recorded") {
+  function pathField(list2, label, path32, missing = "Not recorded") {
     const value = el("dd", "api-path-value");
-    value.append(recordedPathValue(path31, missing));
+    value.append(recordedPathValue(path32, missing));
     list2.append(el("dt", "api-path-label", label), value);
   }
   function actionFields(call, row, { includeTool = true, includeService = true, includePurpose = true, includeMissing = true, returned = false, sharedBatchGap = false } = {}) {
     const list2 = el("dl", "action-fields");
     const operation = !returned ? categories3.operation(call?.tool || row?.tool) : null;
     const discovery = operation?.category === "Discovery";
-    const path31 = returned ? results3.returnedPath(call, row, { discovery: categories3.operation(call?.tool)?.category === "Discovery" }) : null;
+    const path32 = returned ? results3.returnedPath(call, row, { discovery: categories3.operation(call?.tool)?.category === "Discovery" }) : null;
     const returnedAssociation = returned && row?.serviceAssociation?.layer === "reported-api" ? row.serviceAssociation : null;
-    const unassignedBatch = includeService && path31?.source === "unattributed" && returnedAssociation?.services.length === 0 && returnedAssociation.gaps.length === 1 && returnedAssociation.gaps[0].reason === "unattributed-result";
+    const unassignedBatch = includeService && path32?.source === "unattributed" && returnedAssociation?.services.length === 0 && returnedAssociation.gaps.length === 1 && returnedAssociation.gaps[0].reason === "unattributed-result";
     if (includeTool) list2.append(el("dt", "", "Tool"), el("dd", "action-tool", call?.tool || row?.tool || "Not recorded"));
     if (includeService && !sharedBatchGap) {
       const service = el("dd", "action-service");
@@ -46365,8 +46438,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       list2.append(el("dt", "", "Why this category"), el("dd", "", evidence.description));
     }
     if (returned) {
-      if (!sharedBatchGap && !unassignedBatch) pathField(list2, "API path", path31.path, path31.source === "unattributed" ? "Not attributed to a target in this batch" : "Not recorded");
-      if (path31.source === "call") {
+      if (!sharedBatchGap && !unassignedBatch) pathField(list2, "API path", path32.path, path32.source === "unattributed" ? "Not attributed to a target in this batch" : "Not recorded");
+      if (path32.source === "call") {
         const note = el("dd", "path-attribution");
         note.textContent = "Call target; no separate path returned.";
         list2.append(el("dt", "path-attribution", "Path source"), note);
@@ -46383,8 +46456,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       }
     } else if (!discovery || operation.pathLabel) {
       const paths2 = results3.callPaths(call);
-      paths2.forEach((path32, index) => {
-        if (path32 !== null || includeMissing) pathField(list2, discovery ? operation.pathLabel : paths2.length > 1 ? `API path ${index + 1}` : "API path", path32);
+      paths2.forEach((path33, index) => {
+        if (path33 !== null || includeMissing) pathField(list2, discovery ? operation.pathLabel : paths2.length > 1 ? `API path ${index + 1}` : "API path", path33);
       });
     }
     return list2;
@@ -46490,7 +46563,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       return item;
     };
     const list2 = el("div", "returned-api-entries"), pages = el("div", "returned-entries-pages");
-    list2.append(el("h4", "returned-entries-heading", `${count7(ordered2.length)} returned ${ordered2.length === 1 ? "entry" : "entries"}`), pages);
+    list2.append(el("h4", "returned-entries-heading", `${count8(ordered2.length)} returned ${ordered2.length === 1 ? "entry" : "entries"}`), pages);
     const hasErrors = ordered2.some(({ entry: entry3, retained }) => ["failure", "transport"].includes(entry3.outcome) || retained?.errorCode || results3.diagnosticDetails(retained?.errorDiagnostic).length);
     const size = hasErrors ? Math.max(6, ordered2.length) : 6, key4 = "returned:" + row.id;
     if (selectedId) {
@@ -46540,7 +46613,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const facet = data.resultFacet;
     if (facet?.scope !== "before-outcome" || !results3.valid(facet.totals) || facet.totals.count < data.totals.count || resultKeys.some((key4) => facet.totals[key4] < data.totals[key4])) throw new Error("Available result counts do not match this snapshot.");
     const outcomes3 = query().filters.outcomes;
-    const expected2 = outcomes3?.length ? outcomes3.reduce((sum, key4) => sum + facet.totals[key4], 0) : facet.totals.count;
+    const expected2 = outcomes3?.length ? outcomes3.reduce((sum2, key4) => sum2 + facet.totals[key4], 0) : facet.totals.count;
     if (expected2 !== data.totals.count || outcomes3?.length && data.rows.some((row) => !outcomes3.includes(row.outcome))) throw new Error("The result filter does not match the available counts.");
     const promptAuthors = query().filters.promptAuthors;
     if (promptAuthors) {
@@ -47932,13 +48005,13 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (!evidenceHost.hidden) {
       const heading = el("h2", "", "Why the service is not shown");
       heading.id = "serviceEvidenceTitle";
-      const total = evidenceGroups.reduce((sum, group) => sum + group.count, 0);
-      const description = el("p", "", `${count7(total)} of ${count7(rows.length)} ${results3.unit(workspaceState.scope.layer, rows.length)} in this view. Recorded outcomes are shown separately.`);
+      const total = evidenceGroups.reduce((sum2, group) => sum2 + group.count, 0);
+      const description = el("p", "", `${count8(total)} of ${count8(rows.length)} ${results3.unit(workspaceState.scope.layer, rows.length)} in this view. Recorded outcomes are shown separately.`);
       const groups = el("dl");
       for (const group of evidenceGroups) {
         const item = el("div"), term = el("dt");
         item.dataset.evidenceCount = group.count;
-        term.append(document.createTextNode(`${count7(group.count)} ${results3.unit(workspaceState.scope.layer, group.count)}: `));
+        term.append(document.createTextNode(`${count8(group.count)} ${results3.unit(workspaceState.scope.layer, group.count)}: `));
         if (group.purpose) term.append(document.createTextNode(group.purpose + " "), el("span", "muted", `(${group.tool})`));
         else term.append(document.createTextNode(group.tool));
         const representative = rows.find((row) => (row.tool || "Tool not identified") === group.tool && categories3.serviceEvidence(row, workspaceState.scope.layer)?.reason === group.evidence.reason);
@@ -47957,7 +48030,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const dates = workspaceState.route.from || workspaceState.route.to ? `${date2(workspaceState.route.from)} to ${date2(workspaceState.route.to)}` : "All retained dates";
     host.replaceChildren(metadata3.row([
       { label },
-      { label: `${count7(rows.length)} ${results3.unit(workspaceState.scope.layer, rows.length)}` },
+      { label: `${count8(rows.length)} ${results3.unit(workspaceState.scope.layer, rows.length)}` },
       { label: resultNames(resultSelection(workspaceState.route.result)) },
       { label: authorship.selectionLabel(workspaceState.scope.filters.promptAuthors) },
       ...workspaceState.scope.filters.sources?.length && showSourceChoice() ? [{ label: workspaceState.scope.filters.sources.map(filterState.sourceLabel).join(", ") }] : [],
@@ -47980,11 +48053,11 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       host.append(context2);
     }
     const unlinked = rows.filter((row) => !workspaceState.evidence.scenarios.some((scenario) => scenario.scenarioId === row.scenarioId)).length;
-    if (unlinked) host.append(el("p", "context-source", `${count7(unlinked)} records have no retained request details; they remain in the view total.`));
+    if (unlinked) host.append(el("p", "context-source", `${count8(unlinked)} records have no retained request details; they remain in the view total.`));
     if (["request", "reports"].includes(workspaceState.route.view) && workspaceState.route.request) {
       const scenario = workspaceState.evidence.scenarios.find((s) => s.scenarioId === workspaceState.route.request);
       const back = el("div", "context-return");
-      if (workspaceState.route.view === "reports" && scenario) back.append(link("From request: " + excerpt(scenario), "request", { request: scenario.scenarioId }, "request-link"));
+      if (workspaceState.route.view === "reports" && scenario) back.append(link("From request: " + excerpt2(scenario), "request", { request: scenario.scenarioId }, "request-link"));
       host.append(back);
     }
   }
@@ -48056,7 +48129,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     $2("serviceFocus").hidden = !focused || workspaceState.route.view !== "analyze";
     const name = (workspaceState.scope.filters.services || []).map(serviceLabel).join(", ");
     const noun = workspaceState.scope.layer === "tool" ? "calls" : results3.unit(workspaceState.scope.layer, 2);
-    setText($2("serviceFocusScope"), focused ? `${name}${focus.includeMissingService ? ` + ${noun} with missing service details` : " only"}. ${count7(focus.knownMatchIds.length)} known matches${focus.includeMissingService ? `; ${count7(focus.contextOnlyIds.length)} context-only` : ""}.${workspaceState.stale ? " Previous results; refresh before using this scope." : ""}` : "");
+    setText($2("serviceFocusScope"), focused ? `${name}${focus.includeMissingService ? ` + ${noun} with missing service details` : " only"}. ${count8(focus.knownMatchIds.length)} known matches${focus.includeMissingService ? `; ${count8(focus.contextOnlyIds.length)} context-only` : ""}.${workspaceState.stale ? " Previous results; refresh before using this scope." : ""}` : "");
     $2("addServiceContext").hidden = !focused || focus.includeMissingService;
     $2("addServiceContext").disabled = workspaceState.stale || workspaceState.loading;
     setText($2("addServiceContext"), `Include ${noun} with missing service details`);
@@ -48082,7 +48155,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     const rows = selectionRows();
     const model = acceptedAnalyzePeriod();
-    setText(homeCount, count7(rows.length));
+    setText(homeCount, count8(rows.length));
     setText(homeUnit, results3.unit(workspaceState.scope.layer, rows.length));
     const label = `${homeCount.textContent} ${homeUnit.textContent}`;
     const metric = workspaceState.stale ? el("span") : populationLink(rows.length, label);
@@ -48214,9 +48287,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const countsAvailable = nativeOnly ? Boolean(nativeFacet) : githubCountsAvailable || Boolean(nativeFacet);
     const optionCount = (key4) => {
       if (!countsAvailable) return null;
-      if (!boundedIncludesMicrosoft()) return githubCountsAvailable ? count7(totals[key4]) : null;
-      const microsoft = nativeFacet ? count7(key4 === "count" ? nativeFacet.count : nativeFacet.outcomes[key4]) : "unavailable";
-      return nativeOnly ? microsoft : `GitHub ${githubCountsAvailable ? count7(totals[key4]) : "unavailable"}; Microsoft ${microsoft}`;
+      if (!boundedIncludesMicrosoft()) return githubCountsAvailable ? count8(totals[key4]) : null;
+      const microsoft = nativeFacet ? count8(key4 === "count" ? nativeFacet.count : nativeFacet.outcomes[key4]) : "unavailable";
+      return nativeOnly ? microsoft : `GitHub ${githubCountsAvailable ? count8(totals[key4]) : "unavailable"}; Microsoft ${microsoft}`;
     };
     const resultOptions = choices.map((key4) => [key4, workspaceState.scope.layer === "code-reference" && key4 !== "unknown" ? `Previous: ${results3.labels("tool")[key4]}` : resultLabels[key4], optionCount(key4)]);
     $2("outcomeFilter").dataset.allLabel = countsAvailable ? `All results (${optionCount("count")})` : "All results (counts unavailable)";
@@ -48264,7 +48337,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (value.qualification === "unqualified") return { label: "Microsoft values are unavailable for this filter." };
     if (!value.page.nextCursor && value.page.items.length === value.aggregates.options && !value.aggregates.unavailableRows) return null;
     return {
-      label: `${value.page.items.length} of ${count7(value.aggregates.options)} Microsoft options.` + (value.aggregates.unavailableRows ? ` Values unavailable for ${count7(value.aggregates.unavailableRows)} records.` : ""),
+      label: `${value.page.items.length} of ${count8(value.aggregates.options)} Microsoft options.` + (value.aggregates.unavailableRows ? ` Values unavailable for ${count8(value.aggregates.unavailableRows)} records.` : ""),
       ...value.page.nextCursor ? { next: () => boundedNative.pageInventory(dimension, true) } : {},
       first: () => boundedNative.pageInventory(dimension, false)
     };
@@ -48304,9 +48377,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         for (const item of control.options) {
           const row = enabled && value.page.items.find((row2) => row2.value === item.value);
           const facet = sharedNativeView()?.resultFacet;
-          const nativeCount = row ? count7(row.count) : enabled && value.page.nextCursor === null ? "0" : facet ? count7(facet.outcomes[item.value]) : "unavailable";
+          const nativeCount = row ? count8(row.count) : enabled && value.page.nextCursor === null ? "0" : facet ? count8(facet.outcomes[item.value]) : "unavailable";
           if (boundedIncludesMicrosoft()) {
-            item.dataset.count = nativeOnly ? nativeCount : `GitHub ${semanticQuery === null || semanticBound && semanticComplete ? count7(workspaceState.analytics.resultFacet.totals[item.value]) : "unavailable"}; Microsoft ${nativeCount}`;
+            item.dataset.count = nativeOnly ? nativeCount : `GitHub ${semanticQuery === null || semanticBound && semanticComplete ? count8(workspaceState.analytics.resultFacet.totals[item.value]) : "unavailable"}; Microsoft ${nativeCount}`;
             item.label = `${resultLabels[item.value]} (${item.dataset.count})`;
           }
         }
@@ -48319,7 +48392,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
           item.dataset.nativeInventory = "true";
           control.append(item);
         }
-        item.dataset.detail = `${count7(row.count)} Microsoft ${workspaceState.scope.layer === "tool" ? "tool calls" : "returned results"}`;
+        item.dataset.detail = `${count8(row.count)} Microsoft ${workspaceState.scope.layer === "tool" ? "tool calls" : "returned results"}`;
       }
       const requested = {
         toolFilter: workspaceState.route.tool,
@@ -48340,7 +48413,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
   }
   function groupSummary(group) {
     const separate = group.successRate?.unavailable === "different-source-unit-definitions";
-    return visibleResultKeys().map((key4) => `${count7(group[key4])} ${resultLabels[key4].toLowerCase()}${separate ? "" : ` (${percentageMath.percent(group[key4], group.total)})`}`).join(", ") + (separate ? ". Different source units." : "");
+    return visibleResultKeys().map((key4) => `${count8(group[key4])} ${resultLabels[key4].toLowerCase()}${separate ? "" : ` (${percentageMath.percent(group[key4], group.total)})`}`).join(", ") + (separate ? ". Different source units." : "");
   }
   function chartGroupUnit(group) {
     return group.native ? workspaceState.scope.layer === "tool" ? "native tool calls" : "returned-result observations" : results3.unit(workspaceState.scope.layer, group.total);
@@ -48348,7 +48421,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
   function inspectColumnSection(node, group, key4) {
     ux.tooltip(
       node,
-      `${resultLabels[key4]}: ${count7(group[key4])} of ${count7(group.total)} ${chartGroupUnit(group)}${group.successRate?.unavailable ? ". Different source units" : ` (${percentageMath.percent(group[key4], group.total)})`}.`,
+      `${resultLabels[key4]}: ${count8(group[key4])} of ${count8(group.total)} ${chartGroupUnit(group)}${group.successRate?.unavailable ? ". Different source units" : ` (${percentageMath.percent(group[key4], group.total)})`}.`,
       { placement: "right", immediatePointer: true, avoid: () => (node.closest(".analyze-chart-grid") || node.closest(".flat-time-view,.flat-comparison"))?.querySelectorAll(".time-column,.dimensional-count,.dimensional-time-labels,.flat-time-axis,.flat-comparison-action,.flat-comparison-count,.group-name,.percentage-legend-row") || [] }
     );
   }
@@ -48396,8 +48469,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     $2("activityListContext").hidden = $2("activityList").hidden = false;
     const native2 = !restriction && nativeView?.status === "bounded" ? nativeView.aggregates : null;
     const descriptions = [
-      ...!nativeOnly ? [(hasMicrosoftSource() ? "GitHub Copilot: " : "") + (githubReady ? `${count7(workspaceState.analytics.totals.count)} ${results3.unit(workspaceState.scope.layer, workspaceState.analytics.totals.count)}` : "Search membership unavailable")] : [],
-      ...includesNative ? [native2 ? `Microsoft: ${count7(native2.selectedRows)} ${native2.layer === "tool" ? "native tool calls" : native2.layer === "reported-api" ? "returned-result observations" : "selected records"}` : "Microsoft: current totals unavailable"] : []
+      ...!nativeOnly ? [(hasMicrosoftSource() ? "GitHub Copilot: " : "") + (githubReady ? `${count8(workspaceState.analytics.totals.count)} ${results3.unit(workspaceState.scope.layer, workspaceState.analytics.totals.count)}` : "Search membership unavailable")] : [],
+      ...includesNative ? [native2 ? `Microsoft: ${count8(native2.selectedRows)} ${native2.layer === "tool" ? "native tool calls" : native2.layer === "reported-api" ? "returned-result observations" : "selected records"}` : "Microsoft: current totals unavailable"] : []
     ];
     const stats = descriptions.map((text6) => {
       const microsoft = text6.startsWith("Microsoft:");
@@ -48442,15 +48515,15 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     ].filter(Boolean).sort();
     $2("periodLabel").textContent = workspaceState.scope.filters.from || workspaceState.scope.filters.to || recordedDates.length ? `${date2(workspaceState.scope.filters.from || recordedDates[0])} - ${date2(workspaceState.scope.filters.to || recordedDates.at(-1))}` : "No dated activity in this view";
     $2("meaningMatched").textContent = native2 ? [
-      ...workspaceState.analytics.totals.count ? [`GitHub: ${count7(workspaceState.analytics.totals.count)} ${results3.unit(layer, workspaceState.analytics.totals.count)}`] : [],
-      `Microsoft: ${count7(native2.aggregates.selectedRows)} ${layer === "tool" ? "native tool calls" : "returned-result observations"}`
-    ].join(" / ") : `${count7(workspaceState.analytics.totals.count)} ${results3.unit(layer, workspaceState.analytics.totals.count)}`;
+      ...workspaceState.analytics.totals.count ? [`GitHub: ${count8(workspaceState.analytics.totals.count)} ${results3.unit(layer, workspaceState.analytics.totals.count)}`] : [],
+      `Microsoft: ${count8(native2.aggregates.selectedRows)} ${layer === "tool" ? "native tool calls" : "returned-result observations"}`
+    ].join(" / ") : `${count8(workspaceState.analytics.totals.count)} ${results3.unit(layer, workspaceState.analytics.totals.count)}`;
     $2("meaningSources").textContent = native2 ? [
       ...workspaceState.analytics.coverage.sessionCount ? [chatCopy2.count(workspaceState.analytics.coverage.sessionCount)] : [],
-      `${count7(native2.aggregates.conversations)} Microsoft conversations`
-    ].join(" / ") : layer === "http" ? `${count7(workspaceState.analytics.coverage.sessionCount)} recorder sources` : chatCopy2.count(workspaceState.analytics.coverage.sessionCount);
+      `${count8(native2.aggregates.conversations)} Microsoft conversations`
+    ].join(" / ") : layer === "http" ? `${count8(workspaceState.analytics.coverage.sessionCount)} recorder sources` : chatCopy2.count(workspaceState.analytics.coverage.sessionCount);
     $2("takeaway").textContent = "";
-    if (layer === "reported-api" && workspaceState.analytics.apiCoverage) $2("takeaway").textContent = `${count7(workspaceState.analytics.apiCoverage.callsWithNumericStatus)} of ${count7(workspaceState.analytics.apiCoverage.eligibleToolCalls)} Work IQ tool calls retained an API status; ${count7(workspaceState.analytics.apiCoverage.callsWithoutNumericStatus)} did not. Parent-call coverage is before API-result outcome/path filters; private search applies.`;
+    if (layer === "reported-api" && workspaceState.analytics.apiCoverage) $2("takeaway").textContent = `${count8(workspaceState.analytics.apiCoverage.callsWithNumericStatus)} of ${count8(workspaceState.analytics.apiCoverage.eligibleToolCalls)} Work IQ tool calls retained an API status; ${count8(workspaceState.analytics.apiCoverage.callsWithoutNumericStatus)} did not. Parent-call coverage is before API-result outcome/path filters; private search applies.`;
     if (layer === "direct-request") $2("takeaway").textContent = "Request sites found in recorded commands. A request is not proof of a returned response.";
     if (layer === "code-reference") $2("takeaway").textContent = "Code references only. They do not establish a request or response.";
     if (layer === "http") $2("takeaway").textContent = "Recorder diagnostics, including public metadata tests. Not counted as workplace use.";
@@ -48505,7 +48578,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     $2("serviceDefinitions").replaceChildren(el("h3", "", layer === "tool" ? "Activity categories" : "Service categories"), glossary);
     $2("serviceDefinitions").hidden = !definitions.length;
     const chartRows = (chartType === "time" ? workspaceState.analytics.timeSeries?.points?.length || 0 : workspaceState.analytics.groups.length) + (chartType === "time" ? native2?.timeSeries.points.length ?? 0 : native2?.grouping.groups.length ?? 0);
-    $2("chartDataTitle").textContent = `${$2("chartTitle").textContent} (${count7(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
+    $2("chartDataTitle").textContent = `${$2("chartTitle").textContent} (${count8(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
     percentages.update(workspaceState.analytics, { ...workspaceState.scope, search: Boolean(search), withinServices: workspaceState.route.withinServices?.split(",") || [] }, slice.scenarios, native2);
     const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
     for (const link2 of document.querySelectorAll(".analyze-trend-link")) link2.hidden = !offersTrends;
@@ -48518,7 +48591,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (!series?.points?.length && !nativePoints.length) {
       $2("chart").append(empty(series?.window || native2?.timeSeries.window ? "No dated records in this window" : "Dates unavailable"));
       const missing2 = (series?.undatedCount ?? 0) + (native2?.timeSeries.undatedRows ?? 0);
-      if (missing2) $2("chartFooter").append(el("span", "", `${count7(missing2)} undated ${missing2 === 1 ? "record" : "records"}.`));
+      if (missing2) $2("chartFooter").append(el("span", "", `${count8(missing2)} undated ${missing2 === 1 ? "record" : "records"}.`));
       return;
     }
     const points = [
@@ -48538,7 +48611,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       });
       const control = routeLink("", next2, "", { revealReferenceRecords: true });
       const range = date2(point.date) + (point.endDate && point.endDate !== point.date ? " to " + date2(point.endDate) : "");
-      const tip = key4 ? `${range}: ${count7(point[key4])} ${resultLabels[key4].toLowerCase()}. ${help.resultMeaning(key4, workspaceState.scope.layer)}` : `${count7(point.total)} ${chartGroupUnit(point)} dated ${range}.`;
+      const tip = key4 ? `${range}: ${count8(point[key4])} ${resultLabels[key4].toLowerCase()}. ${help.resultMeaning(key4, workspaceState.scope.layer)}` : `${count8(point.total)} ${chartGroupUnit(point)} dated ${range}.`;
       control.setAttribute("aria-label", tip);
       control.setAttribute("aria-description", tip);
       viewKey(control, `chart:time:${point.chartSource}:${point.date}:${key4 || "total"}`);
@@ -48549,7 +48622,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       points,
       label: (point) => date2(point.date) + (mixed ? " / " + point.chartSource : ""),
       unit: frontendActivity ? void 0 : (total) => results3.columnUnit(workspaceState.scope.layer, total),
-      summary: (point) => `${mixed ? point.chartSource + ": " : ""}${date2(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date2(point.endDate, true) : ""}: ${count7(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
+      summary: (point) => `${mixed ? point.chartSource + ": " : ""}${date2(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date2(point.endDate, true) : ""}: ${count8(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
       createAction: (point) => periodLink(point),
       createSegment: periodLink,
       zeroDefinition: () => ux.tooltip(widgetDefinitionLink("time"), "No matching records were dated in this period.")
@@ -48564,7 +48637,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     dimensional.refreshView(chart);
     if (windowed && !workspaceState.scope.timelineFrom) chart.scrollLeft = chart.scrollWidth;
     const missing = (series?.undatedCount ?? 0) + (native2?.timeSeries.undatedRows ?? 0);
-    if (missing) $2("chartFooter").append(el("span", "", `${count7(missing)} undated ${missing === 1 ? "record" : "records"}.`));
+    if (missing) $2("chartFooter").append(el("span", "", `${count8(missing)} undated ${missing === 1 ? "record" : "records"}.`));
   }
   function renderTimelineWindow() {
     const windows = [
@@ -48580,7 +48653,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     host.id = "timelineWindow";
     host.setAttribute("role", "group");
     host.setAttribute("aria-label", "Timeline dates");
-    const summary = el("p", "muted", windows.map(([name, window2]) => `${windows.length > 1 ? name + ": " : ""}${window2.count ? window2.from === window2.to ? date2(window2.from, true) : `${date2(window2.from, true)} \u2013 ${date2(window2.to, true)}` : "No dates in this window"} (${window2.count} of ${count7(window2.total)} ${window2.total === 1 ? bucket : unit})`).join(" / ") + ". Totals and filters still cover the whole selected period.");
+    const summary = el("p", "muted", windows.map(([name, window2]) => `${windows.length > 1 ? name + ": " : ""}${window2.count ? window2.from === window2.to ? date2(window2.from, true) : `${date2(window2.from, true)} \u2013 ${date2(window2.to, true)}` : "No dates in this window"} (${window2.count} of ${count8(window2.total)} ${window2.total === 1 ? bucket : unit})`).join(" / ") + ". Totals and filters still cover the whole selected period.");
     const target = (amount) => activityProjection.advanceBucket(
       first,
       bucket,
@@ -48642,7 +48715,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         count: group.total,
         percentage: !group.native && workspaceState.analytics.measurementEligibility?.outcomeRate === "separate-unit-populations-only" ? void 0 : percentageMath.percent(group.total, group.native ? native2.aggregates.selectedRows : workspaceState.analytics.totals.count)
       }),
-      summary: (group) => `${label(group)}: ${count7(group.total)} ${chartGroupUnit(group)}; ${groupSummary(group)}.${group.id === "group:other" ? " Show all categories." : ""}`,
+      summary: (group) => `${label(group)}: ${count8(group.total)} ${chartGroupUnit(group)}; ${groupSummary(group)}.${group.id === "group:other" ? " Show all categories." : ""}`,
       createAction: (group) => group.native ? group.unavailable ? el("span") : link("", "activity", { nativeGroup: group.id, source: native2.sourceGroups.length === 1 ? native2.sourceGroups[0].sourceId : "microsoft-365", page: void 0 }) : group.id === "group:other" ? link("", "home", { expanded: "true" }) : link("", "activity", {
         ...serviceMode ? { service: group.label } : { endpoint: group.id },
         page: void 0,
@@ -48666,7 +48739,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
   function renderCountTable(host = $2("countTable"), chartType = workspaceState.route.chart || "time", createReferenceAction = null, options = {}) {
     const time3 = chartType === "time";
     const groups = time3 ? workspaceState.analytics.timeSeries?.points || [] : createReferenceAction ? chartType === "endpoint" ? activityProjection.groupRows(workspaceState.analytics.rows, "endpoint") : workspaceState.analytics.workloadGroups : workspaceState.analytics.groups;
-    const table2 = el("table"), thead = el("thead"), heading = el("tr");
+    const table3 = el("table"), thead = el("thead"), heading = el("tr");
     const layer = workspaceState.scope.layer;
     const labels2 = layer === "tool" ? { ...resultLabels } : { success: "HTTP 2xx", failure: "HTTP 4xx/5xx", unknown: "No status", other: "Other status", transport: "Connection failed", partial: "Partial result" };
     if (layer === "reported-api") {
@@ -48681,19 +48754,19 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (groups.length > 24) caption2.append(" Totals include every page.");
     if (layer === "reported-api") caption2.append(" Error results include HTTP 4xx/5xx or a reported error code.");
     const dateLabel = time3 ? workspaceState.scope.bucket === "week" ? "Week starting" : workspaceState.scope.bucket === "month" ? "Month starting" : "Date" : chartType === "endpoint" ? workspaceState.scope.layer === "tool" ? "Path / operation" : "API path" : categoryNoun();
-    table2.setAttribute("aria-label", "Exact data for the visible chart");
-    table2.className = "exact-data-table";
+    table3.setAttribute("aria-label", "Exact data for the visible chart");
+    table3.className = "exact-data-table";
     const columns2 = el("colgroup");
     columns2.append(el("col", "chart-label-column"), ...["total", ...keys2].map(() => el("col", "chart-number-column")));
     for (const [index, label] of [dateLabel, "Total", ...keys2.map((key4) => labels2[key4])].entries()) {
-      const cell = el("th", index ? "numeric" : "", label);
-      cell.scope = "col";
-      heading.append(cell);
+      const cell2 = el("th", index ? "numeric" : "", label);
+      cell2.scope = "col";
+      heading.append(cell2);
     }
     thead.append(heading);
     const footer = el("tfoot"), totalRow = el("tr"), totalLabel = el("th", "", window2 && window2.count < window2.total ? "Dated total (selected period)" : "Total (all rows)");
     totalLabel.scope = "row";
-    totalRow.append(totalLabel, ...["total", ...keys2].map((key4) => el("td", "numeric", count7(time3 && workspaceState.analytics.timeSeries?.totals ? workspaceState.analytics.timeSeries.totals[key4] : groups.reduce((sum, group) => sum + group[key4], 0)))));
+    totalRow.append(totalLabel, ...["total", ...keys2].map((key4) => el("td", "numeric", count8(time3 && workspaceState.analytics.timeSeries?.totals ? workspaceState.analytics.timeSeries.totals[key4] : groups.reduce((sum2, group) => sum2 + group[key4], 0)))));
     footer.append(totalRow);
     if (createReferenceAction && !options.referenceKey) throw new TypeError("Exact chart rows require their accepted reference identity.");
     const tableKey = createReferenceAction ? "chart-reference:" + chartType + ":" + options.referenceKey : "chart:" + sliceKey();
@@ -48705,36 +48778,36 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const label = el("td");
       if (time3 && group.total) {
         const action = createReferenceAction ? createReferenceAction(group, date2(group.date, true)) : button(date2(group.date, true), () => drillTime(group), "chart-data-action quiet");
-        action.setAttribute("aria-label", `${date2(group.date, true)}: ${count7(group.total)} ${results3.unit(workspaceState.scope.layer, group.total)}. View requests.`);
+        action.setAttribute("aria-label", `${date2(group.date, true)}: ${count8(group.total)} ${results3.unit(workspaceState.scope.layer, group.total)}. View requests.`);
         label.append(action);
       } else if (!time3 && group.total) {
         const name = chartType === "endpoint" ? group.label : serviceLabel(group.label);
         const action = createReferenceAction ? createReferenceAction(group, name) : button(name, () => drillGroup(group), "chart-data-action quiet");
-        action.setAttribute("aria-label", `${name}: ${count7(group.total)} ${results3.unit(workspaceState.scope.layer, group.total)}. View requests.`);
+        action.setAttribute("aria-label", `${name}: ${count8(group.total)} ${results3.unit(workspaceState.scope.layer, group.total)}. View requests.`);
         label.append(action);
       } else label.append(el("span", "chart-data-label", time3 ? date2(group.date, true) : chartType === "endpoint" ? group.label : serviceLabel(group.label)));
-      row.append(label, el("td", "numeric", count7(group.total)), ...keys2.map((key4) => {
-        const cell = el("td", "numeric", count7(group[key4]));
+      row.append(label, el("td", "numeric", count8(group.total)), ...keys2.map((key4) => {
+        const cell2 = el("td", "numeric", count8(group[key4]));
         if (time3 && group[key4] && createReferenceAction) {
-          const action = createReferenceAction(group, count7(group[key4]), key4);
-          action.setAttribute("aria-label", `${date2(group.date, true)}: ${labels2[key4]}, ${count7(group[key4])}. View records.`);
-          cell.replaceChildren(action);
+          const action = createReferenceAction(group, count8(group[key4]), key4);
+          action.setAttribute("aria-label", `${date2(group.date, true)}: ${labels2[key4]}, ${count8(group[key4])}. View records.`);
+          cell2.replaceChildren(action);
         }
-        return cell;
+        return cell2;
       }));
       return row;
     }, wrapList: (tbody) => {
-      table2.replaceChildren(caption2, columns2, thead, tbody, footer);
+      table3.replaceChildren(caption2, columns2, thead, tbody, footer);
       const content = document.createDocumentFragment();
       if (rowQuery) {
-        const found = el("p", "table-note", `${count7(visibleGroups.length)} of ${count7(groups.length)} rows found. Totals include all rows.`);
+        const found = el("p", "table-note", `${count8(visibleGroups.length)} of ${count8(groups.length)} rows found. Totals include all rows.`);
         found.setAttribute("role", "status");
         content.append(found);
       }
-      content.append(groups.length ? table2 : el("p", "", "No chart rows in this slice."));
+      content.append(groups.length ? table3 : el("p", "", "No chart rows in this slice."));
       if (time3 && workspaceState.analytics.timeSeries?.undatedCount) {
         const missing = workspaceState.analytics.timeSeries.undatedCount;
-        content.append(el("p", "table-note", `${count7(missing)} record${missing === 1 ? "" : "s"} without a date ${missing === 1 ? "is" : "are"} excluded here. Service and API-path views include them.`));
+        content.append(el("p", "table-note", `${count8(missing)} record${missing === 1 ? "" : "s"} without a date ${missing === 1 ? "is" : "are"} excluded here. Service and API-path views include them.`));
       }
       return content;
     } });
@@ -48902,7 +48975,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const dismiss = button("Close", () => dialog.close(), "quiet");
     head.append(title2, dismiss);
     const list2 = hiddenCards.entries();
-    body.append(visibilityButton(`Restore all (${count7(list2.length)})`, "reset", () => setCardVisibility(null, list2.map((v2) => v2.ref))));
+    body.append(visibilityButton(`Restore all (${count8(list2.length)})`, "reset", () => setCardVisibility(null, list2.map((v2) => v2.ref))));
     for (const entry3 of list2) {
       const row = el("div", "hidden-card-row"), identity4 = el("div");
       identity4.append(el("span", "", entry3.order ? `Hidden card ${entry3.order}` : "Hidden card"));
@@ -48946,7 +49019,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       return;
     }
     if (list2.some((v2) => v2.ref === undoCard)) actions2.append(undoHideButton());
-    const manage = visibilityButton(`Hidden cards (${count7(list2.length)})`, "hide", () => showHiddenCards(manage));
+    const manage = visibilityButton(`Hidden cards (${count8(list2.length)})`, "hide", () => showHiddenCards(manage));
     actions2.append(manage);
   }
   function renderActivity() {
@@ -49000,12 +49073,12 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     $2("activityTitle").textContent = "Activity";
     $2("activityView").dataset.revision = String(workspaceState.evidence.revision);
     const unlinked = orphaned.length;
-    const groups = `${count7(scenarios.length)} ${workspaceState.scope.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
+    const groups = `${count8(scenarios.length)} ${workspaceState.scope.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
     const nativeUnavailable = !widget && boundedIncludesMicrosoft() && !native2 && showMicrosoftActivity();
-    $2("activityListSummary").textContent = widget ? !group ? "This chart selection is no longer available." : `${group.label}: ${count7(allItems.length)} matching ${group.interactionIds ? allItems.length === 1 ? "interaction" : "interactions" : workspaceState.scope.layer === "tool" ? allItems.length === 1 ? "tool call" : "tool calls" : results3.unit(workspaceState.scope.layer, allItems.length)}` : native2 ? [
-      ...allItems.length ? [`${count7(allItems.length)} GitHub ${allItems.length === 1 ? "interaction" : "interactions"}`] : [],
-      `${count7(native2.aggregates.conversations)} Microsoft ${native2.aggregates.conversations === 1 ? "conversation" : "conversations"}`
-    ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable" : `${nativeUnavailable ? "GitHub: " : ""}${groups} \xB7 ${count7(selectionRows().length)} matching ${workspaceState.scope.layer === "tool" ? selectionRows().length === 1 ? "tool call" : "tool calls" : results3.unit(workspaceState.scope.layer, selectionRows().length)}` + (unlinked ? `. WIRE couldn\u2019t link ${count7(unlinked)} ${unlinked === 1 ? "record" : "records"} to an interaction. See the separate list below.` : "");
+    $2("activityListSummary").textContent = widget ? !group ? "This chart selection is no longer available." : `${group.label}: ${count8(allItems.length)} matching ${group.interactionIds ? allItems.length === 1 ? "interaction" : "interactions" : workspaceState.scope.layer === "tool" ? allItems.length === 1 ? "tool call" : "tool calls" : results3.unit(workspaceState.scope.layer, allItems.length)}` : native2 ? [
+      ...allItems.length ? [`${count8(allItems.length)} GitHub ${allItems.length === 1 ? "interaction" : "interactions"}`] : [],
+      `${count8(native2.aggregates.conversations)} Microsoft ${native2.aggregates.conversations === 1 ? "conversation" : "conversations"}`
+    ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable" : `${nativeUnavailable ? "GitHub: " : ""}${groups} \xB7 ${count8(selectionRows().length)} matching ${workspaceState.scope.layer === "tool" ? selectionRows().length === 1 ? "tool call" : "tool calls" : results3.unit(workspaceState.scope.layer, selectionRows().length)}` + (unlinked ? `. WIRE couldn\u2019t link ${count8(unlinked)} ${unlinked === 1 ? "record" : "records"} to an interaction. See the separate list below.` : "");
     $2("activityListSummary").hidden = false;
     host.replaceChildren();
     activityPage2 = roster.index;
@@ -49177,7 +49250,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       item.append(el("span", "card-tool-name", name));
       if (showCounts && (tools2.size > 1 || total > 1)) item.append(
         document.createTextNode(" "),
-        el("span", "card-tool-count", `(${count7(total)} ${results3.columnUnit(workspaceState.scope.layer, total)})`)
+        el("span", "card-tool-count", `(${count8(total)} ${results3.columnUnit(workspaceState.scope.layer, total)})`)
       );
       list2.append(item);
     }
@@ -49231,11 +49304,11 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (!summary) return "Result counts unavailable";
     if (!summary.count) return `No recorded ${results3.unit(layer, 0)} in this view`;
     const label = results3.labels(layer);
-    if (summary.failure) return layer === "tool" ? `${count7(summary.failure)} tool ${summary.failure === 1 ? "call" : "calls"} failed` : `${label.failure}: ${count7(summary.failure)}`;
+    if (summary.failure) return layer === "tool" ? `${count8(summary.failure)} tool ${summary.failure === 1 ? "call" : "calls"} failed` : `${label.failure}: ${count8(summary.failure)}`;
     if (summary.transport) return label.transport;
     if (layer === "tool" && results3.explainedEntries(layer, rows, sourceCallFor).some((entry3) => entry3.tone && entry3.tone !== entry3.key)) return "Reported result issue";
     if (summary.partial) return label.partial;
-    if (summary.unknown) return summary.unknown === summary.count ? label.unknown : `${label.unknown}: ${count7(summary.unknown)}`;
+    if (summary.unknown) return summary.unknown === summary.count ? label.unknown : `${label.unknown}: ${count8(summary.unknown)}`;
     return summary.other ? label.other : null;
   }
   function activityIdentities(rows, layer, { includeTools = true, inspectGap, inspectTool } = {}) {
@@ -49290,7 +49363,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (includeTools && ["tool", "reported-api"].includes(layer)) {
       const labels2 = Array.from(tools2, ([name, total]) => ({
         name,
-        countLabel: total > 1 ? `${count7(total)} ${layer === "tool" ? "calls" : "results"}` : null
+        countLabel: total > 1 ? `${count8(total)} ${layer === "tool" ? "calls" : "results"}` : null
       }));
       field2(tools2.size > 1 ? "Tools" : "Tool", tools2.size ? [ux.cardToolList(labels2, inspectTool)] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
     }
@@ -49395,7 +49468,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (summary && full?.count !== summary.count) {
       facts2.append(el("span", "request-card-count", results3.countLabel(layer, summary.count, full?.count ?? null)));
     } else if (!reportPicker && outcome5 && summary[outcome5.key] < summary.count) {
-      facts2.append(el("span", "request-card-count", `${count7(summary.count)} tool calls`));
+      facts2.append(el("span", "request-card-count", `${count8(summary.count)} tool calls`));
     }
     if (description.hasText && ["partial", "truncated"].includes(scenario.userPrompt.status))
       facts2.append(el("span", "request-card-availability", "Part of the prompt was retained."));
@@ -49416,7 +49489,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       );
       if (!exact11) return cue;
       const link2 = open11("", "record", exact11, "card-evidence-link card-gap-link");
-      const group = entry3.rows.length > 1 ? `first of ${count7(entry3.rows.length)} calls` : null;
+      const group = entry3.rows.length > 1 ? `first of ${count8(entry3.rows.length)} calls` : null;
       if (group) cue.lastElementChild.append(document.createTextNode(` (${group})`));
       link2.setAttribute("aria-label", `${entry3.label}: open ${group ?? "call"}`);
       if (entry3.description) {
@@ -49518,7 +49591,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     if (reportPicker) {
       const panel = open11(
-        full?.count ? `${count7(full.count)} ${full.count === 1 ? "tool call" : "tool calls"}` : "Interaction",
+        full?.count ? `${count8(full.count)} ${full.count === 1 ? "tool call" : "tool calls"}` : "Interaction",
         "activity",
         target,
         "card-evidence-link request-card-open-label card-panel-link"
@@ -49575,8 +49648,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       number3 = el("span", "selection-number");
       node.replaceChildren(number3, document.createTextNode(" in report"));
     }
-    number3.style.minInlineSize = String(count7(maximum).length) + "ch";
-    setText(number3, count7(total));
+    number3.style.minInlineSize = String(count8(maximum).length) + "ch";
+    setText(number3, count8(total));
   }
   function selectionCheckbox(scenario, reportPicker = false) {
     const checkbox = el("input");
@@ -49586,7 +49659,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     else checkbox.dataset.selectedRequest = scenario.scenarioId;
     const aliases = reportPicker ? workspaceState.evidence.exportCatalog.requests.find((request2) => request2.scenarioId === scenario.scenarioId).aliases : [scenario.scenarioId];
     checkbox.checked = aliases.some((id5) => selected.has(id5));
-    checkbox.setAttribute("aria-label", "Select request for report: " + shorten(excerpt(scenario), 70));
+    checkbox.setAttribute("aria-label", "Select request for report: " + shorten(excerpt2(scenario), 70));
     ux.tooltip(checkbox, () => checkbox.disabled ? reportSelectionBlock() || "No reportable activity." : "");
     checkbox.addEventListener(
       "change",
@@ -49616,8 +49689,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     actions2.setAttribute("aria-label", "Report selection");
     const reportTitle = el("span", "muted");
     reportTitle.id = "requestReportTitle";
-    const pick = button("Add to report", () => {
-      if (!pick.isConnected || workspaceState.route.view !== "request" || workspaceState.route.request !== scenarioId) return;
+    const pick2 = button("Add to report", () => {
+      if (!pick2.isConnected || workspaceState.route.view !== "request" || workspaceState.route.request !== scenarioId) return;
       const readingBlock = nativeReaderSelectionBlock();
       if (readingBlock) {
         announce(readingBlock, "stale");
@@ -49630,7 +49703,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       if (!setReportRequestSelected(scenarioId, !reportRequestSelection(scenarioId).selected)) return;
       updateRequestReportActions();
     });
-    pick.id = "requestReportToggle";
+    pick2.id = "requestReportToggle";
     const continueReport = button("Continue to report", () => {
       if (!continueReport.isConnected || workspaceState.route.view !== "request" || workspaceState.route.request !== scenarioId) return;
       if (fromReportCreation()) returnFromReportInspection();
@@ -49644,8 +49717,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       }
     }, "primary");
     continueReport.id = "requestReportContinue";
-    actions2.append(reportTitle, pick, continueReport);
-    ux.explainDisabled(pick, () => nativeReaderSelectionBlock() || reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected" ? "Return to report Activity to change this scope." : "This interaction has no reportable activity."), { compact: true });
+    actions2.append(reportTitle, pick2, continueReport);
+    ux.explainDisabled(pick2, () => nativeReaderSelectionBlock() || reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected" ? "Return to report Activity to change this scope." : "This interaction has no reportable activity."), { compact: true });
     ux.explainDisabled(continueReport, () => !fromReportCreation() && nativeReaderSelectionBlock() || reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected" ? "Return to report Activity to change this scope." : "Add this interaction before continuing."), { compact: true });
     return actions2;
   }
@@ -49709,7 +49782,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       body.append(notice);
       return;
     }
-    const countedTitle = countedIds ? `${count7(countedIds.size)} ${stateLabel} ${countedIds.size === 1 ? "call" : "calls"}` : "";
+    const countedTitle = countedIds ? `${count8(countedIds.size)} ${stateLabel} ${countedIds.size === 1 ? "call" : "calls"}` : "";
     if (sourceCollection.active && workspaceState.route.nativeSource !== void 0) {
       const ordinal = workspaceState.route.nativeOrdinal === void 0 ? void 0 : Number(workspaceState.route.nativeOrdinal);
       const revision = Number(workspaceState.route.nativeRevision);
@@ -50098,12 +50171,12 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       if (prose !== void 0) values.append(el("pre", "reader-request-text", prose));
       if (args.entityUrls) {
         const paths2 = targetOnly ? el(args.entityUrls.length === 1 ? "ul" : "ol", "reader-values reader-request-paths") : el("dl", "action-fields reader-request-paths");
-        results3.callPaths(tool).forEach((path31, index) => {
+        results3.callPaths(tool).forEach((path32, index) => {
           if (targetOnly) {
             const item = el("li");
-            item.append(recordedPathValue(path31));
+            item.append(recordedPathValue(path32));
             paths2.append(item);
-          } else pathField(paths2, args.entityUrls.length === 1 ? "Requested path" : "Requested path " + (index + 1), path31);
+          } else pathField(paths2, args.entityUrls.length === 1 ? "Requested path" : "Requested path " + (index + 1), path32);
         });
         values.append(paths2);
       }
@@ -50191,13 +50264,13 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       if (countedIds && isSelected) {
         const allCalls = results3.summarize(fullRowsFor(scenario.scenarioId, "tool"))?.count;
         if (allCalls > countedIds.size) {
-          intro.append(el("p", "reader-scope", `${count7(countedIds.size)} of ${count7(allCalls)} recorded calls match this view.`));
+          intro.append(el("p", "reader-scope", `${count8(countedIds.size)} of ${count8(allCalls)} recorded calls match this view.`));
           const parent = routeFor("request", { request: scenario.scenarioId });
           activitySection.actions.append(routeLink("Show full activity", parent, "button-link quiet", {
             cardTarget: { target: parent, revision: workspaceState.evidence.revision, focus: "activity" }
           }));
         }
-      } else if (!sameScope2) intro.append(el("p", "reader-scope", full ? `${count7(rows.length)} of ${count7(full.length)} ${results3.unit(workspaceState.scope.layer, full.length)} match the current view. The full recorded interaction follows.` : "Matching context unavailable. The retained interaction follows."));
+      } else if (!sameScope2) intro.append(el("p", "reader-scope", full ? `${count8(rows.length)} of ${count8(full.length)} ${results3.unit(workspaceState.scope.layer, full.length)} match the current view. The full recorded interaction follows.` : "Matching context unavailable. The retained interaction follows."));
       const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
       requestText.append(readerText(scenario.userPrompt, {
         key: "request:" + scenario.scenarioId,
@@ -50348,17 +50421,17 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const ordinals = requestContext.actionOrdinals(scenario);
       const canonical2 = fullRowsFor(scenario.scenarioId, "tool") ?? (workspaceState.scope.layer === "tool" ? rows : void 0);
       for (const [toolIndex, member3] of (scenario.toolCalls || []).entries()) {
-        const matches3 = canonical2?.filter((item) => {
+        const matches4 = canonical2?.filter((item) => {
           if (item.sourceSessionId !== scenario.sourceSessionId) return false;
           if (member3.toolCallId && item.toolCallId) return member3.toolCallId === item.toolCallId;
           if (!member3.startEventId) return false;
           return item.toolCallId ? sourceCallFor(item)?.startEventId === member3.startEventId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, member3.startEventId])}`;
         });
-        const row = matches3?.length === 1 ? matches3[0] : null;
+        const row = matches4?.length === 1 ? matches4[0] : null;
         if (row && (seen.has(row.id) || !isSelected && (row.id === target.actionId || countedIds?.has(row.id)))) continue;
         if (row) seen.add(row.id);
         const key4 = JSON.stringify([scenario.scenarioId, "tool", row?.id || member3.toolCallId || member3.startEventId || ["unidentified", workspaceState.evidence.revision, toolIndex]]);
-        const tool = row ? sourceCallFor(row) : matches3?.length ? null : member3;
+        const tool = row ? sourceCallFor(row) : matches4?.length ? null : member3;
         const ordinal = ordinals.get(member3);
         if (!tool) {
           entries3.push({
@@ -50432,7 +50505,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
               );
               if (returned && canonical2.length > 1 && workspaceState.scope.layer === "tool" && !apiRows.some((entry3) => ["failure", "transport"].includes(entry3.outcome) || results3.returnedResult(tool, entry3)?.errorCode || results3.diagnosticDetails(results3.returnedResult(tool, entry3)?.errorDiagnostic).length)) {
                 const detail = el("details", "reader-returned-facts");
-                detail.append(el("summary", "", `${count7(apiRows.length)} returned ${apiRows.length === 1 ? "entry" : "entries"}`), returned);
+                detail.append(el("summary", "", `${count8(apiRows.length)} returned ${apiRows.length === 1 ? "entry" : "entries"}`), returned);
                 item.append(detail);
               } else if (returned) item.append(returned);
             }
@@ -50508,9 +50581,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
               resultLine(layer, graphRows2?.length ? results3.summarize(graphRows2) : null, { compactSingle: true, singleRecord: true, inline: true })
             );
             item.append(heading, fields8([[layer === "code-reference" ? "Referenced service" : "Service", identityValues(graphRows2, layer)]]));
-            const path31 = el("dl", "action-fields");
-            pathField(path31, layer === "code-reference" ? "Referenced API path" : "API path", results3.pathText(graph.endpoint));
-            item.append(path31);
+            const path32 = el("dl", "action-fields");
+            pathField(path32, layer === "code-reference" ? "Referenced API path" : "API path", results3.pathText(graph.endpoint));
+            item.append(path32);
             actionContext(item, ["direct-request", "recorded-http", "code-reference"].includes(workspaceState.scope.layer) ? graphRows2 : []);
             const status4 = graph.evidenceLevel === "output-visible-http" ? graph.httpStatus : null;
             item.append(el("p", "", status4 != null ? "Visible HTTP status: " + status4 : graph.evidenceLevel === "code-reference" ? "Code reference only; execution is not established." : "No HTTP status observed in this record."));
@@ -50545,9 +50618,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
               el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status)
             );
             actionContext(item, workspaceState.scope.layer === "http" ? httpRows : []);
-            const path31 = el("dl", "action-fields");
-            pathField(path31, "API path", results3.pathText(record.responsePath ?? record.path ?? record.requestedPath ?? record.requestShape?.path));
-            item.append(path31);
+            const path32 = el("dl", "action-fields");
+            pathField(path32, "API path", results3.pathText(record.responsePath ?? record.path ?? record.requestedPath ?? record.requestShape?.path));
+            item.append(path32);
             callDetails(item, heading, key4, groupVisibility, httpRows?.[0]?.id, (visibility) => recordedBlock(JSON.stringify(record, null, 2), { label: "Recorder details / local only", copyLabel: "Copy recorder details" }, visibility));
             return item;
           }
@@ -50595,7 +50668,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const home = sourceHomes.get(entry3.scenarioId);
       home.identifiers.push(...(entry3.identifiers ?? []).filter(([, value]) => value != null && value !== "").map(([kind2, value]) => [label + " " + kind2, value]));
     });
-    if (commonToolTiming && !countedIds) activitySection.toggle.querySelector("span").textContent = `${count7(selectedActions.length)} recorded ${selectedActions.length === 1 ? "call" : "calls"}`;
+    if (commonToolTiming && !countedIds) activitySection.toggle.querySelector("span").textContent = `${count8(selectedActions.length)} recorded ${selectedActions.length === 1 ? "call" : "calls"}`;
     for (const [scenarioId, home] of sourceHomes) {
       const toggle = el("button", "quiet reader-identifiers-toggle", "Record identifiers");
       toggle.type = "button";
@@ -50640,20 +50713,20 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
   function updateRequestReportActions() {
     if (workspaceState.route.view !== "request" || !$2("requestReportToggle")) return;
     const membership = reportRequestSelection(workspaceState.route.request);
-    const pick = $2("requestReportToggle"), next2 = $2("requestReportContinue"), title2 = $2("requestReportTitle");
+    const pick2 = $2("requestReportToggle"), next2 = $2("requestReportContinue"), title2 = $2("requestReportTitle");
     const fixedScope = underlyingRoute().view === "reports" && reportScope !== "selected";
     const reportOrigin = fromReportCreation();
     const readingBlock = nativeReaderSelectionBlock();
-    setText(pick, membership.selected ? "Remove from report" : "Add to report");
-    pick.hidden = fixedScope || Boolean(periodReport);
-    pick.disabled = Boolean(readingBlock) || membership.disabled || fixedScope;
+    setText(pick2, membership.selected ? "Remove from report" : "Add to report");
+    pick2.hidden = fixedScope || Boolean(periodReport);
+    pick2.disabled = Boolean(readingBlock) || membership.disabled || fixedScope;
     setText(next2, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : "Continue to report");
     next2.disabled = reportOrigin ? exportWriting : Boolean(readingBlock) || membership.disabled || fixedScope || !membership.selected;
     next2.hidden = !reportOrigin && !membership.selected;
     setText(title2, readingBlock || (periodReport ? "This report uses fixed paired periods. Return to Compare to change its activity." : fixedScope ? membership.included ? "Included by this report's activity scope. Change the scope in Activity." : "Not included with this report's scope and author choices. Change them in Activity." : membership.selected && !membership.included ? "Selected; not included with current report choices." : !membership.selected && membership.included ? "Included through the current report scope." : ""));
     title2.hidden = !title2.textContent;
     const block = reportSelectionBlock();
-    ux.tooltip(pick, readingBlock || block || (membership.disabled ? "This interaction has no reportable activity." : ""));
+    ux.tooltip(pick2, readingBlock || block || (membership.disabled ? "This interaction has no reportable activity." : ""));
     ux.tooltip(next2, next2.disabled ? readingBlock || block || "Add this interaction before continuing." : "");
   }
   function reportSelection(kind2 = reportScope) {
@@ -50745,8 +50818,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
   }
   function reportNativeSummary(value) {
-    const native2 = value.nativeConversationCount === null ? "Microsoft conversations will be counted when preparing." : `${count7(value.nativeConversationCount)} retained Microsoft ${value.nativeConversationCount === 1 ? "conversation" : "conversations"} ${reportScope === "selected" ? "selected" : "in the original view"}.`;
-    return `${count7(value.requests.length)} GitHub ${value.requests.length === 1 ? "interaction" : "interactions"}. ${native2} Conversations on other pages remain included.` + (nativeAnalysisState && reportScope !== "selected" ? " Search widgets count matching calls; the report includes each matching conversation's complete evidence and may contain more calls." : "");
+    const native2 = value.nativeConversationCount === null ? "Microsoft conversations will be counted when preparing." : `${count8(value.nativeConversationCount)} retained Microsoft ${value.nativeConversationCount === 1 ? "conversation" : "conversations"} ${reportScope === "selected" ? "selected" : "in the original view"}.`;
+    return `${count8(value.requests.length)} GitHub ${value.requests.length === 1 ? "interaction" : "interactions"}. ${native2} Conversations on other pages remain included.` + (nativeAnalysisState && reportScope !== "selected" ? " Search widgets count matching calls; the report includes each matching conversation's complete evidence and may contain more calls." : "");
   }
   function reportSelectionBlock() {
     if (exportWriting || reportJourney?.snapshot().saveUnconfirmed) return "Check or finish the current save before changing report activity.";
@@ -51057,7 +51130,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const nativeOutside = view.picking ? selectedNative().items.filter((item) => !pageIds.has(item.id)).length : selection2.nativeView && Number.isSafeInteger(selection2.nativeConversationCount) ? Math.max(0, selection2.nativeConversationCount - [...pageIds].filter((id5) => view.nativeItems.some((item) => item.id === id5)).length) : 0;
     const outside = selection2.requests.filter((request2) => !pageIds.has(request2.scenarioId)).length + nativeOutside;
     summary.hidden = !outside;
-    setText(summary, outside ? `${count7(outside)} included outside this page.` : "");
+    setText(summary, outside ? `${count8(outside)} included outside this page.` : "");
   }
   function setReportMetadata(node, facts2) {
     node.classList.add("report-metadata");
@@ -51124,14 +51197,14 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     for (const kind2 of ["all", "current", "selected"]) {
       const scope = reportSelection(kind2), size = scope.requests.length;
-      const unavailable6 = Boolean(nativeReportBlock(kind2)), counter = $2("scopeCount-" + kind2);
-      counter.hidden = unavailable6;
-      setReportMetadata(counter, unavailable6 ? [] : scope.available && scope.nativeView ? [
-        `${count7(scope.requests.length)} GitHub ${scope.requests.length === 1 ? "interaction" : "interactions"}`,
-        scope.nativeConversationCount === null ? "Microsoft count checked at preparation" : `${count7(scope.nativeConversationCount)} Microsoft ${scope.nativeConversationCount === 1 ? "conversation" : "conversations"}`
+      const unavailable6 = Boolean(nativeReportBlock(kind2)), counter2 = $2("scopeCount-" + kind2);
+      counter2.hidden = unavailable6;
+      setReportMetadata(counter2, unavailable6 ? [] : scope.available && scope.nativeView ? [
+        `${count8(scope.requests.length)} GitHub ${scope.requests.length === 1 ? "interaction" : "interactions"}`,
+        scope.nativeConversationCount === null ? "Microsoft count checked at preparation" : `${count8(scope.nativeConversationCount)} Microsoft ${scope.nativeConversationCount === 1 ? "conversation" : "conversations"}`
       ] : scope.available ? [
-        scope.sourceSessionCount === null ? "Chat count unavailable" : `${count7(scope.sourceSessionCount)} ${scope.sourceSessionCount === 1 ? "chat" : "chats"}`,
-        `${count7(size)} ${size === 1 ? "interaction" : "interactions"}`
+        scope.sourceSessionCount === null ? "Chat count unavailable" : `${count8(scope.sourceSessionCount)} ${scope.sourceSessionCount === 1 ? "chat" : "chats"}`,
+        `${count8(size)} ${size === 1 ? "interaction" : "interactions"}`
       ] : ["Count unavailable"]);
       document.querySelector(`[name=reportScope][value=${kind2}]`).checked = reportScope === kind2;
     }
@@ -51163,7 +51236,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     $2("reportResultText").disabled = exportWriting;
     $2("reportRecordedContextHelp").hidden = !$2("reportRecordedContext").checked && draft.options().promptMode !== "none";
     setText($2("reportRecordedContextHelp"), draft.options().promptMode === "none" ? "No prompts also excludes linked replies." : $2("reportRecordedContext").checked ? "Linked context does not expand the measured activity or prove one task. Unavailable replies stay excluded." : "");
-    setText($2("reportPromptAuthorSummary"), value.available === false ? "Interaction counts are unavailable for this scope." : `${count7(value.requests.length)} of ${count7(value.baseRequests.length)} ${value.baseRequests.length === 1 ? "interaction" : "interactions"} included.${value.authorExcludedRequestGroups ? ` ${count7(value.authorExcludedRequestGroups)} excluded by authors. Your selection is kept.` : ""}`);
+    setText($2("reportPromptAuthorSummary"), value.available === false ? "Interaction counts are unavailable for this scope." : `${count8(value.requests.length)} of ${count8(value.baseRequests.length)} ${value.baseRequests.length === 1 ? "interaction" : "interactions"} included.${value.authorExcludedRequestGroups ? ` ${count8(value.authorExcludedRequestGroups)} excluded by authors. Your selection is kept.` : ""}`);
     $2("reportPromptAuthorSummary").hidden = !periodReport && value.available !== false && !value.authorExcludedRequestGroups;
     $2("scopeExplanation").replaceChildren();
     $2("scopeExplanation").hidden = !hasNativeScope;
@@ -51198,9 +51271,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const currentIds = new Set(currentViewScenarios().map((s) => s.scenarioId));
     const hidden = value.requests.filter((request2) => !request2.aliases.some((id5) => currentIds.has(id5))).length;
     const currentMembershipAvailable = semanticQuery === null || semanticBound;
-    $2("reportPopulationNote").textContent = value.available && !unknownSelected && value.requests.length ? currentMembershipAvailable ? hidden ? `Includes ${count7(hidden)} ${hidden === 1 ? "interaction" : "interactions"} outside the current Analyze view.` : "" : "Current Analyze matches are unavailable." : "";
+    $2("reportPopulationNote").textContent = value.available && !unknownSelected && value.requests.length ? currentMembershipAvailable ? hidden ? `Includes ${count8(hidden)} ${hidden === 1 ? "interaction" : "interactions"} outside the current Analyze view.` : "" : "Current Analyze matches are unavailable." : "";
     const matching = results3.summarize(selectionRows().filter((row) => reportIds.has(row.scenarioId) && currentIds.has(row.scenarioId)));
-    $2("reportMatchingContext").replaceChildren(resultLine(workspaceState.scope?.layer || "tool", matching, { scope: "Matching view results, not the full report", label: `${count7(matching?.count)} matching ${results3.unit(workspaceState.scope?.layer || "tool", matching?.count)} in the current view` }));
+    $2("reportMatchingContext").replaceChildren(resultLine(workspaceState.scope?.layer || "tool", matching, { scope: "Matching view results, not the full report", label: `${count8(matching?.count)} matching ${results3.unit(workspaceState.scope?.layer || "tool", matching?.count)} in the current view` }));
     $2("reportMatchingContext").hidden = !value.requests.length || !currentMembershipAvailable || Boolean(value.nativeConversations) || hasNativeScope;
     const x2 = workspaceState.evidence.exportCatalog?.excluded;
     const exclusions = $2("scopeExclusions");
@@ -51222,7 +51295,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         const amount = x2[key4], known = Number.isSafeInteger(amount) && amount >= 0;
         if (known && amount === 0) continue;
         const row = el("div");
-        row.append(el("dt", "", label), el("dd", "", known ? count7(amount) : "Count unavailable"));
+        row.append(el("dt", "", label), el("dd", "", known ? count8(amount) : "Count unavailable"));
         excluded.append(row);
       }
       if (excluded.childElementCount) exclusions.append(
@@ -51234,14 +51307,14 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (value.excludedRequestedGroups) exclusions.append(el(
       "p",
       "context-help-note",
-      `${count7(value.excludedRequestedGroups)} selected request groups have no eligible evidence.`
+      `${count8(value.excludedRequestedGroups)} selected request groups have no eligible evidence.`
     ));
     const inclusion = periodReport ? `One comparison report / ${periodReport.value.periods.baseline.rowIds.length} matching records in A / ${periodReport.value.periods.later.rowIds.length} in B` : unknownSelected ? "A selected request is no longer available" : hasNativeScope && value.available ? reportNativeSummary(value) : reportScopes.inclusion(value);
     const activity = workspaceState.route.view === "analyze";
     setText($2("activitySelectionSummary"), inclusion);
     setReportMetadata($2("previewSelectionSummary"), periodReport || unknownSelected || !value.available || hasNativeScope ? [inclusion] : !value.requests.length ? ["No interactions included"] : [
-      value.sourceSessionCount === null ? "Chat count unavailable" : `${count7(value.sourceSessionCount)} ${value.sourceSessionCount === 1 ? "chat" : "chats"}`,
-      `${count7(value.requests.length)} ${value.requests.length === 1 ? "interaction" : "interactions"}`
+      value.sourceSessionCount === null ? "Chat count unavailable" : `${count8(value.sourceSessionCount)} ${value.sourceSessionCount === 1 ? "chat" : "chats"}`,
+      `${count8(value.requests.length)} ${value.requests.length === 1 ? "interaction" : "interactions"}`
     ]);
     let compactSelection = $2("activitySelectionCompact");
     if (!compactSelection) {
@@ -51306,9 +51379,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         const microsoft = periodReport.value.nativePeriods?.summary.map((item) => {
           const source = item.sourceId === "microsoft-365-chat" ? "Chat" : "Cowork";
           const unit = item.unit === "native-tool-call" ? "calls" : item.unit === "native-returned-result-observation" ? "result observations" : "message observations";
-          return `${count7(item[side].count)} ${source} ${unit}`;
+          return `${count8(item[side].count)} ${source} ${unit}`;
         }).join("; ");
-        setText(group.querySelector(".report-period-count"), `${count7(period.rowIds.length)} matching ${results3.unit(periodReport.value.definitions.layer, period.rowIds.length)}${microsoft ? `; ${microsoft}` : ""}`);
+        setText(group.querySelector(".report-period-count"), `${count8(period.rowIds.length)} matching ${results3.unit(periodReport.value.definitions.layer, period.rowIds.length)}${microsoft ? `; ${microsoft}` : ""}`);
       }
       setText(pairedSummary.querySelector(".report-period-authors"), `Authors: ${authorship.selectionLabel(activeAuthors)}.`);
       pairedSummary.querySelector("button").disabled = exportWriting || reportJourney.snapshot().saveUnconfirmed;
@@ -51356,7 +51429,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     host.replaceChildren();
     $2("reportRequestSearchCount").hidden = !query2;
     const candidates2 = requests.length + nativeItems.length;
-    setText($2("reportRequestSearchCount"), native2 ? `${count7(matching.length)} of ${count7(candidates2)} available cards shown. Search checks these cards and keeps your report scope unchanged.` : `${count7(matching.length)} of ${count7(requests.length)} saved interactions shown.${picking ? " Selections outside this list are kept." : ` All ${count7(requests.length)} remain included.`}`);
+    setText($2("reportRequestSearchCount"), native2 ? `${count8(matching.length)} of ${count8(candidates2)} available cards shown. Search checks these cards and keeps your report scope unchanged.` : `${count8(matching.length)} of ${count8(requests.length)} saved interactions shown.${picking ? " Selections outside this list are kept." : ` All ${count8(requests.length)} remain included.`}`);
     const listHost = el("div", "report-selection-list");
     host.append(listHost);
     const wrapList = (list2) => {
@@ -51412,7 +51485,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const source = boundedNative.presentation(), ready2 = !source.loading && !source.error && (plan.nativePage === null && !source.selected || Boolean(source.value) && (plan.nativePage === null || source.pageIndex === plan.nativePage));
       const pager = viewKey(el("div", "pager list-pager"), "pager:" + key4);
       pager.setAttribute("aria-label", "Report activity pages");
-      const label = el("span", "", ready2 ? `${count7(plan.first)}-${count7(plan.last)} of ${count7(plan.total)} available cards` : `Page ${count7(plan.index + 1)} / Microsoft page ${source.loading ? "loading" : "unavailable"}`);
+      const label = el("span", "", ready2 ? `${count8(plan.first)}-${count8(plan.last)} of ${count8(plan.total)} available cards` : `Page ${count8(plan.index + 1)} / Microsoft page ${source.loading ? "loading" : "unavailable"}`);
       label.tabIndex = -1;
       label.dataset.pagePosition = "";
       pager.append(label);
@@ -51553,8 +51626,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const savedCount = workspaceState.evidence.exports?.length || 0;
     const reportCount = (workspaceState.evidence.exports || []).filter((bundle2) => (bundle2.kind ?? "report") === "report").length;
     const comparisonCount = savedCount - reportCount;
-    if (library) setText($2("savedLibraryTitle"), comparisonCount ? `Saved reports and comparisons (${count7(savedCount)})` : savedCount ? `Saved reports (${count7(savedCount)})` : "Saved reports");
-    setText($2("savedReportCount"), library && comparisonCount ? `${count7(reportCount)} report${reportCount === 1 ? "" : "s"} / ${count7(comparisonCount)} comparison${comparisonCount === 1 ? "" : "s"}` : "");
+    if (library) setText($2("savedLibraryTitle"), comparisonCount ? `Saved reports and comparisons (${count8(savedCount)})` : savedCount ? `Saved reports (${count8(savedCount)})` : "Saved reports");
+    setText($2("savedReportCount"), library && comparisonCount ? `${count8(reportCount)} report${reportCount === 1 ? "" : "s"} / ${count8(comparisonCount)} comparison${comparisonCount === 1 ? "" : "s"}` : "");
     $2("savedReportCount").parentElement.hidden = !library || !comparisonCount;
     $2("deleteAllReports").disabled = !reportCount || workspaceState.loading || workspaceState.stale || workspaceState.evidence.exports.some((bundle2) => (bundle2.kind ?? "report") === "report" && (bundle2.canDelete === false || bundle2.nativeEvidenceHash));
     (() => {
@@ -51573,7 +51646,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       }).sort((a3, b) => a3.prepared === null ? b.prepared === null ? a3.index - b.index : 1 : b.prepared === null ? -1 : (library && workspaceState.route.order === "oldest" ? 1 : -1) * (a3.prepared - b.prepared || a3.index - b.index));
       if (!library) {
         const entries3 = ordered2.slice(0, 3);
-        setText($2("savedLibraryTitle"), entries3.length === savedCount ? `Recent reports (${count7(savedCount)})` : `Recent reports (${count7(entries3.length)} of ${count7(savedCount)})`);
+        setText($2("savedLibraryTitle"), entries3.length === savedCount ? `Recent reports (${count8(savedCount)})` : `Recent reports (${count8(entries3.length)} of ${count8(savedCount)})`);
         const recent = el("div", "saved-shelf-rows");
         for (const { bundle: bundle2 } of entries3) {
           const control = savedTitleControl(bundle2, listCurrent, true, listeners);
@@ -51598,8 +51671,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
           date3 === "Time not recorded" ? "Preparation time unavailable" : `Prepared ${date3}`,
           mode,
           formats3,
-          Number.isSafeInteger(groups) && groups >= 0 ? `${count7(groups)} ${hasNative ? "GitHub " : ""}interaction${groups === 1 ? "" : "s"}` : "",
-          hasNative ? `${count7(conversations)} Microsoft conversation${conversations === 1 ? "" : "s"}` : ""
+          Number.isSafeInteger(groups) && groups >= 0 ? `${count8(groups)} ${hasNative ? "GitHub " : ""}interaction${groups === 1 ? "" : "s"}` : "",
+          hasNative ? `${count8(conversations)} Microsoft conversation${conversations === 1 ? "" : "s"}` : ""
         ].filter(Boolean).join(" / ");
         return { bundle: bundle2, label, preparedLabel: date3, period: savedPeriodLabel(bundle2) };
       });
@@ -51619,7 +51692,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         bundle2.timeContext?.timeZone,
         bundle2.timeContext?.locale
       ]));
-      setText($2("savedReportSearchCount"), query2 ? `${count7(matching.length)} of ${count7(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
+      setText($2("savedReportSearchCount"), query2 ? `${count8(matching.length)} of ${count8(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
       if (!matching.length) {
         $2("bundleList").append(empty("No saved reports match", "Try a title, date or file format, or clear this search."));
         return;
@@ -51663,21 +51736,21 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
             action: () => openSavedReport(bundle2, files, format)
           })), outer, current, rowListeners);
           const actions2 = el("div", "saved-report-actions");
-          const inspect = viewKey(button("Inspect details", () => {
-            if (current()) inspectSavedReport(bundle2, inspect);
+          const inspect2 = viewKey(button("Inspect details", () => {
+            if (current()) inspectSavedReport(bundle2, inspect2);
           }, "quiet", rowListeners), "inspect-bundle:" + bundle2.bundleId);
           const remove = viewKey(button(bundle2.kind === "comparison" ? "Delete saved comparison" : "Delete report", () => {
             if (current()) savedArtifactUI.open({ artifactKind: bundle2.kind ?? "report", artifactId: bundle2.bundleId, label: title2 }, remove);
           }, "quiet danger", rowListeners), "delete-bundle:" + bundle2.bundleId);
           remove.disabled = workspaceState.stale && !workspaceState.loading || bundle2.canDelete === false;
-          actions2.append(files, inspect, remove);
+          actions2.append(files, inspect2, remove);
           outer.prepend(identity4, privacy, actions2);
           return outer;
         }
       });
       const unlisted = matching.filter(({ bundle: bundle2, period }) => bundle2.kind !== "comparison" && !period).length;
       if (unlisted) {
-        const note = el("p", "saved-period-availability", unlisted === 1 ? "The activity period isn't listed for one saved entry." : `Activity periods aren't listed for ${unlisted === matching.length ? "these " : ""}${count7(unlisted)} saved entries.`);
+        const note = el("p", "saved-period-availability", unlisted === 1 ? "The activity period isn't listed for one saved entry." : `Activity periods aren't listed for ${unlisted === matching.length ? "these " : ""}${count8(unlisted)} saved entries.`);
         $2("bundleList").append(note);
       }
       $2("bundleList").append(history2);
@@ -51951,8 +52024,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       add("Scope", { all: "All saved activity", current: "Analyze selection", selected: "Selected interactions" }[bundle2.selectionScope?.kind]);
       const nativeConversations = bundle2.selectionScope?.nativeConversations;
       const hasNative = Number.isSafeInteger(nativeConversations) && nativeConversations >= 0;
-      if (Number.isSafeInteger(bundle2.selectionScope?.requestGroups) && bundle2.selectionScope.requestGroups >= 0) add(hasNative ? "GitHub interactions" : "Interactions", count7(bundle2.selectionScope.requestGroups));
-      if (hasNative) add("Microsoft conversations", count7(nativeConversations));
+      if (Number.isSafeInteger(bundle2.selectionScope?.requestGroups) && bundle2.selectionScope.requestGroups >= 0) add(hasNative ? "GitHub interactions" : "Interactions", count8(bundle2.selectionScope.requestGroups));
+      if (hasNative) add("Microsoft conversations", count8(nativeConversations));
       add("Prompts", { none: "None", masked: "Masked", original: "Original" }[bundle2.promptMode]);
       add("Report period", savedPeriodLabel(bundle2));
       add("Purpose", {
@@ -52165,23 +52238,23 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       sharing.prepend(ux.icon("info"));
       actions2.append(sharing);
     }
-    const selector2 = el("select"), viewing = el("label", "", "Viewing");
+    const selector3 = el("select"), viewing = el("label", "", "Viewing");
     const fileHint = el("p", "context-help-note", "Viewing a saved file leaves the saved copy unchanged.");
     fileHint.id = "savedFileViewingHint";
     fileHint.hidden = true;
     toolbar.after(fileHint);
-    selector2.id = "savedReaderFormat";
-    viewing.htmlFor = selector2.id;
+    selector3.id = "savedReaderFormat";
+    viewing.htmlFor = selector3.id;
     const formats3 = Array.isArray(bundle2.formats) && bundle2.formats.length ? registeredReportFiles(bundle2).filter((format) => !entry3?.original || format !== "manifest") : [savedReadableFormat(bundle2)].filter(Boolean);
-    selector2.append(option("report", "Report in WIRE"));
-    for (const format of formats3) selector2.append(option(format, reportFileLabel(format)));
+    selector3.append(option("report", "Report in WIRE"));
+    for (const format of formats3) selector3.append(option(format, reportFileLabel(format)));
     current.updateViewingChoices = (select) => {
-      if (select !== selector2 || !valid2() || selectControls?.isOpen(selector2) || !current.reportHost?.classList.contains("saved-brief-host") || selector2.querySelector('[value="document"]')) return;
-      selector2.options[0].textContent = "Brief";
-      selector2.options[0].after(option("document", "Full report"));
+      if (select !== selector3 || !valid2() || selectControls?.isOpen(selector3) || !current.reportHost?.classList.contains("saved-brief-host") || selector3.querySelector('[value="document"]')) return;
+      selector3.options[0].textContent = "Brief";
+      selector3.options[0].after(option("document", "Full report"));
     };
-    selector2.value = entry3?.reportView ?? !entry3?.format ? "report" : formats3.includes(entry3?.format) ? entry3.format : savedReadableFormat(bundle2);
-    toolbar.append(viewing, selector2);
+    selector3.value = entry3?.reportView ?? !entry3?.format ? "report" : formats3.includes(entry3?.format) ? entry3.format : savedReadableFormat(bundle2);
+    toolbar.append(viewing, selector3);
     const expand = button("Expand sections", () => {
       current.expanded = !current.expanded;
       void show();
@@ -52190,7 +52263,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     toolbar.append(expand);
     const download = button("Download", async () => {
       if (!readable() || download.disabled) return;
-      const read2 = current.read, format = selector2.value, downloadRead = {};
+      const read2 = current.read, format = selector3.value, downloadRead = {};
       current.downloadRead = downloadRead;
       const active = () => readable() && current.read === read2;
       download.disabled = true;
@@ -52216,12 +52289,12 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       current.preview?.dispose();
       current.preview = null;
       if (current.reportHost) current.reportHost.hidden = true;
-      const showingReport = selector2.value === "report" || selector2.value === "document";
-      const completeDocument = selector2.value === "document";
+      const showingReport = selector3.value === "report" || selector3.value === "document";
+      const completeDocument = selector3.value === "document";
       fileHint.hidden = showingReport;
-      if (showingReport) selector2.removeAttribute("aria-describedby");
-      else selector2.setAttribute("aria-describedby", fileHint.id);
-      const read2 = {}, format = showingReport ? savedReadableFormat(bundle2) : selector2.value;
+      if (showingReport) selector3.removeAttribute("aria-describedby");
+      else selector3.setAttribute("aria-describedby", fileHint.id);
+      const read2 = {}, format = showingReport ? savedReadableFormat(bundle2) : selector3.value;
       const kind2 = bundle2.kind === "comparison" ? "comparison" : "report";
       if (!showingReport && current.reportValue?.kind === "pdf") {
         current.reportPreview?.dispose();
@@ -52282,7 +52355,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         if (!active()) return;
         download.disabled = false;
         paintSavedDocument(body, value, active, showingReport, completeDocument);
-        if (showingReport) current.updateViewingChoices(selector2);
+        if (showingReport) current.updateViewingChoices(selector3);
         selectControls?.sync();
       } catch (error) {
         if (active()) {
@@ -52296,7 +52369,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         }
       }
     }
-    selector2.addEventListener("change", show);
+    selector3.addEventListener("change", show);
     selectControls?.sync();
     await show();
   }
@@ -52569,7 +52642,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const coverage4 = workspaceState.evidence.coverage || {};
     const c = workspaceState.analytics.coverage;
     const gaps = [];
-    if (c.unknownSessionRows) gaps.push(`${count7(c.unknownSessionRows)} matching records have no known source chat.`);
+    if (c.unknownSessionRows) gaps.push(`${count8(c.unknownSessionRows)} matching records have no known source chat.`);
     if (!coverage4.graphHistory && ["direct-request", "recorded-http", "code-reference"].includes(workspaceState.scope.layer))
       gaps.push("Graph history has not been scanned; coverage is unknown.");
     setText($2("activityCoverageGap"), gaps.join(" "));
@@ -52580,14 +52653,14 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     if (!workspaceState.evidence || !workspaceState.analytics || !workspaceState.scope) return;
     const host = $2("collectionEvidenceDetails"), coverage4 = workspaceState.evidence.coverage || {}, c = workspaceState.analytics.coverage;
     const http = workspaceState.scope.layer === "http";
-    const sources = http ? `${count7(c.sessionCount)} recorder source${c.sessionCount === 1 ? "" : "s"}` : chatCopy2.count(c.sessionCount);
-    const unscoped = c.unscopedSessionCount ? ` ${count7(c.unscopedSessionCount)} ${http ? "source" : "chat"}${c.unscopedSessionCount === 1 ? " has" : "s have"} no project.` : "";
+    const sources = http ? `${count8(c.sessionCount)} recorder source${c.sessionCount === 1 ? "" : "s"}` : chatCopy2.count(c.sessionCount);
+    const unscoped = c.unscopedSessionCount ? ` ${count8(c.unscopedSessionCount)} ${http ? "source" : "chat"}${c.unscopedSessionCount === 1 ? " has" : "s have"} no project.` : "";
     const native2 = sharedNativeView(), sourceFilter = workspaceState.scope.filters.sources;
     const withGitHub = !sourceFilter?.length || sourceFilter.includes("github-copilot");
     const scope = hasMicrosoftSource() && !http ? "GitHub activity" : scopeLabels[workspaceState.scope.filters.scope] || "Selected collection";
     const membership = [];
-    if (withGitHub) membership.push(`${scope}: ${count7(c.scenarioCount)} ${http ? "record group" : "interaction"}${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count7(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`);
-    if (native2) membership.push(`Microsoft: ${count7(native2.aggregates.conversations)} retained ${native2.aggregates.conversations === 1 ? "conversation" : "conversations"}.`);
+    if (withGitHub) membership.push(`${scope}: ${count8(c.scenarioCount)} ${http ? "record group" : "interaction"}${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count8(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`);
+    if (native2) membership.push(`Microsoft: ${count8(native2.aggregates.conversations)} retained ${native2.aggregates.conversations === 1 ? "conversation" : "conversations"}.`);
     else if (boundedIncludesMicrosoft()) membership.push("Microsoft membership unavailable.");
     const checked = collection?.config?.approved ? collection.checkedWindow : coverage4;
     const key4 = JSON.stringify([workspaceState.evidence.revision, workspaceState.scope, membership, c.firstAt, c.lastAt, coverage4, checked, workspaceState.analytics.warnings, collectionReadError, collection?.config?.approved, collection?.config?.windowDays]);
@@ -52605,7 +52678,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         ["Collection shown", scopeLabels[workspaceState.scope.filters.scope]],
         ["Selected date filter", selectedDates],
         ["Dated records in this view", range(c.firstAt, c.lastAt) || "No dated matching records"],
-        ["Approved collection window", collectionReadError ? "Current approval unavailable" : collection?.config?.approved ? `${count7(collection.config.windowDays)} days of local history` : "No approved collection window"],
+        ["Approved collection window", collectionReadError ? "Current approval unavailable" : collection?.config?.approved ? `${count8(collection.config.windowDays)} days of local history` : "No approved collection window"],
         ["Last checked history", checked?.since && checked?.until ? `${timestamp(checked.since)} to ${timestamp(checked.until)}` : "Not recorded"],
         ["Collection window at this snapshot", range(coverage4.since, coverage4.until) || "Not recorded"],
         ["Snapshot coverage checked", coverage4.checkedAt ? timestamp(coverage4.checkedAt) : "Not recorded"],
@@ -52617,7 +52690,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const graph = coverage4.graphHistory;
     if (graph) {
       const retainedScans = graph.sourceCountBasis === "retained-scan-history";
-      const scanCount = (value) => Number.isFinite(value) ? count7(value) : "Not recorded";
+      const scanCount = (value) => Number.isFinite(value) ? count8(value) : "Not recorded";
       host.append(el("h3", "", "Collection Graph scan"), facts([
         [retainedScans ? "Listed sources read at least once" : "Sources with a recorded scan", scanCount(graph.counts?.sourcesScanned)],
         [retainedScans ? "Sources currently eligible for collection" : "Sources requested for scanning", scanCount(graph.counts?.sourcesRequested)],
@@ -52762,7 +52835,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     const unavailable6 = coverage4?.unavailable ?? detail?.sourceErrors ?? 0, limited = coverage4?.limited ?? 0;
     const compact = Array.isArray(rows) && rows.length === 0 && !unavailable6 && !limited && !query2.trim();
     const checked = coverage4 && detail?.lastCheckedAt && detail?.discovery;
-    setText($2("collectionIssueLabel"), unavailable6 || limited ? `${count7(unavailable6 + limited)} ${unavailable6 + limited === 1 ? "chat" : "chats"} with history gaps` : !checked ? "History not checked" : collectionReadError || collection?.error || ["error", "disconnected", "stopped"].includes(collection?.state) ? "Current history coverage unavailable" : !coverage4.eligible ? "No eligible chats to check" : coverage4.pending ? "History is still importing" : detail.state === "collecting" ? "Checking for history gaps" : detail.state === "paused" ? "No history gaps reported at last check" : "No history gaps reported");
+    setText($2("collectionIssueLabel"), unavailable6 || limited ? `${count8(unavailable6 + limited)} ${unavailable6 + limited === 1 ? "chat" : "chats"} with history gaps` : !checked ? "History not checked" : collectionReadError || collection?.error || ["error", "disconnected", "stopped"].includes(collection?.state) ? "Current history coverage unavailable" : !coverage4.eligible ? "No eligible chats to check" : coverage4.pending ? "History is still importing" : detail.state === "collecting" ? "Checking for history gaps" : detail.state === "paused" ? "No history gaps reported at last check" : "No history gaps reported");
     const search2 = $2("issueSearch").closest(".scoped-search");
     if (compact && (search2.contains(document.activeElement) || $2("collectionIssueGroups").contains(document.activeElement))) ux.restoreFocus($2("collectionIssuesTitle"));
     for (const node of [
@@ -52786,7 +52859,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const reading = captureReading();
       const focusedSource = document.activeElement?.closest(".history-issue")?.dataset.disclosureKey?.slice("history-issue:".length);
       const ordered2 = presentation.ordered("history-issues", rows, (row) => row.sessionId).filter((row) => localSearch.matches(query2, historyStatus2.searchTerms(row)));
-      setText($2("issueSearchCount"), `${count7(ordered2.length)} of ${count7(rows.length)} ${rows.length === 1 ? "chat" : "chats"}`);
+      setText($2("issueSearchCount"), `${count8(ordered2.length)} of ${count8(rows.length)} ${rows.length === 1 ? "chat" : "chats"}`);
       $2("issueSearchCount").hidden = !query2.trim();
       issuesSignature = signature;
       const host = $2("collectionIssueGroups");
@@ -52798,7 +52871,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         if (focusedIndex >= 0) presentation.setPage(`history-issues:${reason2}:${query2}`, Math.floor(focusedIndex / 6));
         const list2 = el("div"), content = el("div", "history-reason-body");
         content.append(el("p", "", copy.explanation), el("p", "muted", copy.guidance), list2);
-        const group = disclosure(`${historyStatus2.reasonTitles[reason2]} (${count7(members.length)})`, content, "history-reason");
+        const group = disclosure(`${historyStatus2.reasonTitles[reason2]} (${count8(members.length)})`, content, "history-reason");
         bindDetails(group, `history-reason:${reason2}:${query2}`, (open11) => {
           if (!open11) {
             list2.replaceChildren();
@@ -53457,7 +53530,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     issueCounts.replaceChildren();
     if (c) for (const [total, label] of [[unavailable6, "unavailable"], [limited, "limited"]]) {
       const fact3 = el("span", "history-status-count");
-      fact3.append(el("span", "history-status-value", count7(total)), document.createTextNode(` ${label}`));
+      fact3.append(el("span", "history-status-value", count8(total)), document.createTextNode(` ${label}`));
       if (issueCounts.childNodes.length) issueCounts.append(document.createTextNode(" "));
       issueCounts.append(fact3);
     }
@@ -53466,16 +53539,16 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     renderIssueZeroState(detail, detail.historyIssues, localQuery("issueSearch"));
     setText($2("collectionExactCheck"), timestamp(status4.lastCheckedAt));
     setText($2("collectionExactNew"), timestamp(status4.lastNewDataAt));
-    setText($2("collectionExactTimes"), status4.config ? `Read new history every ${count7(status4.cadence?.pollSeconds)} seconds; discover chats every ${count7(status4.cadence?.reconciliationSeconds ?? 30)} seconds; refresh this view every ${count7(status4.cadence?.browserPollSeconds ?? 5)} seconds.` : "Not configured.");
-    setText($2("collectionCoverageCounts"), c && status4.lastCheckedAt ? `${status4.error || ["error", "stopped", "disconnected"].includes(status4.state) ? "Last known coverage: " : ""}${count7(c.readable)} of ${count7(c.eligible)} eligible chats have readable history.` : "History coverage is not available until a check completes.");
-    setText($2("collectionCoveragePending"), c?.pending ? `${count7(c.pending)} ${c.pending === 1 ? "chat is" : "chats are"} awaiting or still importing history; some may already be readable.` : "");
+    setText($2("collectionExactTimes"), status4.config ? `Read new history every ${count8(status4.cadence?.pollSeconds)} seconds; discover chats every ${count8(status4.cadence?.reconciliationSeconds ?? 30)} seconds; refresh this view every ${count8(status4.cadence?.browserPollSeconds ?? 5)} seconds.` : "Not configured.");
+    setText($2("collectionCoverageCounts"), c && status4.lastCheckedAt ? `${status4.error || ["error", "stopped", "disconnected"].includes(status4.state) ? "Last known coverage: " : ""}${count8(c.readable)} of ${count8(c.eligible)} eligible chats have readable history.` : "History coverage is not available until a check completes.");
+    setText($2("collectionCoveragePending"), c?.pending ? `${count8(c.pending)} ${c.pending === 1 ? "chat is" : "chats are"} awaiting or still importing history; some may already be readable.` : "");
     $2("collectionCoveragePending").hidden = Boolean(nativeControl) || !c?.pending;
     collectionSettings2.receive(status4, publication);
     if (sourceCollection.controlsActive) sourceSettings?.receive(status4.sourceAware, publication);
     if (sourceCollection.active) {
       const native2 = workspaceState.evidence?.nativeRead;
       const counts3 = native2?.aggregates;
-      sourceSettings?.receiveSavedActivity((savedMicrosoftSummary(native2) + (counts3 ? ` ${count7(counts3.conversations)} ${counts3.conversations === 1 ? "conversation" : "conversations"} / ${count7(counts3.calls)} ${counts3.calls === 1 ? "tool call" : "tool calls"}.` : "")).trim(), publication);
+      sourceSettings?.receiveSavedActivity((savedMicrosoftSummary(native2) + (counts3 ? ` ${count8(counts3.conversations)} ${counts3.conversations === 1 ? "conversation" : "conversations"} / ${count8(counts3.calls)} ${counts3.calls === 1 ? "tool call" : "tool calls"}.` : "")).trim(), publication);
     }
     if (!api.isCurrent(publication)) return;
     renderSettingsSearch();
@@ -53488,38 +53561,38 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         el("h3", "", "Saved Microsoft observations"),
         el("p", "", savedMicrosoftSummary(workspaceState.evidence.nativeRead)),
         facts([
-          ["Saved observations", count7(savedCounts.variants)],
-          ["Message observations", count7(savedCounts.messages)],
-          ["Message parts", count7(savedCounts.parts)],
-          ["Task-state observations", count7(savedCounts.taskStates)]
+          ["Saved observations", count8(savedCounts.variants)],
+          ["Message observations", count8(savedCounts.messages)],
+          ["Message parts", count8(savedCounts.parts)],
+          ["Task-state observations", count8(savedCounts.taskStates)]
         ], { inlineHelp: false }),
         el("p", "", "Observations may include repeated or partial messages. They are not a count of complete replies.")
       );
     }
     if (inventory && c) {
       diagnostics.append(el("h3", "", "Source inventory"), facts([
-        ["Copilot chats listed by the source", count7(inventory.sessions)],
-        ["Chats with a verified local history location", count7(c.eligible)],
-        ["Chats read at least once", count7(c.readable)],
-        ["Chats awaiting or still importing history", count7(c.pending)]
+        ["Copilot chats listed by the source", count8(inventory.sessions)],
+        ["Chats with a verified local history location", count8(c.eligible)],
+        ["Chats read at least once", count8(c.readable)],
+        ["Chats awaiting or still importing history", count8(c.pending)]
       ], { inlineHelp: false }), el("p", "", "A verified location is not a successful read. A chat being imported may already have readable entries."));
-      const excluded = Object.entries(c.excluded || {}).map(([name, total]) => [historyStatus2.dispositions[name] || `Unclassified exclusion (technical code: ${name})`, count7(total)]);
+      const excluded = Object.entries(c.excluded || {}).map(([name, total]) => [historyStatus2.dispositions[name] || `Unclassified exclusion (technical code: ${name})`, count8(total)]);
       diagnostics.append(
         el("h3", "", "Not included in local collection"),
         facts(excluded, { inlineHelp: false }),
         el("p", "", "Archived chats, chats hosted elsewhere and unverified source links are exclusions, not failed reads."),
-        facts([["Chats beyond the source-list limit", count7(inventory.skippedByLimit)], ["Workspace records without a listed chat", count7(inventory.unmappedWorkspaces)]], { inlineHelp: false })
+        facts([["Chats beyond the source-list limit", count8(inventory.skippedByLimit)], ["Workspace records without a listed chat", count8(inventory.unmappedWorkspaces)]], { inlineHelp: false })
       );
     }
     if (m) diagnostics.append(el("h3", "", "Reading limits"), facts([
-      ["Chats with older history beyond the file read limit", count7(m.truncatedSources)],
-      ["Entries skipped above the 1 MiB size limit", count7(m.oversizedLines)],
-      ["Entries skipped because their format was invalid", count7(m.malformedLines)],
-      ["Older context records dropped from working memory", count7(m.contextEvictions)],
-      ["Credential-related exclusions", count7(m.credentialExclusions)],
-      ["Messages with an unsupported text format", count7(m.unsupportedPromptContents)],
-      ["Chats waiting for an unfinished entry", count7(m.partialSources)],
-      ["History data read in the last check (bytes)", count7(m.lastBytesRead)],
+      ["Chats with older history beyond the file read limit", count8(m.truncatedSources)],
+      ["Entries skipped above the 1 MiB size limit", count8(m.oversizedLines)],
+      ["Entries skipped because their format was invalid", count8(m.malformedLines)],
+      ["Older context records dropped from working memory", count8(m.contextEvictions)],
+      ["Credential-related exclusions", count8(m.credentialExclusions)],
+      ["Messages with an unsupported text format", count8(m.unsupportedPromptContents)],
+      ["Chats waiting for an unfinished entry", count8(m.partialSources)],
+      ["History data read in the last check (bytes)", count8(m.lastBytesRead)],
       ["Time spent in the last check", timingPresentation3.duration(Number.isFinite(m.lastDurationMs) && m.lastDurationMs >= 0 ? m.lastDurationMs : null)]
     ], { inlineHelp: false }));
     diagnostics.append(
@@ -53723,8 +53796,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
         list2 = null;
       } else if (/^<summary>.*<\/summary>$/.test(line) && current().tagName === "DETAILS") current().append(inline(el("summary"), line.slice(9, -10)));
       else if (line.startsWith("|") && /^\|[\s:|-]+\|$/.test(lines[index + 1]?.trim() || "")) {
-        const headers2 = cells(line), table2 = el("table"), head = el("thead"), row = el("tr"), body = el("tbody");
-        const numeric = cells(lines[index + 1]).map((cell) => cell.endsWith(":"));
+        const headers2 = cells(line), table3 = el("table"), head = el("thead"), row = el("tr"), body = el("tbody");
+        const numeric = cells(lines[index + 1]).map((cell2) => cell2.endsWith(":"));
         headers2.forEach((label, column) => {
           const th = inline(el("th", numeric[column] ? "numeric" : ""), label);
           th.scope = "col";
@@ -53741,8 +53814,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
           });
           body.append(tr);
         }
-        table2.append(head, body);
-        current().append(table2);
+        table3.append(head, body);
+        current().append(table3);
         list2 = null;
       } else if (/^##\s/.test(line)) {
         section = el("details", "detail-disclosure");
@@ -54018,8 +54091,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const context2 = preview.snapshot.recordedContext;
       const note = el("section", "report-context-review");
       const coverage4 = [
-        `${count7(context2.coverage.included)} included`,
-        ...["omitted", "unavailable", "partial"].filter((key4) => context2.coverage[key4]).map((key4) => `${count7(context2.coverage[key4])} ${key4}`)
+        `${count8(context2.coverage.included)} included`,
+        ...["omitted", "unavailable", "partial"].filter((key4) => context2.coverage[key4]).map((key4) => `${count8(context2.coverage[key4])} ${key4}`)
       ];
       note.append(
         el("h3", "", "Recorded context"),
@@ -54086,7 +54159,7 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
       const incomplete2 = reviewCopies.filter((prompt) => (prompt.availability ? !["recorded", "recorded-empty"].includes(prompt.availability) : prompt.status !== "full") || prompt.original === null).length;
       if (incomplete2) {
         const summary = el("p", "prompt-review-summary");
-        setReportMetadata(summary, [`${count7(incomplete2)} incomplete, excluded or unavailable sources`]);
+        setReportMetadata(summary, [`${count8(incomplete2)} incomplete, excluded or unavailable sources`]);
         comparisons.append(summary);
       }
       const copies = el("div");
@@ -55214,9 +55287,9 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
     }
     namedDrafts.accept(latest);
     syncNamedReport();
-    const present3 = namedDrafts.read().drafts.some((d) => d.id === id5);
-    if (!present3) namedDrafts.notifyDeleted();
-    announce(present3 ? `The draft is still here. ${failure5?.message ?? "Review it before deleting."}` : failure5 ? "The draft is no longer in Reports." : "Draft deleted.", present3 ? "stale" : "info");
+    const present4 = namedDrafts.read().drafts.some((d) => d.id === id5);
+    if (!present4) namedDrafts.notifyDeleted();
+    announce(present4 ? `The draft is still here. ${failure5?.message ?? "Review it before deleting."}` : failure5 ? "The draft is no longer in Reports." : "Draft deleted.", present4 ? "stale" : "info");
   }
   function revealAddedDraft(ref11) {
     const catalog = namedDrafts.read();
@@ -55382,8 +55455,8 @@ function mountEvidence(capability, createBoardTransport2, theme, createReportDra
   };
   selectControls = createSelectControls2(ux, {
     searchFields,
-    finderFor: (select, count8) => {
-      if (!Object.hasOwn(optionFinders, select.id) || count8 < 10 && !select.id.startsWith("trendsPairMeasure")) return null;
+    finderFor: (select, count9) => {
+      if (!Object.hasOwn(optionFinders, select.id) || count9 < 10 && !select.id.startsWith("trendsPairMeasure")) return null;
       return select.id === "chatFilter" && workspaceState.scope?.layer === "http" ? "Find a recorder source" : optionFinders[select.id];
     },
     matchesOption: (query2, label) => localSearch.matches(query2, [label]),
@@ -56302,7 +56375,7 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
     "/api/retained/microsoft/drilldown",
     "/api/retained/microsoft/analyze"
   ];
-  for (const path31 of nativeReadPaths) readOnly.add(path31);
+  for (const path32 of nativeReadPaths) readOnly.add(path32);
   readOnly.add("/api/artifact-deletion/eligibility");
   readOnly.add("/api/report-drafts/list");
   const searchPaths = /* @__PURE__ */ new Set([
@@ -56328,13 +56401,13 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
   function check(call) {
     if (call && (!fresh() || call.token !== token2)) throw stale(call);
   }
-  function begin(path31) {
-    if (controls.has(path31)) return null;
+  function begin(path32) {
+    if (controls.has(path32)) return null;
     if (!fresh()) throw unavailable6();
     const call = {
       token: token2,
       dispatched: false,
-      mutation: !readOnly.has(path31) && path31 !== "/api/search/events",
+      mutation: !readOnly.has(path32) && path32 !== "/api/search/events",
       controller: new AbortController()
     };
     calls2.add(call);
@@ -56352,9 +56425,9 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
   function checkControl(call) {
     if (call && (!call.token || call.token !== controlToken)) throw controlFailure(call);
   }
-  async function request2(path31, input, currentCapability, options = {}, call = null, control = null) {
-    if (options.signal && !searchPaths.has(path31)) throw new TypeError("Caller cancellation is limited to owned search requests.");
-    const timeout = path31 === "/api/search/events" ? null : AbortSignal.timeout(path31 === "/api/search/open" ? 3e4 : [
+  async function request2(path32, input, currentCapability, options = {}, call = null, control = null) {
+    if (options.signal && !searchPaths.has(path32)) throw new TypeError("Caller cancellation is limited to owned search requests.");
+    const timeout = path32 === "/api/search/events" ? null : AbortSignal.timeout(path32 === "/api/search/open" ? 3e4 : [
       "/api/import",
       "/api/preview",
       "/api/collection/configure",
@@ -56369,7 +56442,7 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
       "/api/recollection/preview",
       "/api/recollection/confirm",
       "/api/evaluation/automatic/revoke"
-    ].includes(path31) ? 12e4 : 1e4);
+    ].includes(path32) ? 12e4 : 1e4);
     const bodyText = input === void 0 ? void 0 : JSON.stringify(input);
     const signal = AbortSignal.any([options.signal, call?.controller.signal, timeout].filter(Boolean));
     check(call);
@@ -56378,12 +56451,12 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
     if (call) call.dispatched = true;
     if (control) control.dispatched = true;
     try {
-      response = await fetch(path31, {
+      response = await fetch(path32, {
         method: input === void 0 ? "GET" : "POST",
         headers: {
           ...currentCapability ? { "X-Board-Capability": currentCapability } : {},
           ...input === void 0 ? {} : { "Content-Type": "application/json" },
-          ...path31 === "/api/session" ? { "X-Wire-Session-Protocol": "1" } : {}
+          ...path32 === "/api/session" ? { "X-Wire-Session-Protocol": "1" } : {}
         },
         credentials: "same-origin",
         signal,
@@ -56397,7 +56470,7 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
         error2.reason = "search_cancelled";
         throw error2;
       }
-      const mutation = call?.mutation || path31 === "/api/access/command";
+      const mutation = call?.mutation || path32 === "/api/access/command";
       const error = new Error(mutation ? "WIRE did not respond. The action may have completed; check its result instead of repeating it." : "WIRE did not respond. Check that WIRE is running, then read this view again.");
       error.reason = "runtime_unavailable";
       if (mutation) {
@@ -56415,14 +56488,14 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
       if (watching) queueMicrotask(pump);
       throw stale(call);
     }
-    if (path31 === "/api/search/events" && response.ok) return { response };
+    if (path32 === "/api/search/events" && response.ok) return { response };
     let body;
     try {
       body = await response.json();
     } catch {
       check(call);
       checkControl(control);
-      const mutation = call?.mutation || path31 === "/api/access/command";
+      const mutation = call?.mutation || path32 === "/api/access/command";
       const error = new Error(mutation ? "WIRE could not read the response. The action may have completed; check its result instead of repeating it." : "WIRE could not read the response. Read this view again; no action was repeated.");
       error.reason = "invalid_response";
       if (mutation) {
@@ -56471,18 +56544,18 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
     }
     if (watching) queueMicrotask(pump);
   }
-  const api = async function api2(path31, input, options = {}) {
-    if (Object.hasOwn(options, "controlToken") && !controls.has(path31)) throw new TypeError("Original-owner tokens are limited to safe control operations.");
-    const control = Object.hasOwn(options, "controlToken") ? { token: options.controlToken, dispatched: false, mutation: path31 === "/api/access/command" } : null;
+  const api = async function api2(path32, input, options = {}) {
+    if (Object.hasOwn(options, "controlToken") && !controls.has(path32)) throw new TypeError("Original-owner tokens are limited to safe control operations.");
+    const control = Object.hasOwn(options, "controlToken") ? { token: options.controlToken, dispatched: false, mutation: path32 === "/api/access/command" } : null;
     checkControl(control);
-    const call = begin(path31);
+    const call = begin(path32);
     try {
       const previous = capability, legacy = bootstrap?.mode === "unbound";
-      let result = await request2(path31, input, previous, options, call, control);
-      if (controls.has(path31) && previous !== capability) {
+      let result = await request2(path32, input, previous, options, call, control);
+      if (controls.has(path32) && previous !== capability) {
         const error = new Error("The original panel connection changed. This control result cannot be adopted by the replacement connection.");
         error.reason = "wire_access_stale";
-        if (path31 === "/api/access/command") {
+        if (path32 === "/api/access/command") {
           error.code = "request_outcome_unknown";
           error.outcome = "unknown";
         }
@@ -56498,24 +56571,24 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
         }
         if (control) throw controlFailure(control);
         if (call && (!legacy || bootstrap.mode !== "unbound")) throw stale(call);
-        if (!readOnly.has(path31) || path31 === "/api/access/receipt") {
+        if (!readOnly.has(path32) || path32 === "/api/access/receipt") {
           const error = new Error("The local connection changed. This action was not replayed. Read current state and prepare a new review before trying again.");
           error.code = "request_rejected";
           throw error;
         }
         if (call) call.token = token2;
-        result = await request2(path31, input, capability, options, call);
+        result = await request2(path32, input, capability, options, call);
       }
       if (call && !legacy && ["wire_access_revoked", "wire_access_outcome_unknown"].includes(result.body?.code)) {
         revokeAuthority();
         throw stale(call);
       }
       if (!result.response.ok) {
-        const staleCollectionRead = readOnly.has(path31) && result.response.status === 409 && result.body?.code === "wire_access_global_collection_stale";
+        const staleCollectionRead = readOnly.has(path32) && result.response.status === 409 && result.body?.code === "wire_access_global_collection_stale";
         const error = new Error(staleCollectionRead ? "Collection status changed while it was being read. Read current settings; no connection or collection action will be repeated." : result.body?.error || `Local request failed (${result.response.status}).`);
         error.status = result.response.status;
         error.reason = result.body?.code ?? null;
-        if (path31 === "/api/collection/configure" && bootstrap?.collectionMode === "copilot-only" && result.body?.configuration === "not-saved" && !result.body?.outcome && [
+        if (path32 === "/api/collection/configure" && bootstrap?.collectionMode === "copilot-only" && result.body?.configuration === "not-saved" && !result.body?.outcome && [
           "source_paths_invalid",
           "source_metadata_unavailable",
           "source_metadata_invalid",
@@ -56523,7 +56596,7 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
           "source_reader_unavailable"
         ].includes(error.reason)) error.configuration = "not-saved";
         const recovery = result.body?.recollection;
-        if (path31 === "/api/recollection/confirm" && bootstrap?.collectionMode === "copilot-only" && exact10(recovery, ["operationId", "outcome"]) && recovery.outcome === "not-saved" && uuid9(input?.operationId) && recovery.operationId === input.operationId && !Object.hasOwn(result.body, "outcome")) {
+        if (path32 === "/api/recollection/confirm" && bootstrap?.collectionMode === "copilot-only" && exact10(recovery, ["operationId", "outcome"]) && recovery.outcome === "not-saved" && uuid9(input?.operationId) && recovery.operationId === input.operationId && !Object.hasOwn(result.body, "outcome")) {
           const qualifiedRefusal = error.reason === "RECOLLECTION_NOT_QUALIFIED" ? input.mode === "verified-records-only" && [409, 413, 422].includes(error.status) : error.status === 409 && [
             "RECOLLECTION_SELECTION_CHANGED",
             "RECOLLECTION_EFFECTS_CHANGED",
@@ -56535,7 +56608,7 @@ function createBoardTransport(initialCapability, onSessionChanged = () => {
           if (qualifiedRefusal) error.recollection = { ...recovery };
         }
         const refusal = result.body?.reportSave;
-        if (path31 === "/api/export" && refusal && Object.getPrototypeOf(refusal) === Object.prototype && Object.keys(refusal).sort().join(",") === "bundleId,kind,outcome,previewId" && refusal.outcome === "not-published" && refusal.kind === "report" && refusal.previewId === input?.previewId && typeof refusal.previewId === "string" && /^export-[a-f0-9-]{36}$/.test(refusal.bundleId) && result.body?.outcome !== "unknown") error.reportSave = { ...refusal };
+        if (path32 === "/api/export" && refusal && Object.getPrototypeOf(refusal) === Object.prototype && Object.keys(refusal).sort().join(",") === "bundleId,kind,outcome,previewId" && refusal.outcome === "not-published" && refusal.kind === "report" && refusal.previewId === input?.previewId && typeof refusal.previewId === "string" && /^export-[a-f0-9-]{36}$/.test(refusal.bundleId) && result.body?.outcome !== "unknown") error.reportSave = { ...refusal };
         if (result.body?.outcome === "unknown" || result.body?.code === "wire_access_outcome_unknown") {
           error.code = "request_outcome_unknown";
           error.outcome = "unknown";
@@ -57737,7 +57810,7 @@ function createEvidenceUX(icons, operations) {
         ...clamped,
         index,
         ownerOverlap: overlap(clamped, box),
-        overlap: protectedBoxes.reduce((sum, rect) => sum + overlap(clamped, rect), 0),
+        overlap: protectedBoxes.reduce((sum2, rect) => sum2 + overlap(clamped, rect), 0),
         distance: Math.hypot(clamped.left - preferred.left, clamped.top - preferred.top)
       };
     }).sort((a3, b) => a3.ownerOverlap - b.ownerOverlap || a3.overlap - b.overlap || a3.distance - b.distance || a3.index - b.index);
@@ -57796,14 +57869,14 @@ function createEvidenceUX(icons, operations) {
         panel.hidePopover();
         return;
       }
-      const box = anchor.getBoundingClientRect(), gap2 = 6, pad = 8;
+      const box = anchor.getBoundingClientRect(), gap2 = 6, pad2 = 8;
       const width = Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width);
-      panel.style.maxWidth = Math.max(0, width - pad * 2) + "px";
-      const availableBelow = innerHeight - box.bottom - gap2 - pad, availableAbove = box.top - gap2 - pad;
+      panel.style.maxWidth = Math.max(0, width - pad2 * 2) + "px";
+      const availableBelow = innerHeight - box.bottom - gap2 - pad2, availableAbove = box.top - gap2 - pad2;
       const above = availableBelow < Math.min(panel.scrollHeight, 260) && availableAbove > availableBelow;
       panel.style.maxHeight = Math.max(64, above ? availableAbove : availableBelow) + "px";
-      panel.style.left = Math.max(pad, Math.min(box.left, width - panel.offsetWidth - pad)) + "px";
-      panel.style.top = Math.max(pad, above ? box.top - gap2 - panel.offsetHeight : box.bottom + gap2) + "px";
+      panel.style.left = Math.max(pad2, Math.min(box.left, width - panel.offsetWidth - pad2)) + "px";
+      panel.style.top = Math.max(pad2, above ? box.top - gap2 - panel.offsetHeight : box.bottom + gap2) + "px";
     }
     panel.addEventListener("beforetoggle", (event) => {
       listeners?.abort();
@@ -58350,10 +58423,10 @@ function createEvidenceUX(icons, operations) {
       }
       item.append(label);
       if (countLabel) {
-        const count7 = document.createElement("span");
-        count7.className = "card-tool-count";
-        count7.textContent = `(${countLabel})`;
-        item.append("\xA0", count7);
+        const count8 = document.createElement("span");
+        count8.className = "card-tool-count";
+        count8.textContent = `(${countLabel})`;
+        item.append("\xA0", count8);
       }
       list2.append(item);
     }
@@ -58591,27 +58664,27 @@ function createEvidenceUX(icons, operations) {
     disabledReasons.delete(node);
     pendingIcons.delete(node);
   }
-  function countShare({ count: count7, percentage }) {
-    if (!Number.isSafeInteger(count7) || count7 < 0 || percentage !== void 0 && typeof percentage !== "string") {
+  function countShare({ count: count8, percentage }) {
+    if (!Number.isSafeInteger(count8) || count8 < 0 || percentage !== void 0 && typeof percentage !== "string") {
       throw new TypeError("Widget values require an exact count and an optional formatted share.");
     }
     const value = document.createElement("span"), primary = document.createElement("strong");
     value.className = "percentage-value";
-    primary.textContent = percentage ?? count7.toLocaleString();
+    primary.textContent = percentage ?? count8.toLocaleString();
     value.append(primary);
     if (percentage !== void 0) {
       const secondary = document.createElement("span");
-      secondary.textContent = `(${count7.toLocaleString()})`;
+      secondary.textContent = `(${count8.toLocaleString()})`;
       value.append(document.createTextNode(" "), secondary);
     }
     return value;
   }
-  function paintFilterEntry(trigger2, count7, neutralName = "Filters") {
+  function paintFilterEntry(trigger2, count8, neutralName = "Filters") {
     const label = trigger2.querySelector(".filter-entry-label");
-    const text6 = count7 ? `${count7} ${count7 === 1 ? "filter" : "filters"} applied` : "Filters";
+    const text6 = count8 ? `${count8} ${count8 === 1 ? "filter" : "filters"} applied` : "Filters";
     if (label.textContent !== text6) setOwnedText(label, text6);
-    trigger2.classList.toggle("has-applied-filters", Boolean(count7));
-    if (count7 || neutralName === text6) trigger2.removeAttribute("aria-label");
+    trigger2.classList.toggle("has-applied-filters", Boolean(count8));
+    if (count8 || neutralName === text6) trigger2.removeAttribute("aria-label");
     else trigger2.setAttribute("aria-label", neutralName);
   }
   return {
@@ -58690,13 +58763,13 @@ function mountThemeControl(theme, ux) {
   }
   function filter() {
     const q2 = $2("paletteQuery").value.trim().toLowerCase();
-    let matches3 = 0;
+    let matches4 = 0;
     for (const input of options) {
       const visible = names.get(input.value).toLowerCase().includes(q2);
       input.parentElement.hidden = !visible;
-      if (visible) matches3++;
+      if (visible) matches4++;
     }
-    $2("paletteEmpty").hidden = matches3 > 0;
+    $2("paletteEmpty").hidden = matches4 > 0;
     $2("paletteSelection").hidden = options.some((input) => input.value === active && !input.parentElement.hidden);
     const used = $2("recentPalettes");
     used.hidden = !!q2 || recent.length < 2;
@@ -58714,7 +58787,7 @@ function mountThemeControl(theme, ux) {
         used.append(button);
       }
     }
-    return matches3;
+    return matches4;
   }
   function find(show) {
     $2("paletteFind").hidden = !show;
@@ -59301,7 +59374,7 @@ function createReportScope(authorship) {
       const sourceSessionIds = requests.map((request2) => request2.sourceSessionId);
       const sourceSessionCount = Array.isArray(catalog?.requests) && sourceSessionIds.every((id5) => typeof id5 === "string" && id5.length > 0) ? new Set(sourceSessionIds).size : null;
       const counts3 = Object.fromEntries(countKeys2.map((key4) => [key4, githubRequests.every((r) => Number.isSafeInteger(r.counts?.[key4]) && r.counts[key4] >= 0) ? githubRequests.reduce((n, r) => n + r.counts[key4], 0) : null]));
-      const nativeCounts = Object.fromEntries(nativeKeys.map((key4) => [key4, nativeRequests.every((request2) => Number.isSafeInteger(request2.nativeCounts?.[key4]) && request2.nativeCounts[key4] >= 0) ? nativeRequests.reduce((sum, request2) => sum + request2.nativeCounts[key4], 0) : null]));
+      const nativeCounts = Object.fromEntries(nativeKeys.map((key4) => [key4, nativeRequests.every((request2) => Number.isSafeInteger(request2.nativeCounts?.[key4]) && request2.nativeCounts[key4] >= 0) ? nativeRequests.reduce((sum2, request2) => sum2 + request2.nativeCounts[key4], 0) : null]));
       return {
         requests,
         baseRequests,
@@ -59609,12 +59682,12 @@ function createSelectControls(ux, { decorateOption = () => {
       check.setAttribute("aria-hidden", "true");
       row.append(label, check);
       if (option.count !== void 0) {
-        const count7 = document.createElement("span");
-        count7.id = row.id + "-count";
-        count7.className = "select-option-count";
-        count7.textContent = option.count;
-        row.insertBefore(count7, check);
-        row.setAttribute("aria-labelledby", label.id + " " + count7.id);
+        const count8 = document.createElement("span");
+        count8.id = row.id + "-count";
+        count8.className = "select-option-count";
+        count8.textContent = option.count;
+        row.insertBefore(count8, check);
+        row.setAttribute("aria-labelledby", label.id + " " + count8.id);
       }
       if (option.detail) {
         const detail = document.createElement("span");
@@ -59683,9 +59756,9 @@ function createSelectControls(ux, { decorateOption = () => {
       entry3.updateDraft = () => {
         if (!current()) return;
         const eligible = entry3.options.filter((option) => !option.disabled);
-        const count7 = eligible.filter((option) => entry3.draft.has(option.value)).length;
-        all.setAttribute("aria-checked", count7 === eligible.length ? "true" : count7 ? "mixed" : "false");
-        allCaption.textContent = entry3.filter ? entry3.select.dataset.allLabel || "All results" : `${count7 === eligible.length ? "Deselect" : "Select"} ${entry3.select.dataset.allLabel?.toLowerCase() || "all results"}`;
+        const count8 = eligible.filter((option) => entry3.draft.has(option.value)).length;
+        all.setAttribute("aria-checked", count8 === eligible.length ? "true" : count8 ? "mixed" : "false");
+        allCaption.textContent = entry3.filter ? entry3.select.dataset.allLabel || "All results" : `${count8 === eligible.length ? "Deselect" : "Select"} ${entry3.select.dataset.allLabel?.toLowerCase() || "all results"}`;
         if (entry3.select.hasAttribute("data-empty-value")) allCaption.textContent = "Clear selection";
         apply.disabled = entry3.draft.size === 0;
         hint.hidden = (entry3.filter || immediate) && entry3.draft.size > 0;
@@ -59739,15 +59812,15 @@ function createSelectControls(ux, { decorateOption = () => {
       popup.prepend(capsule);
       list2.after(status4);
       const choices = entry3.options.filter((option) => !option.disabled).length;
-      const describe = (count7) => count7 ? `${count7} of ${choices} choices` : paging ? "No matching choices on this page." : "No matching choices.";
+      const describe = (count8) => count8 ? `${count8} of ${choices} choices` : paging ? "No matching choices on this page." : "No matching choices.";
       status4.textContent = describe(choices);
       const field = searchFields.mount(input, { clearLabel: "Clear option search", onInput() {
         if (!current()) return;
-        let count7 = 0, next2 = -1;
+        let count8 = 0, next2 = -1;
         entry3.rows.forEach((row, i) => {
           row.hidden = !matchesOption(input.value, entry3.options[i].displayLabel);
           if (!row.hidden && !entry3.options[i].disabled) {
-            count7++;
+            count8++;
             if (next2 === -1) next2 = i;
           }
         });
@@ -59758,7 +59831,7 @@ function createSelectControls(ux, { decorateOption = () => {
         attribute(entry3.trigger, "aria-describedby", entry3.select.getAttribute("aria-describedby"));
         list2.scrollTop = 0;
         const selected2 = entry3.options.findIndex((option) => option.node.selected && !option.disabled);
-        status4.textContent = describe(count7);
+        status4.textContent = describe(count8);
         position(false);
         highlight(!input.value && selected2 >= 0 ? selected2 : next2);
       } });
@@ -60447,9 +60520,9 @@ function createReaderSections({ root, presentation, ux, isCurrent, requestClose,
     if (text6 !== void 0) node.textContent = text6;
     return node;
   }
-  const present3 = () => views2.filter((view) => root.contains(view.element));
+  const present4 = () => views2.filter((view) => root.contains(view.element));
   const snapshot = () => {
-    const sections = present3().filter((view) => view.collapsible), open11 = sections.filter((view) => view.isOpen()).length;
+    const sections = present4().filter((view) => view.collapsible), open11 = sections.filter((view) => view.isOpen()).length;
     return { total: sections.length, open: open11, canExpand: open11 < sections.length, canCollapse: open11 > 0 };
   };
   function refresh() {
@@ -60627,11 +60700,11 @@ function createReaderSections({ root, presentation, ux, isCurrent, requestClose,
     snapshot,
     settle: finishAll,
     setAll(open11) {
-      request2(open11, present3());
+      request2(open11, present4());
     },
     reveal(node) {
       if (!current()) return;
-      for (const view of present3()) if (view.body.contains(node) && !view.isOpen()) view.apply(true, false);
+      for (const view of present4()) if (view.body.contains(node) && !view.isOpen()) view.apply(true, false);
       refresh();
     },
     dispose() {
@@ -60652,13 +60725,13 @@ init_collection_status();
 // web/session-journey.mjs
 function createSessionJourney() {
   function savedRoute(value) {
-    const { bundle: bundle2, inspect, order: order2, ...route } = value;
+    const { bundle: bundle2, inspect: inspect2, order: order2, ...route } = value;
     if (route.view !== "reports") return route;
     const valid2 = (id5) => typeof id5 === "string" && /^export-[a-f0-9-]{36}$/.test(id5);
     if (valid2(bundle2)) {
       route.bundle = bundle2;
       delete route.task;
-    } else if (valid2(inspect) && route.task !== "create") route.inspect = inspect;
+    } else if (valid2(inspect2) && route.task !== "create") route.inspect = inspect2;
     if (route.task === "compare") {
       route.task = "library";
       delete route.savedEntry;
@@ -60817,13 +60890,13 @@ function createPagePaths() {
   const trendFields = { measure: "trendMeasure", period: "trendPeriod", from: "trendFrom", to: "trendTo", section: "trendSection" };
   const scopeKeys = new Set("layer chart bucket timelineFrom range from to source tool services includeMissingService withinServices service project result authors scope endpoint session aFrom aTo bFrom bTo comparisonFocus comparisonView nativeGroup trendMeasure trendPeriod trendFrom trendTo page expanded order".split(" "));
   const trendSection = (route) => route.trendSection ?? (route.trendMeasure || route.trendPeriod || route.trendEntry ? "charts" : "overview");
-  const isPagePath2 = (path31) => path31 === "/" || pages.some((page) => path31 === "/" + page || path31 === "/" + page + "/");
+  const isPagePath2 = (path32) => path32 === "/" || pages.some((page) => path32 === "/" + page || path32 === "/" + page + "/");
   const legacy = (hash21) => hash21.startsWith("#") && [...pages, ...aliases].includes(hash21.slice(1).split("?")[0]);
   function parse2(address) {
-    const [path31, query = ""] = address.split(/\?(.*)/s);
-    const fragment = path31.startsWith("#");
-    if (!(fragment ? legacy(address) : isPagePath2(path31))) return null;
-    const raw = fragment ? path31.slice(1) : path31.replaceAll("/", "") || "analyze";
+    const [path32, query = ""] = address.split(/\?(.*)/s);
+    const fragment = path32.startsWith("#");
+    if (!(fragment ? legacy(address) : isPagePath2(path32))) return null;
+    const raw = fragment ? path32.slice(1) : path32.replaceAll("/", "") || "analyze";
     const view = raw === "report" ? "reports" : raw === "compare" ? "analyze" : raw;
     const params = new URLSearchParams(query);
     const route = { view };
@@ -60950,7 +61023,7 @@ function createPreparedReportFrame(html, frozenFrame, {
     if (contained) return;
     const body = source.body, style = frame.contentWindow.getComputedStyle(body);
     const frameStyle = view.getComputedStyle(frame);
-    const edges = frameStyle.boxSizing === "border-box" ? ["borderTopWidth", "borderBottomWidth", "paddingTop", "paddingBottom"].reduce((sum, key4) => sum + (parseFloat(frameStyle[key4]) || 0), 0) : 0;
+    const edges = frameStyle.boxSizing === "border-box" ? ["borderTopWidth", "borderBottomWidth", "paddingTop", "paddingBottom"].reduce((sum2, key4) => sum2 + (parseFloat(frameStyle[key4]) || 0), 0) : 0;
     const height = Math.ceil(Math.max(body.scrollHeight, body.getBoundingClientRect().height) + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0) + edges);
     if (Math.abs(parseFloat(frame.style.height) - height) <= 1) {
       selfResizes = 0;
@@ -61435,9 +61508,9 @@ function createReportJourney({ root, cancelReview, clearSelection, readCurrent, 
       recoveryRows = entries3;
       entries3 = null;
       for (let index = 0; index < recoveryRows.length; index++) {
-        const matches3 = await saveVerifier.matchesSaveIdentity(recoveryRows[index]);
+        const matches4 = await saveVerifier.matchesSaveIdentity(recoveryRows[index]);
         if (!current()) return false;
-        if (matches3) {
+        if (matches4) {
           owner2.saved(recoveryRows[index]);
           return true;
         }
@@ -62643,11 +62716,11 @@ function createDateRangeCalendar({
     grid.setAttribute("aria-label", (label ? label + ": " : "") + (singleDay() ? "Choose a day" : "Choose start and end dates"));
     for (const day2 of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) grid.append(el("span", "", day2));
     for (let i = 0; i < month.getUTCDay(); i++) grid.append(el("span"));
-    const count7 = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
+    const count8 = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
     const focused = focusDay || (from.startsWith(monthKey) && from <= limit ? from : monthKey === limit.slice(0, 7) ? limit : monthKey + "-01");
-    for (let i = 1; i <= count7; i++) {
+    for (let i = 1; i <= count8; i++) {
       const day2 = `${monthKey}-${String(i).padStart(2, "0")}`;
-      const cell = control(String(i), () => {
+      const cell2 = control(String(i), () => {
         if (day2 > today()) return;
         if (singleDay()) {
           from = to = day2;
@@ -62663,13 +62736,13 @@ function createDateRangeCalendar({
         render(day2, true);
         onEdit();
       }, "report-calendar-day");
-      cell.dataset.day = day2;
-      cell.tabIndex = day2 === focused ? 0 : -1;
-      cell.disabled = day2 > limit;
-      cell.setAttribute("aria-label", time2.formatDate(day2, context2(), true));
-      cell.setAttribute("aria-pressed", String(!cell.disabled && (day2 === from || !singleDay() && day2 === to)));
-      cell.classList.toggle("in-range", !cell.disabled && !singleDay() && day2 >= from && day2 <= to);
-      cell.addEventListener("keydown", (event) => {
+      cell2.dataset.day = day2;
+      cell2.tabIndex = day2 === focused ? 0 : -1;
+      cell2.disabled = day2 > limit;
+      cell2.setAttribute("aria-label", time2.formatDate(day2, context2(), true));
+      cell2.setAttribute("aria-pressed", String(!cell2.disabled && (day2 === from || !singleDay() && day2 === to)));
+      cell2.classList.toggle("in-range", !cell2.disabled && !singleDay() && day2 >= from && day2 <= to);
+      cell2.addEventListener("keydown", (event) => {
         if (!current()) return;
         const date2 = /* @__PURE__ */ new Date(day2 + "T12:00:00Z");
         const delta2 = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -date2.getUTCDay(), End: 6 - date2.getUTCDay() }[event.key];
@@ -62681,7 +62754,7 @@ function createDateRangeCalendar({
         monthKey = nextDay.slice(0, 7);
         render(nextDay);
       });
-      grid.append(cell);
+      grid.append(cell2);
     }
     body.replaceChildren(header, grid);
     const future = from > limit || !singleDay() && to > limit;
@@ -62840,11 +62913,11 @@ body[data-wire-reader] [id]{scroll-margin-top:5rem}
     summary.append(source.createTextNode(heading.textContent));
     const prompt = article.querySelector("pre");
     if (prompt?.textContent.trim()) {
-      const excerpt = source.createElement("span");
-      excerpt.className = "wire-reading-excerpt";
+      const excerpt2 = source.createElement("span");
+      excerpt2.className = "wire-reading-excerpt";
       const text6 = prompt.textContent.trim().replace(/\s+/g, " ");
-      excerpt.textContent = text6.length > 100 ? text6.slice(0, 100) + "..." : text6;
-      summary.append(excerpt);
+      excerpt2.textContent = text6.length > 100 ? text6.slice(0, 100) + "..." : text6;
+      summary.append(excerpt2);
     }
     article.before(details);
     details.append(summary, article);
@@ -62944,9 +63017,9 @@ main[data-finding-version] :is(.wire-reader-destination,.report-nav a):focus-vis
     "not recorded": "unknown",
     "not an execution": "unknown"
   };
-  for (const cell of main.querySelectorAll(".example-calls tbody td:last-child,td[data-label='Recorded outcome']")) {
-    const tone = outcomes3[cell.textContent.trim().toLowerCase()];
-    if (tone) cell.classList.add("wire-reading-outcome-" + tone);
+  for (const cell2 of main.querySelectorAll(".example-calls tbody td:last-child,td[data-label='Recorded outcome']")) {
+    const tone = outcomes3[cell2.textContent.trim().toLowerCase()];
+    if (tone) cell2.classList.add("wire-reading-outcome-" + tone);
   }
   if (expanded !== void 0) for (const details of main.querySelectorAll("details:not(.wire-example-editor)")) details.open = expanded;
 }
@@ -62957,7 +63030,7 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
   source.innerHTML = value.text;
   const main = source.content.querySelector("main"), model = value.brief;
   if (!main || !model) return null;
-  const elements = (node, selector2) => Array.from(node.querySelectorAll(selector2));
+  const elements = (node, selector3) => Array.from(node.querySelectorAll(selector3));
   const interactions = new Map(elements(main, "#examples>article[data-report-scenario]").map((n) => [n.id, n]));
   const calls2 = new Map(elements(main, "#recorded-result-facts>section[id]").map((n) => [n.id, n]));
   const byInteraction = /* @__PURE__ */ new Map(), reasons = /* @__PURE__ */ new Map();
@@ -62977,7 +63050,7 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
   }
   const order2 = new Map([...calls2.keys()].map((id5, index) => [id5, index]));
   for (const owned2 of byInteraction.values()) owned2.sort((a3, b) => order2.get(a3) - order2.get(b));
-  const text6 = (n, selector2) => n?.querySelector(selector2)?.textContent.trim() ?? "";
+  const text6 = (n, selector3) => n?.querySelector(selector3)?.textContent.trim() ?? "";
   const el = (tag, str, cls) => {
     const n = doc.createElement(tag);
     if (str !== void 0) n.textContent = str;
@@ -63084,10 +63157,10 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
       if (gap2) parent.append(el("p", gap2));
     }
   }
-  function count7(n, singular) {
+  function count8(n, singular) {
     return `${n} ${singular}${n === 1 ? "" : "s"}`;
   }
-  const findingTitle = (g) => g.returnedStatus ? `${count7(g.calls.length, "call")} with a returned HTTP ${g.returnedStatus}` : g.signal || g.operation;
+  const findingTitle = (g) => g.returnedStatus ? `${count8(g.calls.length, "call")} with a returned HTTP ${g.returnedStatus}` : g.signal || g.operation;
   function caseLink(id5) {
     return jump(titleOf(interactions, id5), "search-interaction", { type: "interaction", id: id5 });
   }
@@ -63122,7 +63195,7 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
       const group = model.groups[index];
       if (!group) return;
       const n = group.interactions.length, caption2 = text6(row, ".finding-values>span");
-      const bar = jump(`${caption2} \xB7 ${count7(n, "interaction")}`, "forward", { type: "finding", id: index });
+      const bar = jump(`${caption2} \xB7 ${count8(n, "interaction")}`, "forward", { type: "finding", id: index });
       bar.classList.add("brief-bar-link");
       if (rows.length > 1 && denominator) {
         const track = el("span", void 0, "brief-bar-track"), mark2 = el("i");
@@ -63137,7 +63210,7 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
       const all = el("details");
       all.append(el("summary", `More patterns (${model.groups.length - rows.length})`));
       list2(all, model.groups.slice(rows.length).map((g, i) => jump(
-        `${g.operation} \xB7 ${findingTitle(g)} \xB7 ${count7(g.interactions.length, "interaction")}`,
+        `${g.operation} \xB7 ${findingTitle(g)} \xB7 ${count8(g.interactions.length, "interaction")}`,
         "forward",
         { type: "finding", id: i + rows.length }
       )));
@@ -63184,11 +63257,11 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         panel.append(spread);
         spread.append(primary);
         if (group.signal) groupBody(primary, group);
-        primary.append(jump(`View ${count7(group.interactions.length, "matching interaction")}`, "forward", { type: "finding", id: 0 }));
+        primary.append(jump(`View ${count8(group.interactions.length, "matching interaction")}`, "forward", { type: "finding", id: 0 }));
         if (more.length) {
           const other = section("Other patterns");
           list2(other, more.map((g, i) => jump(
-            `${findingTitle(g)} \xB7 ${count7(g.interactions.length, "interaction")}`,
+            `${findingTitle(g)} \xB7 ${count8(g.interactions.length, "interaction")}`,
             "disclosure",
             { type: "finding", id: i + 1 }
           )));
@@ -63199,9 +63272,9 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
       const group = model.groups[id5];
       heading(findingTitle(group));
       if (group.signal) groupBody(panel, group);
-      const matches3 = section("Matching interactions");
-      list2(matches3, group.interactions.map(caseLink));
-      panel.append(matches3);
+      const matches4 = section("Matching interactions");
+      list2(matches4, group.interactions.map(caseLink));
+      panel.append(matches4);
     } else if (type === "interactions" || type === "calls") {
       const cases = type === "interactions", map = cases ? interactions : calls2;
       heading(cases ? "Interactions" : "Tool results");
@@ -63263,7 +63336,7 @@ function mountSavedReportBrief(host, value, { icon, isCurrent }) {
           const note = text6(boundary3, ".reading-note");
           const measure = section(label, "h4");
           if (note) measure.append(el("p", note, "brief-meta"));
-          facts(measure, samples.map((cell) => [cell.dataset.label, cell.textContent.trim()]));
+          facts(measure, samples.map((cell2) => [cell2.dataset.label, cell2.textContent.trim()]));
           s.append(measure);
         }
         panel.append(s);
@@ -63442,7 +63515,7 @@ function mountSourceCollectionSettings({
   let sharedRecovery = false, integrated = false;
   const uncertain = /* @__PURE__ */ new Set();
   const held = /* @__PURE__ */ new Map();
-  const stamp3 = () => ({ token: api.publicationToken(), epoch });
+  const stamp4 = () => ({ token: api.publicationToken(), epoch });
   const current = (value) => !withdrawn && value.epoch === epoch && value.token && api.isCurrent(value.token);
   const sources = () => sourceCollection.view(api.accessState());
   const draft = () => configuration.view(api.accessState().state);
@@ -63467,7 +63540,7 @@ function mountSourceCollectionSettings({
     $2("sourceMicrosoftWindow").value = model.values ? String(model.values.windowDays) : "";
   }
   function syncRecovery(authority, model) {
-    if (!current(stamp3())) return;
+    if (!current(stamp4())) return;
     authority ??= sources();
     model ??= draft();
     const initialRead = !latest && !readError && !uncertain.size;
@@ -63496,7 +63569,7 @@ function mountSourceCollectionSettings({
     }).join("\n");
   }
   function paint2() {
-    if (!sourceCollection.controlsActive || !current(stamp3())) return;
+    if (!sourceCollection.controlsActive || !current(stamp4())) return;
     if (sourceCollection.copilotOnly) {
       $2("sourceMicrosoftCollection").hidden = true;
       const authority2 = sources(), global2 = latest?.global;
@@ -63567,7 +63640,7 @@ function mountSourceCollectionSettings({
     ]) {
       const reason2 = $2(id5).disabled ? blocked || (dirty() ? "Save or cancel your changes first." : "") : "";
       ux.tooltip($2(id5), reason2);
-      if (!current(stamp3())) return;
+      if (!current(stamp4())) return;
       ux.explainDisabled($2(id5), reason2, { compact: true });
     }
     for (const group of uncertain) {
@@ -63577,7 +63650,7 @@ function mountSourceCollectionSettings({
     onDraftChange(dirty());
   }
   async function act(group, endpoint2, input, confirm) {
-    const owner2 = stamp3();
+    const owner2 = stamp4();
     if (!current(owner2) || working() || uncertain.size) return;
     const pending = { group, kind: "write", dispatched: false };
     operation = pending;
@@ -63604,12 +63677,12 @@ function mountSourceCollectionSettings({
     } finally {
       if (operation === pending) {
         operation = null;
-        if (current(stamp3())) paint2();
+        if (current(stamp4())) paint2();
       }
     }
   }
   async function recover(group) {
-    const owner2 = stamp3();
+    const owner2 = stamp4();
     if (!current(owner2) || working()) return;
     const pending = { group, kind: "read", dispatched: false }, wasUncertain = uncertain.has(group);
     operation = pending;
@@ -63638,7 +63711,7 @@ function mountSourceCollectionSettings({
     $2("sourceMicrosoftWindow").append(option);
   }
   for (const id5 of ["sourceMicrosoftSurfaces", "sourceMicrosoftWindow"]) $2(id5).addEventListener("input", () => {
-    if (!current(stamp3()) || $2(id5).disabled) return;
+    if (!current(stamp4()) || $2(id5).disabled) return;
     configuration.edit({
       surfaces: $2("sourceMicrosoftSurfaces").value.split(",").filter(Boolean),
       windowDays: Number($2("sourceMicrosoftWindow").value)
@@ -63647,13 +63720,13 @@ function mountSourceCollectionSettings({
     paint2();
   });
   $2("cancelMicrosoftCollection").addEventListener("click", () => {
-    if (!current(stamp3()) || $2("cancelMicrosoftCollection").disabled) return;
+    if (!current(stamp4()) || $2("cancelMicrosoftCollection").disabled) return;
     configuration.cancel();
     sync2();
     paint2();
   });
   const captureGesture = () => {
-    const owner2 = stamp3();
+    const owner2 = stamp4();
     gesture = { owner: owner2, command: current(owner2) && draft().canSubmit ? configuration.command(api.accessState().state) : null };
   };
   $2("saveMicrosoftCollection").addEventListener("pointerdown", (event) => {
@@ -63663,7 +63736,7 @@ function mountSourceCollectionSettings({
     if (["Enter", " "].includes(event.key) && !event.repeat) captureGesture();
   });
   $2("saveMicrosoftCollection").addEventListener("click", () => {
-    if (!current(stamp3()) || $2("saveMicrosoftCollection").disabled || !draft().canSubmit) return;
+    if (!current(stamp4()) || $2("saveMicrosoftCollection").disabled || !draft().canSubmit) return;
     const command = configuration.command(api.accessState().state), original = gesture;
     gesture = null;
     if (original && (!current(original.owner) || JSON.stringify(original.command) !== JSON.stringify(command))) {
@@ -63680,7 +63753,7 @@ function mountSourceCollectionSettings({
     });
   });
   function hold(id5, build) {
-    const capture = () => held.set(id5, { owner: stamp3(), command: current(stamp3()) && sources().current ? build() : null });
+    const capture = () => held.set(id5, { owner: stamp4(), command: current(stamp4()) && sources().current ? build() : null });
     $2(id5).addEventListener("pointerdown", (event) => {
       if (event.button === 0) capture();
     });
@@ -63701,7 +63774,7 @@ function mountSourceCollectionSettings({
   });
   hold("pauseMicrosoftCollection", nativePauseCommand);
   $2("pauseMicrosoftCollection").addEventListener("click", () => {
-    if (!current(stamp3()) || $2("pauseMicrosoftCollection").disabled) return;
+    if (!current(stamp4()) || $2("pauseMicrosoftCollection").disabled) return;
     if (!sources().current) {
       paint2();
       return;
@@ -63714,7 +63787,7 @@ function mountSourceCollectionSettings({
     });
   });
   $2("collectMicrosoftActivity").addEventListener("click", (event) => {
-    if (current(stamp3()) && !$2("collectMicrosoftActivity").disabled) void collect(event);
+    if (current(stamp4()) && !$2("collectMicrosoftActivity").disabled) void collect(event);
   });
   for (const [id5, enabled] of [["pauseGlobalCollection", false], ["resumeGlobalCollection", true]]) {
     const build = () => {
@@ -63729,7 +63802,7 @@ function mountSourceCollectionSettings({
     };
     hold(id5, build);
     $2(id5).addEventListener("click", () => {
-      if (!current(stamp3()) || $2(id5).disabled) return;
+      if (!current(stamp4()) || $2(id5).disabled) return;
       if (!sources().current) {
         paint2();
         return;
@@ -63779,7 +63852,7 @@ function mountSourceCollectionSettings({
     hasDraft: dirty,
     isBusy: working,
     hasUnconfirmedChange: () => uncertain.size > 0,
-    canCollect: () => current(stamp3()) && !working() && !dirty() && !uncertain.size && (needsStoredRead() || !readError && sources().actions.microsoft.includes("collect-now")),
+    canCollect: () => current(stamp4()) && !working() && !dirty() && !uncertain.size && (needsStoredRead() || !readError && sources().actions.microsoft.includes("collect-now")),
     setChecking(value) {
       checking = value;
       paint2();
@@ -64351,7 +64424,7 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
   const publicationCurrent = (token2) => token2 !== null && token2 !== void 0 && typeof token2.then !== "function" && api.isCurrent(token2) === true;
   let withdrawn = !publicationCurrent(api.publicationToken()), epoch = 0, safeDraft = null, pendingOperation = null, revokedWrite = false;
   const capture = () => ({ token: api.publicationToken(), epoch });
-  const current = (stamp3) => !withdrawn && stamp3.epoch === epoch && publicationCurrent(stamp3.token);
+  const current = (stamp4) => !withdrawn && stamp4.epoch === epoch && publicationCurrent(stamp4.token);
   function delivered(token2) {
     if (token2 === void 0) throw new TypeError("Collection Settings delivery requires its publication token.");
     return current({ token: token2, epoch });
@@ -64465,8 +64538,8 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     stale = false;
   }
   function paintNative(control) {
-    const stamp3 = capture();
-    if (!current(stamp3)) return;
+    const stamp4 = capture();
+    if (!current(stamp4)) return;
     const working = busy || checking, state = collectionStatus.page(latest), saved = collectionStatus.persistence(latest);
     const allowed = control.enabled ? control.canPause : control.canResume;
     const reason2 = working ? "Wait for the current Microsoft read setting to finish." : uncertain || readError ? "Read the current connection before another change." : !control.retained ? "Current WIRE access is required." : !allowed ? control.connected ? "This Microsoft read action is not available." : "Microsoft reads cannot resume while the connection is unavailable." : "";
@@ -64507,23 +64580,23 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     explanations.set("pauseCollection", reason2);
     explanations.set("collectNow", saved ? working ? "Update in progress." : uncertain || readError ? "Read current settings." : collectionStatus.persistenceReason(latest) || (saved.actions.includes("collect-now") ? "" : "Collection unavailable.") : "Collection unavailable.");
     ux.tooltip($2("pauseCollection"), reason2);
-    if (!current(stamp3)) return;
+    if (!current(stamp4)) return;
     ux.explainDisabled($2("pauseCollection"), reason2, { compact: true });
-    if (!current(stamp3)) return;
+    if (!current(stamp4)) return;
     ux.tooltip($2("reloadSettings"), working ? reason2 : "");
-    if (!current(stamp3)) return;
+    if (!current(stamp4)) return;
     ux.explainDisabled($2("reloadSettings"), working ? reason2 : "", { compact: true });
-    if (!current(stamp3)) return;
+    if (!current(stamp4)) return;
     ux.pending($2("settingsDraftStatus"), false);
-    if (!current(stamp3)) return;
-    paintNativeConfiguration(control, stamp3);
+    if (!current(stamp4)) return;
+    paintNativeConfiguration(control, stamp4);
   }
-  function paintNativeConfiguration(control, stamp3) {
-    const configuration = nativeView(), present3 = configuration?.present === true;
-    $2("nativeCollectionSourceField").hidden = !present3;
+  function paintNativeConfiguration(control, stamp4) {
+    const configuration = nativeView(), present4 = configuration?.present === true;
+    $2("nativeCollectionSourceField").hidden = !present4;
     $2("nativeCollectionSurfaces").disabled = true;
     $2("collectionCadence").closest(".settings-field").hidden = true;
-    if (!present3) {
+    if (!present4) {
       onDraftChange(false);
       return;
     }
@@ -64552,9 +64625,9 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
       explanations.set("pauseCollection", hold);
       explanations.set("collectNow", hold);
       ux.tooltip($2("pauseCollection"), hold);
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       ux.explainDisabled($2("pauseCollection"), hold, { compact: true });
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
     }
     const guidance = configuration.stale ? "Settings changed. Cancel edits to reload." : uncertain ? "Change unconfirmed." : working ? "Saving..." : configuration.validation || (configuration.dirty ? "Unsaved changes." : "");
     setText("settingsDraftStatus", guidance);
@@ -64567,12 +64640,12 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     for (const id5 of ["saveCollection", "cancelPreferences"]) {
       const help = id5 === "saveCollection" ? explanations.get(id5) : working ? reason2 : "";
       ux.tooltip($2(id5), $2(id5).disabled ? help : "");
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       ux.explainDisabled($2(id5), help, { compact: true });
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
     }
     ux.pending($2("settingsDraftStatus"), working);
-    if (current(stamp3)) onDraftChange(configuration.dirty || configuration.stale);
+    if (current(stamp4)) onDraftChange(configuration.dirty || configuration.stale);
   }
   function paint2() {
     if (!current(capture())) return;
@@ -64725,21 +64798,21 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     return delivered(token2);
   }
   function cancel() {
-    const stamp3 = capture();
-    if (!current(stamp3) || busy) return;
+    const stamp4 = capture();
+    if (!current(stamp4) || busy) return;
     const returnToOrigin = reviewReturn;
     reviewReturn = null;
     reset();
     message(uncertain ? "Earlier change unconfirmed. Read current connection." : "");
     paint2();
-    if (!current(stamp3)) return;
+    if (!current(stamp4)) return;
     let target = visibleSection === "source-access" ? $2(latest?.config?.approved ? "editSource" : "reviewSource") : visibleSection === "connection" ? $2(nativeView()?.present ? "nativeCollectionSurfaces-control" : "collectionWindow-control") : document.querySelector("[data-settings-section]:not([hidden]) h2");
     ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
-    if (current(stamp3) && !uncertain) returnToOrigin?.();
+    if (current(stamp4) && !uncertain) returnToOrigin?.();
   }
   async function act(endpoint2, input, success) {
-    const stamp3 = capture();
-    if (!current(stamp3) || busy || uncertain || readError || stale) return;
+    const stamp4 = capture();
+    if (!current(stamp4) || busy || uncertain || readError || stale) return;
     const origin = visibleSection;
     const operation = { kind: "write", dispatched: false };
     pendingOperation = operation;
@@ -64747,16 +64820,16 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     pendingAction = endpoint2;
     try {
       message("");
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       if (!(native2() && endpoint2 === "/api/collection/enabled")) invalidate();
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       paint2();
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       operation.dispatched = true;
       const request2 = write2(endpoint2, input);
       input = null;
       const status4 = await request2;
-      if (!current(stamp3)) {
+      if (!current(stamp4)) {
         uncertain = true;
         revokedWrite = true;
         return;
@@ -64769,9 +64842,9 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
       reset();
       message(typeof success === "function" ? success(latest) : success, false, origin);
     } catch (error) {
-      const refused3 = endpoint2 === "/api/collection/configure" && error.configuration === "not-saved" && current(stamp3);
+      const refused3 = endpoint2 === "/api/collection/configure" && error.configuration === "not-saved" && current(stamp4);
       if (operation.dispatched && !refused3) uncertain = true;
-      if (!current(stamp3)) {
+      if (!current(stamp4)) {
         revokedWrite ||= operation.dispatched;
         return;
       }
@@ -64785,9 +64858,9 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
         busy = false;
         pendingAction = "";
       }
-      if (current(stamp3)) {
+      if (current(stamp4)) {
         paint2();
-        if (current(stamp3)) $2("settingsMessage").focus({ preventScroll: true });
+        if (current(stamp4)) $2("settingsMessage").focus({ preventScroll: true });
       }
     }
   }
@@ -64852,9 +64925,9 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     paint2();
   });
   function openSourceReview({ onCancel } = {}) {
-    const stamp3 = capture();
+    const stamp4 = capture();
     const id5 = latest?.config?.approved ? "editSource" : "reviewSource";
-    if (!current(stamp3) || $2(id5).disabled || editing) return false;
+    if (!current(stamp4) || $2(id5).disabled || editing) return false;
     $2("approvedSourceTitle").classList.remove("settings-target");
     guidedReview = typeof onCancel === "function";
     editingPaths = Boolean(latest?.suggestedSource?.error);
@@ -64863,28 +64936,28 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     editing = true;
     message("");
     paint2();
-    if (current(stamp3)) {
+    if (current(stamp4)) {
       const target = guidedReview && !editingPaths ? $2("sourceEditorTitle") : $2("sourceDatabase");
       if (target === $2("sourceEditorTitle")) target.tabIndex = -1;
       target.focus();
     }
-    return current(stamp3);
+    return current(stamp4);
   }
   for (const id5 of ["reviewSource", "editSource"]) $2(id5).addEventListener("click", () => openSourceReview());
   $2("changeReviewedPaths").addEventListener("click", () => {
-    const stamp3 = capture();
-    if (!current(stamp3) || busy || !editing) return;
+    const stamp4 = capture();
+    if (!current(stamp4) || busy || !editing) return;
     editingPaths = true;
     paint2();
-    if (current(stamp3)) $2("sourceDatabase").focus();
+    if (current(stamp4)) $2("sourceDatabase").focus();
   });
   $2("cancelSource").addEventListener("click", cancel);
   $2("cancelPreferences").addEventListener("click", cancel);
   $2("connectCollection").addEventListener("click", () => configure(true));
   const captureNativeGesture = () => {
     if (!nativeView()?.present) return;
-    const stamp3 = capture();
-    nativeGesture = { stamp: stamp3, command: current(stamp3) && nativeView().canSubmit ? nativeConfiguration.command(api.accessState().state) : null };
+    const stamp4 = capture();
+    nativeGesture = { stamp: stamp4, command: current(stamp4) && nativeView().canSubmit ? nativeConfiguration.command(api.accessState().state) : null };
   };
   $2("saveCollection").addEventListener("pointerdown", (event) => {
     if (event.button === 0) captureNativeGesture();
@@ -64911,8 +64984,8 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     if (current(capture()) && !$2("collectNow").disabled) $2("checkActivity").click();
   });
   $2("reloadSettings").addEventListener("click", async () => {
-    const stamp3 = capture();
-    if (!current(stamp3) || busy) return;
+    const stamp4 = capture();
+    if (!current(stamp4) || busy) return;
     const origin = visibleSection;
     const wasUncertain = uncertain;
     const recoveringNative = uncertain && nativeView()?.present === true;
@@ -64922,19 +64995,19 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
     pendingAction = "/api/collection/status";
     try {
       paint2();
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       const status4 = await read2();
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       uncertain = false;
       revokedWrite = false;
-      receive(status4, stamp3.token);
-      if (!current(stamp3)) return;
+      receive(status4, stamp4.token);
+      if (!current(stamp4)) return;
       if (recoveringNative && nativeView()?.present) {
         reset();
       }
       message(wasUncertain ? "Current settings shown; earlier change unconfirmed." : "", false, origin);
     } catch (error) {
-      if (!current(stamp3)) return;
+      if (!current(stamp4)) return;
       if (readError && !uncertain) readError = error.message;
       else message("Current settings could not be read.", true);
     } finally {
@@ -64943,7 +65016,7 @@ function mountCollectionSettings({ api, ux, write: write2, read: read2, invalida
         busy = false;
         pendingAction = "";
       }
-      if (current(stamp3)) paint2();
+      if (current(stamp4)) paint2();
     }
   });
   function withdrawAccess() {
@@ -65148,31 +65221,31 @@ function createTextAccess(ux, presentation, authorship, metadata3) {
   }
   function describePrompt(source) {
     const availability5 = authorship?.availability?.(source);
-    const display = authorship?.display?.(source);
+    const display2 = authorship?.display?.(source);
     if (retained(source) !== null) return {
       hasText: true,
       label: caption2(source),
       notice: availability5?.notice ?? null,
-      automatic: display?.automatic ?? false
+      automatic: display2?.automatic ?? false
     };
     const author = authorship?.read(source), empty = source?.status === "full" && typeof source.text === "string" && !source.text.trim();
     const automatic = availability5 ? availability5.state === "automatic" : empty && author?.basis === "autopilot";
     return {
       hasText: false,
       automatic,
-      label: automatic ? display?.label ?? `${author?.actor === "agent" ? "Agent prompt" : "Sender unclear"} (automatic continuation)` : author?.actor === "user" ? "Human activity" : author?.actor === "agent" ? "Agent activity" : authorship?.unknownLabel ?? "Sender unclear",
+      label: automatic ? display2?.label ?? `${author?.actor === "agent" ? "Agent prompt" : "Sender unclear"} (automatic continuation)` : author?.actor === "user" ? "Human activity" : author?.actor === "agent" ? "Agent activity" : authorship?.unknownLabel ?? "Sender unclear",
       notice: automatic ? "Work continued without a new message." : availability5?.notice ?? (empty ? "No prompt text retained" : "Prompt text unavailable")
     };
   }
-  function excerpt(source, limit = 170) {
+  function excerpt2(source, limit = 170) {
     const text6 = retained(source);
     if (text6 === null) return authorship?.availability?.(source).state === "automatic" ? describePrompt(source).label : "Prompt not available";
     const compact = text6.replace(/\s+/gu, " ").trim();
     if (limit === Infinity) return compact;
     const graphemes2 = new Intl.Segmenter(void 0, { granularity: "grapheme" }).segment(compact);
-    let end = compact.length, count7 = 0;
+    let end = compact.length, count8 = 0;
     for (const part of graphemes2) {
-      if (count7++ === limit) {
+      if (count8++ === limit) {
         end = part.index;
         break;
       }
@@ -65186,7 +65259,7 @@ function createTextAccess(ux, presentation, authorship, metadata3) {
     return (prefix || compact.slice(0, end).trimEnd()) + "\xA0\u2026";
   }
   function renderExcerpt(source, limit = 170) {
-    return exactFragment(excerpt(source, limit));
+    return exactFragment(excerpt2(source, limit));
   }
   function exactFragment(text6) {
     const fragment = document.createDocumentFragment();
@@ -65244,7 +65317,7 @@ function createTextAccess(ux, presentation, authorship, metadata3) {
     const initiallyOpen = initialOpen ?? (complete && (subject === "response" || retained(source)?.length <= 1200));
     label ??= "Read " + (complete ? "" : partial ? "retained " : "full ") + noun;
     copyLabel ??= "Copy " + noun;
-    let text6 = retained(source), preview = text6 === null && subject === "response" ? "Original not available" : excerpt(source);
+    let text6 = retained(source), preview = text6 === null && subject === "response" ? "Original not available" : excerpt2(source);
     let released = false, cleared = false, control = null, onToggle = null, unsubscribe = null, releasePreview = null;
     const authorNote = (label2) => metadata3.item(label2, { helpLabel: "prompt author", help: authorship.unverifiedReason(source) });
     const authorGap = subject === "request" && authorship?.read(source).actor === "unknown" ? authorship.unverifiedReason(source) : null;
@@ -65525,7 +65598,7 @@ function createTextAccess(ux, presentation, authorship, metadata3) {
     return root;
   }
   return {
-    excerpt,
+    excerpt: excerpt2,
     renderExcerpt,
     renderCardPreview,
     render,
@@ -65614,7 +65687,7 @@ function createLocalSearch() {
   function normalize(value) {
     return String(value ?? "").normalize("NFKD").replace(new RegExp("\\p{M}", "gu"), "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   }
-  function matches3(query, fields8) {
+  function matches4(query, fields8) {
     if (!String(query).trim()) return true;
     const words = normalize(query).split(" ").filter(Boolean);
     if (!words.length) return fields8.some((field) => String(field ?? "").toLowerCase().includes(query.trim().toLowerCase()));
@@ -65631,9 +65704,9 @@ function createLocalSearch() {
   function phrase(query, fields8) {
     if (!String(query).trim()) return true;
     const text6 = normalize(query);
-    return text6 ? fields8.some((field) => normalize(field).includes(text6)) : matches3(query, fields8);
+    return text6 ? fields8.some((field) => normalize(field).includes(text6)) : matches4(query, fields8);
   }
-  return { normalize, matches: matches3, phrase, parts: parts2 };
+  return { normalize, matches: matches4, phrase, parts: parts2 };
 }
 
 // lib/render.mjs
@@ -66128,13 +66201,13 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
   const outcomeTones2 = dimensional?.outcomeTones;
   const compare3 = (a3, b) => a3 < b ? -1 : a3 > b ? 1 : 0;
   let sequence = 0;
-  function count7(value) {
+  function count8(value) {
     if (!Number.isSafeInteger(value) || value < 0) throw new TypeError("Percentage counts must be nonnegative safe integers.");
     return value;
   }
   function share2(value, total) {
-    count7(value);
-    count7(total);
+    count8(value);
+    count8(total);
     if (value > total) throw new RangeError("A percentage count cannot exceed its denominator.");
     return total ? value / total : null;
   }
@@ -66147,19 +66220,19 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
     if (fraction > 0.999) return ">99.9%";
     return `${Number((fraction * 100).toFixed(1))}%`;
   }
-  function partition2(entries3, total, { preserve = [], maxSlices = 6 } = {}) {
-    count7(total);
+  function partition3(entries3, total, { preserve = [], maxSlices = 6 } = {}) {
+    count8(total);
     if (!Array.isArray(entries3) || !Number.isSafeInteger(maxSlices) || maxSlices < 2) throw new TypeError("Percentage categories require an array and at least two available slices.");
     const ids = /* @__PURE__ */ new Set();
-    let sum = 0;
+    let sum2 = 0;
     const rows = entries3.map((entry3) => {
       if (!entry3 || typeof entry3.id !== "string" || !entry3.id || entry3.id === "group:other" || ids.has(entry3.id) || typeof entry3.label !== "string" || !entry3.label) throw new TypeError("Percentage categories require unique identities and labels.");
       ids.add(entry3.id);
-      sum += count7(entry3.count);
-      count7(sum);
+      sum2 += count8(entry3.count);
+      count8(sum2);
       return { ...entry3, fraction: share2(entry3.count, total), percentage: percent2(entry3.count, total) };
     }).sort((a3, b) => b.count - a3.count || compare3(a3.id, b.id));
-    if (sum !== total) throw new RangeError("Percentage categories must partition the canonical total exactly.");
+    if (sum2 !== total) throw new RangeError("Percentage categories must partition the canonical total exactly.");
     const positive3 = rows.filter((row) => row.count);
     let visible = positive3, members = [];
     if (positive3.length > maxSlices) {
@@ -66168,7 +66241,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
       const chosen = new Set([...fixed, ...positive3.filter((row) => !preserve.includes(row.id)).slice(0, maxSlices - 1 - fixed.length)].map((row) => row.id));
       visible = positive3.filter((row) => chosen.has(row.id));
       members = positive3.filter((row) => !chosen.has(row.id));
-      const otherCount = members.reduce((sum2, row) => sum2 + row.count, 0);
+      const otherCount = members.reduce((sum3, row) => sum3 + row.count, 0);
       visible.push({ id: "group:other", label: "Other", count: otherCount, fraction: share2(otherCount, total), percentage: percent2(otherCount, total), members });
     }
     let accumulated = 0;
@@ -66326,7 +66399,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
     if (!analytics || !results3.valid(analytics.totals) || !Array.isArray(analytics.rows) || !Array.isArray(analytics.workloadGroups) || !results3.layers.includes(analytics.layer)) {
       throw new TypeError("Percentage charts require complete canonical activity analytics.");
     }
-    const total = count7(analytics.totals.count), ids = /* @__PURE__ */ new Set(), tools2 = /* @__PURE__ */ new Map(), services3 = /* @__PURE__ */ new Map();
+    const total = count8(analytics.totals.count), ids = /* @__PURE__ */ new Set(), tools2 = /* @__PURE__ */ new Map(), services3 = /* @__PURE__ */ new Map();
     const outcomes3 = Object.fromEntries(outcomeKeys.map((key4) => [key4, 0]));
     for (const row of analytics.rows) {
       if (!row || typeof row.id !== "string" || ids.has(row.id) || !outcomeKeys.includes(row.outcome) || typeof row.workload !== "string") {
@@ -66361,14 +66434,14 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
       }) ?? analytics.unitPopulations,
       serviceEvidence: categories3.explainRows(analytics.rows, analytics.layer),
       serviceEvidenceGroups: categories3.evidenceGroups(analytics.rows, analytics.layer),
-      outcomes: partition2(outcomeKeys.map((id5) => ({ id: id5, label: names[id5], count: analytics.totals[id5] })), total),
-      categories: partition2(
+      outcomes: partition3(outcomeKeys.map((id5) => ({ id: id5, label: names[id5], count: analytics.totals[id5] })), total),
+      categories: partition3(
         analytics.workloadGroups.map((group) => ({ id: group.label, label: categories3.describe(group.label).label, count: group.total })),
         total,
         { preserve: ["Unknown", "Multiple workloads"] }
       ),
       services: involvement(analytics, total),
-      tools: partition2([...tools2].map(([tool, value]) => ({
+      tools: partition3([...tools2].map(([tool, value]) => ({
         id: tool === null ? "tool:unidentified" : `tool:${tool}`,
         label: tool ?? "Tool not identified",
         count: value,
@@ -66419,7 +66492,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
     });
     const tools2 = { total, slices: [], rows: [
       ...base.tools.rows.map((row) => ({ ...row, sourceId: "github-copilot", sourceLabel: "GitHub Copilot", sourceTotal: base.total })),
-      ...partition2(nativeTools, a3.selectedRows).rows.map((row) => ({ ...row, sourceLabel: "Microsoft 365", sourceTotal: a3.selectedRows }))
+      ...partition3(nativeTools, a3.selectedRows).rows.map((row) => ({ ...row, sourceLabel: "Microsoft 365", sourceTotal: a3.selectedRows }))
     ] };
     const populations = [
       ...base.total ? [{
@@ -66446,7 +66519,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
       boundedNative: true,
       nativeConversations: a3.conversations,
       hasNativeConversations: a3.conversations > 0,
-      outcomes: partition2(base.outcomes.rows.map((row) => ({
+      outcomes: partition3(base.outcomes.rows.map((row) => ({
         ...row,
         count: row.count + a3.outcomes[row.id],
         label: names[row.id],
@@ -66471,7 +66544,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
   }
   function authorUsage(scenarios, nativeConversations = 0) {
     if (!Array.isArray(scenarios) || !authorship) throw new TypeError("Prompt counts require the matching interaction slice and shared authorship.");
-    count7(nativeConversations);
+    count8(nativeConversations);
     const interactions = /* @__PURE__ */ new Map(), nativeIds = /* @__PURE__ */ new Set();
     for (const scenario of scenarios) {
       if (scenario.recordKind === "native-conversation") {
@@ -66634,13 +66707,13 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
           details.append(el("p", "percentage-empty", data.nativeConversations ? "Prompt authorship unavailable for Microsoft 365 conversations." : "No matching interactions."));
           return;
         }
-        const wrap2 = el("div", "percentage-table-wrap"), table3 = el("table", "percentage-table");
-        table3.append(el("caption", "", `${data.nativeConversations ? "GitHub Copilot: " : ""}${data.total.toLocaleString()} matching ${data.total === 1 ? "interaction" : "interactions"}; one originating prompt per interaction.`));
+        const wrap2 = el("div", "percentage-table-wrap"), table4 = el("table", "percentage-table");
+        table4.append(el("caption", "", `${data.nativeConversations ? "GitHub Copilot: " : ""}${data.total.toLocaleString()} matching ${data.total === 1 ? "interaction" : "interactions"}; one originating prompt per interaction.`));
         const head2 = el("thead"), headings2 = el("tr"), body2 = el("tbody");
         for (const text6 of ["Prompt author", "Interactions", "Share"]) {
-          const cell2 = el("th", "", text6);
-          cell2.scope = "col";
-          headings2.append(cell2);
+          const cell3 = el("th", "", text6);
+          cell3.scope = "col";
+          headings2.append(cell3);
         }
         head2.append(headings2);
         for (const row of data.rows) {
@@ -66652,19 +66725,19 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
           tr.append(label2, value, percentage);
           body2.append(tr);
         }
-        table3.append(head2, body2);
-        wrap2.append(table3);
+        table4.append(head2, body2);
+        wrap2.append(table4);
         details.append(wrap2);
         return;
       }
       if (key4 === "outcomes" && current.separateUnits) {
         const wrap2 = el("div", "percentage-table-wrap");
-        const table3 = el("table", "percentage-table"), head2 = el("thead"), headings2 = el("tr"), body2 = el("tbody");
-        table3.append(el("caption", "", "Recorded outcomes by source"));
+        const table4 = el("table", "percentage-table"), head2 = el("thead"), headings2 = el("tr"), body2 = el("tbody");
+        table4.append(el("caption", "", "Recorded outcomes by source"));
         for (const text6 of ["Source", "Outcome", "Count", "Source total", "Share"]) {
-          const cell2 = el("th", "", text6);
-          cell2.scope = "col";
-          headings2.append(cell2);
+          const cell3 = el("th", "", text6);
+          cell3.scope = "col";
+          headings2.append(cell3);
         }
         head2.append(headings2);
         for (const population of current.unitPopulations) for (const entry3 of results3.entries(current.layer, population.totals)) {
@@ -66679,15 +66752,15 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
           );
           body2.append(row);
         }
-        table3.append(head2, body2);
-        wrap2.append(table3);
+        table4.append(head2, body2);
+        wrap2.append(table4);
         details.append(wrap2);
         return;
       }
       if (key4 === "models") {
-        const wrap2 = el("div", "percentage-table-wrap"), table3 = el("table", "percentage-table");
-        table3.setAttribute("role", "table");
-        table3.append(el("caption", "", `${data.total.toLocaleString()} ${data.total === 1 ? "interaction" : "interactions"}; models can overlap.`));
+        const wrap2 = el("div", "percentage-table-wrap"), table4 = el("table", "percentage-table");
+        table4.setAttribute("role", "table");
+        table4.append(el("caption", "", `${data.total.toLocaleString()} ${data.total === 1 ? "interaction" : "interactions"}; models can overlap.`));
         const head2 = el("thead"), headings2 = el("tr");
         for (const text6 of ["Model", "Interactions"]) {
           const th = el("th", "", text6);
@@ -66706,15 +66779,15 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
           tr.append(label2, value);
           body2.append(tr);
         }
-        table3.append(head2, body2);
-        wrap2.append(table3);
+        table4.append(head2, body2);
+        wrap2.append(table4);
         details.append(wrap2);
         return;
       }
-      const wrap = el("div", "percentage-table-wrap"), table2 = el("table", "percentage-table");
-      table2.setAttribute("role", "table");
+      const wrap = el("div", "percentage-table-wrap"), table3 = el("table", "percentage-table");
+      table3.setAttribute("role", "table");
       const qualified = current.boundedNative && current.separateUnits;
-      table2.append(el("caption", "", `${qualified ? current.unitPopulations.map((population) => `${population.label}: ${population.totals.count.toLocaleString()} ${results3.populationLabel(population.unit)}`).join(" / ") : `${current.total.toLocaleString()} ${current.unit}`}${key4 === "services" ? ". Services can overlap." : ""}`));
+      table3.append(el("caption", "", `${qualified ? current.unitPopulations.map((population) => `${population.label}: ${population.totals.count.toLocaleString()} ${results3.populationLabel(population.unit)}`).join(" / ") : `${current.total.toLocaleString()} ${current.unit}`}${key4 === "services" ? ". Services can overlap." : ""}`));
       const head = el("thead"), headings = el("tr");
       for (const text6 of [key4 === "tools" ? "Tool" : key4 === "services" ? "Service" : "Outcome", ...qualified ? ["Source"] : [], "Count", "Share"]) {
         const th = el("th", "", text6);
@@ -66722,9 +66795,9 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
         headings.append(th);
       }
       head.append(headings);
-      table2.append(head);
+      table3.append(head);
       const body = el("tbody");
-      const cell = (label2, value) => {
+      const cell2 = (label2, value) => {
         const node = el("td", "", value);
         node.dataset.label = label2;
         node.setAttribute("role", "cell");
@@ -66747,19 +66820,19 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
         label2.setAttribute("role", "rowheader");
         label2.append(actionFor(key4, row, `percentage:${key4}:table:${row.id}`));
         tr.append(label2);
-        if (qualified) tr.append(cell("Source", row.sourceLabel ?? "GitHub Copilot"));
-        tr.append(cell("Count", row.count.toLocaleString()), cell("Share", current.separateUnits && !qualified ? "Not comparable" : row.percentage));
+        if (qualified) tr.append(cell2("Source", row.sourceLabel ?? "GitHub Copilot"));
+        tr.append(cell2("Count", row.count.toLocaleString()), cell2("Share", current.separateUnits && !qualified ? "Not comparable" : row.percentage));
         body.append(tr);
       }
       const foot = el("tfoot"), total = el("tr"), label = el("th", "", key4 === "services" ? "Records in scope" : "Total");
       label.scope = "row";
       total.setAttribute("role", "row");
       label.setAttribute("role", "rowheader");
-      total.append(label, cell("Count", current.total.toLocaleString()), cell("Share", current.separateUnits ? "Not comparable" : current.total ? "100%" : "Not applicable"));
+      total.append(label, cell2("Count", current.total.toLocaleString()), cell2("Share", current.separateUnits ? "Not comparable" : current.total ? "100%" : "Not applicable"));
       foot.append(total);
-      table2.append(body);
-      if (!qualified) table2.append(foot);
-      wrap.append(table2);
+      table3.append(body);
+      if (!qualified) table3.append(foot);
+      wrap.append(table3);
       details.append(wrap);
     }
     function actionFor(key4, row, viewKey) {
@@ -66818,7 +66891,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
           list2.append(row);
         }
         coverage4.append(list2);
-        if (data.gaps.reduce((sum, gap2) => sum + gap2.count, 0) > data.missingDetailCount) {
+        if (data.gaps.reduce((sum2, gap2) => sum2 + gap2.count, 0) > data.missingDetailCount) {
           coverage4.append(el("p", "", "Gap reasons can overlap; do not add them."));
         }
       }
@@ -66867,7 +66940,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
         item.append(decorate(row, "services"), label, shareValue(row), shareBar(row.kind, row, false));
         list2.append(item);
       }
-      if (data.unresolved.partialCount || data.unresolved.gaps.reduce((sum, gap2) => sum + gap2.count, 0) > data.unresolved.count)
+      if (data.unresolved.partialCount || data.unresolved.gaps.reduce((sum2, gap2) => sum2 + gap2.count, 0) > data.unresolved.count)
         content.append(el("p", "percentage-basis", `${data.unresolved.count} with missing service details. A record can appear in more than one row.`));
     }
     function renderCard(key4) {
@@ -66992,8 +67065,8 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
           item.dataset.category = row.id;
           item.dataset.count = row.count;
           if (!current.separateUnits) item.dataset.percentage = row.percentage;
-          const display = dataHost && key4 === "services" && row.id === "Search" ? { ...row, label: "Search endpoint" } : row;
-          const label = actionFor(key4, display, `percentage:${key4}:${row.sourceId ?? row.sourceLabel ?? ""}:${row.id}`);
+          const display2 = dataHost && key4 === "services" && row.id === "Search" ? { ...row, label: "Search endpoint" } : row;
+          const label = actionFor(key4, display2, `percentage:${key4}:${row.sourceId ?? row.sourceLabel ?? ""}:${row.id}`);
           if (tools2 && current.separateUnits && row.sourceLabel) label.append(el("span", "percentage-basis", row.sourceLabel));
           const action = label.hasAttribute("href") ? label : null;
           if (!tools2) {
@@ -67019,7 +67092,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
               vector("stop", { offset: "1", class: "chart-fade-low" })
             );
             gradients.append(gradient);
-            const path31 = vector("path", {
+            const path32 = vector("path", {
               d: arc(slice.start, slice.end),
               fill: `url(#${gradientId})`,
               class: `percentage-face percentage-slice dimensional-tone-${tone(key4, row)}`,
@@ -67031,12 +67104,12 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
               "aria-hidden": "true"
             });
             if (action) {
-              faces2.append(linkSlice(path31, action));
-            } else faces2.append(path31);
-            const highlight = () => path31.classList.toggle("percentage-active", item.matches(":hover,:focus-within") || path31.matches(":hover"));
+              faces2.append(linkSlice(path32, action));
+            } else faces2.append(path32);
+            const highlight = () => path32.classList.toggle("percentage-active", item.matches(":hover,:focus-within") || path32.matches(":hover"));
             for (const event of ["pointerenter", "pointerleave", "focusin", "focusout"]) {
               item.addEventListener(event, highlight);
-              path31.addEventListener(event, highlight);
+              path32.addEventListener(event, highlight);
             }
           }
         }
@@ -67055,7 +67128,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
       renderTable(key4);
       if (reading) ux.restoreFocus([...content.querySelectorAll("[data-view-key]")].find((node) => node.dataset.viewKey === reading));
     }
-    function linkSlice(path31, action) {
+    function linkSlice(path32, action) {
       const target = vector("a", { href: action.getAttribute("href"), tabindex: "-1", "aria-hidden": "true" });
       mirrorLink?.(target, action);
       target.addEventListener("click", (event) => {
@@ -67066,7 +67139,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
       });
       const tip = action.getAttribute("aria-description");
       if (tip) ux.tooltip(target, `${action.textContent}. ${tip}`);
-      target.append(path31);
+      target.append(path32);
       return target;
     }
     function appendUnitOutcomes(host2) {
@@ -67085,7 +67158,7 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
             "aria-label": `${population.label}: ${population.totals.count} ${current.unit}`
           });
           const faces2 = vector("g", { transform: `translate(${f2.cx} ${f2.cy})`, "aria-hidden": "true" });
-          const data = partition2(outcomeKeys.map((id6) => ({ id: id6, label: id6, count: population.totals[id6] })), population.totals.count);
+          const data = partition3(outcomeKeys.map((id6) => ({ id: id6, label: id6, count: population.totals[id6] })), population.totals.count);
           for (const slice of data.slices) faces2.append(vector("path", {
             d: arc(slice.start, slice.end),
             "data-category": slice.id,
@@ -67115,10 +67188,10 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
             { ...fact3, ...current.boundedNative ? { nativeFilter: { source: population.source, result: entry3.key } } : { drilldownIds: population.outcomeIds[entry3.key] } },
             `percentage:outcomes:${population.source ?? population.unit}:${entry3.key}`
           );
-          const path31 = group.querySelector(`path[data-category="${entry3.key}"]`);
-          if (path31 && label.hasAttribute("href")) {
-            const faces2 = path31.parentNode;
-            faces2.append(linkSlice(path31, label));
+          const path32 = group.querySelector(`path[data-category="${entry3.key}"]`);
+          if (path32 && label.hasAttribute("href")) {
+            const faces2 = path32.parentNode;
+            faces2.append(linkSlice(path32, label));
           }
           row.append(decorate({ id: entry3.key }, "outcomes"), label, ux.countShare(fact3));
           list2.append(row);
@@ -67188,13 +67261,13 @@ function createPercentageCharts({ dimensional, categories: categories3, results:
     }
     return { update, validate: model, referenceModel: () => current ?? null, evidence: (key4) => evidence.get(key4), renderExact, withdrawAccess };
   }
-  return { share: share2, percent: percent2, partition: partition2, visualSlices, arc, frame, point, model, modelUsage, authorUsage, interactionIdentity, withNative, mount };
+  return { share: share2, percent: percent2, partition: partition3, visualSlices, arc, frame, point, model, modelUsage, authorUsage, interactionIdentity, withNative, mount };
 }
 
 // web/dashboard-layout.mjs
 function mountDashboardLayout(host) {
   const view = host.ownerDocument.defaultView;
-  const selector2 = ".analyze-outcome-summary,.analyze-chart-main,:scope > #activityView,#percentageCharts .percentage-card";
+  const selector3 = ".analyze-outcome-summary,.analyze-chart-main,:scope > #activityView,#percentageCharts .percentage-card";
   const widgets = /* @__PURE__ */ new Set();
   const resize = new view.ResizeObserver(measure);
   const children = new view.MutationObserver(refresh);
@@ -67210,7 +67283,7 @@ function mountDashboardLayout(host) {
     }
   }
   function refresh() {
-    const current = new Set(host.querySelectorAll(selector2));
+    const current = new Set(host.querySelectorAll(selector3));
     for (const widget of widgets) if (!current.has(widget)) {
       resize.unobserve(widget);
       widget.style.removeProperty("grid-row-end");
@@ -67304,11 +67377,11 @@ function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
   function start(token2) {
     if (reduced.matches || !isCurrent(token2) || !ordinary || !home.checkVisibility()) return;
     const numbers = [], format = new Intl.NumberFormat();
-    const add = (node, count7, parenthesized = false) => {
-      if (!node || !Number.isSafeInteger(count7) || count7 < 2) return;
-      const text6 = format.format(count7);
+    const add = (node, count8, parenthesized = false) => {
+      if (!node || !Number.isSafeInteger(count8) || count8 < 2) return;
+      const text6 = format.format(count8);
       if (node.textContent !== (parenthesized ? `(${text6})` : text6)) return;
-      numbers.push({ node, count: count7, parenthesized });
+      numbers.push({ node, count: count8, parenthesized });
     };
     for (const column of home.querySelectorAll("#chart .time-column")) {
       const total2 = column.querySelector(".flat-time-column")?.dataset.total;
@@ -67348,9 +67421,9 @@ function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
         finish();
         return;
       }
-      for (const { node, count: count7, parenthesized } of numbers) {
+      for (const { node, count: count8, parenthesized } of numbers) {
         if (!node.isConnected) continue;
-        const value = format.format(Math.max(1, Math.floor(count7 * (1 - (1 - t) ** 1.7))));
+        const value = format.format(Math.max(1, Math.floor(count8 * (1 - (1 - t) ** 1.7))));
         const text6 = parenthesized ? `(${value})` : value;
         if (node.dataset.buildValue !== text6) node.dataset.buildValue = text6;
       }
@@ -67698,7 +67771,7 @@ function mountDeletion({ api, flow, createCalendar, time: time2, timeContext, ux
     }
   });
   const key4 = "workiq-evidence.deletion-operation";
-  const records = (count7) => `${count7} record${count7 === 1 ? "" : "s"}`;
+  const records = (count8) => `${count8} record${count8 === 1 ? "" : "s"}`;
   const setStatus = (message, error = false) => {
     $2("deleteStatus").textContent = message;
     $2("deleteStatus").classList.toggle("error", error);
@@ -67848,7 +67921,7 @@ function mountDeletion({ api, flow, createCalendar, time: time2, timeContext, ux
         [c.diagnostics - (c.anonymousDiagnostics ?? 0), "HTTP diagnostic"],
         [c.other, "other record"],
         [c.anonymousRecords ?? 0, "local record without a source identifier"]
-      ].filter(([count7]) => count7).map(([count7, label]) => `${count7} ${label}${count7 === 1 ? "" : "s"}`).join("; ");
+      ].filter(([count8]) => count8).map(([count8, label]) => `${count8} ${label}${count8 === 1 ? "" : "s"}`).join("; ");
       $2("deleteBreakdown").textContent = (units2 ? units2 + "." : "Only supporting local copies remain.") + `${c.anonymousRecords ? " Unidentified local copies are matched by their retained start/request fingerprint, not verified distinct invocations. Ambiguous repeated occurrences cannot be deleted by this flow." : ""}${c.partialGroups ? ` ${c.partialGroups} request groups keep their out-of-range records.` : ""}${c.retainedOnly ? ` ${c.retainedOnly} records exist only in retained local copies.` : ""}${c.undatedPreserved ? ` ${c.undatedPreserved} unknown-time records are preserved.` : ""}`;
       $2("deleteCopies").textContent = `${c.localCopies} supporting local file${c.localCopies === 1 ? "" : "s"} will be cleaned. ${c.savedReports} saved report${c.savedReports === 1 ? " stays" : "s stay"} available and retain${c.savedReports === 1 ? "s its" : " their"} previous copies.`;
       if (c.savedComparisons) $2("deleteCopies").textContent += ` ${c.savedComparisons} saved comparison${c.savedComparisons === 1 ? " also keeps its" : "s also keep their"} frozen copies.`;
@@ -68104,12 +68177,12 @@ var deletionStyles = `
 
 // web/recollection-flow.mjs
 function describeRecollection(phase, { preview, result, busy = false, error = false } = {}) {
-  const count7 = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const count8 = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
   const data = phase === "complete" ? result : preview;
   const exact10 = data?.mode === "verified-records-only";
-  const records = count7(exact10 ? data.counts?.[phase === "complete" ? "added" : "proposed"] : data?.counts?.records);
+  const records = count8(exact10 ? data.counts?.[phase === "complete" ? "added" : "proposed"] : data?.counts?.records);
   const calls2 = (n) => `${n.toLocaleString()} verified call${n === 1 ? "" : "s"}`;
-  const prompts = count7(result?.counts?.restoredPrompts);
+  const prompts = count8(result?.counts?.restoredPrompts);
   const scopeAvailable = Boolean(preview?.scope?.from && preview?.scope?.to);
   return {
     records,
@@ -68291,9 +68364,9 @@ function mountRecollection({ api, createCalendar, time: time2, timeContext, sear
     if (!current(access2)) return;
     const query = $2("recollectSearch").value;
     sourceMatches.length = 0;
-    const matches3 = sourceMatches = sources.filter((source) => (!selectedOnly || selectedSources2.has(source.sourceSessionId)) && search.matches(query, [source.name]));
+    const matches4 = sourceMatches = sources.filter((source) => (!selectedOnly || selectedSources2.has(source.sourceSessionId)) && search.matches(query, [source.name]));
     searchField.sync();
-    pageSources($2("recollectSources"), matches3, (source) => {
+    pageSources($2("recollectSources"), matches4, (source) => {
       const label = document.createElement("label"), input = document.createElement("input"), name = document.createElement("span");
       label.className = "delete-choice";
       input.type = "checkbox";
@@ -68304,7 +68377,7 @@ function mountRecollection({ api, createCalendar, time: time2, timeContext, sear
       label.append(input, name);
       return label;
     }, reset, () => current(access2), eraseSourceRows);
-    if (!matches3.length) {
+    if (!matches4.length) {
       const empty = document.createElement("p");
       empty.textContent = selectedOnly ? "No selected chats match this search." : "No chats match. Try another name.";
       $2("recollectSources").append(empty);
@@ -68590,7 +68663,7 @@ function mountRecollection({ api, createCalendar, time: time2, timeContext, sear
           [c?.promptOnly, "existing with prompt restoration"],
           [c?.verifiedCompletions, "saved unknowns with verified completion"],
           [c?.verifiedMetadata, "saved calls with verified result details"]
-        ].filter(([count7]) => Number.isSafeInteger(count7) && count7 > 0).map(([count7, label]) => `${count7.toLocaleString()} ${label}`).join(", ");
+        ].filter(([count8]) => Number.isSafeInteger(count8) && count8 > 0).map(([count8, label]) => `${count8.toLocaleString()} ${label}`).join(", ");
         $2("recollectSummary").textContent = view.records === null ? "The preview record count is unavailable. Nothing can be confirmed." : `${view.records.toLocaleString()} record${view.records === 1 ? "" : "s"}${kinds2 ? `: ${kinds2}` : ""}.${Number.isSafeInteger(c?.alreadyPresent) && c.alreadyPresent > 0 ? ` ${c.alreadyPresent.toLocaleString()} already-present records will not be duplicated.` : ""}` + (c?.unresolved ? ` ${c.unresolved.toLocaleString()} saved calls could not be verified for correction and will stay unchanged.` : "") + (c?.checkpointConflicts ? ` Conflicting saved checkpoint evidence: ${c.checkpointConflicts.toLocaleString()}.` : "");
         const corrections = result2.correctable ?? [];
         if (result2.scope.correctExisting && (!Array.isArray(result2.correctable) || corrections.length > 32 || corrections.length !== c.verifiedCompletions + c.verifiedMetadata)) throw new Error("Saved-call corrections were not identified. Preview again.");
@@ -68621,7 +68694,7 @@ function mountRecollection({ api, createCalendar, time: time2, timeContext, sear
           [row.credentialExclusions, "credential exclusions"],
           [row.unsupportedPromptContents, "unsupported message formats"],
           [row.missingResults, "calls without a recorded result"]
-        ].filter(([count7]) => count7).map(([count7, label]) => `${count7} ${label}`).join("; ");
+        ].filter(([count8]) => count8).map(([count8, label]) => `${count8} ${label}`).join("; ");
         li.textContent = exact10 ? `${row.name}: day coverage incomplete.` : `${row.name}: ${row.problem || "Available history read."}${gaps ? ` ${gaps}.` : ""}`;
         return li;
       }));
@@ -70801,16 +70874,16 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
   const same7 = (a3, b) => JSON.stringify(a3) === JSON.stringify(b);
   const sameIds = (a3, b) => Array.isArray(a3) && Array.isArray(b) && same7([...a3].sort(), [...b].sort());
   const orderedRows = (rows) => [...rows].sort((a3, b) => a3.id < b.id ? -1 : a3.id > b.id ? 1 : 0);
-  const require9 = (condition) => {
+  const require10 = (condition) => {
     if (!condition) throw new Error("Comparison facts do not match the accepted revision, definitions or exact membership. Read the current Analyze view.");
   };
   function semanticScope(value, revision) {
     const receipt = value?.receipt;
-    require9(value?.status === "ready" && value.coverage === "whole-retained-corpus" && searchContract?.analysisReceipt(receipt) && receipt.revision === revision && ["scenarioIds", "actionIds", "parentScenarioIds"].every((key4) => Array.isArray(value[key4]) && value[key4].every((id5) => typeof id5 === "string" && id5.length) && new Set(value[key4]).size === value[key4].length));
+    require10(value?.status === "ready" && value.coverage === "whole-retained-corpus" && searchContract?.analysisReceipt(receipt) && receipt.revision === revision && ["scenarioIds", "actionIds", "parentScenarioIds"].every((key4) => Array.isArray(value[key4]) && value[key4].every((id5) => typeof id5 === "string" && id5.length) && new Set(value[key4]).size === value[key4].length));
     return { scenarioIds: [...value.scenarioIds], actionIds: [...value.actionIds], parentScenarioIds: [...value.parentScenarioIds] };
   }
   function validateNarrowing(ids, scenarios) {
-    require9(ids === void 0 || Array.isArray(ids) && new Set(ids).size === ids.length && ids.every((id5) => typeof id5 === "string" && scenarios.some((record) => record.scenarioId === id5)));
+    require10(ids === void 0 || Array.isArray(ids) && new Set(ids).size === ids.length && ids.every((id5) => typeof id5 === "string" && scenarios.some((record) => record.scenarioId === id5)));
   }
   function prepare(snapshot, options, periods, query = "", withinServices = [], semanticSearch, nativeView = snapshot?.nativeRead) {
     if (!Array.isArray(snapshot?.scenarios)) throw new Error("The complete retained interaction roster is unavailable.");
@@ -70818,7 +70891,7 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
     if (semanticSearch !== void 0) {
       semanticScope(semanticSearch, snapshot.revision);
       validateNarrowing(semanticSearch.withinScenarioIds, snapshot.scenarios);
-      require9(!query.trim() || semanticSearch.withinScenarioIds !== void 0);
+      require10(!query.trim() || semanticSearch.withinScenarioIds !== void 0);
     }
     const scenarioIds = semanticSearch === void 0 ? snapshot.scenarios.filter((record) => {
       const source = sources.get(record.sourceSessionId);
@@ -70865,7 +70938,7 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
   }
   function begin(input, snapshot, semanticSearch, hasSearch = false) {
     accepted = null;
-    require9(Array.isArray(snapshot.assessment?.catalog) && typeof hasSearch === "boolean");
+    require10(Array.isArray(snapshot.assessment?.catalog) && typeof hasSearch === "boolean");
     const filters = input.options.filters;
     pending = {
       token: ++generation2,
@@ -70890,7 +70963,7 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
     };
     if (input.semanticSelection) {
       validateNarrowing(input.semanticSelection.withinScenarioIds, snapshot.scenarios);
-      require9(searchContract.sameReceipt(input.semanticSelection.receipt, semanticSearch.receipt) && same7(input.semanticSelection.withinScenarioIds, semanticSearch.withinScenarioIds));
+      require10(searchContract.sameReceipt(input.semanticSelection.receipt, semanticSearch.receipt) && same7(input.semanticSelection.withinScenarioIds, semanticSearch.withinScenarioIds));
     }
     return generation2;
   }
@@ -70911,18 +70984,18 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
       "code-reference": ["Graph code references"]
     };
     const nativeDatesExcluded = typeof datedLegacyUnit === "string" && datedLegacyUnit === value?.definitions?.unit && ["baseline", "later"].every((side) => value.periods?.[side]?.analytics?.measurementEligibility?.nativeActivityDates === "unqualified" && Array.isArray(value.periods[side].analytics.rows) && value.periods[side].analytics.rows.every((row) => !row.countUnit?.startsWith("native-")));
-    require9(value?.kind === "retained-period-comparison" && value.schemaVersion === 1 && value.revision === input.expectedRevision && same7(value.assessmentBasis, basis2) && same7(value.source, source) && same7(value.timeContext, time2.normalize(input.options.timeContext)) && same7(value.options, input.options) && same7(value.selection, { ...semanticMembership ? {
+    require10(value?.kind === "retained-period-comparison" && value.schemaVersion === 1 && value.revision === input.expectedRevision && same7(value.assessmentBasis, basis2) && same7(value.source, source) && same7(value.timeContext, time2.normalize(input.options.timeContext)) && same7(value.options, input.options) && same7(value.selection, { ...semanticMembership ? {
       semanticMembership,
       ...input.semanticSelection.withinScenarioIds === void 0 ? {} : { withinScenarioIds: input.semanticSelection.withinScenarioIds }
     } : { scenarioIds: input.scenarioIds }, withinServices: input.withinServices }) && value.definitions?.activitySchemaVersion === 2 && value.definitions.layer === (input.options.layer ?? "tool") && supportedUnits[value.definitions.layer]?.includes(value.definitions.unit) && (value.definitions.unit === unit || nativeDatesExcluded) && value.definitions.metricProjectionVersion === contract.METRIC_PROJECTION_VERSION && same7(value.definitions.serviceInvolvement, categories3.involvementDefinition));
     contract.validateBasis(value.assessmentBasis);
     for (const key4 of ["baseline", "later"]) {
       const side = value.periods?.[key4], analytics = side?.analytics;
-      require9(side && analytics && same7(side.range, input.periods[key4]) && same7(side.dateRange, time2.range(side.range, value.timeContext.timeZone)) && same7(side.dateRange, analytics.dateRange) && same7(analytics.timeContext, value.timeContext) && analytics.revision === value.revision && analytics.schemaVersion === value.definitions.activitySchemaVersion && analytics.groupBy === (input.options.groupBy ?? "workload") && analytics.layer === value.definitions.layer && analytics.unit === value.definitions.unit && Array.isArray(analytics.rows) && sameIds(side.interactionRefs, side.assessment?.interactionRefs) && new Set(side.interactionRefs).size === side.interactionRefs.length && Array.isArray(side.interactionCoverage));
+      require10(side && analytics && same7(side.range, input.periods[key4]) && same7(side.dateRange, time2.range(side.range, value.timeContext.timeZone)) && same7(side.dateRange, analytics.dateRange) && same7(analytics.timeContext, value.timeContext) && analytics.revision === value.revision && analytics.schemaVersion === value.definitions.activitySchemaVersion && analytics.groupBy === (input.options.groupBy ?? "workload") && analytics.layer === value.definitions.layer && analytics.unit === value.definitions.unit && Array.isArray(analytics.rows) && sameIds(side.interactionRefs, side.assessment?.interactionRefs) && new Set(side.interactionRefs).size === side.interactionRefs.length && Array.isArray(side.interactionCoverage));
       const filters = { ...input.options.filters, ...side.dateRange };
       const validRows = (rows, scope) => Array.isArray(rows) && new Set(rows.map((row) => row?.id)).size === rows.length && rows.every((row) => row && typeof row.id === "string" && row.id.length > 0 && typeof row.scenarioId === "string" && (semanticMembership ? semanticMembership.scenarioIds.includes(row.scenarioId) || semanticMembership.actionIds.includes(row.id) : input.scenarioIds.includes(row.scenarioId)) && (input.semanticSelection?.withinScenarioIds === void 0 || input.semanticSelection.withinScenarioIds.includes(row.scenarioId)) && (row.sourceSessionId === null || typeof row.sourceSessionId === "string") && (row.projectId === null || typeof row.projectId === "string") && typeof row.tool === "string" && row.tool.length > 0 && typeof row.scope === "string" && row.scope.length > 0 && typeof row.workload === "string" && ["user", "agent", "unknown"].includes(row.promptAuthor) && typeof row.endpoint?.id === "string" && typeof row.endpoint.label === "string" && Array.isArray(row.serviceAssociation?.services) && row.serviceAssociation.services.every((service) => typeof service === "string") && Array.isArray(row.serviceAssociation.gaps) && (row.durationMs === null || Number.isFinite(row.durationMs) && row.durationMs >= 0) && typeof row.startedAt === "string" && Number.isFinite(Date.parse(row.startedAt)) && projection5.selected(row, scope) && input.withinServices.every((service) => row.serviceAssociation.services.includes(service)));
       const facet = analytics.resultFacet;
-      require9(validRows(analytics.rows, filters) && sameIds(side.rowIds, analytics.rows.map((row) => row.id)) && new Set(side.rowIds).size === side.rowIds.length && sameIds(side.scenarioIds, [...new Set(analytics.rows.map((row) => row.scenarioId))]) && facet?.scope === "before-outcome" && validRows(facet.rows, { ...filters, outcomes: void 0 }) && same7(facet.totals, projection5.summarize(facet.rows)) && same7(orderedRows(analytics.rows), orderedRows(facet.rows.filter((row) => projection5.selected(row, filters)))));
+      require10(validRows(analytics.rows, filters) && sameIds(side.rowIds, analytics.rows.map((row) => row.id)) && new Set(side.rowIds).size === side.rowIds.length && sameIds(side.scenarioIds, [...new Set(analytics.rows.map((row) => row.scenarioId))]) && facet?.scope === "before-outcome" && validRows(facet.rows, { ...filters, outcomes: void 0 }) && same7(facet.totals, projection5.summarize(facet.rows)) && same7(orderedRows(analytics.rows), orderedRows(facet.rows.filter((row) => projection5.selected(row, filters)))));
       const projected = projection5.project(analytics.rows, {
         groupBy: input.options.groupBy ?? "workload",
         limit: input.options.limit ?? 10,
@@ -70933,14 +71006,14 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
         timelineLimit: 400,
         completeTimeline: true
       }, scenarios);
-      require9(Object.entries(projected).every(([field, expected2]) => same7(analytics[field], expected2)));
+      require10(Object.entries(projected).every(([field, expected2]) => same7(analytics[field], expected2)));
       if (semanticMembership && analytics.apiCoverage) {
         const parents = /* @__PURE__ */ new Set([...semanticMembership.scenarioIds, ...semanticMembership.parentScenarioIds]);
-        require9(Array.isArray(analytics.apiCoverage.calls) && analytics.apiCoverage.calls.every((call) => parents.has(call.scenarioId) && (input.semanticSelection.withinScenarioIds === void 0 || input.semanticSelection.withinScenarioIds.includes(call.scenarioId))) && same7(analytics.apiCoverage, projection5.apiCoverage(analytics.apiCoverage.calls, analytics.rows)));
+        require10(Array.isArray(analytics.apiCoverage.calls) && analytics.apiCoverage.calls.every((call) => parents.has(call.scenarioId) && (input.semanticSelection.withinScenarioIds === void 0 || input.semanticSelection.withinScenarioIds.includes(call.scenarioId))) && same7(analytics.apiCoverage, projection5.apiCoverage(analytics.apiCoverage.calls, analytics.rows)));
       }
       const associations = side.scenarioIds.map((id5) => catalog.find((item) => item.scenarioId === id5));
       const refs4 = [...new Set(associations.filter((item) => item?.status === "retained" && item.interactionRef).map((item) => item.interactionRef))];
-      require9(sameIds(side.interactionRefs, refs4) && sameIds(side.unmappedScenarioIds, side.scenarioIds.filter((id5, index) => !associations[index]?.interactionRef || associations[index].status !== "retained")) && same7(side.reviewStatusRevisions, associations.filter((item) => item?.interactionRef).map((item) => ({
+      require10(sameIds(side.interactionRefs, refs4) && sameIds(side.unmappedScenarioIds, side.scenarioIds.filter((id5, index) => !associations[index]?.interactionRef || associations[index].status !== "retained")) && same7(side.reviewStatusRevisions, associations.filter((item) => item?.interactionRef).map((item) => ({
         scenarioId: item.scenarioId,
         interactionRef: item.interactionRef,
         revision: item.reviewStatusRevision ?? null
@@ -70952,45 +71025,45 @@ function createPeriodComparisonState({ time: time2, search, contract, projection
         eligibleUnitRefs: metric.eligibleUnitRefs,
         coveredUnitRefs: metric.coveredUnitRefs
       }));
-      require9(same7(coverage4, side.interactionCoverage) && new Set(coverage4.map((item) => item.slot)).size === coverage4.length && side.assessment.metrics.every((metric) => same7(metric.basis, basis2)));
+      require10(same7(coverage4, side.interactionCoverage) && new Set(coverage4.map((item) => item.slot)).size === coverage4.length && side.assessment.metrics.every((metric) => same7(metric.basis, basis2)));
       contract.validateAssessmentAttempts(side.assessment.assessmentAttempts);
-      require9(side.assessment.assessmentAttempts.every((item) => side.interactionRefs.includes(item.interactionRef)) && sameIds(
+      require10(side.assessment.assessmentAttempts.every((item) => side.interactionRefs.includes(item.interactionRef)) && sameIds(
         side.assessment.reviewStatuses.map((item) => item.interactionRef),
         [...new Set(side.reviewStatusRevisions.filter((item) => item.revision !== null).map((item) => item.interactionRef))]
       ));
       for (const item of side.assessment.reviewStatuses) {
-        require9(side.interactionRefs.includes(item.interactionRef));
+        require10(side.interactionRefs.includes(item.interactionRef));
         contract.validateReviewStatus(item.reviewStatus);
       }
     }
-    require9(same7(value.comparison, comparePeriodCohorts2(value.periods.baseline, value.periods.later)));
-    require9(value.nativeViewId === input.nativeViewId);
-    require9(value.nativeViewKind === input.nativeViewKind);
+    require10(same7(value.comparison, comparePeriodCohorts2(value.periods.baseline, value.periods.later)));
+    require10(value.nativeViewId === input.nativeViewId);
+    require10(value.nativeViewKind === input.nativeViewKind);
     if (input.nativeViewId !== void 0) {
-      require9(typeof validateNativePeriods2 === "function");
+      require10(typeof validateNativePeriods2 === "function");
       validateNativePeriods2(value.nativePeriods, { baseline: value.periods.baseline.dateRange, later: value.periods.later.dateRange });
-      require9(input.nativeViewKind === "current" ? value.nativePeriods.schemaVersion === 2 : value.nativePeriods.schemaVersion === 1);
-    } else require9(value.nativePeriods === void 0);
+      require10(input.nativeViewKind === "current" ? value.nativePeriods.schemaVersion === 2 : value.nativePeriods.schemaVersion === 1);
+    } else require10(value.nativePeriods === void 0);
     if (value.definitions.resultProjectionVersion !== void 0) {
-      require9(value.definitions.resultProjectionVersion === 1 && typeof resultContract?.compareReportResultFacts === "function");
+      require10(value.definitions.resultProjectionVersion === 1 && typeof resultContract?.compareReportResultFacts === "function");
       if (value.definitions.layer === "tool") {
         for (const side of Object.values(value.periods)) {
-          require9(Array.isArray(side.resultMembership));
+          require10(Array.isArray(side.resultMembership));
           resultContract.validateReportResultFacts(side.resultFacts, { memberRefs: side.resultMembership.map((item) => item.memberRef) });
           const nativeRows = (value.nativePeriods?.rows ?? []).filter((row) => row.unit === "native-tool-call" && row.startedAt !== null && row.startedAt >= side.dateRange.from && row.startedAt < side.dateRange.to);
-          require9(side.resultFacts.calls.length === side.analytics.rows.length + nativeRows.length && new Set(side.resultMembership.map((item) => item.rowRef)).size === side.resultMembership.length);
+          require10(side.resultFacts.calls.length === side.analytics.rows.length + nativeRows.length && new Set(side.resultMembership.map((item) => item.rowRef)).size === side.resultMembership.length);
           if (side.changeSummary !== void 0) {
             const { interactions, affected, issueRowIds } = side.changeSummary;
             const ids = new Set(side.rowIds);
-            require9(!value.nativePeriods && Number.isSafeInteger(interactions) && interactions >= 0 && interactions <= side.scenarioIds.length && Boolean(interactions) === Boolean(ids.size) && Number.isSafeInteger(affected) && affected >= 0 && affected <= interactions && Array.isArray(issueRowIds) && new Set(issueRowIds).size === issueRowIds.length && issueRowIds.every((id5) => ids.has(id5)) && affected <= issueRowIds.length && Boolean(affected) === Boolean(issueRowIds.length) && issueRowIds.length === side.resultFacts.calls.filter((call) => call.completion === "failed" || call.observations.some(resultContract.reportObservationHasError)).length);
+            require10(!value.nativePeriods && Number.isSafeInteger(interactions) && interactions >= 0 && interactions <= side.scenarioIds.length && Boolean(interactions) === Boolean(ids.size) && Number.isSafeInteger(affected) && affected >= 0 && affected <= interactions && Array.isArray(issueRowIds) && new Set(issueRowIds).size === issueRowIds.length && issueRowIds.every((id5) => ids.has(id5)) && affected <= issueRowIds.length && Boolean(affected) === Boolean(issueRowIds.length) && issueRowIds.length === side.resultFacts.calls.filter((call) => call.completion === "failed" || call.observations.some(resultContract.reportObservationHasError)).length);
           }
         }
-        require9(same7(value.resultComparison, resultContract.compareReportResultFacts(value.periods.baseline.resultFacts, value.periods.later.resultFacts)));
-      } else require9(value.periods.baseline.resultFacts === null && value.periods.later.resultFacts === null && same7(value.resultComparison, { version: 1, status: "unavailable", reason: "not-tool-call-cohort", groups: [] }));
+        require10(same7(value.resultComparison, resultContract.compareReportResultFacts(value.periods.baseline.resultFacts, value.periods.later.resultFacts)));
+      } else require10(value.periods.baseline.resultFacts === null && value.periods.later.resultFacts === null && same7(value.resultComparison, { version: 1, status: "unavailable", reason: "not-tool-call-cohort", groups: [] }));
     }
     pending.scope.endpoints = (input.options.filters.endpoints ?? []).map((id5) => {
       const names = ["baseline", "later"].map((side) => value.periods[side].analytics.filterOptions?.endpoints?.find((entry3) => entry3.id === id5)?.label ?? null);
-      require9(names[0] === names[1]);
+      require10(names[0] === names[1]);
       return { id: id5, name: names[0] };
     });
     accepted = structuredClone(value);
@@ -71350,19 +71423,19 @@ function mountPeriodComparison({
   doc.getElementById("analyzeFilterPanel").append(additionalOptions);
   const footer = el("div", void 0, "comparison-actions");
   footer.id = "comparisonActions";
-  const inspect = el("section", void 0, "compare-inspection");
-  inspect.hidden = true;
+  const inspect2 = el("section", void 0, "compare-inspection");
+  inspect2.hidden = true;
   const inspectTitle = el("h2");
   inspectTitle.tabIndex = -1;
   const inspectBody = el("div"), inspectClose = button("Back to comparison", () => closeInspection(true));
-  inspect.append(inspectClose, inspectTitle, inspectBody);
+  inspect2.append(inspectClose, inspectTitle, inspectBody);
   let inspected = null, inspectionReturn = null, inspectionTrigger = null, paintedView = "";
   function closeInspection(restore = false) {
-    inspect.hidden = true;
+    inspect2.hidden = true;
     inspected = null;
     if (restore && publicationCurrent(acceptedPublication) && inspectionTrigger?.checkVisibility()) inspectionTrigger.focus({ preventScroll: true });
   }
-  inspect.addEventListener("keydown", (event) => {
+  inspect2.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
       closeInspection(true);
@@ -71385,7 +71458,7 @@ function mountPeriodComparison({
   scopeRow.append(dateHint, scope);
   setup.append(title2, chartControls, status4, scopeRow, searchLabel);
   resultHeading.append(views2);
-  root.append(resultHeading, output, footer, inspect);
+  root.append(resultHeading, output, footer, inspect2);
   function selectedCallCount(value) {
     return value && chartView() === "outcomes" && !value.nativePeriods && value.periods.later.changeSummary ? value.periods.later.rowIds.length : null;
   }
@@ -71559,19 +71632,19 @@ function mountPeriodComparison({
     for (const cells of rows) {
       const tr = el("tr");
       cells.forEach((value, index) => {
-        const heading = !index && rowHeadings, cell = el(heading ? "th" : "td");
-        if (heading) cell.scope = "row";
-        else cell.dataset.label = headers2[index];
-        if (value instanceof doc.defaultView.Node) cell.append(value);
-        else cell.textContent = value;
-        tr.append(cell);
+        const heading = !index && rowHeadings, cell2 = el(heading ? "th" : "td");
+        if (heading) cell2.scope = "row";
+        else cell2.dataset.label = headers2[index];
+        if (value instanceof doc.defaultView.Node) cell2.append(value);
+        else cell2.textContent = value;
+        tr.append(cell2);
       });
       body.append(tr);
     }
     node.append(head, body);
     return node;
   }
-  function table2(caption2, headers2, rows) {
+  function table3(caption2, headers2, rows) {
     const wrap = el("div", void 0, "period-comparison-table");
     wrap.tabIndex = 0;
     wrap.setAttribute("role", "region");
@@ -71579,15 +71652,15 @@ function mountPeriodComparison({
     wrap.append(dataTable(caption2, headers2, rows));
     return wrap;
   }
-  function alignOutcomeReadings(table3) {
+  function alignOutcomeReadings(table4) {
     const columns2 = el("colgroup");
     for (const width of ["34%", "22%", "22%", "22%"]) {
       const col = el("col");
       col.style.width = width;
       columns2.append(col);
     }
-    table3.tHead.before(columns2);
-    return table3;
+    table4.tHead.before(columns2);
+    return table4;
   }
   const signed2 = (value) => value === null ? "Not comparable" : `${value > 0 ? "+" : ""}${number3(value)}`;
   const duration3 = (value) => assessmentFactories.timing.duration(value);
@@ -71690,15 +71763,15 @@ function mountPeriodComparison({
         group.append(el("h4", label));
         group.append(el("p", `Change: ${signed2((peers[1]?.count ?? 0) - (peers[0]?.count ?? 0))} ${results3.columnUnit(value.definitions.layer, 2)}.`, "compare-caption"));
         for (const [index, [key4, side]] of sides.entries()) {
-          const fact3 = peers[index], count7 = fact3?.count ?? 0, peer = peers[1 - index]?.count ?? 0;
-          const text6 = `${label}, ${names[index].label}: ${count7} of ${side.rowIds.length} ${value.definitions.unit}; ${share2(count7, side.rowIds.length)}. Change: ${signed2(index ? count7 - peer : peer - count7)} records.`;
+          const fact3 = peers[index], count8 = fact3?.count ?? 0, peer = peers[1 - index]?.count ?? 0;
+          const text6 = `${label}, ${names[index].label}: ${count8} of ${side.rowIds.length} ${value.definitions.unit}; ${share2(count8, side.rowIds.length)}. Change: ${signed2(index ? count8 - peer : peer - count8)} records.`;
           const row = el("span", void 0, "comparison-group-value"), track = el("span", void 0, "comparison-group-track");
           const bar = el("span", void 0, "comparison-group-bar");
-          bar.style.width = `${maximum ? count7 / maximum * 100 : 0}%`;
+          bar.style.width = `${maximum ? count8 / maximum * 100 : 0}%`;
           track.append(bar);
           const period = identity4(names[index].label);
           period.append(el("span", `${number3(side.rowIds.length)} ${results3.columnUnit(value.definitions.layer, side.rowIds.length)} total`, "compare-value-detail"));
-          row.append(period, track, ux.countShare({ count: count7, percentage: share2(count7, side.rowIds.length) }));
+          row.append(period, track, ux.countShare({ count: count8, percentage: share2(count8, side.rowIds.length) }));
           const control = mark(text6, row, () => openInspection("calls", control, { side: key4, ids: fact3?.drilldownIds ?? [], label }));
           group.append(control);
         }
@@ -71732,30 +71805,30 @@ function mountPeriodComparison({
         values.push(value);
         affected.push(summary.affected);
         const text6 = measure.share ? value === null ? "No interactions" : percentage.format(value) + "%" : number3(value);
-        const cell = el("div", void 0, "compare-change-value");
+        const cell2 = el("div", void 0, "compare-change-value");
         if (ids.length) {
           const action = button(text6, () => openInspection("calls", action, { side: key4, index, label }));
           action.id = `compareChange-${index}-${key4}`;
           action.setAttribute("aria-label", `${measure.label}, ${key4 === "baseline" ? "baseline" : "selected"}: ${text6}. ${label}`);
-          cell.append(action);
-        } else cell.append(numeric(text6));
-        if (measure.share && value !== null) cell.append(el("span", `${number3(summary.affected)} of ${counted(summary.interactions, "interaction")}`, "compare-value-detail"));
-        return cell;
+          cell2.append(action);
+        } else cell2.append(numeric(text6));
+        if (measure.share && value !== null) cell2.append(el("span", `${number3(summary.affected)} of ${counted(summary.interactions, "interaction")}`, "compare-value-detail"));
+        return cell2;
       });
       const delta2 = values.some((value) => value === null) ? null : values[1] - values[0];
       const change = el("div", void 0, "compare-change-value");
       if (measure.share) {
         const sign = delta2 > 0 ? "+" : delta2 < 0 ? "\u2212" : "";
         const magnitude = Math.abs(delta2);
-        const count7 = affected[1] - affected[0];
+        const count8 = affected[1] - affected[0];
         if (delta2 === null) {
           change.append(
-            numeric(count7 ? `${number3(Math.abs(count7))} ${count7 > 0 ? "more" : "fewer"} affected interaction${Math.abs(count7) === 1 ? "" : "s"}` : "No change in count"),
+            numeric(count8 ? `${number3(Math.abs(count8))} ${count8 > 0 ? "more" : "fewer"} affected interaction${Math.abs(count8) === 1 ? "" : "s"}` : "No change in count"),
             el("span", values.every((v2) => v2 === null) ? "Neither period has a percentage to compare" : `No ${values[0] === null ? "baseline" : "selected-period"} percentage to compare`, "compare-value-detail")
           );
         } else change.append(
           numeric(`${sign}${magnitude > 0 && magnitude < 0.1 ? "<0.1" : percentage.format(magnitude)} pp`),
-          el("span", `${signed2(count7)} affected interaction${Math.abs(count7) === 1 ? "" : "s"}`, "compare-value-detail")
+          el("span", `${signed2(count8)} affected interaction${Math.abs(count8) === 1 ? "" : "s"}`, "compare-value-detail")
         );
       } else change.append(numeric(signed2(delta2)));
       const detail = button(measure.label, () => openInspection("measure", detail, { index }));
@@ -71778,7 +71851,7 @@ function mountPeriodComparison({
     }
     if (view === "outcomes") {
       const section = el("div");
-      section.append(table2(
+      section.append(table3(
         "Exact outcome counts and shares",
         ["Outcome", ...names.map((name) => name.label), "Change (percentage points)"],
         Object.entries(focusedLabels(results3.labels(value.definitions.layer))).map(([key4, label]) => {
@@ -71790,7 +71863,7 @@ function mountPeriodComparison({
           ];
         })
       ));
-      if (value.resultComparison?.groups.length) section.append(table2(
+      if (value.resultComparison?.groups.length) section.append(table3(
         "Recorded application/API errors",
         ["Source and period", "Calls with recorded errors", "Selected calls", "Application results available", "Application results unavailable"],
         value.resultComparison.groups.flatMap((group) => sides.map(([key4], index) => {
@@ -71807,7 +71880,7 @@ function mountPeriodComparison({
       return section;
     }
     const rows = chartRows(value);
-    return table2(
+    return table3(
       view === "timeline" ? "Exact timeline values" : "Exact breakdown values",
       ["Period", view === "timeline" ? "Civil dates" : "Group", "Records", "Period denominator", "Share"],
       sides.flatMap(([key4, side], index) => rows[key4].map((row) => [
@@ -71844,7 +71917,7 @@ function mountPeriodComparison({
         return [key4 === "baseline" ? "Baseline" : "Selected", time2.formatCivilRange(side.range.from, side.range.to, value.timeContext), amount, action];
       });
       inspectTitle.textContent = title3;
-      inspectBody.replaceChildren(table2(title3, ["Period", "Dates", "Value", "Calls"], rows));
+      inspectBody.replaceChildren(table3(title3, ["Period", "Dates", "Value", "Calls"], rows));
     } else if (kind2 === "numbers") inspectBody.replaceChildren(numbersPanel(value, sides, names));
     else {
       const readingSides = narrowing ? sides.map(([key4, side, name]) => {
@@ -71885,10 +71958,10 @@ function mountPeriodComparison({
       inspectBody.replaceChildren(records);
     }
     if (!publicationCurrent(publication)) return;
-    inspect.hidden = false;
+    inspect2.hidden = false;
     if (focus) {
       inspectTitle.focus({ preventScroll: true });
-      inspect.scrollIntoView({ block: "start" });
+      inspect2.scrollIntoView({ block: "start" });
     }
   }
   function deltaNode(value, unit, lowerIsBetter = false) {
@@ -71910,10 +71983,10 @@ function mountPeriodComparison({
     if (doc.getElementById("outcomeFilter-control")?.getAttribute("aria-expanded") === "true") return;
     const a3 = value?.periods.baseline.analytics.resultFacet.totals, b = value?.periods.later.analytics.resultFacet.totals;
     for (const option of control.options) {
-      const count7 = a3 && b ? `A: ${number3(a3[option.value])}; B: ${number3(b[option.value])}` : null;
-      option.textContent = labels2[option.value] + (count7 ? ` (${count7})` : "");
+      const count8 = a3 && b ? `A: ${number3(a3[option.value])}; B: ${number3(b[option.value])}` : null;
+      option.textContent = labels2[option.value] + (count8 ? ` (${count8})` : "");
       option.dataset.optionLabel = labels2[option.value];
-      if (count7) option.dataset.count = count7;
+      if (count8) option.dataset.count = count8;
       else delete option.dataset.count;
     }
     control.dataset.allLabel = "All results";
@@ -71951,7 +72024,7 @@ function mountPeriodComparison({
     ]));
     const selectedOutcomes = value.options.filters.outcomes;
     const subject = getContext().route.comparisonFocus === "completed" ? "success" : selectedOutcomes?.length && !selectedOutcomes.includes("failure") ? selectedOutcomes[0] : "failure";
-    const outcomeChange = (key4) => denominators.every((count7) => count7 > 0) ? b.analytics.totals[key4] * 100 / denominators[1] - a3.analytics.totals[key4] * 100 / denominators[0] : null;
+    const outcomeChange = (key4) => denominators.every((count8) => count8 > 0) ? b.analytics.totals[key4] * 100 / denominators[1] - a3.analytics.totals[key4] * 100 / denominators[0] : null;
     const failure5 = tool && ["success", "failure"].includes(subject) ? subject === "success" ? "completed" : "failed" : `were recorded as "${results3.labels(value.definitions.layer)[subject]}"`;
     const maximum = Math.max(...denominators);
     const summary = el("div", void 0, "compare-result-pair");
@@ -71968,8 +72041,8 @@ function mountPeriodComparison({
         summary.append(row);
         continue;
       }
-      const count7 = side.analytics.totals[subject], reference3 = denominators[index];
-      heading.append(numeric(value.definitions.layer === "code-reference" ? `${counted(side.rowIds.length, "reference")} \xB7 execution not observed` : `${number3(count7)} of ${number3(reference3)} ${results3.columnUnit(value.definitions.layer, reference3)} ${failure5}`));
+      const count8 = side.analytics.totals[subject], reference3 = denominators[index];
+      heading.append(numeric(value.definitions.layer === "code-reference" ? `${counted(side.rowIds.length, "reference")} \xB7 execution not observed` : `${number3(count8)} of ${number3(reference3)} ${results3.columnUnit(value.definitions.layer, reference3)} ${failure5}`));
       const bar = el("div", void 0, "compare-outcome-bar");
       bar.setAttribute("role", "group");
       bar.setAttribute("aria-label", `${names[index].label}: ` + Object.entries(labels2).map(([key4, label]) => `${label} ${side.analytics.totals[key4]} (${rates[key4][index] ?? "Not applicable"})`).join(", "));
@@ -72033,7 +72106,7 @@ function mountPeriodComparison({
       const measurable = (fact3) => fact3.state === "available" && (key4 !== "p95" || fact3.coverage.count > 1);
       const delta2 = item.delta && measurable(item.baseline) && measurable(item.later) ? item.delta.value : null;
       for (const [index, fact3] of [item.baseline, item.later].entries()) {
-        const cell = el("div", void 0, "compare-timing-value"), measured = numeric(measurable(fact3) ? duration3(fact3.value) : key4 === "p95" && fact3.coverage.count === 1 ? "Not shown (one timing)" : "Not measured");
+        const cell2 = el("div", void 0, "compare-timing-value"), measured = numeric(measurable(fact3) ? duration3(fact3.value) : key4 === "p95" && fact3.coverage.count === 1 ? "Not shown (one timing)" : "Not measured");
         if (index && delta2 !== null && delta2 !== 0) measured.classList.add(delta2 < 0 ? "compare-better" : "compare-worse");
         const text6 = `${label}, ${names[index].label}: ${measured.textContent}. ${fact3.coverage.count} of ${fact3.coverage.eligible} calls have timing. ${delta2 === null ? "Change unavailable." : `Change: ${durationChange2(delta2)}.`}`;
         const control = mark(text6, measured, () => openInspection("calls", control, {
@@ -72041,22 +72114,22 @@ function mountPeriodComparison({
           ids: value.periods[index ? "later" : "baseline"].analytics.rows.filter((row) => row.durationMs !== null).map((row) => row.id),
           label: names[index].label + ": timed calls"
         }));
-        cell.append(control);
-        if (index) cell.append(el(
+        cell2.append(control);
+        if (index) cell2.append(el(
           "p",
           delta2 === null ? "Cannot compare" : delta2 === 0 ? "Unchanged" : `${durationChange2(delta2)}\xA0${delta2 < 0 ? "faster" : "slower"}`,
           "compare-value-detail" + (delta2 === null || delta2 === 0 ? "" : delta2 < 0 ? " compare-better" : " compare-worse")
         ));
-        cells.push(cell);
+        cells.push(cell2);
       }
       rows.push(cells);
     }
     const coverage4 = matching.median;
     rows.push(["Calls with timing", ...[coverage4.baseline, coverage4.later].map((fact3) => {
-      const cell = el("div", void 0, "compare-timing-value"), missing = fact3.coverage.eligible - fact3.coverage.count;
-      cell.append(numeric(`${number3(fact3.coverage.count)} of ${number3(fact3.coverage.eligible)}`));
-      if (missing) cell.append(el("p", `${number3(missing)} without timing`, "compare-value-detail"));
-      return cell;
+      const cell2 = el("div", void 0, "compare-timing-value"), missing = fact3.coverage.eligible - fact3.coverage.count;
+      cell2.append(numeric(`${number3(fact3.coverage.count)} of ${number3(fact3.coverage.eligible)}`));
+      if (missing) cell2.append(el("p", `${number3(missing)} without timing`, "compare-value-detail"));
+      return cell2;
     })]);
     const values = dataTable("Tool latency by period", ["Measure", ...names.map((name) => name.label)], rows);
     values.className = "compare-values-table";
@@ -72094,7 +72167,7 @@ function mountPeriodComparison({
       tab.setAttribute("aria-controls", body.id);
       body.append(el("p", `${number3(side.rowIds.length)} ${results3.columnUnit(value.definitions.layer, side.rowIds.length)} across ${counted(side.interactionRefs.length, "interaction")}`, "compare-caption"));
       if (side.rowIds.length) {
-        const exact10 = table2(
+        const exact10 = table3(
           `${names[index].label}: ${number3(side.rowIds.length)} exact ${results3.columnUnit(value.definitions.layer, side.rowIds.length)}`,
           [value.definitions.layer === "tool" ? "Call and interaction" : "Record and interaction", "Started", "Result", value.definitions.layer === "tool" ? "Latency" : "Duration"],
           side.analytics.rows.map((row, rowIndex) => {
@@ -72173,26 +72246,26 @@ function mountPeriodComparison({
       });
       section.append(el("h4", timed.find(Boolean)?.label || formatter4.comparisonLabel(item)));
       const cells = sides.map(([key4], index) => {
-        const fact3 = item[key4], timing = timed[index], cell = el("div");
+        const fact3 = item[key4], timing = timed[index], cell2 = el("div");
         if (fact3?.state === "available" && timing) {
           const typical = el("p");
           if (timing.timed > 1) typical.textContent = `Typical (median): ${duration3(timing.distribution.p50Ms)}`;
           else typical.append(numeric(duration3(timing.measurement.value)), " ", el("span", "(one timing)", "compare-observation"));
-          cell.append(typical);
-          if (timing.timed > 1) cell.append(el("p", `95% finished within: ${duration3(timing.distribution.p95Ms)}`));
+          cell2.append(typical);
+          if (timing.timed > 1) cell2.append(el("p", `95% finished within: ${duration3(timing.distribution.p95Ms)}`));
         } else {
           const text6 = fact3 ? formatter4.metricPresentation(fact3, fact3.metric, { includeOrigin: false }).value : formatter4.absentPeerLabel(item[key4 === "baseline" ? "later" : "baseline"]);
-          cell.append(el("p", text6 === "Not measured" ? "No timing recorded" : text6));
+          cell2.append(el("p", text6 === "Not measured" ? "No timing recorded" : text6));
         }
         const definition = formatter4.sideDefinitionLabel(item, key4);
-        if (definition) cell.append(el("span", definition, "compare-caption"));
-        cell.tabIndex = 0;
+        if (definition) cell2.append(el("span", definition, "compare-caption"));
+        cell2.tabIndex = 0;
         ux.tooltip(
-          cell,
-          `${section.querySelector("h4").textContent}, ${names[index].label}. ${cell.textContent}. ${timing ? `${timing.timed} of ${timing.eligible} ${timing.coverage.unit} have timing.` : "Timing coverage unavailable."}`,
+          cell2,
+          `${section.querySelector("h4").textContent}, ${names[index].label}. ${cell2.textContent}. ${timing ? `${timing.timed} of ${timing.eligible} ${timing.coverage.unit} have timing.` : "Timing coverage unavailable."}`,
           { helpOnActivate: true, tone: "contrast" }
         );
-        return cell;
+        return cell2;
       });
       const values = dataTable(section.querySelector("h4").textContent + " by period", names.map((name) => name.label), [cells], false);
       values.className = "compare-whole-table";
@@ -72286,10 +72359,10 @@ function mountPeriodComparison({
           return [label, number3(item.baseline[key4]), number3(item.later[key4]), signed2(item.later[key4] - item.baseline[key4]), "-"];
         });
         const periodCount = (entry3, side) => {
-          const cell = el("div", number3(entry3.count));
+          const cell2 = el("div", number3(entry3.count));
           const note = item.unit === "native-tool-call" && resultNote(side, item.sourceId);
-          if (note) cell.append(el("p", note, "compare-caption"));
-          return cell;
+          if (note) cell2.append(el("p", note, "compare-caption"));
+          return cell2;
         };
         return [[
           `${source}: ${unit}`,
@@ -72299,7 +72372,7 @@ function mountPeriodComparison({
           number3(item.undated)
         ], ...outcomes3];
       });
-      section.append(rows.length ? table2("Microsoft period populations", ["Source and measure", "Baseline", "Selected", "Change", "Undated"], rows) : el("p", "No Microsoft observations match this source, record type and filter selection.", "compare-empty"));
+      section.append(rows.length ? table3("Microsoft period populations", ["Source and measure", "Baseline", "Selected", "Change", "Undated"], rows) : el("p", "No Microsoft observations match this source, record type and filter selection.", "compare-empty"));
       content.append(section);
     }
     const nativeDatesUnavailable = (!value.options.filters.sources?.length || value.options.filters.sources.some((source) => source.startsWith("microsoft-365-"))) && sides.some(([, side]) => side.analytics.measurementEligibility?.nativeActivityDates === "unqualified");
@@ -72545,7 +72618,7 @@ function mountPeriodComparison({
     const pair = acceptedPair();
     if (!pair || entry3?.key !== pair.key || entry3.revision !== pair.revision) return null;
     if (!Object.values(pair.comparison.periods).some((side2) => side2.rowIds.length)) return null;
-    if (inspect.hidden || inspected?.kind !== "calls") return { tab: calls2, region: inspect };
+    if (inspect2.hidden || inspected?.kind !== "calls") return { tab: calls2, region: inspect2 };
     const side = selectedPeriod === "later" ? "B" : "A";
     const tab = root.querySelector("#comparisonRecords" + side);
     const region = root.querySelector("#comparison-record-scroll-" + side) || root.querySelector("#comparisonExactRecords" + side);
@@ -73413,9 +73486,9 @@ function mountTrends({ root, api, time: time2, ux, authorship, createCalendar, m
     onInspect: () => {
     },
     onSelect: (date2) => openErrorsChart(date2),
-    onWindow(first, last, count7) {
+    onWindow(first, last, count8) {
       landingWindow.hidden = !first;
-      landingWindow.textContent = first ? `${axisDate(first)} \u2013 ${axisDate(last)} in view \xB7 ${count7} days in this chart` : "";
+      landingWindow.textContent = first ? `${axisDate(first)} \u2013 ${axisDate(last)} in view \xB7 ${count8} days in this chart` : "";
     }
   });
   function openErrorsChart(date2) {
@@ -73714,9 +73787,9 @@ function mountTrends({ root, api, time: time2, ux, authorship, createCalendar, m
       formatDate: fullDate,
       formatAxisDate: axisDate,
       weekContext,
-      onWindow(first, last, count7) {
+      onWindow(first, last, count8) {
         visibleDays.hidden = !first;
-        const text6 = first ? `${axisDate(first)} \u2013 ${axisDate(last)} in view \xB7 ${count7} days in this chart` : "";
+        const text6 = first ? `${axisDate(first)} \u2013 ${axisDate(last)} in view \xB7 ${count8} days in this chart` : "";
         if (visibleDays.textContent !== text6) visibleDays.textContent = text6;
       },
       onInspect() {
@@ -73850,7 +73923,7 @@ function mountTrends({ root, api, time: time2, ux, authorship, createCalendar, m
   }
   function validate3(value, request2) {
     const history2 = value?.coverage?.historySummary;
-    if (value?.kind !== "retained-trends" || value.schemaVersion !== 1 || value.revision !== request2.expectedRevision || value.from !== request2.from || value.to !== request2.to || JSON.stringify(value.filters) !== JSON.stringify(request2.filters) || value.timeContext?.timeZone !== request2.timeContext.timeZone || !Array.isArray(value.days) || value.days.length !== value.window?.count || value.days.length > 90 || !value.totals || !value.definitions || value.window.offset !== request2.offset || value.days.some((day2) => !day2.date || !Number.isSafeInteger(day2.calls) || !Number.isSafeInteger(day2.interactions) || Object.keys(families2).some((id5) => !Array.isArray(day2.values?.[id5]))) || !Array.isArray(value.members) || Object.keys(families2).some((id5) => !Array.isArray(value.definitions[id5])) || value.coverage?.latestMatchingDate != null && !/^\d{4}-\d\d-\d\d$/.test(value.coverage.latestMatchingDate) || history2 && (history2.scope !== "saved-chats" || history2.affectedDates !== "unknown" || ["unreadableChats", "limitedChats", "pendingChats"].some((key4) => !Number.isSafeInteger(history2[key4]) || history2[key4] < 0) || !history2.reasons || Object.values(history2.reasons).some((count7) => !Number.isSafeInteger(count7) || count7 < 0))) {
+    if (value?.kind !== "retained-trends" || value.schemaVersion !== 1 || value.revision !== request2.expectedRevision || value.from !== request2.from || value.to !== request2.to || JSON.stringify(value.filters) !== JSON.stringify(request2.filters) || value.timeContext?.timeZone !== request2.timeContext.timeZone || !Array.isArray(value.days) || value.days.length !== value.window?.count || value.days.length > 90 || !value.totals || !value.definitions || value.window.offset !== request2.offset || value.days.some((day2) => !day2.date || !Number.isSafeInteger(day2.calls) || !Number.isSafeInteger(day2.interactions) || Object.keys(families2).some((id5) => !Array.isArray(day2.values?.[id5]))) || !Array.isArray(value.members) || Object.keys(families2).some((id5) => !Array.isArray(value.definitions[id5])) || value.coverage?.latestMatchingDate != null && !/^\d{4}-\d\d-\d\d$/.test(value.coverage.latestMatchingDate) || history2 && (history2.scope !== "saved-chats" || history2.affectedDates !== "unknown" || ["unreadableChats", "limitedChats", "pendingChats"].some((key4) => !Number.isSafeInteger(history2[key4]) || history2[key4] < 0) || !history2.reasons || Object.values(history2.reasons).some((count8) => !Number.isSafeInteger(count8) || count8 < 0))) {
       throw new Error("Trends returned an invalid or mismatched population. No values were inferred.");
     }
   }
@@ -74386,17 +74459,17 @@ function mountTrends({ root, api, time: time2, ux, authorship, createCalendar, m
     return `${offset + 1}\u2013${offset + data.window.count} of ${data.window.totalDays} days`;
   }
   function drawTable(card, target, includePeriod) {
-    const family2 = card.id, source = viewData(card), table2 = el("table", "exact-data-table"), header = el("tr");
+    const family2 = card.id, source = viewData(card), table3 = el("table", "exact-data-table"), header = el("tr");
     const head = el("thead"), body = el("tbody");
     const windowLabel = source.window.count < source.window.totalDays ? ` \xB7 Daily rows: ${dayPage()}` : "";
-    table2.append(el("caption", "", `${families2[family2].label} \xB7 ${formatRange()}${windowLabel}`));
+    table3.append(el("caption", "", `${families2[family2].label} \xB7 ${formatRange()}${windowLabel}`));
     for (const label of ["Date", ...source.definitions[family2].map((value) => value.label), "Interactions", "Calls"]) {
-      const cell = el("th", "", label);
-      cell.scope = "col";
-      header.append(cell);
+      const cell2 = el("th", "", label);
+      cell2.scope = "col";
+      header.append(cell2);
     }
     head.append(header);
-    table2.append(head, body);
+    table3.append(head, body);
     for (const day2 of includePeriod ? [source.totals, ...source.days] : source.days) {
       const row = el("tr"), date2 = el("th", "", day2.date ? fullDate(day2.date) : "Entire period");
       date2.scope = "row";
@@ -74405,7 +74478,7 @@ function mountTrends({ root, api, time: time2, ux, authorship, createCalendar, m
       row.append(el("td", "", number3(day2.interactions)), el("td", "", number3(day2.calls)));
       body.append(row);
     }
-    target.append(table2);
+    target.append(table3);
   }
   function formatRange() {
     const end = axisDate(range.to) === "Today" ? "Today" : time2.formatDate(range.to, data.timeContext, true);
@@ -75645,17 +75718,17 @@ function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, 
   modes.append(one, two);
   const hint = el("p", "trends-index-scope"), inspector = el("div", "trend-pair-readings"), plots = el("div");
   const when = el("h3"), readings = [0, 1].map((n) => {
-    const block = el("div"), label = el("strong"), key4 = el("i", "trend-pair-key"), value = el("p"), inspect = directionButton("", () => {
+    const block = el("div"), label = el("strong"), key4 = el("i", "trend-pair-key"), value = el("p"), inspect2 = directionButton("", () => {
       const choice = choiceAt(n), day2 = dayAt();
       if (!current() || !choice || !day2) return;
       const point = model.point(day2, choice);
-      evidence(choice, day2, point.rowIds, inspect);
+      evidence(choice, day2, point.rowIds, inspect2);
     });
     key4.setAttribute("aria-hidden", "true");
     key4.dataset.secondary = String(n === 1);
-    inspect.id = `trendPairEvidence${n + 1}`;
-    block.append(key4, label, value, inspect);
-    return { block, key: key4, label, value, inspect };
+    inspect2.id = `trendPairEvidence${n + 1}`;
+    block.append(key4, label, value, inspect2);
+    return { block, key: key4, label, value, inspect: inspect2 };
   });
   inspector.append(when, ...readings.map((r) => r.block));
   const association = el("details"), result = el("p"), exact10 = el("details"), tableRegion = el("div", "trends-exact");
@@ -75822,8 +75895,8 @@ function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, 
       }
       scrub(tableRegion);
       if (first) {
-        const list2 = [first, second].filter(Boolean), table2 = el("table", "exact-data-table"), head = el("thead"), h2 = el("tr"), tbody = el("tbody");
-        table2.append(el("caption", "", `Daily readings \xB7 ${fullDate(data.days[0].date)} \u2013 ${fullDate(data.days.at(-1).date)}`), head, tbody);
+        const list2 = [first, second].filter(Boolean), table3 = el("table", "exact-data-table"), head = el("thead"), h2 = el("tr"), tbody = el("tbody");
+        table3.append(el("caption", "", `Daily readings \xB7 ${fullDate(data.days[0].date)} \u2013 ${fullDate(data.days.at(-1).date)}`), head, tbody);
         head.append(h2);
         for (const label of ["Date", ...list2.map((c) => c.label)]) {
           const th = el("th", "", label);
@@ -75840,7 +75913,7 @@ function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, 
           }
           tbody.append(tr);
         }
-        tableRegion.append(table2);
+        tableRegion.append(table3);
       }
       if (first && second) {
         const v2 = model.correlation(data.days, first, second);
@@ -76060,8 +76133,8 @@ function searchHitPresentation(hit, { showSource = true } = {}) {
   }
   if (field !== "source" && hit.type === "view" && hit.target?.kind === "route" && typeof hit.target.href === "string") {
     const names = { "/": "Analyze", "/compare": "Compare", "/reports": "Reports", "/settings": "Settings", "/collection-status": "Collection status" };
-    const path31 = hit.target.href.split("?")[0];
-    if (Object.hasOwn(names, path31)) shown.source = names[path31] === hit.title ? [] : plain8(names[path31]);
+    const path32 = hit.target.href.split("?")[0];
+    if (Object.hasOwn(names, path32)) shown.source = names[path32] === hit.title ? [] : plain8(names[path32]);
   }
   if (!showSource && field !== "source") shown.source = [];
   return shown;
@@ -77430,7 +77503,7 @@ function createAnalyzeScope(results3, authorship, serviceLabel, sourceLabel) {
       if (!paired || restriction) parts2.push(text6);
       if (restriction) restrictions.push(text6);
     }
-    const count7 = (value) => value.toLocaleString(applied.timeContext?.locale);
+    const count8 = (value) => value.toLocaleString(applied.timeContext?.locale);
     if (applied.layer !== "tool") add("Activity", [results3.unit(applied.layer, 2)], false);
     if (filters.sources?.length && typeof sourceLabel !== "function") throw new TypeError("Accepted source presentation is unavailable.");
     const sources = filters.sources?.map((id5) => sourceLabel(id5));
@@ -77448,9 +77521,9 @@ function createAnalyzeScope(results3, authorship, serviceLabel, sourceLabel) {
       if (!paired && (!selection2 || !Array.isArray(selection2.knownMatchIds) || !Array.isArray(selection2.contextOnlyIds) || selection2.includeMissingService !== (filters.includeMissingService === true))) {
         throw new TypeError("Accepted service selection is unavailable.");
       }
-      add("Service", [filters.services.map(serviceLabel).join(", ") + (filters.includeMissingService ? "" : paired ? " only" : ` only (${count7(selection2.knownMatchIds.length)} known matches)`)]);
+      add("Service", [filters.services.map(serviceLabel).join(", ") + (filters.includeMissingService ? "" : paired ? " only" : ` only (${count8(selection2.knownMatchIds.length)} known matches)`)]);
       if (filters.includeMissingService) {
-        const context2 = paired ? "Missing-service context allowed" : `Includes missing-service context: ${count7(selection2.knownMatchIds.length)} known matches; ${count7(selection2.contextOnlyIds.length)} context-only`;
+        const context2 = paired ? "Missing-service context allowed" : `Includes missing-service context: ${count8(selection2.knownMatchIds.length)} known matches; ${count8(selection2.contextOnlyIds.length)} context-only`;
         parts2.push(context2);
         restrictions.push(context2);
       }
@@ -77672,11 +77745,11 @@ function chartReferenceFacts(analytics, model) {
       total: model.total,
       unit: model.unit,
       ...model.separateUnits ? { separateUnits: true } : {},
-      outcomes: freeze7({ rows: freeze7(model.outcomes.rows.map(({ id: id5, count: count7, percentage }) => freeze7({ id: id5, count: count7, percentage }))) }),
+      outcomes: freeze7({ rows: freeze7(model.outcomes.rows.map(({ id: id5, count: count8, percentage }) => freeze7({ id: id5, count: count8, percentage }))) }),
       services: freeze7({
         missingDetailCount: model.services.missingDetailCount,
         partialCount: model.services.partialCount,
-        recordedRows: freeze7(model.services.recordedRows.map(({ id: id5, label, count: count7, fraction, percentage }) => freeze7({ id: id5, label, count: count7, fraction, percentage })))
+        recordedRows: freeze7(model.services.recordedRows.map(({ id: id5, label, count: count8, fraction, percentage }) => freeze7({ id: id5, label, count: count8, fraction, percentage })))
       }),
       models: freeze7({
         total: model.models.total,
@@ -77684,7 +77757,7 @@ function chartReferenceFacts(analytics, model) {
       }),
       ...model.authors ? { authors: freeze7({
         total: model.authors.total,
-        unverifiedReasons: freeze7(model.authors.unverifiedReasons.map(({ reason: reason2, version: version2, count: count7 }) => freeze7({ reason: reason2, version: version2, count: count7 })))
+        unverifiedReasons: freeze7(model.authors.unverifiedReasons.map(({ reason: reason2, version: version2, count: count8 }) => freeze7({ reason: reason2, version: version2, count: count8 })))
       }) } : {}
     })
   });
@@ -78135,9 +78208,9 @@ function mountChartReference({
           heading.id = "guideAuthorReasonsTitle";
           summary.setAttribute("aria-labelledby", heading.id);
           const reasons = el("dl", void 0, "chart-reference-definitions");
-          for (const { reason: reason2, count: count7, version: version2 } of context2.model.authors.unverifiedReasons) {
+          for (const { reason: reason2, count: count8, version: version2 } of context2.model.authors.unverifiedReasons) {
             const rule = version2 === null ? "rule version unavailable" : version2 === "mixed" ? "no single saved rule version" : `saved rule v${version2}`;
-            reasons.append(definition(reason2, `${number3(count7)} ${count7 === 1 ? "interaction" : "interactions"} (${rule})`));
+            reasons.append(definition(reason2, `${number3(count8)} ${count8 === 1 ? "interaction" : "interactions"} (${rule})`));
           }
           summary.append(heading, reasons, el("p", `View revision ${context2.revision}`, "chart-reference-qualification"));
           host2.append(summary);
@@ -80241,8 +80314,8 @@ function mountAccountSettingsPresentation({ api, ux, accountSlot, connectionSlot
 }
 
 // web/account-profile.mjs
-function createAccountProfile({ api, present: present3, provider = "github", visible = () => true }) {
-  if (typeof api !== "function" || typeof present3 !== "function" || !["github", "microsoft"].includes(provider) || ["accessState", "publicationToken", "isCurrent"].some((name) => typeof api[name] !== "function")) {
+function createAccountProfile({ api, present: present4, provider = "github", visible = () => true }) {
+  if (typeof api !== "function" || typeof present4 !== "function" || !["github", "microsoft"].includes(provider) || ["accessState", "publicationToken", "isCurrent"].some((name) => typeof api[name] !== "function")) {
     throw new TypeError("Account profiles require the shared publication interface.");
   }
   let token2 = null, revision = 0, pending = null, again = false, timer, disposed = false, connection = null;
@@ -80271,10 +80344,10 @@ function createAccountProfile({ api, present: present3, provider = "github", vis
     pending = request2;
     request2.promise = (async () => {
       try {
-        if (Date.now() >= currentUntil && present3({ phase: "loading", profile: null }, owner2) !== true || !current(owner2, version2)) return false;
+        if (Date.now() >= currentUntil && present4({ phase: "loading", profile: null }, owner2) !== true || !current(owner2, version2)) return false;
         const profile = await api("/api/profile/" + provider);
         if (!current(owner2, version2)) return false;
-        if (present3({ phase: "ready", profile }, owner2) !== true || !current(owner2, version2)) return false;
+        if (present4({ phase: "ready", profile }, owner2) !== true || !current(owner2, version2)) return false;
         currentUntil = provider === "github" && profile.identity?.state === "verified" ? Math.min(...[profile.identity.expiresAt, profile.avatar?.expiresAt].filter(Number.isFinite)) : 0;
         if (profile.identity?.state === "verified" || Number.isFinite(profile.refreshAt)) {
           const deadlines = [Date.now() + 15e3, profile.refreshAt, profile.identity.expiresAt, profile.avatar?.expiresAt].filter((value) => Number.isFinite(value));
@@ -80289,7 +80362,7 @@ function createAccountProfile({ api, present: present3, provider = "github", vis
       } catch {
         if (current(owner2, version2)) {
           currentUntil = 0;
-          present3({ phase: "error", profile: null }, owner2);
+          present4({ phase: "error", profile: null }, owner2);
         }
         return false;
       } finally {
@@ -80324,7 +80397,7 @@ function createAccountProfile({ api, present: present3, provider = "github", vis
       withdrawAccess();
       const owner2 = api.publicationToken();
       if (pending && visible() && synchronous2(owner2) && api.isCurrent(owner2) === true) {
-        present3({ phase: "loading", profile: null }, owner2);
+        present4({ phase: "loading", profile: null }, owner2);
       }
       return receiveAccess();
     },
@@ -80422,7 +80495,7 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
   form.append(prepare, message, recover);
   container.append(form);
   let token2 = null, generation2 = null, revision = 0, reading = null, again = false, disposed = false, error = "", gesture = null;
-  const stamp3 = () => ({ token: token2, revision });
+  const stamp4 = () => ({ token: token2, revision });
   const synchronous2 = (value) => value !== null && value !== void 0 && typeof value.then !== "function";
   function current(owner2) {
     return !disposed && synchronous2(owner2.token) && owner2.token === token2 && owner2.revision === revision && api.isCurrent(owner2.token) === true && !disposed && owner2.token === token2 && owner2.revision === revision;
@@ -80433,7 +80506,7 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
     element.textContent = value;
   }
   function paint2() {
-    if (!current(stamp3())) return;
+    if (!current(stamp4())) return;
     const model = state.view(generation2);
     form.hidden = model.phase === "prepared" && !model.uncertain && !error;
     prepare.hidden = model.phase !== "available";
@@ -80459,7 +80532,7 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
     form.hidden = true;
   }
   async function read2() {
-    const owner2 = stamp3();
+    const owner2 = stamp4();
     if (!current(owner2)) return;
     if (reading) {
       again ||= reading.owner.token !== owner2.token || reading.owner.revision !== owner2.revision;
@@ -80479,7 +80552,7 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
         if (current(owner2)) error = "Connection details could not be read.";
       } finally {
         if (reading === request2) reading = null;
-        if (current(stamp3())) paint2();
+        if (current(stamp4())) paint2();
         if (again && !disposed) {
           again = false;
           void read2();
@@ -80490,7 +80563,7 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
   }
   const listen = (element, name, fn) => element.addEventListener(name, fn, { signal: events.signal });
   listen(prepare, "pointerdown", (event) => {
-    if (event.button === 0) gesture = { ...stamp3(), generation: generation2 };
+    if (event.button === 0) gesture = { ...stamp4(), generation: generation2 };
   });
   listen(prepare, "pointercancel", () => {
     gesture = null;
@@ -80501,11 +80574,11 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
       event.preventDefault();
       return;
     }
-    gesture = { ...stamp3(), generation: generation2 };
+    gesture = { ...stamp4(), generation: generation2 };
   });
   listen(form, "submit", (event) => {
     event.preventDefault();
-    const owner2 = stamp3(), original = gesture;
+    const owner2 = stamp4(), original = gesture;
     gesture = null;
     if (!current(owner2) || prepare.disabled || !prepare.checkVisibility() || !state.view(generation2).canPrepare) return;
     if (original && (!current(original) || original.generation !== generation2)) {
@@ -80543,7 +80616,7 @@ function mountMicrosoftEnrollment({ api, container, createState, onConnect, onCh
         state.failed(command, { rejected: failure5.code === "request_rejected" && failure5.outcome !== "unknown" });
         if (current(owner2)) error = state.view(generation2).uncertain ? "Connection request unconfirmed." : "The connection did not start.";
       } finally {
-        if (current(stamp3())) paint2();
+        if (current(stamp4())) paint2();
       }
     })();
   });
@@ -80732,14 +80805,14 @@ function createNativeConfigurationState() {
   }
   function view(observed) {
     const current = Boolean(latest && observed && integer10(observed.authorizationRevision) && latest.generation === observed.generation && latest.authorizationRevision >= observed.authorizationRevision);
-    const changed2 = dirty(), present3 = Boolean(latest || baseline);
+    const changed2 = dirty(), present4 = Boolean(latest || baseline);
     return {
-      present: present3,
+      present: present4,
       intent: baseline?.intent ?? null,
       values: draft ? structuredClone(draft) : null,
       dirty: changed2,
       stale,
-      needsRead: present3 && !current,
+      needsRead: present4 && !current,
       basis: baseline?.basis ?? null,
       blockers: [...latest?.blockers ?? []],
       valid: Boolean(values(draft)),
@@ -80828,7 +80901,7 @@ function createSourceCollectionState({ bootstrap, collectionStatus, createNative
     return structuredClone(value);
   }
   const validAccess = (observed) => Boolean(validBootstrap && observed?.readable && observed.mode === "enforced" && observed.collectionMode === bootstrap.collectionMode && uuid9(observed.runtimeId) && revision(observed.state?.generation) && revision(observed.state?.authorizationRevision));
-  const matches3 = (observed) => Boolean(validAccess(observed) && observed.runtimeId === runtimeId && latest && latest.generation === observed.state.generation && latest.authorizationRevision >= observed.state.authorizationRevision);
+  const matches4 = (observed) => Boolean(validAccess(observed) && observed.runtimeId === runtimeId && latest && latest.generation === observed.state.generation && latest.authorizationRevision >= observed.state.authorizationRevision);
   return {
     active,
     controlsActive,
@@ -80846,7 +80919,7 @@ function createSourceCollectionState({ bootstrap, collectionStatus, createNative
       }
       if (highWater && (next2.generation < highWater.generation || next2.authorizationRevision < highWater.authorizationRevision || next2.generation === highWater.generation && ((next2.microsoft?.status.revision ?? 0) < highWater.nativeRevision || next2.github.status.revision < highWater.githubRevision || (next2.global.revision ?? 0) < highWater.globalRevision))) throw unavailable6();
       latest = next2;
-      if (!matches3(observed)) {
+      if (!matches4(observed)) {
         latest = null;
         throw unavailable6();
       }
@@ -80862,7 +80935,7 @@ function createSourceCollectionState({ bootstrap, collectionStatus, createNative
       latest = null;
     },
     authorize(endpoint2, input, observed) {
-      if (!matches3(observed)) {
+      if (!matches4(observed)) {
         latest = null;
         throw unavailable6();
       }
@@ -80900,7 +80973,7 @@ function createSourceCollectionState({ bootstrap, collectionStatus, createNative
       if (!valid2) throw unavailable6();
     },
     view(observed) {
-      const current = matches3(observed);
+      const current = matches4(observed);
       if (!current) latest = null;
       return {
         current,
@@ -80926,7 +80999,7 @@ function createBoundedNativeState() {
   const resultKeys = ["success", "failure", "unknown", "partial", "other", "transport"];
   const invalid3 = () => new TypeError("Saved Microsoft activity could not be verified.");
   const counts3 = (value2) => exact10(value2, countKeys2) && countKeys2.every((key4) => integer10(value2[key4]));
-  const outcomes3 = (value2, total) => exact10(value2, resultKeys) && resultKeys.every((key4) => integer10(value2[key4])) && resultKeys.reduce((sum, key4) => sum + value2[key4], 0) === total;
+  const outcomes3 = (value2, total) => exact10(value2, resultKeys) && resultKeys.every((key4) => integer10(value2[key4])) && resultKeys.reduce((sum2, key4) => sum2 + value2[key4], 0) === total;
   function readback(value2) {
     if (!exact10(value2, [
       "schemaVersion",
@@ -81123,13 +81196,13 @@ function createBoundedNativeState() {
       if ((windowed ? total > series.datedRows : total !== series.datedRows) || windowed && series.window?.count === series.window?.total && total !== series.datedRows || resultKeys.some((key4) => sums[key4] > a3.outcomes[key4])) throw invalid3();
     }
     function validateGrouping(g, by) {
-      if (!exact10(g, ["complete", "groupBy", "groupCount", "groups", "other"]) || g.complete !== true || g.groupBy !== by || !integer10(g.groupCount) || !Array.isArray(g.groups) || g.groups.length > g.groupCount || g.groups.some((group) => !exact10(group, ["id", "label", "count", "outcomes"]) || typeof group.id !== "string" || typeof group.label !== "string" || !integer10(group.count) || !outcomes3(group.outcomes, group.count)) || g.other !== null && (!exact10(g.other, ["groupCount", "count", "outcomes"]) || !integer10(g.other.groupCount) || !integer10(g.other.count) || !outcomes3(g.other.outcomes, g.other.count)) || g.groups.length + (g.other?.groupCount ?? 0) !== g.groupCount || g.groups.reduce((sum, group) => sum + group.count, g.other?.count ?? 0) !== a3.selectedRows) throw invalid3();
-      if (new Set(g.groups.map((group) => group.id)).size !== g.groups.length || resultKeys.some((key4) => g.groups.reduce((sum, group) => sum + group.outcomes[key4], g.other?.outcomes[key4] ?? 0) !== a3.outcomes[key4])) throw invalid3();
+      if (!exact10(g, ["complete", "groupBy", "groupCount", "groups", "other"]) || g.complete !== true || g.groupBy !== by || !integer10(g.groupCount) || !Array.isArray(g.groups) || g.groups.length > g.groupCount || g.groups.some((group) => !exact10(group, ["id", "label", "count", "outcomes"]) || typeof group.id !== "string" || typeof group.label !== "string" || !integer10(group.count) || !outcomes3(group.outcomes, group.count)) || g.other !== null && (!exact10(g.other, ["groupCount", "count", "outcomes"]) || !integer10(g.other.groupCount) || !integer10(g.other.count) || !outcomes3(g.other.outcomes, g.other.count)) || g.groups.length + (g.other?.groupCount ?? 0) !== g.groupCount || g.groups.reduce((sum2, group) => sum2 + group.count, g.other?.count ?? 0) !== a3.selectedRows) throw invalid3();
+      if (new Set(g.groups.map((group) => group.id)).size !== g.groups.length || resultKeys.some((key4) => g.groups.reduce((sum2, group) => sum2 + group.outcomes[key4], g.other?.outcomes[key4] ?? 0) !== a3.outcomes[key4])) throw invalid3();
     }
     validateGrouping(value2.grouping, analytics?.groupBy ?? "workload");
     if (hasPresentation) {
       validateGrouping(value2.toolGroups, "tool");
-      if (!Array.isArray(value2.sourceGroups) || value2.sourceGroups.length > sources.length || new Set(value2.sourceGroups.map((group) => group.sourceId)).size !== value2.sourceGroups.length || value2.sourceGroups.some((group) => !exact10(group, ["sourceId", "conversations", "count", "outcomes"]) || !sources.includes(group.sourceId) || analytics?.filters?.sources?.length && !analytics.filters.sources.includes(group.sourceId) || !integer10(group.conversations) || !integer10(group.count) || !outcomes3(group.outcomes, group.count)) || value2.sourceGroups.reduce((sum, group) => sum + group.count, 0) !== a3.selectedRows || value2.sourceGroups.reduce((sum, group) => sum + group.conversations, 0) !== a3.conversations || resultKeys.some((key4) => value2.sourceGroups.reduce((sum, group) => sum + group.outcomes[key4], 0) !== a3.outcomes[key4])) throw invalid3();
+      if (!Array.isArray(value2.sourceGroups) || value2.sourceGroups.length > sources.length || new Set(value2.sourceGroups.map((group) => group.sourceId)).size !== value2.sourceGroups.length || value2.sourceGroups.some((group) => !exact10(group, ["sourceId", "conversations", "count", "outcomes"]) || !sources.includes(group.sourceId) || analytics?.filters?.sources?.length && !analytics.filters.sources.includes(group.sourceId) || !integer10(group.conversations) || !integer10(group.count) || !outcomes3(group.outcomes, group.count)) || value2.sourceGroups.reduce((sum2, group) => sum2 + group.count, 0) !== a3.selectedRows || value2.sourceGroups.reduce((sum2, group) => sum2 + group.conversations, 0) !== a3.conversations || resultKeys.some((key4) => value2.sourceGroups.reduce((sum2, group) => sum2 + group.outcomes[key4], 0) !== a3.outcomes[key4])) throw invalid3();
     }
     const ids = /* @__PURE__ */ new Set();
     for (const item of value2.page.items) {
@@ -81183,7 +81256,7 @@ function createBoundedNativeState() {
     result.conversationId,
     result.sourceId
   ]);
-  const selector2 = (input) => {
+  const selector3 = (input) => {
     const { at: at2, sourceRevision, page, ...rest } = input;
     return { ...rest, page: { limit: page.limit, after: null } };
   };
@@ -81220,7 +81293,7 @@ function createBoundedNativeState() {
     begin(input, owner2, context2, previous = false) {
       const nextPage = input.page.after !== null;
       if (previous && (!value || pageIndex < 1 || JSON.stringify(input) !== JSON.stringify(pages[pageIndex - 1]))) throw invalid3();
-      if (nextPage && !previous && (!value || input.page.after !== value.page.nextCursor || JSON.stringify(selector2(input)) !== JSON.stringify(selector2({ ...acceptedInput, revision: value.revision })))) throw invalid3();
+      if (nextPage && !previous && (!value || input.page.after !== value.page.nextCursor || JSON.stringify(selector3(input)) !== JSON.stringify(selector3({ ...acceptedInput, revision: value.revision })))) throw invalid3();
       suspended = null;
       active = {
         input: structuredClone(input),
@@ -81585,7 +81658,7 @@ function mountBoundedNative({
     return Boolean(origin && api.isCurrent(origin.owner) && readingAuthority?.owner === origin.owner && readingAuthority.basis === origin.authority);
   }
   const unit = (layer) => layer === "tool" ? "native tool calls" : layer === "reported-api" ? "returned-result observations" : "selected records";
-  const callUnit = (layer, count7) => layer === "tool" ? count7 === 1 ? "tool call" : "tool calls" : layer === "reported-api" ? count7 === 1 ? "returned result" : "returned results" : "records";
+  const callUnit = (layer, count8) => layer === "tool" ? count8 === 1 ? "tool call" : "tool calls" : layer === "reported-api" ? count8 === 1 ? "returned result" : "returned results" : "records";
   const outcomeLabels = (layer) => results3.labels(layer);
   let chartType = "time";
   function clear(root) {
@@ -81662,37 +81735,37 @@ function mountBoundedNative({
   function scopedFilter(values) {
     onFilter({ source: selectedSources2.length === 1 ? selectedSources2[0] : "microsoft-365", ...values });
   }
-  function exactTable(value, matches3 = () => true, topic = chartType) {
+  function exactTable(value, matches4 = () => true, topic = chartType) {
     const details = node("details", void 0, "detail-disclosure native-exact");
     details.append(node("summary", "Exact counts and coverage"));
     const keys2 = Object.keys(value.aggregates.outcomes).filter((key4) => ["success", "failure", "unknown"].includes(key4) || value.aggregates.outcomes[key4]);
     const labels2 = outcomeLabels(value.aggregates.layer);
     function tableFor(title2, entries3, first, extra = []) {
-      const table2 = node("table", void 0, "percentage-table"), head = node("thead"), heading = node("tr");
-      table2.append(node("caption", title2));
+      const table3 = node("table", void 0, "percentage-table"), head = node("thead"), heading = node("tr");
+      table3.append(node("caption", title2));
       const headings = [first, ...extra, "Count", ...keys2.map((key4) => labels2[key4])];
       for (const label of headings) {
-        const cell = node("th", label);
-        cell.scope = "col";
-        heading.append(cell);
+        const cell2 = node("th", label);
+        cell2.scope = "col";
+        heading.append(cell2);
       }
       head.append(heading);
-      table2.append(head);
+      table3.append(head);
       const body = node("tbody");
-      for (const entry3 of entries3.filter(matches3)) {
+      for (const entry3 of entries3.filter(matches4)) {
         const row = node("tr"), label = node("th");
         label.scope = "row";
         label.append(entry3.action ?? document.createTextNode(entry3.label));
         row.append(label);
-        for (const [index, count7] of [...entry3.extra ?? [], entry3.count, ...keys2.map((key4) => entry3.outcomes[key4])].entries()) {
-          const cell = node("td", number3(count7));
-          cell.dataset.label = headings[index + 1];
-          row.append(cell);
+        for (const [index, count8] of [...entry3.extra ?? [], entry3.count, ...keys2.map((key4) => entry3.outcomes[key4])].entries()) {
+          const cell2 = node("td", number3(count8));
+          cell2.dataset.label = headings[index + 1];
+          row.append(cell2);
         }
         body.append(row);
       }
-      table2.append(body);
-      details.append(table2);
+      table3.append(body);
+      details.append(table3);
     }
     tableFor("Selected Microsoft sources", (value.sourceGroups ?? []).map((source) => ({
       ...source,
@@ -81703,8 +81776,8 @@ function mountBoundedNative({
       ...value.toolGroups?.groups ?? [],
       ...value.toolGroups?.other ? [{ ...value.toolGroups.other, label: "Other tools" }] : []
     ], "Tool");
-    const timed = topic === "time", category = ["categories", "workload"].includes(topic), path31 = ["paths", "endpoint"].includes(topic);
-    const grouped = category && ["workload", "service"].includes(value.grouping.groupBy) || path31 && value.grouping.groupBy === "endpoint";
+    const timed = topic === "time", category = ["categories", "workload"].includes(topic), path32 = ["paths", "endpoint"].includes(topic);
+    const grouped = category && ["workload", "service"].includes(value.grouping.groupBy) || path32 && value.grouping.groupBy === "endpoint";
     const groups = timed ? value.timeSeries.points ?? [] : [
       ...value.grouping.groups,
       ...value.grouping.other ? [{ ...value.grouping.other, id: "group:other", label: "Other groups" }] : []
@@ -81714,15 +81787,15 @@ function mountBoundedNative({
       `${value.timeSeries.window.count ? `Visible dates: ${formatDate(value.timeSeries.window.from)} to ${formatDate(value.timeSeries.window.to)}` : "No dated records in this window"}. ${number3(value.timeSeries.datedRows)} dated records across the selected period. Use Timeline dates below the chart for other dates.`,
       "settings-help"
     ));
-    if (timed || grouped) tableFor(timed ? "Dated calls and results" : path31 ? "Selected paths" : "Selected categories", groups.map((group) => ({
+    if (timed || grouped) tableFor(timed ? "Dated calls and results" : path32 ? "Selected paths" : "Selected categories", groups.map((group) => ({
       ...group,
       label: timed ? formatDate(group.date) : group.label,
       action: group.count && group.id !== "group:other" ? button(
         timed ? formatDate(group.date) : group.label,
         () => timed ? scopedFilter({ range: "custom", from: group.from, to: group.to }) : onGroup(group.id)
       ) : null
-    })), timed ? "Date" : path31 ? "Path" : "Category");
-    else if (category || path31) details.append(node("p", `${path31 ? "Path" : "Category"} grouping is unavailable in this saved view.`, "reader-state"));
+    })), timed ? "Date" : path32 ? "Path" : "Category");
+    else if (category || path32) details.append(node("p", `${path32 ? "Path" : "Category"} grouping is unavailable in this saved view.`, "reader-state"));
     details.append(
       facts([
         ["Message observations", number3(value.aggregates.messages)],
@@ -81790,11 +81863,11 @@ function mountBoundedNative({
       }
     }
     const problem = node("p", void 0, "request-card-problem"), labels2 = outcomeLabels(view.aggregates.layer);
-    const recorded4 = Object.entries(item.outcomes).filter(([, count7]) => count7);
+    const recorded4 = Object.entries(item.outcomes).filter(([, count8]) => count8);
     const toolOutcome2 = view.aggregates.layer === "tool" && results3.toolCardOutcome({ ...item.outcomes, count: item.selectedRows });
-    for (const [key5, count7] of recorded4.filter(([key6]) => !toolOutcome2 && (key6 !== "success" || recorded4.length === 1))) {
+    for (const [key5, count8] of recorded4.filter(([key6]) => !toolOutcome2 && (key6 !== "success" || recorded4.length === 1))) {
       const label = view.aggregates.layer === "tool" ? { failure: "failed", unknown: "unverified" }[key5] ?? labels2[key5].toLowerCase() : labels2[key5].toLowerCase();
-      const part = node("span", `${number3(count7)} ${label}`, "result-tone-" + key5 + (["failure", "transport"].includes(key5) ? " request-card-failure-text" : ""));
+      const part = node("span", `${number3(count8)} ${label}`, "result-tone-" + key5 + (["failure", "transport"].includes(key5) ? " request-card-failure-text" : ""));
       if (problem.childNodes.length) problem.append(" / ");
       problem.append(part);
     }
@@ -82046,7 +82119,7 @@ function mountBoundedNative({
       }
       return body;
     }
-    function inspect(at2) {
+    function inspect2(at2) {
       rawTarget = at2;
       if (completed && !source.element.isConnected) root.append(source.element);
       if (!source.isOpen()) source.apply(true, false);
@@ -82054,7 +82127,7 @@ function mountBoundedNative({
       source.element.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
     function original(at2) {
-      return button("Open source record", () => inspect(at2));
+      return button("Open source record", () => inspect2(at2));
     }
     function messageBlock(item, contextual2 = false) {
       const message = item.fields.message, author = message?.value?.author;
@@ -82581,7 +82654,7 @@ function mountBoundedNative({
       }
       return Boolean(state.snapshot().value && state.snapshot().pageIndex === index);
     },
-    renderExact(host, topic, isCurrent, matches3) {
+    renderExact(host, topic, isCurrent, matches4) {
       for (const previous of references) if (!previous.isConnected) {
         clear(previous);
         references.delete(previous);
@@ -82593,7 +82666,7 @@ function mountBoundedNative({
       else {
         section.append(node("p", `${number3(value.aggregates.selectedRows)} ${callUnit(value.aggregates.layer, value.aggregates.selectedRows)}.`));
         if (topic === "paths") section.append(node("p", "Paths are unavailable.", "reader-state"));
-        const data = exactTable(value, matches3, topic);
+        const data = exactTable(value, matches4, topic);
         data.open = true;
         data.firstElementChild.remove();
         section.append(data);
@@ -82719,14 +82792,14 @@ var accountSettingsStyles = `
 `;
 
 // web/native-activity.mjs
-function createNativeActivityPresentation({ api, ux, presentation, createReaderSections: createReaderSections2, sourceLabel, excerpt, timing, results: results3, capturedAt, pagedList, activityIdentities }) {
+function createNativeActivityPresentation({ api, ux, presentation, createReaderSections: createReaderSections2, sourceLabel, excerpt: excerpt2, timing, results: results3, capturedAt, pagedList, activityIdentities }) {
   if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
     throw new TypeError("Native presentation requires the shared publication interface.");
   }
   const authorized2 = (token2) => token2 != null && typeof token2.then !== "function" && api.isCurrent(token2) === true;
   const isNative = (record) => record?.recordKind === "native-conversation";
-  const present3 = (fact3) => fact3?.availability === "recorded";
-  const text6 = (fact3) => present3(fact3) && typeof fact3.value?.text === "string" ? fact3.value.text : null;
+  const present4 = (fact3) => fact3?.availability === "recorded";
+  const text6 = (fact3) => present4(fact3) && typeof fact3.value?.text === "string" ? fact3.value.text : null;
   const names = { user: "Recorded user message", assistant: "Assistant reply", tool: "Tool message", unknown: "Sender unclear" };
   function messagePresentation(message) {
     const author = message.value?.author, representation = message.value?.representation;
@@ -82789,20 +82862,20 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
         if (!Object.hasOwn(factLabels, fact3.kind) || typeof fact3.key !== "string" || !fact3.key) {
           throw new TypeError("Recorded Chat update identity or kind is unavailable.");
         }
-        if (fact3.kind === "provider-progress" && (!fact3.fields?.text || typeof fact3.fields.text.availability !== "string" || present3(fact3.fields.text) && typeof fact3.fields.text.value !== "string")) {
+        if (fact3.kind === "provider-progress" && (!fact3.fields?.text || typeof fact3.fields.text.availability !== "string" || present4(fact3.fields.text) && typeof fact3.fields.text.value !== "string")) {
           throw new TypeError("Recorded provider progress text is unavailable.");
         }
       }
       return group.facts;
     });
   }
-  const recordedText = (field) => present3(field) && typeof field.value === "string" && field.value.trim() ? field.value : null;
+  const recordedText = (field) => present4(field) && typeof field.value === "string" && field.value.trim() ? field.value : null;
   function factTitle(fact3) {
     if (fact3.kind === "provider-progress") {
       const field = fact3.fields.text;
-      return present3(field) ? field.value.trim() ? field.value : "Recorded progress text is blank." : availability5[field.availability] || "Progress text unavailable.";
+      return present4(field) ? field.value.trim() ? field.value : "Recorded progress text is blank." : availability5[field.availability] || "Progress text unavailable.";
     }
-    if (fact3.kind === "clarification" && present3(fact3.fields.questions)) {
+    if (fact3.kind === "clarification" && present4(fact3.fields.questions)) {
       const question = fact3.fields.questions.value[0];
       return typeof question === "string" ? question.trim() ? question : "The recorded question is empty." : question.question;
     }
@@ -82834,10 +82907,10 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
     const messages = record.nativeConversation.messages;
     const message = messages.find((message2) => text6(message2) !== null && message2.value.author === "user") || messages.find((message2) => text6(message2) !== null);
     const fact3 = !message && sourceFacts(record.nativeConversation)[0];
-    if (fact3) return { label: factLabels[fact3.kind], text: excerpt({ text: factTitle(fact3) }), author: "unknown" };
+    if (fact3) return { label: factLabels[fact3.kind], text: excerpt2({ text: factTitle(fact3) }), author: "unknown" };
     return {
       label: message ? messagePresentation(message).label : "Conversation",
-      text: message ? message.value.text.trim() ? complete ? message.value.text : excerpt(message.value) : "Recorded message is empty." : "No recorded message text",
+      text: message ? message.value.text.trim() ? complete ? message.value.text : excerpt2(message.value) : "Recorded message is empty." : "No recorded message text",
       author: message?.value.author === "user" ? "user" : "unknown"
     };
   }
@@ -82991,7 +83064,7 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
     }
     function factField(parent, label, field2, { omitAbsent = false } = {}) {
       if (!field2 || omitAbsent && field2.availability === "absent-in-response") return;
-      const value = present3(field2) ? String(field2.value) : { "recorded-empty": "Empty in the source", "explicit-null": "Source supplied no value" }[field2.availability] || availability5[field2.availability] || "Unavailable";
+      const value = present4(field2) ? String(field2.value) : { "recorded-empty": "Empty in the source", "explicit-null": "Source supplied no value" }[field2.availability] || availability5[field2.availability] || "Unavailable";
       const line = node("p", "native-update-detail");
       line.append(node("span", "muted", label + ": "), document.createTextNode(value));
       parent.append(line);
@@ -83054,10 +83127,10 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
           }
           if (fields9.annotation && fields9.annotation.availability !== "absent-in-response") {
             const labels2 = { tool: "Tool annotation", artifact: "Artifact annotation", skillActivation: "Skill annotation" };
-            item.append(node("p", "reader-state", present3(fields9.annotationType) ? `${labels2[fields9.annotationType.value]} recorded; its details are not verified.` : "Annotation details are not verified."));
+            item.append(node("p", "reader-state", present4(fields9.annotationType) ? `${labels2[fields9.annotationType.value]} recorded; its details are not verified.` : "Annotation details are not verified."));
           }
         } else if (fact3.kind === "clarification") {
-          if (present3(fields9.questions)) for (const question of fields9.questions.value) {
+          if (present4(fields9.questions)) for (const question of fields9.questions.value) {
             item.append(node("p", "native-update-title", typeof question === "string" ? question.trim() ? question : "The recorded question is empty." : question.question));
             if (typeof question !== "string" && question.options.length) {
               const options = node("ul", "native-update-list");
@@ -83090,12 +83163,12 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
             actions2.add(name);
             factField(item, "Proposed action", submit.fields.actionId);
           }
-          if (present3(fields9.cardCount)) item.append(node("p", "reader-state", fields9.cardCount.value === 0 ? "No confirmation cards recorded." : `${fields9.cardCount.value} confirmation ${fields9.cardCount.value === 1 ? "card" : "cards"} recorded.`));
+          if (present4(fields9.cardCount)) item.append(node("p", "reader-state", fields9.cardCount.value === 0 ? "No confirmation cards recorded." : `${fields9.cardCount.value} confirmation ${fields9.cardCount.value === 1 ? "card" : "cards"} recorded.`));
           else factField(item, "Confirmation cards", fields9.cardCount);
-          if (present3(fields9.isConsequential)) item.append(node("p", "context-help-note", fields9.isConsequential.value ? "Marked consequential by the source. Approval is not recorded here." : "Not marked consequential by the source. Approval is not recorded here."));
+          if (present4(fields9.isConsequential)) item.append(node("p", "context-help-note", fields9.isConsequential.value ? "Marked consequential by the source. Approval is not recorded here." : "Not marked consequential by the source. Approval is not recorded here."));
           else item.append(node("p", "context-help-note", "The request does not establish approval or execution."));
         } else if (fact3.kind === "provider-progress") {
-          if (present3(fields9.text)) item.append(copyText(fields9.text.value, "Recorded progress text"));
+          if (present4(fields9.text)) item.append(copyText(fields9.text.value, "Recorded progress text"));
           else factField(item, "Text", fields9.text);
         } else if (fact3.kind === "native-invocation") {
           factField(item, "Tool", fields9.toolName);
@@ -83132,15 +83205,15 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
     }
     function renderMessage(message) {
       const value = text6(message), author = message.value?.author;
-      const display = messagePresentation(message);
-      const owner2 = display.section === "response" ? replies.body : display.section === "prompt" ? prompt.body : activity.body;
+      const display2 = messagePresentation(message);
+      const owner2 = display2.section === "response" ? replies.body : display2.section === "prompt" ? prompt.body : activity.body;
       const item = node("article", "reader-native-message");
       item.id = "native-message-" + encodeURIComponent(message.observationKey);
       item.dataset.observationKey = message.observationKey;
       item.dataset.sourceKey = message.sourceKey;
-      item.dataset.messageKind = display.kind;
+      item.dataset.messageKind = display2.kind;
       item.tabIndex = -1;
-      const label = display.label;
+      const label = display2.label;
       item.setAttribute("aria-label", label);
       if (owner2 === prompt.body && prompts.length !== 1 || owner2 === activity.body) {
         const heading = node("h3", "reader-context-heading", label);
@@ -83221,18 +83294,18 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
         if (!inputs.length) body.append(node("p", "reader-state", "Input not recorded."));
         for (const observation of inputs) {
           const fact3 = observation.fields.input;
-          body.append(fact3.availability === "recorded-empty" ? fields8([["Input", "Recorded empty string"]]) : present3(fact3) || fact3.availability === "explicit-null" ? copyText(typeof fact3.value === "string" ? fact3.value : JSON.stringify(fact3.value, null, 2), "Recorded input", "recorded-arguments") : fields8([["Input", availability5[fact3.availability] || "Unavailable"]]));
+          body.append(fact3.availability === "recorded-empty" ? fields8([["Input", "Recorded empty string"]]) : present4(fact3) || fact3.availability === "explicit-null" ? copyText(typeof fact3.value === "string" ? fact3.value : JSON.stringify(fact3.value, null, 2), "Recorded input", "recorded-arguments") : fields8([["Input", availability5[fact3.availability] || "Unavailable"]]));
         }
         for (const observation of call.observations) {
           const elapsed = observation.fields.callElapsed;
           if (elapsed) body.append(fields8([
-            ["Recorded duration", present3(elapsed) ? duration3(elapsed.value) : availability5[elapsed.availability] || "Unavailable"],
+            ["Recorded duration", present4(elapsed) ? duration3(elapsed.value) : availability5[elapsed.availability] || "Unavailable"],
             ["Measurement boundary", elapsed.boundary]
           ]));
           const failure5 = observation.fields.failure;
           if (failure5) {
             const value = failure5.value;
-            const diagnostic2 = present3(failure5) && value?.diagnostic ? results3.diagnosticDetails(value.diagnostic) : [];
+            const diagnostic2 = present4(failure5) && value?.diagnostic ? results3.diagnosticDetails(value.diagnostic) : [];
             const signal = value?.messageStatus === "text-excluded" ? {
               "access-denial": "The recorded error reports access denied",
               "request-timeout": "The recorded request timed out",
@@ -83244,20 +83317,20 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
               "unsupported-format": "Error format was not supported",
               "not-supplied": "The source did not supply a failure reason"
             }[value?.messageStatus] || "Error text was not saved";
-            body.append(fields8(diagnostic2.length ? diagnostic2 : [["Recorded error", present3(failure5) ? reason2 : availability5[failure5.availability] || "Unavailable"]]));
+            body.append(fields8(diagnostic2.length ? diagnostic2 : [["Recorded error", present4(failure5) ? reason2 : availability5[failure5.availability] || "Unavailable"]]));
           }
-          if (present3(observation.fields.resultEvidence)) body.append(fields8(results3.resultDetails(observation.fields.resultEvidence.value)));
+          if (present4(observation.fields.resultEvidence)) body.append(fields8(results3.resultDetails(observation.fields.resultEvidence.value)));
           const returned = observation.outcomes.nestedApi;
           if (returned) {
             body.append(fields8([
-              ["Returned results", present3(returned) ? `${returned.observed.length} observed` : "Not recorded"],
+              ["Returned results", present4(returned) ? `${returned.observed.length} observed` : "Not recorded"],
               ["Declared requests", returned.declaredRequestCount]
             ]));
             for (const result2 of returned.observed) body.append(returnedEntry(observation.observationKey, result2));
           }
           const references = observation.fields.resultReferences;
           if (references) body.append(
-            fields8([["Source references", present3(references) ? references.value.cardinality : "Unavailable"]]),
+            fields8([["Source references", present4(references) ? references.value.cardinality : "Unavailable"]]),
             node("p", "context-help-note", "References are not executed API requests or successful results.")
           );
         }
@@ -83314,7 +83387,7 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
     }
     for (const reference3 of conversation.resultReferences.filter((reference4) => !countedIds && reference4.callKeys.length !== 1)) {
       activity.body.append(
-        fields8([["Source references", present3(reference3) ? reference3.value.cardinality : "Unavailable"]]),
+        fields8([["Source references", present4(reference3) ? reference3.value.cardinality : "Unavailable"]]),
         node("p", "context-help-note", "References are not executed API requests or successful results.")
       );
     }
@@ -83332,7 +83405,7 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
       for (const coverage4 of conversation.coverage) source.body.append(node("p", "context-help-note", coverage4.meaning));
       for (const observation of conversation.observations) if (observation.fields.approval) {
         const approval = observation.fields.approval;
-        source.body.append(fields8([["Recorded approval", present3(approval) ? approval.value ? "Approved" : "Not approved" : "Unavailable"]]));
+        source.body.append(fields8([["Recorded approval", present4(approval) ? approval.value ? "Approved" : "Not approved" : "Unavailable"]]));
       }
       const models = /* @__PURE__ */ new Set();
       for (const observation of conversation.observations) if (observation.fields.model) {
@@ -83340,7 +83413,7 @@ function createNativeActivityPresentation({ api, ux, presentation, createReaderS
         if (models.has(signature)) continue;
         models.add(signature);
         source.body.append(fields8([
-          ["Recorded model", present3(model) ? model.value : availability5[model.availability] || "Unavailable"],
+          ["Recorded model", present4(model) ? model.value : availability5[model.availability] || "Unavailable"],
           ["Model scope", model.scope]
         ]));
       }
@@ -83584,13 +83657,13 @@ function createSavedFilePreview(host, value, { frozenFrame, isCurrent, onError, 
     for (const paragraph of surface.querySelectorAll("p")) {
       if (paragraph.children.length > 1 && [...paragraph.childNodes].every((node) => node.nodeType === win.Node.TEXT_NODE ? !node.textContent.trim() : node.nodeName === "A")) paragraph.classList.add("saved-document-links");
     }
-    for (const table2 of surface.querySelectorAll("table")) {
+    for (const table3 of surface.querySelectorAll("table")) {
       const scroll = el("div", void 0, "saved-markdown-table");
       scroll.tabIndex = 0;
       scroll.setAttribute("role", "region");
       scroll.setAttribute("aria-label", "Report table");
-      table2.before(scroll);
-      scroll.append(table2);
+      table3.before(scroll);
+      scroll.append(table3);
     }
     listen(surface, "click", (event) => {
       const link = event.target.closest("a[href]");
@@ -83619,14 +83692,14 @@ function createSavedFilePreview(host, value, { frozenFrame, isCurrent, onError, 
     const tree = el("div", void 0, "saved-json-tree");
     tree.setAttribute("aria-label", "JSON document");
     tree.append(el("h2", "Structured data"), el("p", "Expand properties to inspect the saved fields.", "saved-json-intro"));
-    const at2 = (path31) => path31.reduce((parent, key4) => parent[key4], state.json);
-    function property(parent, path31, name) {
-      const data = at2(path31);
+    const at2 = (path32) => path32.reduce((parent, key4) => parent[key4], state.json);
+    function property(parent, path32, name) {
+      const data = at2(path32);
       if (!state.scalars.has(data)) {
         const group = el("details"), summary = el("summary");
-        const count7 = Object.keys(data).length;
-        const type = Array.isArray(data) ? count7 === 1 ? "item" : "items" : count7 === 1 ? "property" : "properties";
-        summary.append(el("span", name, "saved-json-key"), el("span", `${count7} ${type}`, "saved-json-count"));
+        const count8 = Object.keys(data).length;
+        const type = Array.isArray(data) ? count8 === 1 ? "item" : "items" : count8 === 1 ? "property" : "properties";
+        summary.append(el("span", name, "saved-json-key"), el("span", `${count8} ${type}`, "saved-json-count"));
         group.append(summary);
         parent.append(group);
         let filled = false;
@@ -83635,7 +83708,7 @@ function createSavedFilePreview(host, value, { frozenFrame, isCurrent, onError, 
           filled = true;
           const children = el("div", void 0, "saved-json-children");
           group.append(children);
-          properties(children, path31);
+          properties(children, path32);
         });
       } else {
         const row = el("div", void 0, "saved-json-row");
@@ -83643,14 +83716,14 @@ function createSavedFilePreview(host, value, { frozenFrame, isCurrent, onError, 
         parent.append(row);
       }
     }
-    function properties(parent, path31) {
-      const keys2 = Object.keys(at2(path31));
+    function properties(parent, path32) {
+      const keys2 = Object.keys(at2(path32));
       let offset = 0;
       const more = el("button", "Show more", "quiet");
       more.type = "button";
       function append() {
         if (!live()) return;
-        for (const key4 of keys2.slice(offset, offset + 100)) property(parent, [...path31, key4], key4);
+        for (const key4 of keys2.slice(offset, offset + 100)) property(parent, [...path32, key4], key4);
         offset += 100;
         more.remove();
         if (offset < keys2.length) {
@@ -84806,20 +84879,20 @@ var failure = (code2, cause) => Object.assign(new Error(
 ), { code: code2 });
 async function loadBrowserAssets({ directory: root = directory, renderer = "bundled" } = {}) {
   if (!Object.hasOwn(entries, renderer)) throw failure("WIRE_BROWSER_BUILD_INVALID");
-  let manifest, canonicalRoot, stamp3;
+  let manifest, canonicalRoot, stamp4;
   try {
     canonicalRoot = await realpath(root);
     manifest = JSON.parse(await readFile3(path6.join(canonicalRoot, ".vite", "manifest.json"), "utf8"));
-    stamp3 = JSON.parse(await readFile3(path6.join(canonicalRoot, "wire-build.json"), "utf8"));
+    stamp4 = JSON.parse(await readFile3(path6.join(canonicalRoot, "wire-build.json"), "utf8"));
   } catch (error) {
     throw failure(error.code === "ENOENT" ? "WIRE_BROWSER_BUILD_MISSING" : "WIRE_BROWSER_BUILD_INVALID", error);
   }
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) || manifest[entries[renderer]]?.isEntry !== true) throw failure("WIRE_BROWSER_BUILD_INVALID");
-  if (stamp3?.schemaVersion !== 1 || !stamp3.sources || typeof stamp3.sources !== "object" || Array.isArray(stamp3.sources) || requiredSources.some((file) => !Object.hasOwn(stamp3.sources, file)) || Object.entries(stamp3.sources).some(([file, hash21]) => !sourceName(file) || !/^[a-f0-9]{64}$/.test(hash21))) {
+  if (stamp4?.schemaVersion !== 1 || !stamp4.sources || typeof stamp4.sources !== "object" || Array.isArray(stamp4.sources) || requiredSources.some((file) => !Object.hasOwn(stamp4.sources, file)) || Object.entries(stamp4.sources).some(([file, hash21]) => !sourceName(file) || !/^[a-f0-9]{64}$/.test(hash21))) {
     throw failure("WIRE_BROWSER_BUILD_INVALID");
   }
   try {
-    for (const [file, hash21] of packaged ? [] : Object.entries(stamp3.sources)) {
+    for (const [file, hash21] of packaged ? [] : Object.entries(stamp4.sources)) {
       if (digest(await readFile3(path6.join(sourceRoot2, ...file.split("/")))) !== hash21) {
         throw failure("WIRE_BROWSER_BUILD_STALE");
       }
@@ -85070,7 +85143,7 @@ function coverageFor(state, scenarios) {
       "Source roster reports truncated tails, malformed lines, missing completions, unmapped IDs and missing logs; coverage is not a complete history claim.",
       ...graph ? [
         retainedScans ? `${graph.coverage.sourcesScanned} listed sources have been read at least once, including sources no longer eligible; ${graph.coverage.sourcesRequested} sources are currently eligible. These are separate counts, not scan progress. ${graph.coverage.syntheticReferences} synthetic references excluded from real totals.` : `${graph.coverage.sourcesScanned} sources have a recorded Graph scan; ${graph.coverage.sourcesRequested} sources were requested for scanning. ${graph.coverage.syntheticReferences} synthetic references excluded from real totals.`,
-        ...Object.entries(graph.exclusions ?? {}).map(([reason2, count7]) => `Graph scan limitation: ${reason2.replaceAll("-", " ")} (${count7}).`),
+        ...Object.entries(graph.exclusions ?? {}).map(([reason2, count8]) => `Graph scan limitation: ${reason2.replaceAll("-", " ")} (${count8}).`),
         "Nested agent summaries and dynamic SDK/CLI targets do not establish hidden requests; only recorded source-stream evidence is inspected."
       ] : []
     ]
@@ -85079,6 +85152,7 @@ function coverageFor(state, scenarios) {
 
 // lib/server.mjs
 init_activity_analytics();
+init_analytics();
 init_analytics_input();
 init_export_selection();
 
@@ -85122,11 +85196,11 @@ function retireDeletedDraftMembers(state, removedIds, all) {
 function namedDraftCatalog(state, scope, requests) {
   const group = currentGroup(state, scope);
   const version2 = ref10(state, [scopeKey(state, scope), group.revision, state.revision]);
-  const stamp3 = { version: version2, revision: group.revision, source: scopeKey(state, scope), boardRevision: state.revision };
-  if (!group.drafts.length) return { ...stamp3, drafts: [] };
+  const stamp4 = { version: version2, revision: group.revision, source: scopeKey(state, scope), boardRevision: state.revision };
+  if (!group.drafts.length) return { ...stamp4, drafts: [] };
   requests ??= buildExportCatalog(mergeEvidenceWithState(state)).requests;
   const ids = new Map([...identities(state, requests)].map(([id5, key4]) => [key4, id5]));
-  return { ...stamp3, drafts: group.drafts.map((d) => ({
+  return { ...stamp4, drafts: group.drafts.map((d) => ({
     id: d.id,
     name: d.name,
     ...d.createdAt !== void 0 ? { createdAt: d.createdAt } : {},
@@ -85365,23 +85439,23 @@ function createDeletionController(session, {
     const clusters = [], aliases = /* @__PURE__ */ new Map();
     for (const unit of units2) {
       const existing = [...new Set(unit.aliases.map((id5) => aliases.get(id5)).filter(Boolean))];
-      const cluster = existing.sort((a3, b) => a3.index - b.index)[0] ?? { index: clusters.length, first: unit, aliases: /* @__PURE__ */ new Set(), units: [] };
-      if (!existing.length) clusters.push(cluster);
-      for (const other of existing) if (other !== cluster) {
-        other.units.forEach((value) => cluster.units.push(value));
+      const cluster2 = existing.sort((a3, b) => a3.index - b.index)[0] ?? { index: clusters.length, first: unit, aliases: /* @__PURE__ */ new Set(), units: [] };
+      if (!existing.length) clusters.push(cluster2);
+      for (const other of existing) if (other !== cluster2) {
+        other.units.forEach((value) => cluster2.units.push(value));
         other.aliases.forEach((id5) => {
-          cluster.aliases.add(id5);
-          aliases.set(id5, cluster);
+          cluster2.aliases.add(id5);
+          aliases.set(id5, cluster2);
         });
         other.merged = true;
       }
-      cluster.units.push(unit);
+      cluster2.units.push(unit);
       unit.aliases.forEach((id5) => {
-        aliases.set(id5, cluster);
-        cluster.aliases.add(id5);
+        aliases.set(id5, cluster2);
+        cluster2.aliases.add(id5);
       });
     }
-    const target = clusters.filter((cluster) => !cluster.merged).filter(({ first: unit }) => {
+    const target = clusters.filter((cluster2) => !cluster2.merged).filter(({ first: unit }) => {
       if (scope.scope === "all") return true;
       try {
         time.instant(unit.at);
@@ -85391,7 +85465,7 @@ function createDeletionController(session, {
       const value = Date.parse(unit.at);
       return value >= Date.parse(scope.bounds.from) && value < Date.parse(scope.bounds.to);
     });
-    const identitySet = new Set(target.flatMap((cluster) => [...cluster.aliases]));
+    const identitySet = new Set(target.flatMap((cluster2) => [...cluster2.aliases]));
     const identities2 = [...identitySet].sort();
     const affected = activeUnits.filter((unit) => unit.aliases.some((id5) => identitySet.has(id5)));
     const groups = new Set(affected.map((unit) => unit.record.scenarioId).filter(Boolean));
@@ -85426,23 +85500,23 @@ function createDeletionController(session, {
         records: target.length,
         requestGroups: groups.size,
         partialGroups: [...groups].filter((id5) => survivingGroups.has(id5)).length,
-        anonymousRecords: target.filter((cluster) => cluster.first.local).length,
-        anonymousToolCalls: target.filter((cluster) => cluster.first.local && cluster.first.family === "toolCalls").length,
-        anonymousGraphRecords: target.filter((cluster) => cluster.first.local && cluster.first.family === "graphActivities").length,
-        anonymousDiagnostics: target.filter((cluster) => cluster.first.local && cluster.first.family === "httpRecords").length,
-        toolCalls: target.filter((cluster) => cluster.first.family === "toolCalls").length,
-        graphRecords: target.filter((cluster) => cluster.first.family === "graphActivities").length,
-        diagnostics: target.filter((cluster) => cluster.first.family === "httpRecords").length,
-        other: target.filter((cluster) => ["empty", "native"].includes(cluster.first.family)).length,
-        retainedOnly: target.filter((cluster) => ![...cluster.aliases].some((id5) => activeAliases.has(id5))).length,
+        anonymousRecords: target.filter((cluster2) => cluster2.first.local).length,
+        anonymousToolCalls: target.filter((cluster2) => cluster2.first.local && cluster2.first.family === "toolCalls").length,
+        anonymousGraphRecords: target.filter((cluster2) => cluster2.first.local && cluster2.first.family === "graphActivities").length,
+        anonymousDiagnostics: target.filter((cluster2) => cluster2.first.local && cluster2.first.family === "httpRecords").length,
+        toolCalls: target.filter((cluster2) => cluster2.first.family === "toolCalls").length,
+        graphRecords: target.filter((cluster2) => cluster2.first.family === "graphActivities").length,
+        diagnostics: target.filter((cluster2) => cluster2.first.family === "httpRecords").length,
+        other: target.filter((cluster2) => ["empty", "native"].includes(cluster2.first.family)).length,
+        retainedOnly: target.filter((cluster2) => ![...cluster2.aliases].some((id5) => activeAliases.has(id5))).length,
         savedReports: state.exports.filter((entry3) => entry3.kind !== "comparison").length,
         savedComparisons: state.exports.filter((entry3) => entry3.kind === "comparison").length,
         localCopies: materializations.actions.length + Number(removeCards.length > 0 || personalChanged) + Number(clearNativeBackfill),
         reviewStates: removeCards.length,
-        undatedPreserved: scope.scope === "all" ? 0 : clusters.filter((cluster) => {
-          if (cluster.merged) return false;
+        undatedPreserved: scope.scope === "all" ? 0 : clusters.filter((cluster2) => {
+          if (cluster2.merged) return false;
           try {
-            time.instant(cluster.first.at);
+            time.instant(cluster2.first.at);
             return false;
           } catch {
             return true;
@@ -85913,22 +85987,22 @@ function selectedSourceProof(discovery, rows) {
   if (!/^[a-f0-9]{64}$/.test(discovery.sourceIdentity ?? "")) throw selectionChanged();
   return fingerprint2([discovery.adapter, discovery.schemaVersion, discovery.sourceIdentity, rows]);
 }
-function discoverSelection(access2, scope, verify = access2.verify, expectedProof) {
+function discoverSelection(access2, scope, verify2 = access2.verify, expectedProof) {
   const proof = (current) => {
     const observed = selectedSourceProof(current, selectedSources(current, scope));
     if (expectedProof !== void 0 && observed !== expectedProof) throw selectionChanged();
     return observed;
   };
-  return discoverSources(access2.config, { includeIdentity: true, ...access2.newOnly && { selection: { verify, proof } } });
+  return discoverSources(access2.config, { includeIdentity: true, ...access2.newOnly && { selection: { verify: verify2, proof } } });
 }
 function reviewedEffects({ discovery, assertCheckpoints, ...effects }) {
   return fingerprint2(effects);
 }
-async function recheckSelectedMetadata(access2, scope, target, verify = access2.verify) {
+async function recheckSelectedMetadata(access2, scope, target, verify2 = access2.verify) {
   if (sourceMetadataStamp(sourceHost(access2.config)) === target.discovery.metadataStamp) return;
-  await verify();
-  const current = await discoverSelection(access2, scope, verify, target.selectedSourceProof);
-  await verify();
+  await verify2();
+  const current = await discoverSelection(access2, scope, verify2, target.selectedSourceProof);
+  await verify2();
   if (selectedSourceProof(current, selectedSources(current, scope)) !== target.selectedSourceProof) throw selectionChanged();
   target.discovery.metadataStamp = current.metadataStamp;
 }
@@ -85939,15 +86013,15 @@ function checkSelectedSources(config, target) {
     "RECOLLECTION_METADATA_CHANGED",
     "The Copilot source changed during validation. Preview again."
   );
-  for (const [id5, stamp3, unavailable6] of target.stamps) {
+  for (const [id5, stamp4, unavailable6] of target.stamps) {
     let current;
     try {
       current = sourceFileStamp(statSync3(files.historyFile(id5)));
     } catch (error) {
-      if (stamp3 === null && unavailable6 === error.code) continue;
+      if (stamp4 === null && unavailable6 === error.code) continue;
       throw refused2("RECOLLECTION_EFFECTS_CHANGED", "Selected source history is no longer available. Preview again.");
     }
-    if (current !== stamp3) throw refused2("RECOLLECTION_EFFECTS_CHANGED", "Selected source history changed. Preview again.");
+    if (current !== stamp4) throw refused2("RECOLLECTION_EFFECTS_CHANGED", "Selected source history changed. Preview again.");
   }
 }
 function addMissingRecords(existing, incoming) {
@@ -86842,7 +86916,7 @@ init_time();
 var families = ["authors", "tools", "services", "problems", "timing", "models", "rhythm"];
 var promptAuthorship2 = createPromptAuthorship({ screen: true });
 var unique5 = (values) => [...new Set(values)];
-var percent = (count7, eligible) => eligible ? count7 * 100 / eligible : null;
+var percent = (count8, eligible) => eligible ? count8 * 100 / eligible : null;
 var dayNumber = (day2) => Date.parse(`${day2}T00:00:00Z`) / 864e5;
 var quantile = (values, fraction) => values.length ? values[Math.max(0, Math.ceil(values.length * fraction) - 1)] : null;
 function validateTrendsInput(input) {
@@ -86875,13 +86949,13 @@ function instant7(value) {
 }
 function memberValue(id5, label, rows, eligible, unit) {
   const origins = unique5(rows.map((row) => row.originId));
-  const count7 = unit === "interaction" ? origins.length : rows.length;
+  const count8 = unit === "interaction" ? origins.length : rows.length;
   return {
     id: id5,
     label,
-    count: count7,
+    count: count8,
     eligible,
-    percent: percent(count7, eligible),
+    percent: percent(count8, eligible),
     calls: rows.length,
     interactions: origins.length,
     rowIds: rows.map((row) => row.id),
@@ -87285,7 +87359,7 @@ function createSearchCorpus(session, options) {
       state: frame.issues.length ? "partial" : "ready",
       generation: generation2,
       items: frame.entries.length,
-      textBytes: frame.entries.reduce((sum, item) => sum + Buffer.byteLength(item.title) + Buffer.byteLength(item.content), 0),
+      textBytes: frame.entries.reduce((sum2, item) => sum2 + Buffer.byteLength(item.title) + Buffer.byteLength(item.content), 0),
       issues: frame.issues
     });
     return status4;
@@ -87295,7 +87369,7 @@ function createSearchCorpus(session, options) {
     const frame = await sources.scan(
       () => ensure(token2),
       signal,
-      (stamp3, revision) => cache?.stamp === stamp3 ? cache.pdfs.get(revision) : void 0
+      (stamp4, revision) => cache?.stamp === stamp4 ? cache.pdfs.get(revision) : void 0
     );
     ensure(token2);
     await sources.current(frame, () => {
@@ -87445,7 +87519,7 @@ function createSearchRetrieval(session, { source, onInvalidate, nativeReader, re
       const ticket = { generation: snapshot.generation, hits: hits.map(({ id: id5, revision }) => ({ id: id5, revision })) };
       hits = [];
       delivering = true;
-      let disclosed = false, count7 = 0;
+      let disclosed = false, count8 = 0;
       const deliveryStarted = performance.now();
       const result = await corpus.deliver(ticket, (entries3) => {
         if (!current(snapshot, requestId, signal)) return;
@@ -87459,13 +87533,13 @@ function createSearchRetrieval(session, { source, onInvalidate, nativeReader, re
         } } })) : disclose(freezeCorpus(values), freezeCorpus(receipt));
         if (returned && typeof returned.then === "function") throw new TypeError("Search disclosure must be synchronous.");
         disclosed = true;
-        count7 = values.length;
+        count8 = values.length;
       });
       if (requestId !== latestRequest || closed) return status4(closed ? "closed" : "superseded");
       if (!disclosed) return status4(result.state === "ready" || result.state === "partial" ? "stale" : result.state);
       metrics = { ...metrics, searchMs: performance.now() - began, deliveryMs: performance.now() - deliveryStarted };
       state = result.state;
-      return freezeCorpus({ ...status4(!query.trim() ? "empty" : !count7 && state === "ready" ? "no-match" : state), count: count7, requestId });
+      return freezeCorpus({ ...status4(!query.trim() ? "empty" : !count8 && state === "ready" ? "no-match" : state), count: count8, requestId });
     } catch (error) {
       if (!current(snapshot, requestId, signal)) return status4(closed ? "closed" : "superseded");
       throw error;
@@ -87710,7 +87784,7 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
     panel.timer.unref();
     void heartbeat(panel);
   }
-  function get(owner2) {
+  function get5(owner2) {
     const panel = panels2.get(owner2);
     if (!panel || panel.closed || panel.closeRequested) throw safeError2("search-disconnected", 428);
     panel.lastUsed = Date.now();
@@ -87742,22 +87816,22 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
         const observed = await observe(panel);
         panel.basis = observed.basis;
         push(panel, { event: "status", state: "searching", requestId: job.requestId });
-        const publish = (matches3) => {
+        const publish = (matches4) => {
           if (panel.closed || panel.closeRequested || mutations || serial !== panel.serial || job.requestId !== panel.latest) return;
-          const stamp3 = matches3.receipt;
+          const stamp4 = matches4.receipt;
           const base = {
             schemaVersion: searchWireContract.schemaVersion,
             panelId: panel.id,
             epoch: panel.epoch,
             revision: observed.state.revision,
-            requestId: stamp3.requestId,
-            generation: stamp3.generation,
-            indexId: stamp3.indexId,
-            mode: stamp3.mode,
+            requestId: stamp4.requestId,
+            generation: stamp4.generation,
+            indexId: stamp4.indexId,
+            mode: stamp4.mode,
             queryPurpose: job.purpose,
             queryTypes: [...job.types]
           };
-          if (stamp3.requestId !== job.requestId) throw new TypeError("Search producer request mismatch.");
+          if (stamp4.requestId !== job.requestId) throw new TypeError("Search producer request mismatch.");
           const strictReceipt = { ...base, purpose: "strict-match-population", matchPolicyId: SEARCH_MATCH_POLICY_ID };
           const project = (values) => values.map(({ content, ...hit }) => hit);
           const event = {
@@ -87767,20 +87841,20 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
             event: "results",
             purpose: job.purpose,
             requestId: job.requestId,
-            matches: { receipt: strictReceipt, hits: project(matches3.hits), total: matches3.hits.length },
+            matches: { receipt: strictReceipt, hits: project(matches4.hits), total: matches4.hits.length },
             status: panel.engine.status()
           };
           if (job.purpose === "navigation") {
             const sameTypes = (values) => JSON.stringify(searchWireContract.canonicalTypes(values)) === JSON.stringify(job.types);
-            if (stamp3.purpose !== "strict-match-population" || stamp3.matchPolicyId !== SEARCH_MATCH_POLICY_ID || !sameTypes(stamp3.types)) throw new TypeError("Search producer policy mismatch.");
+            if (stamp4.purpose !== "strict-match-population" || stamp4.matchPolicyId !== SEARCH_MATCH_POLICY_ID || !sameTypes(stamp4.types)) throw new TypeError("Search producer policy mismatch.");
           }
           if (!searchWireContract.validResults(event)) throw new TypeError("Search producer returned an invalid result set.");
-          panel.matches = { hits: new Map(matches3.hits.map((hit) => [hit.id, hit])), receipt: strictReceipt };
+          panel.matches = { hits: new Map(matches4.hits.map((hit) => [hit.id, hit])), receipt: strictReceipt };
           panel.nativeFrame = observed.native;
           push(panel, event);
         };
         const input = { query: job.query, requestId: job.requestId, types: job.types };
-        const result = job.purpose === "analysis" ? await panel.engine.search(input, (hits, receipt) => publish({ hits, receipt })) : await panel.engine.discover(input, ({ matches: matches3 }) => publish(matches3));
+        const result = job.purpose === "analysis" ? await panel.engine.search(input, (hits, receipt) => publish({ hits, receipt })) : await panel.engine.discover(input, ({ matches: matches4 }) => publish(matches4));
         if (!panel.closed && serial === panel.serial && job.requestId === panel.latest) {
           push(panel, { event: "status", state: result.state, requestId: job.requestId, status: result });
         }
@@ -87797,7 +87871,7 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
   function query(owner2, input) {
     const job = validateWire("query", input);
     if (Buffer.byteLength(job.query) > 65536) throw safeError2("invalid-search-input", 422);
-    const panel = get(owner2);
+    const panel = get5(owner2);
     if (job.requestId <= panel.latest) return { state: "superseded" };
     panel.latest = job.requestId;
     panel.queryPurpose = job.purpose;
@@ -87818,7 +87892,7 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
     object15(input, ["id", "receipt", "openId"]);
     validateWire("receipt", input.receipt);
     if (typeof input.id !== "string" || !Number.isSafeInteger(input.openId) || input.openId < 0) throw safeError2("invalid-search-open", 422);
-    const panel = get(owner2), set = panel.matches;
+    const panel = get5(owner2), set = panel.matches;
     const hit = set.hits.get(input.id), receipt = set.receipt;
     if (mutations || !hit || !searchWireContract.sameReceipt(input.receipt, receipt)) throw safeError2("stale-search-target");
     if (panel.opening) throw safeError2("search-open-busy", 429);
@@ -87898,7 +87972,7 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
       validateWire("receipt", receipt);
       if (!searchWireContract.analysisReceipt(receipt)) throw safeError2("search-membership-purpose", 422);
       if (!createRecordedResults().layers.includes(layer)) throw safeError2("invalid-search-layer", 422);
-      const panel = get(owner2), source = currentSource(session, state);
+      const panel = get5(owner2), source = currentSource(session, state);
       if (mutations || panel.queryPurpose !== "analysis" || !searchWireContract.sameReceipt(receipt, panel.matches.receipt) || state.revision !== receipt.revision || basis(state, source, nativeFrame?.revision) !== panel.basis || state.deletion?.pending || nativeFrame?.revision !== panel.nativeFrame?.revision || nativeFrame?.generation !== panel.nativeFrame?.generation) throw safeError2("stale-search-membership");
       if (!source.available && (!nativeFrame || mergeEvidenceWithState(state).length) || !searchWireContract.completeCoverage(panel.engine.status().corpus, receipt.queryTypes)) {
         throw safeError2("search-membership-unavailable", 428);
@@ -87912,7 +87986,7 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
       return { scenarioIds, actionIds, parentScenarioIds };
     },
     panelStatus(owner2) {
-      const panel = get(owner2);
+      const panel = get5(owner2);
       return panel.engine.status();
     },
     invalidate,
@@ -87925,7 +87999,7 @@ function createLiveSearch(session, { maxPanels = 2, heartbeatMs = 1e3, idleMs = 
       invalidate("changed");
     },
     cancel(owner2) {
-      const panel = get(owner2);
+      const panel = get5(owner2);
       panel.pending = null;
       panel.serial++;
       panel.reason = "cancelled";
@@ -88212,14 +88286,14 @@ function createProfileCache(context2) {
         if (!info.isFile() || info.isSymbolicLink() || info.size > cacheLimit) throw new ProfileError("cache-invalid");
         handle = await open10(file, "r");
         const buffer = Buffer.alloc(cacheLimit + 1);
-        let count7 = 0;
-        while (count7 < buffer.length) {
-          const { bytesRead } = await handle.read(buffer, count7, buffer.length - count7, null);
+        let count8 = 0;
+        while (count8 < buffer.length) {
+          const { bytesRead } = await handle.read(buffer, count8, buffer.length - count8, null);
           if (!bytesRead) break;
-          count7 += bytesRead;
+          count8 += bytesRead;
         }
-        if (count7 > cacheLimit) throw new ProfileError("cache-invalid");
-        const cached = JSON.parse(buffer.subarray(0, count7).toString("utf8"));
+        if (count8 > cacheLimit) throw new ProfileError("cache-invalid");
+        const cached = JSON.parse(buffer.subarray(0, count8).toString("utf8"));
         if (cached.schemaVersion !== 1 || cached.accountKey !== profileAccountKey(identity4)) return null;
         if (!Number.isSafeInteger(cached.fetchedAt) || cached.fetchedAt > now || now - cached.fetchedAt > maxAge) return null;
         if (!validProfile(cached.profile, identity4.login, identity4.source === "copilot-app-profile")) throw new ProfileError("cache-invalid");
@@ -90752,6 +90826,19 @@ async function executeAction(session, exports, owner2, action, input, services3 
     });
     return native2 ? services3.nativeReader.publish(native2, () => value) : value;
   }
+  if (action === "get_diagnostic_calls") {
+    validateObject(input, ["from", "to", "tools", "sourceSessionIds"]);
+    const list2 = (value2) => value2 === void 0 || Array.isArray(value2) && value2.length <= 500 && value2.every((item) => typeof item === "string" && item.length <= 1e3);
+    const instant8 = (value2) => value2 === void 0 || typeof value2 === "string" && value2.length <= 64 && Number.isFinite(Date.parse(value2));
+    if (!instant8(input.from) || !instant8(input.to) || !list2(input.tools) || !list2(input.sourceSessionIds)) {
+      throw new BoardError("Invalid diagnostic window. Use ISO timestamps and bounded tool or chat lists.", 422);
+    }
+    const state = await loadBoardState(session);
+    const native2 = services3.sourceAware ? null : await services3.nativeReader?.scan();
+    const scenarios = [...mergeEvidenceWithState(state), ...native2?.records ?? []].filter((record) => !isNativeConsumerRecord(record));
+    const value = { ...buildDiagnosticCalls(scenarios, input), revision: state.revision };
+    return native2 ? services3.nativeReader.publish(native2, () => value) : value;
+  }
   if (action === "get_analytics" || action === "get_snapshot") {
     validateAnalyticsInput(input);
     const state = await loadBoardState(session);
@@ -92343,8 +92430,4837 @@ var agentTools = [
       types: { type: "array", uniqueItems: true, items: { enum: searchTypes }, description: "Optional result types. Omit to search all." },
       limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum results to return. Defaults to 25." }
     }, ["query"])
+  },
+  {
+    name: "wire_diagnostic_calls",
+    description: `Read ${PRODUCT_NAME}'s retained Work IQ tool calls for a UTC window as MCP diagnostic records: host outcome, recorded error code and reason, HTTP and per-entry status, duration. Includes reconciled totals and coverage limits. No prompts, arguments or result bodies. Read-only.`,
+    parameters: schema({
+      from: { type: "string", maxLength: 64, description: "Inclusive UTC start (ISO 8601)." },
+      to: { type: "string", maxLength: 64, description: "Exclusive UTC end (ISO 8601)." },
+      tools: { type: "array", maxItems: 20, uniqueItems: true, items: { type: "string", maxLength: 100 }, description: "Optional Work IQ tool names, e.g. workiq-fetch." },
+      sourceSessionIds: { type: "array", maxItems: 500, uniqueItems: true, items: { type: "string", maxLength: 1e3 }, description: "Optional chats." }
+    })
+  },
+  {
+    name: "wire_diagnostic_bundle",
+    description: `Prepare an MCP diagnostic report and redacted bundle from ${PRODUCT_NAME}'s retained Work IQ calls for a UTC window. With save false (default) nothing is written: returns the draft report.md, clusters and a verdicts template. With save true, writes the report and zip to ${PRODUCT_NAME}'s private diagnostics folder and returns their paths. Never sends or uploads.`,
+    parameters: schema({
+      from: { type: "string", maxLength: 64, description: "Inclusive UTC start (ISO 8601)." },
+      to: { type: "string", maxLength: 64, description: "Exclusive UTC end (ISO 8601)." },
+      tools: { type: "array", maxItems: 20, uniqueItems: true, items: { type: "string", maxLength: 100 } },
+      captureScope: { enum: ["sample", "failures-only", "complete"], description: "complete only when every call in the window is included; WIRE supplies the reconciled totals." },
+      profile: { enum: ["internal", "external"], description: "Defaults to internal." },
+      verdicts: { type: "object", description: "A filled verdicts template from a previous preparation." },
+      reviewedNarrative: { type: "boolean", description: "Include operator narrative from verdicts; only after reviewing it for content that shouldn't be shared." },
+      save: { type: "boolean", description: "Write the bundle locally. Ask the user first." }
+    })
+  },
+  {
+    name: "wire_inspect_bundle",
+    description: "Check an MCP diagnostic bundle zip without extracting it: layout, schema, checksums and cross-file counts. Returns its summary and clusters, or why it was refused. Read-only.",
+    parameters: schema({ path: { type: "string", minLength: 1, maxLength: 4096, description: "Absolute path to the .zip." } }, ["path"])
   }
 ];
+
+// lib/copilot-extension.mjs
+init_paths();
+import { mkdir as mkdir11, writeFile } from "node:fs/promises";
+import { statSync as statSync5 } from "node:fs";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
+import path31 from "node:path";
+
+// lib/mcp-diagnostics/collect.mjs
+import { randomBytes as randomBytes10 } from "node:crypto";
+import { chmodSync, closeSync, existsSync, linkSync, mkdirSync, openSync, unlinkSync, writeSync } from "node:fs";
+import { join } from "node:path";
+
+// lib/mcp-diagnostics/cluster.mjs
+import { createHash as createHash36 } from "node:crypto";
+var PyFloat = class {
+  constructor(value) {
+    this.value = Number(value);
+  }
+  valueOf() {
+    return this.value;
+  }
+  toJSON() {
+    return this.value;
+  }
+};
+var isStr = (value) => typeof value === "string";
+var isBool = (value) => typeof value === "boolean";
+var isList = Array.isArray;
+var isDict = (value) => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+var isInt = (value) => typeof value === "bigint" || typeof value === "number" && Number.isInteger(value);
+var isFloat = (value) => value instanceof PyFloat || typeof value === "number" && !Number.isInteger(value);
+var isNum = (value) => isInt(value) || isFloat(value);
+var num = (value) => value instanceof PyFloat ? value.value : Number(value);
+var dict = () => /* @__PURE__ */ Object.create(null);
+function typeName(value) {
+  if (value === null || value === void 0) return "NoneType";
+  if (isBool(value)) return "bool";
+  if (isInt(value)) return "int";
+  if (isFloat(value)) return "float";
+  if (isStr(value)) return "str";
+  if (isList(value)) return "list";
+  if (isDict(value)) return "dict";
+  return typeof value;
+}
+function pyTruthy(value) {
+  if (value === null || value === void 0 || value === false) return false;
+  if (value === true) return true;
+  if (typeof value === "bigint") return value !== 0n;
+  if (isNum(value)) return num(value) !== 0;
+  if (isStr(value) || isList(value)) return value.length > 0;
+  if (isDict(value)) return Object.keys(value).length > 0;
+  return true;
+}
+var WS = "\\t\\n\\x0B\\f\\r\\x1C-\\x20\\x85\\xA0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000";
+var S3 = `[${WS}]`;
+var NS = `[^${WS}]`;
+var W = "\\p{L}\\p{N}_";
+var B2 = `(?:(?<=[${W}])(?![${W}])|(?<![${W}])(?=[${W}]))`;
+var D2 = "\\p{Nd}";
+var STRIP_BOTH = new RegExp(`^${S3}+|${S3}+$`, "gu");
+var STRIP_LEFT = new RegExp(`^${S3}+`, "u");
+var pyStrip = (value) => value.replace(STRIP_BOTH, "");
+var pyLstrip = (value) => value.replace(STRIP_LEFT, "");
+var fullmatch = (pattern2, value, flags = "u") => new RegExp(`^(?:${pattern2})$`, flags).exec(value);
+var SURROGATE = /[\uD800-\uDFFF]/;
+var cpLen = (value) => SURROGATE.test(value) ? [...value].length : value.length;
+function cpSlice(value, start, end) {
+  if (!SURROGATE.test(value)) return value.slice(start, end);
+  return Array.from(value).slice(start, end).join("");
+}
+function cmpStr(left, right) {
+  if (left === right) return 0;
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    let a3 = left.charCodeAt(index);
+    let b = right.charCodeAt(index);
+    if (a3 !== b) {
+      if (a3 >= 55296) a3 = a3 < 57344 ? a3 + 8192 : a3 - 2048;
+      if (b >= 55296) b = b < 57344 ? b + 8192 : b - 2048;
+      return a3 < b ? -1 : 1;
+    }
+  }
+  return left.length - right.length;
+}
+var sortStrings = (values) => [...values].sort(cmpStr);
+function pySplitlines(text6) {
+  const parts2 = text6.split(/\r\n|[\n\r\x0B\f\x1C-\x1E\x85\u2028\u2029]/);
+  if (parts2[parts2.length - 1] === "") parts2.pop();
+  return parts2;
+}
+var ND = new RegExp("^\\p{Nd}$", "u");
+function digitValue(char) {
+  if (char >= "0" && char <= "9") return char.charCodeAt(0) - 48;
+  const codePoint = char.codePointAt(0);
+  let start = codePoint;
+  while (start > 0 && ND.test(String.fromCodePoint(start - 1))) start -= 1;
+  return (codePoint - start) % 10;
+}
+var pyInt = (digits) => Number([...digits].map(digitValue).join(""));
+function floatRepr(value) {
+  if (Number.isNaN(value)) return "nan";
+  if (value === Infinity) return "inf";
+  if (value === -Infinity) return "-inf";
+  if (value === 0) return Object.is(value, -0) ? "-0.0" : "0.0";
+  const sign = value < 0 ? "-" : "";
+  const [mantissa, exponentText] = Math.abs(value).toExponential().split("e");
+  const digits = mantissa.replace(".", "");
+  const exponent = Number(exponentText);
+  const point = exponent + 1;
+  if (point > -4 && point <= 16) {
+    if (point <= 0) return `${sign}0.${"0".repeat(-point)}${digits}`;
+    if (point >= digits.length) return `${sign}${digits}${"0".repeat(point - digits.length)}.0`;
+    return `${sign}${digits.slice(0, point)}.${digits.slice(point)}`;
+  }
+  const lead = digits.length > 1 ? `${digits[0]}.${digits.slice(1)}` : digits;
+  const magnitude = Math.abs(exponent);
+  return `${sign}${lead}e${exponent < 0 ? "-" : "+"}${magnitude < 10 ? "0" : ""}${magnitude}`;
+}
+function pyRound(value, places) {
+  if (!Number.isFinite(value)) return new PyFloat(value);
+  const [whole, fraction] = Math.abs(value).toFixed(100).split(".");
+  const tail = fraction.slice(places);
+  let scaled = BigInt(whole + fraction.slice(0, places));
+  const rest = /[1-9]/.test(tail.slice(1));
+  if (tail[0] > "5" || tail[0] === "5" && (rest || scaled % 2n === 1n)) scaled += 1n;
+  const text6 = scaled.toString().padStart(places + 1, "0");
+  const rounded = Number(`${text6.slice(0, text6.length - places)}.${text6.slice(text6.length - places)}`);
+  return new PyFloat(value < 0 ? -rounded : rounded);
+}
+function strRepr(value) {
+  const quote = value.includes("'") && !value.includes('"') ? '"' : "'";
+  let out = quote;
+  for (const char of value) {
+    const codePoint = char.codePointAt(0);
+    if (char === quote || char === "\\") out += `\\${char}`;
+    else if (char === "	") out += "\\t";
+    else if (char === "\n") out += "\\n";
+    else if (char === "\r") out += "\\r";
+    else if (codePoint < 32 || codePoint === 127) out += `\\x${codePoint.toString(16).padStart(2, "0")}`;
+    else if (codePoint < 127) out += char;
+    else if (/[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]/u.test(char)) {
+      const hex = codePoint.toString(16);
+      out += codePoint <= 255 ? `\\x${hex.padStart(2, "0")}` : codePoint <= 65535 ? `\\u${hex.padStart(4, "0")}` : `\\U${hex.padStart(8, "0")}`;
+    } else out += char;
+  }
+  return out + quote;
+}
+function pyRepr(value) {
+  if (isStr(value)) return strRepr(value);
+  if (isList(value)) return `[${value.map(pyRepr).join(", ")}]`;
+  if (isDict(value)) {
+    return `{${Object.entries(value).map(([key4, item]) => `${strRepr(key4)}: ${pyRepr(item)}`).join(", ")}}`;
+  }
+  return pyStr(value);
+}
+function pyStr(value) {
+  if (value === null || value === void 0) return "None";
+  if (value === true) return "True";
+  if (value === false) return "False";
+  if (isStr(value)) return value;
+  if (isInt(value)) return String(value);
+  if (isFloat(value)) return floatRepr(num(value));
+  return pyRepr(value);
+}
+function pyEq(left, right) {
+  if (left === right) return true;
+  const numeric = (value) => isBool(value) || isNum(value);
+  if (numeric(left) && numeric(right)) {
+    if (typeof left === "bigint" && typeof right === "bigint") return left === right;
+    return num(left) === num(right);
+  }
+  if (isList(left) && isList(right)) {
+    return left.length === right.length && left.every((item, index) => pyEq(item, right[index]));
+  }
+  if (isDict(left) && isDict(right)) {
+    const keys2 = Object.keys(left);
+    return keys2.length === Object.keys(right).length && keys2.every((key4) => Object.hasOwn(right, key4) && pyEq(left[key4], right[key4]));
+  }
+  return false;
+}
+function toPlain(value) {
+  if (value instanceof PyFloat) return value.value;
+  if (typeof value === "bigint") return Number(value);
+  if (isList(value)) return value.map(toPlain);
+  if (isDict(value)) {
+    const out = {};
+    for (const [key4, item] of Object.entries(value)) {
+      Object.defineProperty(out, key4, { value: toPlain(item), enumerable: true, writable: true, configurable: true });
+    }
+    return out;
+  }
+  return value;
+}
+var JsonDecodeError = class extends Error {
+  constructor(msg, doc, pos) {
+    const lineno = doc.slice(0, pos).split("\n").length;
+    const colno = pos - (pos === 0 ? -1 : doc.lastIndexOf("\n", pos - 1));
+    super(`${msg}: line ${lineno} column ${colno} (char ${pos})`);
+    this.name = "JSONDecodeError";
+    this.msg = msg;
+    this.pos = pos;
+  }
+};
+var ESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "	" };
+var NUMBER = /-?(?:0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?/y;
+function skipWs(text6, index) {
+  while (index < text6.length) {
+    const code2 = text6.charCodeAt(index);
+    if (code2 !== 32 && code2 !== 9 && code2 !== 10 && code2 !== 13) break;
+    index += 1;
+  }
+  return index;
+}
+function scanString(text6, end) {
+  const begin = end - 1;
+  let out = "";
+  for (; ; ) {
+    let index = end;
+    while (index < text6.length) {
+      const code3 = text6.charCodeAt(index);
+      if (code3 === 34 || code3 === 92 || code3 < 32) break;
+      index += 1;
+    }
+    if (index >= text6.length) throw new JsonDecodeError("Unterminated string starting at", text6, begin);
+    out += text6.slice(end, index);
+    const code2 = text6.charCodeAt(index);
+    if (code2 === 34) return [out, index + 1];
+    if (code2 !== 92) throw new JsonDecodeError("Invalid control character at", text6, index);
+    index += 1;
+    if (index >= text6.length) throw new JsonDecodeError("Unterminated string starting at", text6, begin);
+    const escape5 = text6[index];
+    if (escape5 !== "u") {
+      if (!Object.hasOwn(ESCAPES, escape5)) throw new JsonDecodeError("Invalid \\escape", text6, index - 1);
+      out += ESCAPES[escape5];
+      end = index + 1;
+      continue;
+    }
+    const hex = text6.slice(index + 1, index + 5);
+    if (!/^[0-9a-fA-F]{4}$/.test(hex)) throw new JsonDecodeError("Invalid \\uXXXX escape", text6, index - 1);
+    out += String.fromCharCode(parseInt(hex, 16));
+    end = index + 5;
+  }
+}
+function constant(name, options) {
+  if (options.constants === "allow") {
+    return new PyFloat(name === "NaN" ? NaN : name === "Infinity" ? Infinity : -Infinity);
+  }
+  throw options.constantError(name);
+}
+function scanOnce(text6, index, options) {
+  if (index >= text6.length) throw new JsonDecodeError("Expecting value", text6, index);
+  const char = text6[index];
+  if (char === '"') return scanString(text6, index + 1);
+  if (char === "{") return scanObject(text6, index, options);
+  if (char === "[") return scanArray(text6, index, options);
+  if (char === "n" && text6.startsWith("null", index)) return [null, index + 4];
+  if (char === "t" && text6.startsWith("true", index)) return [true, index + 4];
+  if (char === "f" && text6.startsWith("false", index)) return [false, index + 5];
+  if (char === "N" && text6.startsWith("NaN", index)) return [constant("NaN", options), index + 3];
+  if (char === "I" && text6.startsWith("Infinity", index)) return [constant("Infinity", options), index + 8];
+  if (char === "-" && text6.startsWith("-Infinity", index)) return [constant("-Infinity", options), index + 9];
+  NUMBER.lastIndex = index;
+  const match = NUMBER.exec(text6);
+  if (!match) throw new JsonDecodeError("Expecting value", text6, index);
+  const lexeme = match[0];
+  if (match[1] !== void 0 || match[2] !== void 0) return [new PyFloat(Number(lexeme)), NUMBER.lastIndex];
+  const value = Number(lexeme);
+  return [Number.isSafeInteger(value) ? value === 0 ? 0 : value : BigInt(lexeme), NUMBER.lastIndex];
+}
+function scanObject(text6, start, options) {
+  const out = dict();
+  let duplicate;
+  let index = skipWs(text6, start + 1);
+  if (text6[index] === "}") return [out, index + 1];
+  for (; ; ) {
+    if (text6[index] !== '"') {
+      throw new JsonDecodeError("Expecting property name enclosed in double quotes", text6, index);
+    }
+    const [key4, keyEnd] = scanString(text6, index + 1);
+    index = skipWs(text6, keyEnd);
+    if (text6[index] !== ":") throw new JsonDecodeError("Expecting ':' delimiter", text6, index);
+    const [value, valueEnd] = scanOnce(text6, skipWs(text6, index + 1), options);
+    if (duplicate === void 0 && Object.hasOwn(out, key4)) duplicate = key4;
+    out[key4] = value;
+    index = skipWs(text6, valueEnd);
+    if (text6[index] === "}") {
+      index += 1;
+      break;
+    }
+    if (text6[index] !== ",") throw new JsonDecodeError("Expecting ',' delimiter", text6, index);
+    index = skipWs(text6, index + 1);
+  }
+  if (duplicate !== void 0 && options.duplicates === "error") throw options.duplicateError(duplicate);
+  return [out, index];
+}
+function scanArray(text6, start, options) {
+  const out = [];
+  let index = skipWs(text6, start + 1);
+  if (text6[index] === "]") return [out, index + 1];
+  for (; ; ) {
+    const [value, end] = scanOnce(text6, index, options);
+    out.push(value);
+    index = skipWs(text6, end);
+    if (text6[index] === "]") return [out, index + 1];
+    if (text6[index] !== ",") throw new JsonDecodeError("Expecting ',' delimiter", text6, index);
+    index = skipWs(text6, index + 1);
+  }
+}
+var DuplicateKeyError = class extends Error {
+};
+var STRICT = {
+  duplicates: "error",
+  constants: "error",
+  duplicateError: (key4) => new DuplicateKeyError(`duplicate key ${pyRepr(key4)}`),
+  constantError: (name) => new Error(`non-finite JSON number ${name}`)
+};
+function pyLoads(text6, options = {}) {
+  const settings2 = { duplicates: "last", constants: "allow", ...options };
+  if (text6.startsWith("\uFEFF")) {
+    throw new JsonDecodeError("Unexpected UTF-8 BOM (decode using utf-8-sig)", text6, 0);
+  }
+  const [value, end] = scanOnce(text6, skipWs(text6, 0), settings2);
+  const tail = skipWs(text6, end);
+  if (tail !== text6.length) throw new JsonDecodeError("Extra data", text6, tail);
+  return value;
+}
+function pyRawDecode(text6, index, options = {}) {
+  return scanOnce(text6, index, { duplicates: "last", constants: "allow", ...options });
+}
+var strictLoads = (text6, options = {}) => pyLoads(text6, { ...STRICT, ...options });
+function encodeAscii(value) {
+  let out = '"';
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    const code2 = value.charCodeAt(index);
+    if (char === '"' || char === "\\") out += `\\${char}`;
+    else if (char === "\n") out += "\\n";
+    else if (char === "\r") out += "\\r";
+    else if (char === "	") out += "\\t";
+    else if (char === "\b") out += "\\b";
+    else if (char === "\f") out += "\\f";
+    else if (code2 < 32 || code2 > 126) out += `\\u${code2.toString(16).padStart(4, "0")}`;
+    else out += char;
+  }
+  return `${out}"`;
+}
+function pyDumps(value, options = {}) {
+  const { sortKeys = false, indent = null, ensureAscii = true, allowNan = true } = options;
+  const [itemSep, keySep] = options.separators ?? (indent === null ? [", ", ": "] : [",", ": "]);
+  const encodeString = ensureAscii ? encodeAscii : (text6) => JSON.stringify(text6);
+  const encode = (item, level) => {
+    if (item === null) return "null";
+    if (item === true) return "true";
+    if (item === false) return "false";
+    if (isStr(item)) return encodeString(item);
+    if (isInt(item)) return String(item);
+    if (isFloat(item)) {
+      const number3 = num(item);
+      if (Number.isFinite(number3)) return floatRepr(number3);
+      if (!allowNan) throw new RangeError("Out of range float values are not JSON compliant");
+      return Number.isNaN(number3) ? "NaN" : number3 > 0 ? "Infinity" : "-Infinity";
+    }
+    let parts2;
+    let brackets;
+    if (isList(item)) {
+      if (!item.length) return "[]";
+      parts2 = item.map((child) => encode(child, level + 1));
+      brackets = "[]";
+    } else if (isDict(item)) {
+      const keys2 = Object.keys(item);
+      if (!keys2.length) return "{}";
+      if (sortKeys) keys2.sort(cmpStr);
+      parts2 = keys2.map((key4) => encodeString(key4) + keySep + encode(item[key4], level + 1));
+      brackets = "{}";
+    } else if (options.default) {
+      return encode(options.default(item), level);
+    } else {
+      throw new TypeError(`Object of type ${typeName(item)} is not JSON serializable`);
+    }
+    if (indent === null) return brackets[0] + parts2.join(itemSep) + brackets[1];
+    const inner = `
+${" ".repeat(indent * (level + 1))}`;
+    return brackets[0] + inner + parts2.join(itemSep + inner) + `
+${" ".repeat(indent * level)}` + brackets[1];
+  };
+  return encode(value, 0);
+}
+var compactSorted = (value) => pyDumps(value, { sortKeys: true, ensureAscii: false, separators: [",", ":"], allowNan: false });
+var sha256Hex = (data) => createHash36("sha256").update(data).digest("hex");
+function invalidUtf8At(bytes2) {
+  let index = 0;
+  while (index < bytes2.length) {
+    const byte = bytes2[index];
+    let need;
+    let min;
+    if (byte < 128) {
+      index += 1;
+      continue;
+    }
+    if (byte >= 194 && byte <= 223) [need, min] = [1, 128];
+    else if (byte >= 224 && byte <= 239) [need, min] = [2, 2048];
+    else if (byte >= 240 && byte <= 244) [need, min] = [3, 65536];
+    else return index;
+    let codePoint = byte & 63 >> need;
+    for (let offset = 1; offset <= need; offset += 1) {
+      const next2 = bytes2[index + offset];
+      if (next2 === void 0 || (next2 & 192) !== 128) return index;
+      codePoint = codePoint << 6 | next2 & 63;
+    }
+    if (codePoint < min || codePoint > 1114111 || codePoint >= 55296 && codePoint <= 57343) return index;
+    index += need + 1;
+  }
+  return -1;
+}
+function decodeUtf8(bytes2) {
+  const at2 = invalidUtf8At(bytes2);
+  return at2 >= 0 ? [null, at2] : [Buffer.from(bytes2).toString("utf8"), -1];
+}
+var TOKEN = /[0-9A-Za-z_=+.\-]+/gu;
+var GUID = new RegExp(`${B2}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}${B2}`, "giu");
+var TIMESTAMP = new RegExp(
+  `${B2}${D2}{4}-${D2}{2}-${D2}{2}[T ][0-9:.]+(?:Z|[+-]${D2}{2}:?${D2}{2})?${B2}`,
+  "giu"
+);
+var ISO_DAY = new RegExp(`^(${D2}{4}-${D2}{2}-${D2}{2})`, "u");
+var PSEUDO = new RegExp(
+  `<(user|id|sess|session|call|frame|req|request|path|path-id|path-name|opaque|host|tenant-host|arg-id|org|collector)-${D2}+:[0-9a-f]{4,}>`,
+  "giu"
+);
+var STATUS = new RegExp(
+  `["']?(?:status|statusCode|status_code|httpStatus|http_status|httpStatusCode|http_status_code)["']?${S3}*[:=]${S3}*["']?(-?(?:${D2}+(?:\\.${D2}+)?|NaN|Infinity|-Infinity))["']?(?![0-9.])`,
+  "giu"
+);
+var CODE = new RegExp(`["']?(?:code|errorCode|error_code)["']?${S3}*[:=]${S3}*["']([^"']{1,160})["']`, "giu");
+var REQID = new RegExp(
+  `["']?(requestId|request_id|clientRequestId|client_request_id|x-ms-request-id|x_ms_request_id|xMsRequestId|correlationId|correlation_id)["']?${S3}*[:=]${S3}*["']([^"']{1,300})["']`,
+  "giu"
+);
+var FALLBACK_ISERROR = new RegExp(`["']?isError["']?${S3}*[:=]${S3}*true${B2}`, "iu");
+var FALLBACK_STOPPED = new RegExp(`["']?stoppedReason["']?${S3}*[:=]${S3}*["']error["']`, "iu");
+var FALLBACK_ERROR = new RegExp(
+  `(?<![A-Za-z0-9_])["']?error["']?${S3}*[:=]${S3}*(?:["'](?!${S3}*(?:null|false)${S3}*["'])[^"']*${NS}[^"']*["']|\\{${S3}*[^${WS}}]|\\[${S3}*[^${WS}\\]]|true${B2}|-?(?:[1-9]${D2}*)(?:\\.${D2}+)?)`,
+  "iu"
+);
+var COLLAPSE_WS = new RegExp(`${S3}+`, "gu");
+var STATUS_TEXT = new RegExp(`^${S3}*(${D2}{3})${S3}*$`, "u");
+var DEFAULT_OPAQUE_LEN = 20;
+var CLUSTER_ENGINE_VERSION = 2;
+var DISPLAY_SIGNATURE_LIMIT = 220;
+var DISPLAY_SAMPLE_ERROR_LIMIT = 320;
+var DISPLAY_SAMPLE_ARGS_LIMIT = 220;
+var MAX_PROTOCOL_DEPTH = 5;
+var MAX_PROTOCOL_NODES = 1e4;
+var MAX_PROTOCOL_ARRAY = 1e3;
+var MAX_PROTOCOL_TEXT = 1e5;
+var STATUS_KEYS = /* @__PURE__ */ new Set(["status", "statuscode", "httpstatus", "httpstatuscode"]);
+var ERROR_KEYS = /* @__PURE__ */ new Set(["error", "errors"]);
+var DIRECT_PROTOCOL_KEYS = /* @__PURE__ */ new Set(["iserror", ...STATUS_KEYS, "stoppedreason", ...ERROR_KEYS, "content"]);
+var SIGNAL_KEYS = /* @__PURE__ */ new Set([...DIRECT_PROTOCOL_KEYS, "outcome", "success"]);
+var OPERATION_KEYS = /* @__PURE__ */ new Set([
+  ...DIRECT_PROTOCOL_KEYS,
+  "code",
+  "errorcode",
+  "subcode",
+  "message",
+  "detail",
+  "details",
+  "diagnostic",
+  "outcome",
+  "success",
+  "id",
+  "operationid",
+  "index",
+  "path",
+  "requestpath",
+  "resourcepath",
+  "endpoint",
+  "uri",
+  "url",
+  "target",
+  "requestid",
+  "requestids",
+  "clientrequestid",
+  "clientrequestids",
+  "xmsrequestid",
+  "xmsrequestids",
+  "correlationid",
+  "correlationids"
+]);
+var PAYLOAD_KEYS = /* @__PURE__ */ new Set(["data", "body", "headers"]);
+var OPERATION_PAYLOAD_KEYS = /* @__PURE__ */ new Set([...OPERATION_KEYS, ...PAYLOAD_KEYS]);
+var STOPPED_ENVELOPE_KEYS = /* @__PURE__ */ new Set([...OPERATION_KEYS, "markdown", "resultcount", "retrievalhits"]);
+var REQUEST_ID_KINDS = {
+  requestid: "request_id",
+  requestids: "request_id",
+  clientrequestid: "client_request_id",
+  clientrequestids: "client_request_id",
+  xmsrequestid: "x_ms_request_id",
+  xmsrequestids: "x_ms_request_id",
+  correlationid: "correlation_id",
+  correlationids: "correlation_id"
+};
+var PATH_KEYS = /* @__PURE__ */ new Set(["path", "requestpath", "resourcepath", "endpoint", "uri", "url", "target"]);
+var METADATA_KEYS = [
+  "status_codes",
+  "error_codes",
+  "request_ids",
+  "client_request_ids",
+  "x_ms_request_ids",
+  "correlation_ids",
+  "paths"
+];
+var keyOf = (value) => pyStr(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+var isContainer = (value) => isDict(value) || isList(value);
+var subset = (set, allowed) => [...set].every((key4) => allowed.has(key4));
+var intersects = (set, values) => values.some((key4) => set.has(key4));
+var get = (object16, key4) => Object.hasOwn(object16, key4) ? object16[key4] : null;
+function loadsOrNull(text6) {
+  const stripped = pyStrip(text6);
+  if (!stripped) return null;
+  try {
+    return strictLoads(stripped);
+  } catch {
+    return null;
+  }
+}
+function isOpaque(token2, minLen) {
+  if (token2.length < minLen) return false;
+  if (/^[0-9]+$/.test(token2)) return false;
+  return /[0-9]/.test(token2) && /[A-Za-z]/.test(token2);
+}
+function normaliseText(value, minLen, preserveTokens = false) {
+  value = value.replace(PSEUDO, (_2, kind2) => `<${kind2.toLowerCase()}>`).replace(GUID, "<guid>").replace(TIMESTAMP, "<ts>");
+  if (!preserveTokens) value = value.replace(TOKEN, (token2) => isOpaque(token2, minLen) ? "<x>" : token2);
+  return pyStrip(value.replace(COLLAPSE_WS, " "));
+}
+function isCodeKey(key4) {
+  const normalized = keyOf(key4);
+  return !STATUS_KEYS.has(normalized) && (normalized === "code" || normalized.endsWith("errorcode") || normalized === "subcode");
+}
+function normaliseStructured(node, minLen, field = "") {
+  const identifier = REQUEST_ID_KINDS[keyOf(field)];
+  if (identifier && truthyError(node)) return `<${identifier}>`;
+  if (isDict(node)) {
+    const out = dict();
+    for (const key4 of Object.keys(node).sort(cmpStr)) out[key4] = normaliseStructured(node[key4], minLen, key4);
+    return out;
+  }
+  if (isList(node)) return node.map((value) => normaliseStructured(value, minLen, field));
+  if (isStr(node)) return normaliseText(node, minLen, isCodeKey(field) || PATH_KEYS.has(keyOf(field)));
+  return node;
+}
+function normalise(err, minLen = DEFAULT_OPAQUE_LEN) {
+  if (!pyTruthy(err) || !pyStrip(pyStr(err))) return "(no error text - check the body column)";
+  const text6 = pyStrip(pyStr(err));
+  let parsed;
+  try {
+    parsed = strictLoads(text6);
+  } catch {
+    return normaliseText(text6, minLen);
+  }
+  return compactSorted(normaliseStructured(parsed, minLen));
+}
+function truthyError(value) {
+  if (value === null || value === void 0 || value === false) return false;
+  if (isStr(value)) {
+    const stripped = pyStrip(value);
+    return Boolean(stripped) && !["null", "false"].includes(stripped.toLowerCase());
+  }
+  if (isContainer(value)) return pyTruthy(value);
+  if (isNum(value) || value === true) return num(value) !== 0;
+  return true;
+}
+function statusOf(value) {
+  let code2;
+  if (isBool(value)) return null;
+  if (isInt(value)) code2 = Number(value);
+  else if (isFloat(value)) {
+    const number3 = num(value);
+    if (!Number.isFinite(number3) || !Number.isInteger(number3)) return null;
+    code2 = number3;
+  } else if (isStr(value)) {
+    const match = STATUS_TEXT.exec(value);
+    if (!match) return null;
+    code2 = pyInt(match[1]);
+  } else return null;
+  return code2 >= 100 && code2 <= 599 ? code2 : null;
+}
+var emptyMetadata = () => Object.fromEntries(METADATA_KEYS.map((key4) => [key4, /* @__PURE__ */ new Set()]));
+var isWorkiqMime = (key4) => pyStrip(key4).toLowerCase().startsWith("application/vnd.ms-workiq.");
+function normalizedItems(node) {
+  const items = /* @__PURE__ */ new Map();
+  for (const [key4, value] of Object.entries(node)) items.set(keyOf(key4), [key4, value]);
+  return items;
+}
+var directSignalKeys = (node) => [...normalizedItems(node).keys()].filter((key4) => SIGNAL_KEYS.has(key4));
+function operationShape(node, allowPayload = false) {
+  if (!isDict(node) || !Object.keys(node).length) return false;
+  const keys2 = new Set(normalizedItems(node).keys());
+  if (!subset(keys2, allowPayload ? OPERATION_PAYLOAD_KEYS : OPERATION_KEYS)) return false;
+  const hasStatus = intersects(keys2, [...STATUS_KEYS]);
+  const hasIdentity = intersects(keys2, ["id", "operationid", "index", "path", "requestpath", "resourcepath"]);
+  const hasOutcome = intersects(keys2, ["iserror", "stoppedreason", "error", "outcome", "success"]);
+  return hasStatus || hasIdentity && hasOutcome;
+}
+var operationArray = (node, allowPayload = false) => isList(node) && node.length > 0 && node.every((item) => operationShape(item, allowPayload));
+function explicitEnvelope(node, source) {
+  if (!isDict(node)) return false;
+  const normalized = normalizedItems(node);
+  const keys2 = new Set(normalized.keys());
+  if (normalized.has("iserror") && isBool(normalized.get("iserror")[1])) return true;
+  if (normalized.has("stoppedreason") && subset(keys2, STOPPED_ENVELOPE_KEYS)) return true;
+  if ([...normalized.values()].some(([original]) => isWorkiqMime(original))) return true;
+  if (intersects(keys2, ["content", "result", "results", "responses", "operations"])) return true;
+  if (keys2.has("jsonrpc") && keys2.has("error")) return true;
+  const signals = directSignalKeys(node).length > 0;
+  if (source === "error" && (signals || Object.keys(node).some(isCodeKey))) return true;
+  return signals && subset(keys2, OPERATION_KEYS);
+}
+function decodePayload(text6) {
+  const stripped = pyStrip(text6);
+  if (!stripped) return [null, "absent", false];
+  try {
+    return [strictLoads(stripped), "structural", false];
+  } catch {
+  }
+  const starts = [...text6.matchAll(/[[{]/g)].map((match) => match.index);
+  const candidatesIncomplete = starts.length > 64;
+  for (const start of starts.slice(0, 1)) {
+    let value;
+    let end;
+    try {
+      [value, end] = pyRawDecode(text6, start, STRICT);
+    } catch {
+      continue;
+    }
+    const prefix = pyStrip(text6.slice(0, start));
+    const suffix = pyStrip(text6.slice(end));
+    let mode = prefix && !suffix ? "prefixed-json" : "extracted-json";
+    if (!prefix && suffix) mode = "json-with-trailing";
+    return [value, mode, Boolean(suffix) || candidatesIncomplete];
+  }
+  return [null, "regex-fallback", starts.length > 0];
+}
+function analyseFallback(body) {
+  const hits = /* @__PURE__ */ new Set();
+  const metadata3 = emptyMetadata();
+  if (FALLBACK_ISERROR.test(body)) hits.add("isError");
+  for (const match of body.matchAll(STATUS)) {
+    const code2 = statusOf(match[1]);
+    if (code2 !== null && code2 >= 400) {
+      metadata3.status_codes.add(String(code2));
+      hits.add(`statusCode=${code2}`);
+    }
+  }
+  if (FALLBACK_STOPPED.test(body)) hits.add("stoppedReason=error");
+  if (FALLBACK_ERROR.test(body)) hits.add("error");
+  for (const match of body.matchAll(CODE)) {
+    const code2 = pyStrip(match[1]);
+    if (code2) metadata3.error_codes.add(code2);
+  }
+  for (const match of body.matchAll(REQID)) {
+    const kind2 = REQUEST_ID_KINDS[keyOf(match[1])];
+    const value = pyStrip(match[2]);
+    if (kind2 && value) {
+      metadata3[`${kind2}s`].add(value);
+      metadata3.request_ids.add(value);
+    }
+  }
+  return [hits, metadata3];
+}
+function directDiagnostic(node, hits, metadata3, state = null) {
+  const localHits = /* @__PURE__ */ new Set();
+  const statuses2 = [];
+  let errorCode = null;
+  let message = "";
+  const requestIds = /* @__PURE__ */ new Set();
+  let explicitOutcome = "";
+  const scalar = (value) => !isContainer(value) && !isBool(value);
+  for (const [key4, [original, value]] of normalizedItems(node)) {
+    if (key4 === "iserror" && value === true) localHits.add("isError");
+    else if (STATUS_KEYS.has(key4)) {
+      const code2 = statusOf(value);
+      if (code2 !== null) {
+        statuses2.push(code2);
+        metadata3.status_codes.add(String(code2));
+        if (code2 >= 400) localHits.add(`statusCode=${code2}`);
+      }
+    } else if (key4 === "stoppedreason" && pyStrip(pyStr(value)).toLowerCase() === "error") {
+      localHits.add("stoppedReason=error");
+    } else if (ERROR_KEYS.has(key4) && truthyError(value)) localHits.add("error");
+    else if (isCodeKey(original) && scalar(value)) {
+      const candidate = pyStrip(pyStr(value));
+      if (candidate) {
+        errorCode = errorCode || candidate;
+        metadata3.error_codes.add(candidate);
+      }
+    } else if (Object.hasOwn(REQUEST_ID_KINDS, key4)) {
+      let candidates2;
+      if (isList(value)) {
+        if (value.length > MAX_PROTOCOL_ARRAY && state) state.inconclusive = true;
+        candidates2 = value.slice(0, MAX_PROTOCOL_ARRAY);
+      } else if (value === null || isDict(value) || isBool(value)) {
+        if (isDict(value) && state) state.inconclusive = true;
+        continue;
+      } else candidates2 = [value];
+      for (const candidateValue of candidates2) {
+        if (candidateValue === null || isContainer(candidateValue) || isBool(candidateValue)) {
+          if (state) state.inconclusive = true;
+          continue;
+        }
+        const candidate = pyStrip(pyStr(candidateValue));
+        if (candidate) {
+          metadata3[`${REQUEST_ID_KINDS[key4]}s`].add(candidate);
+          metadata3.request_ids.add(candidate);
+          requestIds.add(candidate);
+        }
+      }
+    } else if (PATH_KEYS.has(key4) && scalar(value)) {
+      const candidate = pyStrip(pyStr(value));
+      if (candidate) metadata3.paths.add(candidate);
+    } else if ((key4 === "message" || key4 === "detail") && isStr(value)) {
+      message = message || pyStrip(value);
+    } else if (key4 === "outcome" && isStr(value)) {
+      explicitOutcome = pyStrip(value).toLowerCase();
+    } else if (key4 === "success" && isBool(value)) {
+      explicitOutcome = value ? "ok" : "fail";
+    }
+  }
+  let outcome5;
+  if (["fail", "failed", "error"].includes(explicitOutcome)) {
+    localHits.add("outcome=fail");
+    outcome5 = "fail";
+  } else if (localHits.size) outcome5 = "fail";
+  else if (["ok", "success", "succeeded"].includes(explicitOutcome)) outcome5 = "ok";
+  else if (statuses2.length) outcome5 = statuses2.some((code2) => code2 >= 400) ? "fail" : "ok";
+  else outcome5 = "unknown";
+  for (const hit of localHits) hits.add(hit);
+  let statusCode2 = statuses2.find((code2) => code2 >= 400) ?? null;
+  if (statusCode2 === null && new Set(statuses2).size === 1) statusCode2 = statuses2[0];
+  return [outcome5, statusCode2, errorCode, sortStrings(requestIds), message];
+}
+function operationRecord(node, path32, hits, metadata3, state) {
+  if (cpLen(path32) > 240) {
+    state.inconclusive = true;
+    path32 = cpSlice(path32, 0, 240);
+  }
+  const [outcome5, statusCode2, errorCode, requestIds, message] = directDiagnostic(node, hits, metadata3, state);
+  const diagnostic2 = { outcome: outcome5 };
+  if (statusCode2 !== null) diagnostic2.status_code = statusCode2;
+  if (errorCode) diagnostic2.error_code = errorCode;
+  if (message) diagnostic2.message = message;
+  if (outcome5 === "fail") hits.add("operationFailure");
+  return {
+    path: path32,
+    outcome: outcome5,
+    status_code: statusCode2,
+    error_code: errorCode,
+    request_ids: requestIds,
+    diagnostic: compactSorted(diagnostic2)
+  };
+}
+function analyseJson(value, source = "result") {
+  const hits = /* @__PURE__ */ new Set();
+  const metadata3 = emptyMetadata();
+  const operations = [];
+  const state = { nodes: 0, inconclusive: false };
+  const consumeArray = (node, path32, depth, allowPayload = false) => {
+    if (node.length > MAX_PROTOCOL_ARRAY) state.inconclusive = true;
+    const limited = node.slice(0, MAX_PROTOCOL_ARRAY);
+    if (!operationArray(limited, allowPayload)) {
+      if (limited.some((item) => isDict(item) && directSignalKeys(item).length)) state.inconclusive = true;
+      return;
+    }
+    for (const [index, item] of limited.entries()) {
+      if (state.nodes >= MAX_PROTOCOL_NODES) {
+        state.inconclusive = true;
+        return;
+      }
+      state.nodes += 1;
+      operations.push(operationRecord(item, `${path32}[${index}]`, hits, metadata3, state));
+      const wrappers = dict();
+      for (const [key4, child] of Object.entries(item)) if (!PAYLOAD_KEYS.has(keyOf(key4))) wrappers[key4] = child;
+      inspectWrappers(wrappers, `${path32}[${index}]`, depth + 1);
+    }
+  };
+  const consumeText = (text6, path32, depth) => {
+    if (cpLen(text6) > MAX_PROTOCOL_TEXT) {
+      state.inconclusive = true;
+      text6 = cpSlice(text6, 0, MAX_PROTOCOL_TEXT);
+    }
+    const [parsed, mode, incomplete2] = decodePayload(text6);
+    state.inconclusive = state.inconclusive || incomplete2;
+    if (parsed === null) {
+      const [fallbackHits, fallbackMetadata] = analyseFallback(text6);
+      for (const hit of fallbackHits) hits.add(hit);
+      for (const [key4, values] of Object.entries(fallbackMetadata)) for (const item of values) metadata3[key4].add(item);
+      if (pyStrip(text6)) state.inconclusive = true;
+      return;
+    }
+    if (isList(parsed)) consumeArray(parsed, path32, depth + 1);
+    else if (explicitEnvelope(parsed, "result")) walk(parsed, path32, depth + 1, "envelope");
+    else if (mode !== "structural") state.inconclusive = true;
+  };
+  const inspectWrappers = (node, path32, depth) => {
+    for (const [key4, [original, child]] of normalizedItems(node)) {
+      const childPath = `${path32}.${original}`;
+      if (key4 === "content" && isList(child)) {
+        if (child.length > MAX_PROTOCOL_ARRAY) state.inconclusive = true;
+        for (const [index, item] of child.slice(0, MAX_PROTOCOL_ARRAY).entries()) {
+          if (!isDict(item)) continue;
+          const itemKeys = new Map(Object.entries(item).map(([itemKey, itemValue]) => [keyOf(itemKey), itemValue]));
+          const text6 = itemKeys.get("text");
+          const itemType = pyStrip(pyStr(itemKeys.has("type") ? itemKeys.get("type") : "")).toLowerCase();
+          if (isStr(text6) && (itemType === "" || itemType === "text")) {
+            consumeText(text6, `${childPath}[${index}].text`, depth + 1);
+          }
+        }
+      } else if (isWorkiqMime(original) && isContainer(child)) {
+        walk(child, childPath, depth + 1, "envelope");
+      } else if (["results", "responses", "operations"].includes(key4)) {
+        if (isList(child)) consumeArray(child, childPath, depth + 1, true);
+        else if (isDict(child) && explicitEnvelope(child, "result")) walk(child, childPath, depth + 1, "envelope");
+      } else if (["result", "response", "body"].includes(key4)) {
+        if (isList(child)) consumeArray(child, childPath, depth + 1);
+        else if (isDict(child) && explicitEnvelope(child, "result")) walk(child, childPath, depth + 1, "envelope");
+      } else if (ERROR_KEYS.has(key4) && isContainer(child)) {
+        walk(child, childPath, depth + 1, "error");
+      }
+    }
+  };
+  const walk = (node, path32, depth, context2) => {
+    if (depth > MAX_PROTOCOL_DEPTH || state.nodes >= MAX_PROTOCOL_NODES) {
+      state.inconclusive = true;
+      return;
+    }
+    state.nodes += 1;
+    if (isList(node)) {
+      consumeArray(node, path32, depth);
+      return;
+    }
+    if (!isDict(node)) return;
+    const recognized = context2 === "error" || context2 === "envelope" || explicitEnvelope(node, source);
+    if (!recognized) {
+      if (directSignalKeys(node).length) state.inconclusive = true;
+      return;
+    }
+    directDiagnostic(node, hits, metadata3, state);
+    inspectWrappers(node, path32, depth);
+  };
+  walk(value, "$", 0, source);
+  return { hits, metadata: metadata3, operations, inconclusive: state.inconclusive };
+}
+var sortedMetadata = (metadata3) => Object.fromEntries(sortStrings(METADATA_KEYS).map((key4) => [key4, sortStrings(metadata3[key4])]));
+function diagnosticAnalysis(body, source = "result") {
+  const available2 = pyTruthy(body) && Boolean(pyStrip(pyStr(body)));
+  const base = {
+    predicates: [],
+    metadata: sortedMetadata(emptyMetadata()),
+    operations: [],
+    inconclusive: false,
+    body_available: available2,
+    scan_mode: "absent",
+    predicate_confidence: "none",
+    limits: {
+      max_depth: MAX_PROTOCOL_DEPTH,
+      max_nodes: MAX_PROTOCOL_NODES,
+      max_array_items: MAX_PROTOCOL_ARRAY,
+      max_text_chars: MAX_PROTOCOL_TEXT
+    }
+  };
+  if (!available2) return base;
+  const text6 = pyStrip(pyStr(body));
+  const [parsed, scanMode, parseInconclusive] = decodePayload(text6);
+  base.scan_mode = scanMode;
+  if (parsed === null) {
+    const [hits, metadata3] = analyseFallback(text6);
+    base.predicates = sortStrings(hits);
+    base.metadata = sortedMetadata(metadata3);
+    base.inconclusive = true;
+    base.predicate_confidence = "suspect";
+    return base;
+  }
+  const analysed = analyseJson(parsed, source);
+  base.predicates = sortStrings(analysed.hits);
+  base.metadata = sortedMetadata(analysed.metadata);
+  base.operations = analysed.operations;
+  base.inconclusive = Boolean(parseInconclusive || analysed.inconclusive);
+  base.predicate_confidence = base.inconclusive ? "suspect" : "confirmed";
+  return base;
+}
+function scalarText(value) {
+  if (value === null || value === void 0 || isContainer(value) || isBool(value)) return "";
+  return pyStrip(pyStr(value));
+}
+function frameDiagnostic(frame) {
+  const error = stringify(Object.hasOwn(frame, "error") ? frame.error : get(frame, "err"));
+  const parsedError = loadsOrNull(error);
+  if (isDict(parsedError) && pyEq(get(parsedError, "cluster_engine_version"), CLUSTER_ENGINE_VERSION) && !["status_code", "error_code", "embedded_failure", "predicates", "operations"].some((key4) => pyTruthy(get(frame, key4)))) {
+    return compactSorted(parsedError);
+  }
+  const payload2 = { cluster_engine_version: CLUSTER_ENGINE_VERSION };
+  if (pyStrip(error)) payload2.error = parsedError !== null ? parsedError : error;
+  const statusCode2 = statusOf(get(frame, "status_code"));
+  if (statusCode2 !== null) payload2.status_code = statusCode2;
+  const errorCode = scalarText(get(frame, "error_code"));
+  if (errorCode) payload2.error_code = errorCode;
+  let predicates = get(frame, "embedded_failure");
+  if (!pyTruthy(predicates)) predicates = get(frame, "predicates");
+  if (!pyTruthy(predicates)) predicates = [];
+  if (isStr(predicates)) predicates = [predicates];
+  if (isList(predicates)) {
+    const clean = sortStrings(new Set(predicates.map((value) => pyStrip(pyStr(value))).filter(Boolean)));
+    if (clean.length) payload2.predicates = clean;
+  }
+  let operations = get(frame, "operations");
+  if (!isList(operations)) operations = error ? diagnosticAnalysis(error, "error").operations : [];
+  const grouping = /* @__PURE__ */ new Map();
+  for (const operation of operations) {
+    if (!isDict(operation)) continue;
+    const item = {};
+    const rawOutcome = get(operation, "outcome");
+    const outcome5 = pyStrip(pyStr(pyTruthy(rawOutcome) ? rawOutcome : "")).toLowerCase();
+    if (["ok", "fail", "unknown"].includes(outcome5)) item.outcome = outcome5;
+    const operationStatus = statusOf(get(operation, "status_code"));
+    if (operationStatus !== null) item.status_code = operationStatus;
+    const operationCode = scalarText(get(operation, "error_code"));
+    if (operationCode) item.error_code = operationCode;
+    const diagnostic2 = get(operation, "diagnostic");
+    if (isStr(diagnostic2) && pyStrip(diagnostic2)) {
+      const decoded = loadsOrNull(diagnostic2);
+      item.diagnostic = decoded !== null ? decoded : diagnostic2;
+    } else if (isContainer(diagnostic2) && pyTruthy(diagnostic2)) {
+      item.diagnostic = diagnostic2;
+    }
+    if (!Object.keys(item).length) continue;
+    grouping.set(compactSorted(item), item);
+  }
+  if (grouping.size) payload2.operations = sortStrings(grouping.keys()).map((key4) => grouping.get(key4));
+  return compactSorted(payload2);
+}
+function stringify(value) {
+  if (value === null || value === void 0) return "";
+  if (isContainer(value)) return compactSorted(value);
+  return pyStr(value);
+}
+var MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+function validDay(timestamp) {
+  const match = ISO_DAY.exec(timestamp || "");
+  if (!match) return "";
+  const parts2 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(match[1]);
+  if (!parts2) return "";
+  const [year, month, date2] = parts2.slice(1).map(Number);
+  if (year < 1 || month < 1 || month > 12 || date2 < 1) return "";
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return date2 > MONTH_DAYS[month - 1] + (month === 2 && leap ? 1 : 0) ? "" : match[1];
+}
+function fallbackMemberId(row, occurrence) {
+  const encoded2 = pyDumps(row, {
+    sortKeys: true,
+    ensureAscii: false,
+    separators: [",", ":"],
+    default: (value) => pyStr(value)
+  });
+  return `row-${sha256Hex(encoded2).slice(0, 20)}-${occurrence}`;
+}
+function clusterId(tool, signature) {
+  const encoded2 = pyDumps([tool, signature], { ensureAscii: false, separators: [",", ":"] });
+  return `c-${sha256Hex(encoded2).slice(0, 24)}`;
+}
+var asList = (value) => isList(value) ? value : pyTruthy(value) ? [value] : [];
+function cluster(rows, minLen = DEFAULT_OPAQUE_LEN) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const [index, row] of rows.entries()) {
+    const tool = stringify(get(row, "tool"));
+    const signature = normalise(frameDiagnostic(row), minLen);
+    const key4 = JSON.stringify([tool, signature]);
+    if (!buckets.has(key4)) buckets.set(key4, { tool, signature, members: [] });
+    buckets.get(key4).members.push([index, row]);
+  }
+  const clusters = [];
+  for (const { tool, signature, members } of buckets.values()) {
+    const items = members.map(([, row]) => row);
+    const timestamps = sortStrings(items.filter((row) => pyTruthy(get(row, "ts"))).map((row) => stringify(row.ts)));
+    const dayCounts = /* @__PURE__ */ new Map();
+    for (const row of items) {
+      const day2 = validDay(stringify(get(row, "ts")));
+      if (day2) dayCounts.set(day2, (dayCounts.get(day2) ?? 0) + 1);
+    }
+    const memberIds = [];
+    const sets = emptyMetadata();
+    let scanInconclusive = false;
+    for (const [index, row] of members) {
+      memberIds.push(pyStrip(stringify(get(row, "frame_id"))) || fallbackMemberId(row, index));
+      const analysis = diagnosticAnalysis(stringify(get(row, "err")), "error");
+      scanInconclusive = scanInconclusive || analysis.inconclusive;
+      for (const [key4, values] of Object.entries(analysis.metadata)) for (const value of values) sets[key4].add(value);
+      const typedStatus2 = statusOf(get(row, "status_code"));
+      if (typedStatus2 !== null) sets.status_codes.add(String(typedStatus2));
+      const typedCode = scalarText(get(row, "error_code"));
+      if (typedCode) sets.error_codes.add(typedCode);
+      for (const value of asList(get(row, "request_ids"))) {
+        const candidate = scalarText(value);
+        if (candidate) sets.request_ids.add(candidate);
+      }
+      const rowOperations = get(row, "operations");
+      if (!isList(rowOperations)) continue;
+      for (const operation of rowOperations) {
+        if (!isDict(operation)) continue;
+        const operationStatus = statusOf(get(operation, "status_code"));
+        if (operationStatus !== null) sets.status_codes.add(String(operationStatus));
+        const operationCode = scalarText(get(operation, "error_code"));
+        if (operationCode) sets.error_codes.add(operationCode);
+        for (const value of asList(get(operation, "request_ids"))) {
+          const candidate = scalarText(value);
+          if (candidate) sets.request_ids.add(candidate);
+        }
+      }
+    }
+    const first = items[0] ?? {};
+    const sampleArgs = stringify(get(first, "args"));
+    const sampleError = stringify(get(first, "err"));
+    const count8 = items.length;
+    const dated = [...dayCounts.values()].reduce((total, value) => total + value, 0);
+    const days = sortStrings(dayCounts.keys());
+    const display2 = cpSlice(signature, 0, DISPLAY_SIGNATURE_LIMIT);
+    clusters.push({
+      id: clusterId(tool, signature),
+      tool,
+      signature,
+      signature_display: display2,
+      signature_display_truncated: cpLen(signature) > cpLen(display2),
+      count: count8,
+      sessions: new Set(items.map((row) => stringify(get(row, "session"))).filter(Boolean)).size,
+      first_seen: timestamps[0] ?? "",
+      last_seen: timestamps[timestamps.length - 1] ?? "",
+      distinct_days: dayCounts.size,
+      days,
+      day_counts: Object.fromEntries(days.map((day2) => [day2, dayCounts.get(day2)])),
+      undated_count: count8 - dated,
+      frame_ids: memberIds,
+      member_ids: [...memberIds],
+      status_codes: sortStrings(sets.status_codes),
+      error_codes: sortStrings(sets.error_codes),
+      request_ids: sortStrings(sets.request_ids),
+      client_request_ids: sortStrings(sets.client_request_ids),
+      x_ms_request_ids: sortStrings(sets.x_ms_request_ids),
+      correlation_ids: sortStrings(sets.correlation_ids),
+      paths: sortStrings(sets.paths),
+      diagnostic_scan_inconclusive: scanInconclusive,
+      sample_args: cpSlice(sampleArgs, 0, DISPLAY_SAMPLE_ARGS_LIMIT),
+      sample_args_truncated: cpLen(sampleArgs) > DISPLAY_SAMPLE_ARGS_LIMIT,
+      sample_error: cpSlice(sampleError, 0, DISPLAY_SAMPLE_ERROR_LIMIT),
+      sample_error_truncated: cpLen(sampleError) > DISPLAY_SAMPLE_ERROR_LIMIT
+    });
+  }
+  clusters.sort((a3, b) => b.count - a3.count || cmpStr(a3.tool, b.tool) || cmpStr(a3.id, b.id));
+  if (clusters.reduce((total, item) => total + item.count, 0) !== rows.length) {
+    throw new Error("cluster counts do not conserve input rows");
+  }
+  return clusters;
+}
+function sanity(clusters, rows, minLen = DEFAULT_OPAQUE_LEN) {
+  const warnings = [];
+  const total = rows.length;
+  const sum2 = (values) => values.reduce((acc, value) => acc + value, 0);
+  if (sum2(clusters.map((item) => item.count)) !== total) warnings.push("Cluster counts do not sum to parsed rows.");
+  for (const item of clusters) {
+    if (sum2(Object.values(item.day_counts ?? {})) !== item.count - (item.undated_count ?? 0)) {
+      warnings.push(`${item.id} daily counts do not reconcile with dated members.`);
+    }
+  }
+  if (total >= 50 && clusters.length < 5) {
+    warnings.push(
+      `Only ${clusters.length} clusters for ${total} rows - the normaliser may be erasing useful text. Raise --opaque above ${minLen} and compare.`
+    );
+  }
+  if (total >= 20 && clusters.length > 0.7 * total) {
+    warnings.push(
+      `${clusters.length} clusters for ${total} rows - almost nothing grouped. Lower --opaque below ${minLen} and compare.`
+    );
+  }
+  const blank = sum2(clusters.filter((item) => item.signature.startsWith("(no error text")).map((item) => item.count));
+  if (blank) {
+    warnings.push(
+      `${blank} rows have no body text. This is inconclusive, not evidence of no embedded failures; specify the diagnostic body column.`
+    );
+  }
+  if (total && !rows.some((row) => pyTruthy(get(row, "session")))) {
+    warnings.push("No session_id on any row; session counts are unavailable and must not be reported.");
+  }
+  if (total && !rows.some((row) => pyTruthy(get(row, "ts")))) {
+    warnings.push("No timestamps parsed; temporal classification is unavailable.");
+  }
+  const undated = sum2(clusters.map((item) => item.undated_count ?? 0));
+  if (undated) {
+    warnings.push(`${undated} row(s) lack a valid YYYY-MM-DD date; daily tables cover only dated members.`);
+  }
+  const duplicates = sum2(clusters.map((item) => item.frame_ids.length - new Set(item.frame_ids).size));
+  if (duplicates) warnings.push(`${duplicates} duplicate frame membership ID(s) detected.`);
+  const mixed = clusters.filter((item) => item.status_codes.length > 1 || item.error_codes.length > 1).map((item) => item.id);
+  if (mixed.length) {
+    warnings.push(
+      `${mixed.length} cluster(s) contain multiple diagnostic status/error codes: ${mixed.slice(0, 8).join(", ")}`
+    );
+  }
+  const limited = clusters.filter((item) => item.diagnostic_scan_inconclusive).length;
+  if (limited) {
+    warnings.push(
+      `${limited} cluster(s) reached the bounded protocol scan limit; embedded-failure coverage is inconclusive for those members.`
+    );
+  }
+  const erased = clusters.filter((item) => item.signature.includes("<x>")).length;
+  if (erased) {
+    warnings.push(
+      `${erased} signature(s) collapse unlabelled opaque tokens. Structured code, path, status, and correlation fields remain preserved separately.`
+    );
+  }
+  return warnings;
+}
+
+// lib/mcp-diagnostics/redact.mjs
+import { createHmac as createHmac16, randomBytes as randomBytes9 } from "node:crypto";
+var PROFILES = ["internal", "external"];
+var PLACEHOLDER_CONTENT = "<redacted-content>";
+var PLACEHOLDER_NARRATIVE = "<omitted-unreviewed-narrative>";
+var PLACEHOLDER_PROSE = "<omitted-unreviewed-error-prose>";
+var PLACEHOLDER_PAYLOAD = "<omitted-nondiagnostic-payload>";
+var PLACEHOLDER_LITERAL = "<redacted-literal>";
+var SECRET_RULES = [
+  ["capability-url-shares", new RegExp("/shares/u![A-Za-z0-9_\\-=]+", "giu"), "/shares/<redacted-capability>"],
+  [
+    "upload-session",
+    new RegExp(`https?://[^${WS}"'<>]*upload(?:Session|Url)[^${WS}"'<>]*`, "giu"),
+    "<redacted-upload-session-url>"
+  ],
+  [
+    "sas-token",
+    new RegExp(`([?&])(?:sig|sv|se|st|sp|skoid|sktid|srt|spr)=[^&${WS}"'<>]+`, "giu"),
+    "$1<redacted-sas>"
+  ],
+  ["query-token", new RegExp(`([?&])(?:access_token|token|code|id_token|refresh_token|secret|password|passwd|apikey|api_key|client_secret)=[^&${WS}"'<>]+`, "giu"), "$1<redacted-token>"],
+  ["bearer", new RegExp(`${B2}Bearer${S3}+[^${WS},;"']+`, "giu"), "<redacted-bearer>"],
+  ["basic", new RegExp(`${B2}Basic${S3}+[A-Za-z0-9+/=_\\-]{4,}`, "giu"), "<redacted-basic>"],
+  ["credential-assignment", new RegExp(`${B2}(?:password|passwd|client[_-]?secret|api[_-]?key|authorization|proxy-authorization)${S3}*[:=]${S3}*[^${WS},;"'}]+`, "giu"), "<redacted-credential>"],
+  ["cookie", new RegExp(`${B2}(?:set-cookie|cookie)${S3}*:${S3}*[^\\r\\n]+`, "giu"), "<redacted-cookie>"],
+  ["jwt", new RegExp(`${B2}eyJ[A-Za-z0-9_\\-]{8,}\\.[A-Za-z0-9_\\-]{8,}\\.[A-Za-z0-9_\\-]{8,}`, "gu"), "<redacted-jwt>"],
+  ["private-key", /-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/gsu, "<redacted-private-key>"],
+  ["github-token", new RegExp(`${B2}gh[pousr]_[A-Za-z0-9]{16,}`, "gu"), "<redacted-token>"],
+  ["aws-key", new RegExp(`${B2}(?:AKIA|ASIA)[0-9A-Z]{16}${B2}`, "gu"), "<redacted-aws-key>"]
+];
+var EMAIL_SOURCE = `${B2}[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}${B2}`;
+var GUID_SOURCE = `${B2}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}${B2}`;
+var OPAQUE_SOURCE = `${B2}(?:AAMk|AQMk|AQAB)[A-Za-z0-9_\\-=]{12,}${B2}`;
+var EMAIL = new RegExp(EMAIL_SOURCE, "gu");
+var GUID2 = new RegExp(GUID_SOURCE, "giu");
+var OPAQUE_ID = new RegExp(OPAQUE_SOURCE, "gu");
+var TENANT_HOST = new RegExp(`${B2}([A-Za-z0-9-]+)\\.(?:sharepoint\\.com|onmicrosoft\\.com)${B2}`, "giu");
+var SAFE_TOKEN = "[A-Za-z][A-Za-z0-9_.:\\-/]{0,127}";
+var SAFE_VERSION = "[A-Za-z0-9][A-Za-z0-9_.+\\-]{0,63}";
+var ISO_TIME = `${D2}{4}-${D2}{2}-${D2}{2}T${D2}{2}:${D2}{2}:${D2}{2}(?:\\.${D2}+)?(?:Z|[+-]${D2}{2}:${D2}{2})`;
+var ALIAS = `<[A-Za-z0-9_-]+-${D2}+:[0-9a-f]{4,64}>`;
+var OFFSET = `(?:Z|[+-]${D2}{2}:?${D2}{2})`;
+var QUOTED = `'(?:''|[^'])*'|"(?:\\\\[^\\n]|[^"])*"`;
+var safeToken = (value) => isStr(value) && Boolean(fullmatch(SAFE_TOKEN, value));
+var safeVersion = (value) => isStr(value) && Boolean(fullmatch(SAFE_VERSION, value));
+var CONTENT_KEYS = /* @__PURE__ */ new Set([
+  "body",
+  "content",
+  "contentbytes",
+  "comment",
+  "comments",
+  "message",
+  "messages",
+  "text",
+  "subject",
+  "question",
+  "query",
+  "queries",
+  "search",
+  "prompt",
+  "markdown",
+  "htmlbody",
+  "textbody",
+  "bodypreview",
+  "snippet",
+  "summary",
+  "note",
+  "notes",
+  "description",
+  "attachment",
+  "attachments",
+  "filecontent",
+  "data",
+  "value",
+  "values",
+  "document",
+  "documents",
+  "title",
+  "label",
+  "reason",
+  "justification",
+  "jsonbody",
+  "payload",
+  "input"
+]);
+var CREDENTIAL_KEYS = /* @__PURE__ */ new Set([
+  "authorization",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+  "password",
+  "passwd",
+  "secret",
+  "clientsecret",
+  "client_secret",
+  "token",
+  "accesstoken",
+  "access_token",
+  "refreshtoken",
+  "refresh_token",
+  "idtoken",
+  "id_token",
+  "apikey",
+  "api_key",
+  "x-api-key",
+  "githubtoken",
+  "sasurl",
+  "uploadurl",
+  "headers"
+]);
+var ARG_POLICIES = new Map(Object.entries({
+  entityurl: "path",
+  entityurls: "paths",
+  functionurl: "path",
+  actionurl: "path",
+  parenturl: "path",
+  path: "path",
+  url: "path",
+  urls: "paths",
+  endpoint: "path",
+  method: "token",
+  operationtype: "token",
+  format: "token",
+  strategy: "token",
+  timezone: "token",
+  scope: "token",
+  source: "token",
+  tool: "token",
+  server: "token",
+  consistencylevel: "token",
+  top: "number",
+  skip: "number",
+  limit: "number",
+  count: "boolean",
+  $top: "number",
+  $skip: "number",
+  $count: "boolean",
+  select: "selector",
+  $select: "selector",
+  orderby: "orderby",
+  $orderby: "orderby",
+  expand: "expand",
+  $expand: "expand",
+  filter: "filter",
+  $filter: "filter",
+  $search: "search",
+  agentid: "identifier",
+  conversationid: "identifier",
+  requestid: "identifier",
+  clientrequestid: "identifier",
+  correlationid: "identifier",
+  capabilities: "tokens",
+  options: "container",
+  parameters: "container",
+  params: "container",
+  request: "container",
+  pagination: "container"
+}));
+var STRUCTURAL_SEGMENTS = /* @__PURE__ */ new Set([
+  "",
+  "v1.0",
+  "beta",
+  "me",
+  "users",
+  "groups",
+  "messages",
+  "mailfolders",
+  "childfolders",
+  "attachments",
+  "events",
+  "calendar",
+  "calendarview",
+  "calendars",
+  "drive",
+  "drives",
+  "items",
+  "children",
+  "content",
+  "root",
+  "sites",
+  "lists",
+  "columns",
+  "fields",
+  "workbook",
+  "worksheets",
+  "tables",
+  "rows",
+  "teams",
+  "channels",
+  "chats",
+  "members",
+  "planner",
+  "tasks",
+  "plans",
+  "buckets",
+  "sendmail",
+  "cancel",
+  "delta",
+  "search",
+  "$ref",
+  "$value",
+  "schema"
+]);
+var REQUEST_ID_KEYS = /* @__PURE__ */ new Set([
+  "requestid",
+  "request_id",
+  "clientrequestid",
+  "client_request_id",
+  "correlationid",
+  "correlation_id",
+  "traceid",
+  "trace_id",
+  "activityid",
+  "activity_id",
+  "batchid",
+  "batch_id",
+  "request-id",
+  "client-request-id",
+  "x-ms-request-id",
+  "x-ms-correlation-request-id"
+]);
+var STATUS_KEYS2 = /* @__PURE__ */ new Set([
+  "status",
+  "statuscode",
+  "status_code",
+  "httpstatus",
+  "http_status",
+  "httpstatuscode",
+  "http_status_code"
+]);
+var CODE_KEYS = /* @__PURE__ */ new Set(["code", "errorcode", "error_code", "subcode", "type"]);
+var TIMING_KEYS = /* @__PURE__ */ new Set([
+  "duration",
+  "durationms",
+  "duration_ms",
+  "elapsed",
+  "elapsedms",
+  "elapsed_ms",
+  "retryafter",
+  "retry_after",
+  "retryafterseconds"
+]);
+var PROTOCOL_KEYS = /* @__PURE__ */ new Set([
+  "iserror",
+  "is_error",
+  "stoppedreason",
+  "stopped_reason",
+  "jsonrpc",
+  "protocol",
+  "transport",
+  "outcome",
+  "effectiveoutcome",
+  "effective_outcome",
+  "success",
+  "ok",
+  "mimetype",
+  "mime_type"
+]);
+var PATH_KEYS2 = /* @__PURE__ */ new Set(["path", "requestpath", "request_path", "url", "uri", "target"]);
+var MESSAGE_KEYS = /* @__PURE__ */ new Set(["message", "errormessage", "error_message", "detail", "details"]);
+var ERROR_CONTAINER_KEYS = /* @__PURE__ */ new Set(["error", "innererror", "inner_error", "cause"]);
+var BATCH_KEYS = /* @__PURE__ */ new Set(["operations", "responses", "errors", "batch", "batchstatuses", "batch_statuses"]);
+var RESULT_BODY_KEYS = /* @__PURE__ */ new Set([
+  "data",
+  "value",
+  "values",
+  "result",
+  "contents",
+  "markdown",
+  "body",
+  "subject",
+  "messages",
+  "text",
+  "snippet",
+  "retrievalhits",
+  "retrieval_hits",
+  "items",
+  "documents"
+]);
+var DIAGNOSTIC_ENVELOPE_KEYS = /* @__PURE__ */ new Set(["results", "content"]);
+var KNOWN_ERROR_TEMPLATES = [
+  ["access-denied", `${B2}(?:access|permission)${S3}+denied${B2}`],
+  ["parse-uri", `${B2}(?:failed${S3}+to${S3}+parse|parse${S3}+uri|invalid${S3}+uri)${B2}`],
+  ["not-found", `${B2}(?:not${S3}+found|no${S3}+schema)${B2}`],
+  ["internal-error", `${B2}(?:internal|general)${S3}+(?:server${S3}+)?error${B2}`],
+  ["throttled", `${B2}(?:too${S3}+many${S3}+requests|throttl|rate${S3}+limit)[${W}]*${B2}`],
+  ["timeout", `${B2}(?:timed?${S3}*out|timeout)${B2}`],
+  ["unauthenticated", `${B2}(?:unauthenticated|authentication${S3}+failed)${B2}`],
+  ["no-client", `${B2}no${S3}+MCP${S3}+client${S3}+found${B2}`],
+  ["size-limit", `${B2}(?:size${S3}+limit|too${S3}+large|exceeds?${S3}+${D2}+${S3}*(?:MB|GB))${B2}`],
+  ["service-unavailable", `${B2}(?:service|upstream)${S3}+unavailable${B2}`]
+].map(([name, source]) => [name, new RegExp(source, "iu")]);
+var MESSAGE_PATH = new RegExp(`(?<![${W}])/(?:[^${WS}"'|,;}]+)`, "u");
+var isContainer2 = (value) => isDict(value) || isList(value);
+var isEmptyish = (value) => value === null || value === void 0 || value === "" || isList(value) && !value.length || isDict(value) && !Object.keys(value).length;
+var intOrStr = (value) => isStr(value) || isInt(value) || isBool(value);
+var get2 = (object16, key4) => Object.hasOwn(object16, key4) ? object16[key4] : null;
+var increment = (map, key4, count8 = 1) => map.set(key4, (map.get(key4) ?? 0) + count8);
+function partition2(value, separator) {
+  const index = value.indexOf(separator);
+  return index < 0 ? [value, "", ""] : [value.slice(0, index), separator, value.slice(index + separator.length)];
+}
+function rpartition(value, separator) {
+  const index = value.lastIndexOf(separator);
+  return index < 0 ? ["", "", value] : [value.slice(0, index), separator, value.slice(index + separator.length)];
+}
+var SCHEME_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-.";
+function urlsplit(input) {
+  let url = input.replace(/[\t\r\n]/g, "");
+  let scheme = "";
+  let netloc = "";
+  let query = "";
+  const colon = url.indexOf(":");
+  if (colon > 0 && /^[A-Za-z]/.test(url) && [...url.slice(0, colon)].every((char) => SCHEME_CHARS.includes(char))) {
+    scheme = url.slice(0, colon).toLowerCase();
+    url = url.slice(colon + 1);
+  }
+  if (url.startsWith("//")) {
+    let end = url.length;
+    for (const char of "/?#") {
+      const found = url.indexOf(char, 2);
+      if (found >= 0) end = Math.min(end, found);
+    }
+    netloc = url.slice(2, end);
+    url = url.slice(end);
+    if (netloc.includes("[") !== netloc.includes("]")) throw new Error("Invalid IPv6 URL");
+  }
+  if (url.includes("#")) url = url.slice(0, url.indexOf("#"));
+  if (url.includes("?")) [url, , query] = partition2(url, "?");
+  if (netloc && /[^\x00-\x7f]/.test(netloc)) {
+    const plain8 = netloc.replace(/[@:#?]/g, "");
+    const normalized = plain8.normalize("NFKC");
+    if (plain8 !== normalized && /[/?#@:]/.test(normalized)) {
+      throw new Error(`netloc '${netloc}' contains invalid characters under NFKC normalization`);
+    }
+  }
+  let hostname = null;
+  if (netloc) {
+    const hostinfo = rpartition(netloc, "@")[2];
+    const [, bracket, bracketed] = partition2(hostinfo, "[");
+    let host = bracket ? partition2(bracketed, "]")[0] : partition2(hostinfo, ":")[0];
+    if (host) {
+      const [name, percent2, zone] = partition2(host, "%");
+      host = name.toLowerCase() + percent2 + zone;
+      hostname = host;
+    }
+  }
+  return { scheme, netloc, path: url, query, hostname };
+}
+var UTF8 = new TextDecoder("utf-8");
+function unquote(value) {
+  if (!value.includes("%")) return value;
+  return value.replace(/[\x00-\x7f]+/g, (run) => {
+    const bytes2 = [];
+    for (let index = 0; index < run.length; index += 1) {
+      if (run[index] === "%" && /^[0-9A-Fa-f]{2}$/.test(run.slice(index + 1, index + 3))) {
+        bytes2.push(parseInt(run.slice(index + 1, index + 3), 16));
+        index += 2;
+      } else bytes2.push(run.charCodeAt(index));
+    }
+    return UTF8.decode(Uint8Array.from(bytes2));
+  });
+}
+function parseQsl(query) {
+  const pairs = [];
+  for (const part of query.split("&")) {
+    if (!part) continue;
+    const [name, separator, value] = partition2(part, "=");
+    pairs.push([unquote(name.replaceAll("+", " ")), separator ? unquote(value.replaceAll("+", " ")) : ""]);
+  }
+  return pairs;
+}
+var ODATA_PATTERNS = {
+  comparison: new RegExp(`(${B2}(?:eq|ne|gt|ge|lt|le)${S3}+)(?!<redacted-literal>)([^${WS}()]+)`, "giu"),
+  inList: new RegExp(`(${B2}in${S3}*)\\(([^)]*)\\)`, "giu"),
+  textFunction: new RegExp(
+    `(${B2}(?:contains|startswith|endswith)${S3}*\\(${S3}*[A-Za-z_][A-Za-z0-9_./]*${S3}*,${S3}*)([^)]*)`,
+    "giu"
+  ),
+  longToken: new RegExp(`${B2}[A-Za-z0-9_\\-=]{24,}${B2}`, "gu"),
+  quoted: new RegExp(QUOTED, "gu"),
+  functionArgument: new RegExp(`([,(]?${S3}*[A-Za-z_][A-Za-z0-9_.]*${S3}*=${S3}*)([^,)]*)`, "gu")
+};
+var DIGIT_LIKE = /^[\p{Nd}\u00B2\u00B3\u00B9\u2070\u2074-\u2079\u2080-\u2089\u2460-\u2468\u2474-\u247C\u2488-\u2490\u24F5-\u24FD\u24EA\u24FF\u2776-\u277E\u2780-\u2788\u278A-\u2792\u1369-\u1371\u19DA]+$/u;
+var Pseudonymiser = class {
+  constructor(salt = null) {
+    this.salt = salt ? Buffer.from(salt) : randomBytes9(32);
+    this.map = /* @__PURE__ */ new Map();
+    this.counts = /* @__PURE__ */ new Map();
+  }
+  alias(kind2, value) {
+    const key4 = JSON.stringify([kind2, value]);
+    if (!this.map.has(key4)) {
+      increment(this.counts, kind2);
+      const digest8 = createHmac16("sha256", this.salt).update(value, "utf8").digest("hex").slice(0, 12);
+      this.map.set(key4, `<${kind2}-${this.counts.get(kind2)}:${digest8}>`);
+    }
+    return this.map.get(key4);
+  }
+  get distinct() {
+    return Object.fromEntries(this.counts);
+  }
+};
+var Redactor = class {
+  constructor(profile = "internal", { maxErrorLen = 4e3, salt = null } = {}) {
+    if (!PROFILES.includes(profile)) throw new Error(`profile must be one of ${PROFILES.join(", ")}`);
+    this.profile = profile;
+    this.maxErrorLen = maxErrorLen;
+    this.fired = /* @__PURE__ */ new Map();
+    this.classes = /* @__PURE__ */ new Map();
+    this.droppedFields = /* @__PURE__ */ new Map();
+    this.unknownDropped = /* @__PURE__ */ new Map();
+    this.pseudo = new Pseudonymiser(salt);
+  }
+  record(rule, cls, count8 = 1) {
+    increment(this.fired, rule, count8);
+    this.classes.set(rule, cls);
+  }
+  drop(category, unknown = false) {
+    increment(unknown ? this.unknownDropped : this.droppedFields, category);
+    this.record(category, "content");
+  }
+  /** Keep an explicitly classified identifier internally; alias externally. */
+  identifier(value, kind2 = "id") {
+    if (isBool(value) || !(isStr(value) || isInt(value))) {
+      this.drop("diagnostic.invalid-identifier");
+      return PLACEHOLDER_CONTENT;
+    }
+    const text6 = pyStr(value);
+    if (!text6 || cpLen(text6) > 1024 || /[\x00-\x1f]/.test(text6)) {
+      this.drop("diagnostic.invalid-identifier");
+      return PLACEHOLDER_CONTENT;
+    }
+    if (["request", "session_id", "call_id", "arg-id", "path-id"].includes(kind2) && !(fullmatch("[A-Za-z0-9._:/+=@%!-]+", text6) || fullmatch(ALIAS, text6))) {
+      this.drop("diagnostic.invalid-identifier");
+      return PLACEHOLDER_CONTENT;
+    }
+    if (this.profile === "internal") return text6;
+    this.record(`identifier:${kind2}`, "identifying");
+    return this.pseudo.alias(kind2, text6);
+  }
+  substitute(text6, pattern2, replacement, rule, cls) {
+    let count8 = 0;
+    const out = text6.replace(pattern2, (...args) => {
+      count8 += 1;
+      return typeof replacement === "function" ? replacement(args[0]) : replacement.replace("$1", args[1] ?? "");
+    });
+    if (count8) this.record(rule, cls, count8);
+    return out;
+  }
+  /** Finite secret/identity scrub only; this is not a content classifier. */
+  text(value) {
+    if (!value) return value;
+    let out = this.scrubSecrets(value);
+    if (this.profile === "external") {
+      out = this.substitute(out, EMAIL, (match) => this.identifier(match, "user"), "email", "identifying");
+      out = this.substitute(out, GUID2, (match) => this.identifier(match, "id"), "guid", "identifying");
+      out = this.substitute(out, OPAQUE_ID, (match) => this.identifier(match, "opaque"), "opaque-id", "identifying");
+      out = this.substitute(
+        out,
+        TENANT_HOST,
+        (match) => this.identifier(match, "tenant-host"),
+        "tenant-host",
+        "identifying"
+      );
+    }
+    return out;
+  }
+  scrubSecrets(value) {
+    let out = value;
+    for (const [name, pattern2, replacement] of SECRET_RULES) out = this.substitute(out, pattern2, replacement, name, "secret");
+    return out;
+  }
+  // -- arguments --------------------------------------------------------
+  /** Project an argument tree through an explicit key/value allowlist. */
+  args(value) {
+    if (isDict(value)) {
+      const output = /* @__PURE__ */ Object.create(null);
+      for (const [key4, rawValue] of Object.entries(value)) {
+        const leaf = key4.toLowerCase();
+        if (CREDENTIAL_KEYS.has(leaf)) {
+          this.drop("argument.credential");
+          continue;
+        }
+        if (CONTENT_KEYS.has(leaf)) {
+          this.drop("argument.content");
+          output[key4] = PLACEHOLDER_CONTENT;
+          continue;
+        }
+        const policy = ARG_POLICIES.get(leaf);
+        if (policy === void 0) {
+          this.drop("argument.unknown-key", true);
+          continue;
+        }
+        const projected = this.argumentValue(policy, rawValue);
+        if (projected !== null) output[key4] = projected;
+      }
+      return output;
+    }
+    if (isList(value)) return value.map((item) => isDict(item) ? this.args(item) : PLACEHOLDER_CONTENT);
+    this.drop("argument.unstructured-root");
+    return PLACEHOLDER_CONTENT;
+  }
+  argumentValue(policy, value) {
+    if (policy === "container") {
+      const parsed = parseJsonString(value);
+      if (isContainer2(parsed)) return this.args(parsed);
+      this.drop("argument.invalid-container");
+      return PLACEHOLDER_CONTENT;
+    }
+    if (policy === "path") return this.path(value);
+    if (policy === "paths") {
+      if (!isList(value)) {
+        this.drop("argument.invalid-path-list");
+        return [];
+      }
+      return value.map((item) => this.path(item));
+    }
+    if (policy === "identifier") {
+      if (intOrStr(value)) return this.identifier(value, "arg-id");
+      this.drop("argument.invalid-identifier");
+      return PLACEHOLDER_CONTENT;
+    }
+    if (["token", "selector", "orderby", "expand", "filter", "search"].includes(policy)) {
+      if (!isStr(value)) {
+        this.drop(`argument.invalid-${policy}`);
+        return PLACEHOLDER_CONTENT;
+      }
+      if (policy === "token") return safeToken(value) ? value : PLACEHOLDER_CONTENT;
+      if (policy === "selector") return selector2(value);
+      if (policy === "orderby") return orderby(value);
+      if (policy === "expand") return this.expand(value);
+      if (policy === "filter") return odataFilter(value);
+      this.drop("argument.search-text");
+      return PLACEHOLDER_CONTENT;
+    }
+    if (policy === "tokens") {
+      if (isList(value)) return value.filter(safeToken);
+      if (safeToken(value)) return value;
+      this.drop("argument.invalid-token-list");
+      return [];
+    }
+    if (policy === "number") {
+      if (isNum(value)) return value;
+      if (isStr(value) && fullmatch(`-?${D2}+(?:\\.${D2}+)?`, value)) return value;
+      this.drop("argument.invalid-number");
+      return null;
+    }
+    if (policy === "boolean") {
+      if (isBool(value)) return value;
+      if (isStr(value) && ["true", "false"].includes(value.toLowerCase())) return value.toLowerCase();
+      this.drop("argument.invalid-boolean");
+      return null;
+    }
+    throw new Error(`unknown argument policy: ${policy}`);
+  }
+  /** Project JSON arguments. Unparsed input never falls back to raw text. */
+  argsString(raw) {
+    if (!raw) return raw;
+    let parsed;
+    try {
+      parsed = pyLoads(raw);
+    } catch (error) {
+      if (!(error instanceof JsonDecodeError)) throw error;
+      this.drop("argument.unparsed");
+      return pyDumps(PLACEHOLDER_CONTENT);
+    }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!isStr(parsed) || !["{", "["].includes(pyLstrip(parsed).slice(0, 1))) break;
+      try {
+        parsed = pyLoads(parsed);
+      } catch (error) {
+        if (!(error instanceof JsonDecodeError)) throw error;
+        this.drop("argument.unparsed");
+        return pyDumps(PLACEHOLDER_CONTENT);
+      }
+    }
+    return pyDumps(this.args(parsed), { ensureAscii: false, sortKeys: true });
+  }
+  expand(value, depth = 0) {
+    if (depth >= 4) {
+      this.drop("argument.expand-depth");
+      return PLACEHOLDER_CONTENT;
+    }
+    try {
+      const result = [];
+      for (const part of odataParts(value, ",")) {
+        const match = fullmatch("([A-Za-z_][A-Za-z0-9_./]*)(?:\\((.*)\\))?", part, "su");
+        if (!match) throw new SyntaxError("unsupported expand expression");
+        const [, name, inner] = match;
+        if (inner === void 0) {
+          result.push(name);
+          continue;
+        }
+        const clauses = [];
+        for (const clause of odataParts(inner, ";")) {
+          const [rawKey, separator, raw] = partition2(clause, "=");
+          const key4 = pyStrip(rawKey).toLowerCase();
+          if (!separator) throw new SyntaxError("unsupported expand clause");
+          let safe;
+          if (key4 === "$filter") safe = odataFilter(raw);
+          else if (key4 === "$select") safe = selector2(raw);
+          else if (key4 === "$orderby") safe = orderby(raw);
+          else if (key4 === "$expand") safe = this.expand(raw, depth + 1);
+          else if ((key4 === "$top" || key4 === "$skip") && fullmatch(`${D2}+`, pyStrip(raw))) safe = pyStrip(raw);
+          else if (key4 === "$search") {
+            this.drop("argument.search-text");
+            safe = PLACEHOLDER_CONTENT;
+          } else throw new SyntaxError("unsupported expand clause");
+          clauses.push(`${key4}=${safe}`);
+        }
+        result.push(`${name}(${clauses.join(";")})`);
+      }
+      return result.join(",");
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      this.drop("argument.invalid-expand");
+      return PLACEHOLDER_CONTENT;
+    }
+  }
+  path(raw) {
+    if (!isStr(raw)) {
+      this.drop("argument.invalid-path");
+      return PLACEHOLDER_CONTENT;
+    }
+    const value = this.scrubSecrets(raw);
+    const parsed = urlsplit(value);
+    let prefix = "";
+    let path32;
+    let query;
+    if (parsed.scheme || parsed.netloc) {
+      const scheme = ["http", "https"].includes(parsed.scheme) ? parsed.scheme : "https";
+      let host = parsed.hostname || "<redacted-host>";
+      const portMatch = new RegExp(`:(${D2}{1,5})$`, "u").exec(rpartition(parsed.netloc, "@")[2]);
+      const port = portMatch ? `:${portMatch[1]}` : "";
+      if (this.profile === "external" && host) host = this.identifier(host, "host");
+      prefix = `${scheme}://${host}${port}`;
+      ({ path: path32, query } = parsed);
+    } else {
+      [path32, , query] = partition2(value, "?");
+    }
+    const safePath = path32.split("/").map((segment) => this.pathSegment(segment)).join("/");
+    const safeQuery = this.odataQuery(query);
+    return prefix + safePath + (safeQuery ? `?${safeQuery}` : "");
+  }
+  pathSegment(raw) {
+    let segment = unquote(raw);
+    if (!segment) return "";
+    segment = segment.replace(ODATA_PATTERNS.quoted, PLACEHOLDER_LITERAL);
+    const base = partition2(segment, "(")[0].toLowerCase();
+    if (STRUCTURAL_SEGMENTS.has(base)) {
+      if (segment.includes("(") && segment.endsWith(")")) {
+        const [name, , rest] = partition2(segment, "(");
+        let argumentsText = rest.slice(0, -1);
+        if (argumentsText.includes("=")) {
+          argumentsText = argumentsText.replace(
+            ODATA_PATTERNS.functionArgument,
+            (_2, lead) => lead + PLACEHOLDER_LITERAL
+          );
+        } else if (pyStrip(argumentsText)) argumentsText = PLACEHOLDER_LITERAL;
+        return `${name}(${argumentsText})`;
+      }
+      return segment;
+    }
+    if (DIGIT_LIKE.test(segment)) return this.profile === "internal" ? segment : this.identifier(segment, "path-id");
+    if (fullmatch(EMAIL_SOURCE, segment)) return this.profile === "internal" ? segment : this.identifier(segment, "user");
+    const isIdentifier = fullmatch(GUID_SOURCE, segment, "iu") || fullmatch(OPAQUE_SOURCE, segment) || fullmatch("[A-Za-z0-9_\\-=]{24,}", segment);
+    if (isIdentifier) return this.profile === "internal" ? segment : this.identifier(segment, "path-id");
+    this.record("path-name", "content");
+    if (this.profile === "external") return this.identifier(segment, "path");
+    return "<redacted-path-name>";
+  }
+  odataQuery(query) {
+    if (!query) return "";
+    const output = [];
+    for (const [key4, value] of parseQsl(query)) {
+      const lowered = key4.toLowerCase();
+      if (lowered === "$select") output.push([key4, selector2(value)]);
+      else if (lowered === "$filter") output.push([key4, odataFilter(value)]);
+      else if (lowered === "$search") {
+        this.drop("argument.search-text");
+        output.push([key4, PLACEHOLDER_CONTENT]);
+      } else if (lowered === "$orderby") output.push([key4, orderby(value)]);
+      else if (lowered === "$expand") output.push([key4, this.expand(value)]);
+      else if ((lowered === "$top" || lowered === "$skip") && fullmatch(`${D2}+`, value)) output.push([key4, value]);
+      else if (lowered === "$count" && ["true", "false"].includes(value.toLowerCase())) {
+        output.push([key4, value.toLowerCase()]);
+      } else this.drop("argument.query-parameter", true);
+    }
+    return output.map(([key4, value]) => `${key4}=${value}`).join("&");
+  }
+  // -- diagnostic response/error projection ----------------------------
+  /** Return only structured or known-template diagnostic evidence. */
+  diagnostic(raw) {
+    const parsed = parseJsonString(raw);
+    if (isContainer2(parsed)) {
+      const projected = this.projectDiagnostic(parsed);
+      if (isEmptyish(projected)) {
+        this.drop("diagnostic.nondiagnostic-payload");
+        return PLACEHOLDER_PAYLOAD;
+      }
+      return pyDumps(projected, { ensureAscii: false, sortKeys: true });
+    }
+    if (raw === null || raw === void 0 || raw === "") return "";
+    return this.knownMessage(pyStr(raw));
+  }
+  projectDiagnostic(value) {
+    if (isList(value)) {
+      return value.map((item) => this.projectDiagnostic(item)).filter((item) => !isEmptyish(item));
+    }
+    if (!isDict(value)) return null;
+    const output = /* @__PURE__ */ Object.create(null);
+    for (const [key4, rawValue] of Object.entries(value)) {
+      const leaf = key4.toLowerCase();
+      let safe;
+      if (RESULT_BODY_KEYS.has(leaf)) {
+        this.drop("diagnostic.result-content");
+        continue;
+      }
+      if (DIAGNOSTIC_ENVELOPE_KEYS.has(leaf)) safe = this.projectEnvelope(rawValue);
+      else if (STATUS_KEYS2.has(leaf)) safe = projectStatus(rawValue);
+      else if (CODE_KEYS.has(leaf)) safe = projectCode(rawValue);
+      else if (REQUEST_ID_KEYS.has(leaf)) safe = this.identifier(rawValue, "request");
+      else if (TIMING_KEYS.has(leaf)) safe = isNum(rawValue) || isBool(rawValue) ? rawValue : null;
+      else if (PROTOCOL_KEYS.has(leaf)) safe = projectProtocol(rawValue);
+      else if (PATH_KEYS2.has(leaf)) safe = this.path(rawValue);
+      else if (MESSAGE_KEYS.has(leaf)) safe = this.knownMessage(pyStr(rawValue));
+      else if (ERROR_CONTAINER_KEYS.has(leaf)) {
+        const parsed = parseJsonString(rawValue);
+        safe = isContainer2(parsed) ? this.projectDiagnostic(parsed) : this.knownMessage(pyStr(parsed));
+      } else if (BATCH_KEYS.has(leaf)) safe = this.projectDiagnostic(rawValue);
+      else if (leaf === "headers") safe = this.diagnosticHeaders(rawValue);
+      else {
+        this.drop("diagnostic.unknown-field", true);
+        continue;
+      }
+      if (!isEmptyish(safe)) output[key4] = safe;
+    }
+    return output;
+  }
+  /** Extract diagnostics from WorkIQ results and MCP content wrappers. */
+  projectEnvelope(value) {
+    const parsed = parseJsonString(value);
+    if (isList(parsed)) {
+      return parsed.map((item) => this.projectEnvelope(item)).filter((item) => !isEmptyish(item) && item !== PLACEHOLDER_PAYLOAD);
+    }
+    if (isDict(parsed)) {
+      const mime = Object.hasOwn(parsed, "mimeType") ? parsed.mimeType : Object.hasOwn(parsed, "mime_type") ? parsed.mime_type : get2(parsed, "type");
+      if (["application/json", "application/problem+json", "text/json", "text"].includes(mime)) {
+        for (const payloadKey of ["text", "content", "body", "data", "value"]) {
+          if (!Object.hasOwn(parsed, payloadKey)) continue;
+          const payload2 = parseJsonString(parsed[payloadKey]);
+          if (isContainer2(payload2)) return { mime_type: mime, diagnostic: this.projectDiagnostic(payload2) };
+          if (mime === "text") return { mime_type: mime, diagnostic: this.knownMessage(pyStr(payload2)) };
+          this.drop("diagnostic.unparsed-envelope");
+          return null;
+        }
+      }
+      return this.projectDiagnostic(parsed);
+    }
+    this.drop("diagnostic.unparsed-envelope");
+    return null;
+  }
+  diagnosticHeaders(value) {
+    if (!isDict(value)) {
+      this.drop("diagnostic.headers");
+      return {};
+    }
+    const output = /* @__PURE__ */ Object.create(null);
+    for (const [key4, rawValue] of Object.entries(value)) {
+      const leaf = key4.toLowerCase();
+      if (["request-id", "client-request-id", "x-ms-request-id", "x-ms-correlation-request-id"].includes(leaf)) {
+        output[key4] = this.identifier(rawValue, "request");
+      } else if (["retry-after", "x-ms-retry-after-ms"].includes(leaf) && DIGIT_LIKE.test(pyStr(rawValue))) {
+        output[key4] = isInt(rawValue) ? Number(rawValue) : pyInt(pyStr(rawValue));
+      } else this.drop("diagnostic.header");
+    }
+    return output;
+  }
+  knownMessage(message) {
+    const scrubbed = this.scrubSecrets(message);
+    for (const [name, pattern2] of KNOWN_ERROR_TEMPLATES) {
+      if (!pattern2.test(scrubbed)) continue;
+      const pathMatch = MESSAGE_PATH.exec(scrubbed);
+      const suffix = pathMatch ? ` path=${this.path(pathMatch[0])}` : "";
+      this.record(`diagnostic-template:${name}`, "diagnostic");
+      return `<error-template:${name}>${suffix}`;
+    }
+    this.drop("diagnostic.unreviewed-prose");
+    return PLACEHOLDER_PROSE;
+  }
+  // -- side inputs -------------------------------------------------------
+  /** Include operator prose only after an explicit manual-review assertion. */
+  narrative(text6, reviewed = false) {
+    if (!pyTruthy(text6)) return "";
+    if (!reviewed) {
+      this.drop("narrative.unreviewed");
+      return PLACEHOLDER_NARRATIVE;
+    }
+    this.record("narrative.reviewed", "manual-review");
+    return this.text(pyStr(text6));
+  }
+  /** Project operator metadata to a known typed environment schema. */
+  environment(source) {
+    if (!isDict(source)) throw new TypeError("environment must be a dictionary");
+    const output = /* @__PURE__ */ Object.create(null);
+    const nullable3 = /* @__PURE__ */ new Set([
+      "collected_at",
+      "collection_time",
+      "host",
+      "server",
+      "os",
+      "client",
+      "transport",
+      "auth_mode",
+      "authmode",
+      "tools",
+      "tool_inventory",
+      "source_offsets_seen",
+      "sourceoffsetsseen",
+      "identity",
+      "tenant",
+      "clock_skew_ms",
+      "clockskewms",
+      "local_offset",
+      "localoffset"
+    ]);
+    for (const [key4, value] of Object.entries(source)) {
+      const leaf = key4.toLowerCase();
+      if (value === null && nullable3.has(leaf)) {
+        if (!["identity", "tenant"].includes(leaf) || this.profile === "internal") output[key4] = null;
+        else this.drop("environment.external-identity");
+        continue;
+      }
+      if (["collected_at", "collection_time"].includes(leaf) && isStr(value)) {
+        if (fullmatch(ISO_TIME, value)) output[key4] = value;
+        else if (!value) output[key4] = null;
+      } else if (["host", "server", "os", "client"].includes(leaf)) {
+        const projected = this.environmentComponent(leaf, value);
+        if (pyTruthy(projected)) output[key4] = projected;
+      } else if (["transport", "auth_mode", "authmode"].includes(leaf)) {
+        if (isStr(value)) output[key4] = safeToken(value) ? value : null;
+      } else if (["tools", "tool_inventory"].includes(leaf)) {
+        output[key4] = this.environmentTools(value);
+      } else if (["source_offsets_seen", "sourceoffsetsseen"].includes(leaf)) {
+        if (isList(value)) {
+          output[key4] = value.filter((item) => isStr(item) && (fullmatch(OFFSET, item) || item === "none \u2014 timestamps assumed UTC"));
+        }
+      } else if (["identity", "tenant"].includes(leaf)) {
+        if (this.profile === "internal") {
+          const projected = environmentIdentity(this, value);
+          if (!isEmptyish(projected)) output[key4] = projected;
+        } else this.drop("environment.external-identity");
+      } else if (["clock_skew_ms", "clockskewms"].includes(leaf) && (isNum(value) || isBool(value))) {
+        output[key4] = value;
+      } else if (["local_offset", "localoffset"].includes(leaf) && isStr(value)) {
+        if (fullmatch(OFFSET, value)) output[key4] = value;
+      } else this.drop("environment.unknown-key", true);
+    }
+    return output;
+  }
+  environmentComponent(kind2, value) {
+    if (!isDict(value)) return {};
+    const output = /* @__PURE__ */ Object.create(null);
+    const nullable3 = /* @__PURE__ */ new Set([
+      "name",
+      "version",
+      "build",
+      "architecture",
+      "platform",
+      "endpoint",
+      "url",
+      "transport",
+      "auth_mode",
+      "authmode",
+      "os"
+    ]);
+    for (const [key4, item] of Object.entries(value)) {
+      const leaf = key4.toLowerCase();
+      if (item === null && nullable3.has(leaf)) {
+        output[key4] = null;
+        continue;
+      }
+      if (leaf === "name" && isStr(item)) {
+        if (!item) output[key4] = null;
+        else if (["host", "server"].includes(kind2) && this.profile === "external" && item !== "unknown") {
+          output[key4] = fullmatch(ALIAS, item) ? item : this.identifier(item, kind2);
+        } else if (safeToken(item)) output[key4] = item;
+      } else if (["version", "build", "architecture", "platform"].includes(leaf)) {
+        if (isStr(item)) output[key4] = safeVersion(item) ? item : null;
+      } else if (["endpoint", "url"].includes(leaf) && isStr(item)) {
+        output[key4] = this.path(item);
+      } else if (["transport", "auth_mode", "authmode"].includes(leaf)) {
+        if (isStr(item)) output[key4] = safeToken(item) ? item : null;
+      } else if (leaf === "os") {
+        if (safeToken(item)) output[key4] = item;
+        else if (isDict(item)) {
+          const safeOs = /* @__PURE__ */ Object.create(null);
+          for (const osKey of ["name", "version", "architecture"]) {
+            const osValue = get2(item, osKey);
+            const valid2 = osKey === "name" ? safeToken : safeVersion;
+            if (osValue === null) safeOs[osKey] = null;
+            else if (valid2(osValue)) safeOs[osKey] = osValue;
+          }
+          output[key4] = safeOs;
+        }
+      } else this.drop("environment.unknown-component-key", true);
+    }
+    return output;
+  }
+  environmentTools(value) {
+    if (!isList(value)) return [];
+    const output = [];
+    for (const item of value) {
+      if (safeToken(item)) output.push({ name: item });
+      else if (isDict(item)) {
+        const tool = /* @__PURE__ */ Object.create(null);
+        for (const [key4, raw] of Object.entries(item)) {
+          if (!["name", "version", "schema_sha256"].includes(key4)) {
+            this.drop("environment.unknown-tool-key", true);
+            continue;
+          }
+          if (raw === null) {
+            tool[key4] = null;
+            continue;
+          }
+          if (key4 === "schema_sha256") {
+            if (isStr(raw) && /^[0-9a-fA-F]{64}$/.test(raw)) tool[key4] = raw.toLowerCase();
+            continue;
+          }
+          if (isStr(raw)) tool[key4] = (key4 === "name" ? safeToken : safeVersion)(raw) ? raw : null;
+        }
+        if (pyTruthy(get2(tool, "name"))) output.push(tool);
+      }
+    }
+    return output;
+  }
+  /** Project a probe record; result bodies never pass through. */
+  probe(source) {
+    const parsed = parseJsonString(source);
+    if (isList(parsed)) return parsed.map((item) => this.probe(item)).filter((item) => !isEmptyish(item));
+    if (!isDict(parsed)) return this.diagnostic(parsed);
+    const output = /* @__PURE__ */ Object.create(null);
+    for (const [key4, value] of Object.entries(parsed)) {
+      const leaf = key4.toLowerCase();
+      if (["timestamp", "ts", "collected_at"].includes(leaf) && isStr(value)) {
+        if (fullmatch(ISO_TIME, value)) output[key4] = value;
+      } else if (["tool", "name", "server", "method"].includes(leaf)) {
+        if (safeToken(value)) output[key4] = value;
+      } else if (PROTOCOL_KEYS.has(leaf)) {
+        const safe = projectProtocol(value);
+        if (safe !== null) output[key4] = safe;
+      } else if (STATUS_KEYS2.has(leaf) || CODE_KEYS.has(leaf) || REQUEST_ID_KEYS.has(leaf)) {
+        const projected = this.projectDiagnostic({ [key4]: value });
+        Object.assign(output, projected);
+      } else if (TIMING_KEYS.has(leaf) && (isNum(value) || isBool(value))) {
+        output[key4] = value;
+      } else if ([
+        "error",
+        "err",
+        "diagnostic",
+        "response",
+        "result",
+        "operations",
+        "batch",
+        "batchstatuses",
+        "batch_statuses"
+      ].includes(leaf)) {
+        const diagnostic2 = this.diagnostic(value);
+        if (diagnostic2 !== "" && diagnostic2 !== PLACEHOLDER_PAYLOAD) {
+          output[key4] = "[{".includes(diagnostic2.slice(0, 1)) ? pyLoads(diagnostic2) : diagnostic2;
+        }
+      } else if (["read_only", "readonly", "replayed"].includes(leaf) && isBool(value)) {
+        output[key4] = value;
+      } else this.drop("probe.unknown-field", true);
+    }
+    return output;
+  }
+  // -- report ------------------------------------------------------------
+  report(verification = null) {
+    const counted = (counter2) => [...counter2.keys()].sort(cmpStr).map((name) => `${name} (${counter2.get(name)})`);
+    return {
+      profile: this.profile,
+      rules_fired: [...this.fired.entries()].sort((a3, b) => b[1] - a3[1]).map(([rule, hits]) => ({ rule, class: this.classes.get(rule) ?? "unknown", hits })),
+      fields_dropped: counted(this.droppedFields),
+      unknown_fields_dropped: counted(this.unknownDropped),
+      pseudonyms: this.profile === "external" ? this.pseudo.distinct : {},
+      salt_stored: false,
+      semantic_redaction_certified: false,
+      limitations: [
+        "Finite scanners cannot establish that arbitrary prose is non-private.",
+        "Unreviewed narrative and unknown structured fields are omitted fail-closed.",
+        "Reviewed narrative records an operator assertion, not machine certification."
+      ],
+      verification: verification || {
+        ran: false,
+        passed: false,
+        findings: ["verification not run"],
+        scope: "known secret patterns and external identity patterns"
+      }
+    };
+  }
+};
+function parseJsonString(value) {
+  if (!isStr(value)) return value;
+  if (!["{", "["].includes(pyLstrip(value).slice(0, 1))) return value;
+  try {
+    return pyLoads(value);
+  } catch (error) {
+    if (error instanceof JsonDecodeError) return value;
+    throw error;
+  }
+}
+function selector2(value) {
+  const parts2 = value.split(",").map(pyStrip);
+  const safe = parts2.filter((part) => fullmatch("[A-Za-z_][A-Za-z0-9_./]*", part));
+  return safe.length && safe.length === parts2.length ? safe.join(",") : PLACEHOLDER_CONTENT;
+}
+function orderby(value) {
+  const parts2 = value.split(",").map(pyStrip);
+  const valid2 = parts2.every((part) => fullmatch(`[A-Za-z_][A-Za-z0-9_./]*(?:${S3}+(?:asc|desc))?`, part, "iu"));
+  return valid2 ? parts2.join(",") : PLACEHOLDER_CONTENT;
+}
+function odataParts(value, delimiter) {
+  const parts2 = [];
+  let start = 0;
+  let depth = 0;
+  let quote = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote) {
+      if (char === quote) {
+        if (value[index + 1] === quote) index += 1;
+        else quote = null;
+      }
+    } else if (char === "'" || char === '"') quote = char;
+    else if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth < 0) throw new SyntaxError("unbalanced OData clause");
+    } else if (char === delimiter && depth === 0) {
+      parts2.push(pyStrip(value.slice(start, index)));
+      start = index + 1;
+    }
+  }
+  if (depth || quote) throw new SyntaxError("unbalanced OData clause");
+  parts2.push(pyStrip(value.slice(start)));
+  return parts2;
+}
+function odataFilter(value) {
+  return value.replace(ODATA_PATTERNS.quoted, PLACEHOLDER_LITERAL).replace(GUID2, PLACEHOLDER_LITERAL).replace(ODATA_PATTERNS.comparison, (_2, lead) => lead + PLACEHOLDER_LITERAL).replace(ODATA_PATTERNS.inList, (_2, lead) => `${lead}(${PLACEHOLDER_LITERAL})`).replace(ODATA_PATTERNS.textFunction, (_2, lead) => lead + PLACEHOLDER_LITERAL).replace(ODATA_PATTERNS.longToken, PLACEHOLDER_LITERAL);
+}
+function projectStatus(value) {
+  if (isBool(value)) return null;
+  if (isNum(value)) {
+    const number3 = num(value);
+    return number3 >= 100 && number3 <= 599 && Number.isFinite(number3) && Number.isInteger(number3) ? number3 : null;
+  }
+  const text6 = pyStr(value);
+  if (fullmatch(`${D2}{3}`, text6) || ["ok", "fail", "failed", "error", "unknown", "success"].includes(text6.toLowerCase())) {
+    return text6;
+  }
+  return null;
+}
+function projectCode(value) {
+  if (isBool(value) || !(isStr(value) || isInt(value))) return null;
+  const text6 = pyStr(value);
+  return safeToken(text6) || fullmatch(`-?${D2}{1,10}`, text6) ? text6 : null;
+}
+function projectProtocol(value) {
+  if (isBool(value) || isNum(value)) return value;
+  const text6 = pyStr(value);
+  return safeToken(text6) ? text6 : null;
+}
+function environmentIdentity(redactor, value) {
+  if (isStr(value) || isInt(value) || isBool(value)) return value;
+  if (!isDict(value)) return null;
+  const allowed = /* @__PURE__ */ new Set([
+    "id",
+    "tenantid",
+    "tenant_id",
+    "upn",
+    "userprincipalname",
+    "name",
+    "object_id",
+    "objectid",
+    "region"
+  ]);
+  const output = /* @__PURE__ */ Object.create(null);
+  for (const [key4, item] of Object.entries(value)) {
+    if (allowed.has(key4.toLowerCase()) && (isStr(item) || isInt(item) || isBool(item) || item === null)) {
+      output[key4] = item;
+    } else redactor.drop("environment.unknown-identity-key", true);
+  }
+  return output;
+}
+function* verificationPatterns(profile) {
+  for (const [name, pattern2] of SECRET_RULES) yield [name, "secret", pattern2];
+  if (profile === "external") {
+    yield ["email", "identifying", EMAIL];
+    yield ["guid", "identifying", GUID2];
+    yield ["opaque-id", "identifying", OPAQUE_ID];
+    yield ["tenant-host", "identifying", TENANT_HOST];
+  }
+}
+function verify(texts, profile) {
+  if (!PROFILES.includes(profile)) throw new Error(`profile must be one of ${PROFILES.join(", ")}`);
+  const findings = [];
+  for (const [filename2, body] of Object.entries(texts)) {
+    if (!isStr(body)) throw new TypeError("verification bodies must be strings");
+    for (const [name, cls, pattern2] of verificationPatterns(profile)) {
+      for (const match of body.matchAll(pattern2)) {
+        const at2 = cpLen(body.slice(0, match.index));
+        findings.push({ file: filename2, rule: name, class: cls, at: at2, excerpt: excerpt(body, at2) });
+      }
+    }
+  }
+  return {
+    ran: true,
+    passed: !findings.length,
+    findings,
+    finding_count: findings.length,
+    scope: "known secret patterns and external identity patterns; not semantic privacy certification"
+  };
+}
+var excerpt = (body, at2, span = 24) => `${cpSlice(body, Math.max(0, at2 - span), at2)}<<<HIT>>>`;
+
+// lib/mcp-diagnostics/zip.mjs
+import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
+var LOCAL = 67324752;
+var CENTRAL = 33639248;
+var END = 101010256;
+var UTF8_FLAG = 2048;
+var STORED = 0;
+var DEFLATED = 8;
+var ZipError = class extends Error {
+};
+function dosDateTime(date2) {
+  if (date2.getUTCFullYear() < 1980) return [0, 1 << 5 | 1];
+  const time2 = date2.getUTCHours() << 11 | date2.getUTCMinutes() << 5 | date2.getUTCSeconds() >> 1;
+  const day2 = date2.getUTCFullYear() - 1980 << 9 | date2.getUTCMonth() + 1 << 5 | date2.getUTCDate();
+  return [time2, day2];
+}
+function createZip(entries3, { date: date2 = new Date(Date.UTC(1980, 0, 1)), mode = 33152 } = {}) {
+  const [time2, day2] = dosDateTime(date2);
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const { name, data, mode: entryMode = mode } of entries3) {
+    const nameBytes = Buffer.from(name, "utf8");
+    const body = Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8");
+    const compressed = deflateRawSync(body);
+    const checksum = crc32(body);
+    const flags = /^[\x00-\x7f]*$/.test(name) ? 0 : UTF8_FLAG;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(LOCAL, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(flags, 6);
+    local.writeUInt16LE(DEFLATED, 8);
+    local.writeUInt16LE(time2, 10);
+    local.writeUInt16LE(day2, 12);
+    local.writeUInt32LE(checksum, 14);
+    local.writeUInt32LE(compressed.length, 18);
+    local.writeUInt32LE(body.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(CENTRAL, 0);
+    central.writeUInt16LE(3 << 8 | 20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(flags, 8);
+    central.writeUInt16LE(DEFLATED, 10);
+    central.writeUInt16LE(time2, 12);
+    central.writeUInt16LE(day2, 14);
+    central.writeUInt32LE(checksum, 16);
+    central.writeUInt32LE(compressed.length, 20);
+    central.writeUInt32LE(body.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt32LE(entryMode << 16 >>> 0, 38);
+    central.writeUInt32LE(offset, 42);
+    locals.push(local, nameBytes, compressed);
+    centrals.push(central, nameBytes);
+    offset += local.length + nameBytes.length + compressed.length;
+  }
+  const directory2 = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(END, 0);
+  end.writeUInt16LE(entries3.length, 8);
+  end.writeUInt16LE(entries3.length, 10);
+  end.writeUInt32LE(directory2.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory2, end]);
+}
+var decodeName = (bytes2, flags) => {
+  const name = bytes2.toString(flags & UTF8_FLAG ? "utf8" : "latin1");
+  const nul = name.indexOf("\0");
+  return nul >= 0 ? name.slice(0, nul) : name;
+};
+function findEnd(buffer) {
+  const floor = Math.max(0, buffer.length - 22 - 65535);
+  for (let index = buffer.length - 22; index >= floor; index -= 1) {
+    if (buffer.readUInt32LE(index) === END && index + 22 + buffer.readUInt16LE(index + 20) <= buffer.length) return index;
+  }
+  throw new ZipError("File is not a zip file");
+}
+function listEntries(buffer, { maxEntries = Infinity } = {}) {
+  if (buffer.length < 22) throw new ZipError("File is not a zip file");
+  const endAt = findEnd(buffer);
+  if (buffer.readUInt16LE(endAt + 4) !== 0 || buffer.readUInt16LE(endAt + 6) !== 0) {
+    throw new ZipError("zipfiles that span multiple disks are not supported");
+  }
+  const size = buffer.readUInt32LE(endAt + 12);
+  const start = buffer.readUInt32LE(endAt + 16);
+  if (buffer.readUInt16LE(endAt + 10) === 65535 || size === 4294967295 || start === 4294967295) {
+    throw new ZipError("ZIP64 archives are not supported");
+  }
+  const concat = endAt - size - start;
+  if (concat < 0) throw new ZipError("Bad offset for central directory");
+  const entries3 = [];
+  let position = start + concat;
+  const limit = position + size;
+  while (position < limit) {
+    if (position + 46 > buffer.length || buffer.readUInt32LE(position) !== CENTRAL) {
+      throw new ZipError("Bad magic number for central directory");
+    }
+    if (entries3.length >= maxEntries) throw new ZipError("Too many archive members");
+    const flags = buffer.readUInt16LE(position + 8);
+    const nameLength = buffer.readUInt16LE(position + 28);
+    const extraLength = buffer.readUInt16LE(position + 30);
+    const commentLength = buffer.readUInt16LE(position + 32);
+    const compressedSize = buffer.readUInt32LE(position + 20);
+    const fileSize = buffer.readUInt32LE(position + 24);
+    if (compressedSize === 4294967295 || fileSize === 4294967295) throw new ZipError("ZIP64 archives are not supported");
+    const nameBytes = buffer.subarray(position + 46, position + 46 + nameLength);
+    const externalAttr = buffer.readUInt32LE(position + 38);
+    const name = decodeName(nameBytes, flags);
+    entries3.push({
+      name,
+      nameBytes,
+      flags,
+      method: buffer.readUInt16LE(position + 10),
+      crc: buffer.readUInt32LE(position + 16),
+      compressedSize,
+      size: fileSize,
+      externalAttr,
+      mode: externalAttr >>> 16,
+      headerOffset: buffer.readUInt32LE(position + 42) + concat,
+      isDir: name.endsWith("/")
+    });
+    position += 46 + nameLength + extraLength + commentLength;
+  }
+  return entries3;
+}
+function readEntry(buffer, entry3, { maxBytes = Infinity } = {}) {
+  if (entry3.flags & 1) throw new ZipError("Encrypted archives are unsupported");
+  const at2 = entry3.headerOffset;
+  if (at2 + 30 > buffer.length || buffer.readUInt32LE(at2) !== LOCAL) throw new ZipError("Bad magic number for file header");
+  const nameLength = buffer.readUInt16LE(at2 + 26);
+  const extraLength = buffer.readUInt16LE(at2 + 28);
+  if (!buffer.subarray(at2 + 30, at2 + 30 + nameLength).equals(entry3.nameBytes)) {
+    throw new ZipError("File name in directory and header differ");
+  }
+  const dataStart = at2 + 30 + nameLength + extraLength;
+  if (dataStart + entry3.compressedSize > buffer.length) throw new ZipError("Truncated archive member");
+  const raw = buffer.subarray(dataStart, dataStart + entry3.compressedSize);
+  const cap = Math.min(entry3.size, maxBytes) + 1;
+  let body;
+  if (entry3.method === STORED) body = raw;
+  else if (entry3.method === DEFLATED) {
+    try {
+      body = inflateRawSync(raw, { maxOutputLength: Math.max(cap, 1) });
+    } catch {
+      throw new ZipError("Archive size mismatch");
+    }
+  } else throw new ZipError("Unsupported archive compression");
+  if (body.length !== entry3.size || body.length > maxBytes) throw new ZipError("Archive size mismatch");
+  if (crc32(body) !== entry3.crc) throw new ZipError(`Bad CRC-32 for file ${JSON.stringify(entry3.name)}`);
+  return Buffer.from(body);
+}
+function posixParts(name) {
+  let root = "";
+  if (name.startsWith("//") && !name.startsWith("///")) root = "//";
+  else if (name.startsWith("/")) root = "/";
+  const parts2 = name.split("/").filter((part) => part && part !== ".");
+  return { parts: root ? [root, ...parts2] : parts2, absolute: Boolean(root) };
+}
+var S_IFMT = 61440;
+var S_IFREG = 32768;
+var S_IFDIR = 16384;
+
+// lib/mcp-diagnostics/collect.mjs
+var COLLECTOR_VERSION = "2.1.0";
+var SCHEMA_VERSION2 = 2;
+var LIVE_WINDOW_DAYS = 14;
+var MAX_FILE_BYTES = 16 * 1024 * 1024;
+var MAX_BUNDLE_BYTES = 64 * 1024 * 1024;
+var CAPTURE_SCOPES = ["complete", "failures-only", "sample"];
+var OUTCOMES4 = ["ok", "fail", "unknown"];
+var VERDICTS = /* @__PURE__ */ new Set([
+  "unclassified",
+  "test-probe",
+  "caller-error",
+  "product-bug",
+  "contract-gap",
+  "by-design",
+  "client-side",
+  "infra-transient",
+  "fixed-since",
+  "not-reproduced-now"
+]);
+var RW_CLASSES = /* @__PURE__ */ new Set(["read", "write", "unknown-treat-as-write"]);
+var REPRO_DISPOSITIONS = /* @__PURE__ */ new Set([
+  "not-attempted",
+  "not-attempted-unsafe",
+  "not-attempted-no-input",
+  "inconclusive",
+  "not-reproduced-now"
+]);
+var ALIASES = {
+  ts: ["ts", "timestamp", "time", "started_at", "created_at"],
+  session_id: ["session_id", "session", "sessionid", "conversation_id"],
+  call_id: ["call_id", "tool_call_id", "tool_complete_call_id", "id"],
+  tool: ["tool", "name", "tool_name", "tool_start_name"],
+  args: ["args", "arguments_json", "arguments", "input", "params"],
+  error: ["error", "err", "tool_complete_error_message", "error_message"],
+  result: ["result", "tool_complete_result_content", "output", "content", "body"],
+  success: ["success", "tool_complete_success", "ok", "is_success"],
+  duration_ms: ["duration_ms", "duration", "elapsed_ms", "latency_ms"]
+};
+var SAFE_FRAME_IDENTIFIER = "[A-Za-z0-9._:/+=-]{1,1024}";
+var SAFE_ALIAS = `<[A-Za-z0-9_-]+-${D2}+:[0-9a-f]{4,64}>`;
+var SAFE_SLUG = "[a-z0-9][a-z0-9-]{0,47}";
+var ISO_DAY2 = new RegExp(`^(${D2}{4}-${D2}{2}-${D2}{2})`, "u");
+var SAFE_PREDICATE = "[A-Za-z][A-Za-z0-9_.:-]*(?:=[A-Za-z0-9_.:-]+)?";
+var SAFE_TOOL = "[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}";
+var SAFE_SERVER = "[A-Za-z0-9][A-Za-z0-9._:-]{0,199}";
+var SAFE_ADAPTER = "[A-Za-z0-9][A-Za-z0-9._:-]{0,63}";
+var SAFE_CODE = "[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}";
+var SAFE_OPERATION_PATH = `\\$(?:(?:\\.(?:[A-Za-z0-9_-]{1,80}|\\*))|(?:\\[${D2}{1,9}\\])){0,32}`;
+var matches3 = (pattern2, value) => isStr(value) && Boolean(fullmatch(pattern2, value));
+var safeIdentifier = (value) => matches3(SAFE_FRAME_IDENTIFIER, value) || matches3(SAFE_ALIAS, value);
+var InputError = class extends Error {
+  constructor(message, { exitCode = 2, details = [] } = {}) {
+    super(message);
+    this.name = "InputError";
+    this.exitCode = exitCode;
+    this.details = details;
+  }
+};
+var RedactionGateError = class extends Error {
+  constructor(verification) {
+    super(`REDACTION VERIFICATION FAILED \u2014 ${verification.finding_count} finding(s). Bundle NOT written.`);
+    this.name = "RedactionGateError";
+    this.exitCode = 3;
+    this.verification = verification;
+  }
+};
+var isContainer3 = (value) => isDict(value) || isList(value);
+var get3 = (object16, key4, fallback = null) => Object.hasOwn(object16, key4) ? object16[key4] : fallback;
+var casefold = (value) => value.toUpperCase().toLowerCase();
+var isBlank = (value) => value === null || value === void 0 || value === "";
+var unique6 = (values) => [...new Set(values.filter(Boolean))];
+var sum = (values) => values.reduce((total, value) => total + value, 0);
+var counter = () => /* @__PURE__ */ new Map();
+var bump = (map, key4, by = 1) => map.set(key4, (map.get(key4) ?? 0) + by);
+var sortedEntries = (map) => Object.fromEntries(sortStrings(map.keys()).map((key4) => [key4, map.get(key4)]));
+var mostCommon = (map) => [...map.entries()].sort((a3, b) => b[1] - a3[1]);
+var loadsOptions = {
+  duplicates: "error",
+  constants: "error",
+  duplicateError: (key4) => new InputError(`duplicate JSON key ${pyRepr(key4)}`),
+  constantError: (name) => new InputError(`non-finite JSON number ${name}`)
+};
+var jsonLoads = (text6) => pyLoads(text6, loadsOptions);
+var sortedJson = (value) => pyDumps(value, { sortKeys: true, ensureAscii: false, separators: [",", ":"], allowNan: false });
+function stringify2(value) {
+  if (value === null || value === void 0 || value === false) return "";
+  if (isContainer3(value)) {
+    try {
+      return pyDumps(value, { ensureAscii: false, separators: [",", ":"], allowNan: false });
+    } catch {
+      throw new InputError("value is not strict JSON");
+    }
+  }
+  return pyStr(value);
+}
+function errorPresent(value) {
+  if (value === null || value === void 0 || value === false) return false;
+  if (isStr(value)) return Boolean(pyStrip(value));
+  return isContainer3(value) || isNum(value) ? pyTruthy(value) : true;
+}
+function normaliseAliasValue(field, value) {
+  if (field === "error" && !errorPresent(value)) return ["empty", null];
+  if (field !== "error" && isBlank(value)) return ["empty", null];
+  if (field === "success") {
+    if (isBool(value)) return ["success", value];
+    if (isStr(value) && ["true", "false"].includes(pyStrip(value).toLowerCase())) {
+      return ["success", pyStrip(value).toLowerCase() === "true"];
+    }
+    if (isNum(value) && (pyEq(value, 0) || pyEq(value, 1))) return ["success", num(value) !== 0];
+    return ["invalid", typeName(value), cpSlice(pyRepr(value), 0, 80)];
+  }
+  if (["args", "error", "result"].includes(field)) {
+    if (isContainer3(value)) {
+      try {
+        return ["json", sortedJson(value)];
+      } catch {
+        throw new InputError(`${field} contains a non-JSON value`);
+      }
+    }
+    if (isStr(value)) {
+      const stripped = pyStrip(value);
+      if ("[{".includes(stripped.slice(0, 1))) {
+        try {
+          return ["json", sortedJson(jsonLoads(stripped))];
+        } catch {
+        }
+      }
+      return ["text", stripped];
+    }
+    return ["scalar", typeName(value), value];
+  }
+  if (["session_id", "call_id", "tool"].includes(field)) return ["text", pyStr(value)];
+  if (field === "duration_ms") return ["number", value];
+  return [typeName(value), value];
+}
+function pick(row, field) {
+  const aliases = new Map(ALIASES[field].map((alias, index) => [casefold(alias), index]));
+  const found = Object.entries(row).filter(([key4]) => aliases.has(casefold(key4))).map(([key4, value]) => [aliases.get(casefold(key4)), key4, value]).sort((a3, b) => a3[0] - b[0]);
+  if (!found.length) return null;
+  const normalized = found.map(([, name, value]) => [normaliseAliasValue(field, value), name, value]);
+  if (normalized.slice(1).some(([canonical2]) => !pyEq(canonical2, normalized[0][0]))) {
+    throw new InputError(`conflicting aliases for ${field}: ${normalized.map(([, name]) => name).join(", ")}`);
+  }
+  const chosen = normalized.find(([canonical2]) => canonical2[0] !== "empty");
+  return chosen ? chosen[2] : normalized[0][2];
+}
+function present3(row, ...names) {
+  const wanted = new Set(names.map(casefold));
+  const found = Object.entries(row).filter(([key4]) => wanted.has(casefold(key4)));
+  if (!found.length) return [false, null];
+  const canonical2 = found.map(([, value]) => {
+    try {
+      return sortedJson(value);
+    } catch {
+      throw new InputError(`${names.join("/")} contains a non-JSON value`);
+    }
+  });
+  if (canonical2.slice(1).some((value) => value !== canonical2[0])) {
+    throw new InputError(`conflicting aliases for ${names.join("/")}`);
+  }
+  return [true, found[0][1]];
+}
+var MONTH_DAYS2 = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+var daysIn = (year, month) => MONTH_DAYS2[month - 1] + (month === 2 && year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 1 : 0);
+function validDateTime(parts2) {
+  const { year, month, day: day2, hour = 0, minute = 0, second = 0 } = parts2;
+  return year >= 1 && year <= 9999 && month >= 1 && month <= 12 && day2 >= 1 && day2 <= daysIn(year, month) && hour <= 23 && minute <= 59 && second <= 59;
+}
+function parseHms(text6, start, end) {
+  const values = [0, 0, 0];
+  let position = start;
+  let micro = 0;
+  for (let index = 0; index < 3; index += 1) {
+    const digits2 = text6.slice(position, position + 2);
+    if (!/^[0-9]{2}$/.test(digits2)) return null;
+    values[index] = Number(digits2);
+    position += 2;
+    const char = position < text6.length ? text6[position] : "\0";
+    position += 1;
+    if (position >= end) return { values, micro, more: char !== "\0" };
+    if (char === ":") continue;
+    if (char === ".") break;
+    return null;
+  }
+  const remains = end - position;
+  if (remains !== 3 && remains !== 6) return null;
+  const digits = text6.slice(position, end);
+  if (!/^[0-9]+$/.test(digits)) return null;
+  micro = Number(digits) * (remains === 3 ? 1e3 : 1);
+  return { values, micro, more: end < text6.length };
+}
+function fromIsoformat(text6) {
+  const codePoints = Array.from(text6);
+  const date2 = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(codePoints.slice(0, 10).join(""));
+  if (!date2) return null;
+  const parts2 = { year: +date2[1], month: +date2[2], day: +date2[3], offset: null, offsetMicro: 0, micro: 0 };
+  if (codePoints.length > 10) {
+    const rest = codePoints.slice(11).join("");
+    const signAt = rest.search(/[+-]/);
+    const end = signAt < 0 ? rest.length : signAt;
+    const time2 = parseHms(rest, 0, end);
+    if (!time2 || signAt < 0 && time2.more) return null;
+    [parts2.hour, parts2.minute, parts2.second] = time2.values;
+    parts2.micro = time2.micro;
+    if (signAt >= 0) {
+      if (![6, 9, 16].includes(rest.length - signAt)) return null;
+      const zone = parseHms(rest, signAt + 1, rest.length);
+      if (!zone || zone.more) return null;
+      const sign = rest[signAt] === "-" ? -1 : 1;
+      parts2.offset = sign * (zone.values[0] * 3600 + zone.values[1] * 60 + zone.values[2]);
+      parts2.offsetMicro = sign * zone.micro;
+      if (Math.abs(parts2.offset + parts2.offsetMicro / 1e6) >= 86400) return null;
+    }
+  }
+  return validDateTime(parts2) ? parts2 : null;
+}
+var MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+var STRPTIME_DIRECTIVES = {
+  Y: `(${D2}${D2}${D2}${D2})`,
+  m: `(1[0-2]|0[1-9]|[1-9])`,
+  d: `(3[01]|[12]${D2}|0[1-9]|[1-9]| [1-9])`,
+  H: `(2[0-3]|[0-1]${D2}|${D2})`,
+  M: `([0-5]${D2}|${D2})`,
+  S: `(6[0-1]|[0-5]${D2}|${D2})`,
+  f: "([0-9]{1,6})",
+  b: `((?i:${MONTHS.join("|")}))`,
+  z: `([+-]${D2}${D2}:?[0-5]${D2}(?::?[0-5]${D2}(?:\\.${D2}{1,6})?)?|Z)`
+};
+var STRPTIME_FORMATS = [
+  "%d/%b/%Y:%H:%M:%S %z",
+  "%Y-%m-%d %H:%M:%S.%f%z",
+  "%Y-%m-%d %H:%M:%S%z",
+  "%Y-%m-%d %H:%M:%S %z",
+  "%Y/%m/%d %H:%M:%S.%f%z",
+  "%Y/%m/%d %H:%M:%S%z",
+  "%Y/%m/%d %H:%M:%S %z",
+  "%Y-%m-%d %H:%M:%S",
+  "%Y-%m-%d %H:%M:%S.%f",
+  "%Y/%m/%d %H:%M:%S"
+].map((format) => {
+  const names = [];
+  const source = format.replace(/%(.)|(\s+)|([.^$*+?(){}[\]|\\/])/g, (_2, directive, space, literal2) => {
+    if (directive) {
+      names.push(directive);
+      return STRPTIME_DIRECTIVES[directive];
+    }
+    return space ? `${S3}+` : `\\${literal2}`;
+  });
+  return { names, pattern: new RegExp(`^${source}`, "u") };
+});
+function strptime(text6) {
+  for (const { names, pattern: pattern2 } of STRPTIME_FORMATS) {
+    const match = pattern2.exec(text6);
+    if (!match || match[0].length !== text6.length) continue;
+    const parts2 = { hour: 0, minute: 0, second: 0, micro: 0, offset: null, offsetMicro: 0 };
+    let valid2 = true;
+    names.forEach((name, index) => {
+      const value = match[index + 1];
+      if (name === "Y") parts2.year = pyInt(value);
+      else if (name === "m") parts2.month = pyInt(value);
+      else if (name === "d") parts2.day = pyInt(pyStrip(value));
+      else if (name === "b") parts2.month = MONTHS.indexOf(value.toLowerCase()) + 1;
+      else if (name === "H") parts2.hour = pyInt(value);
+      else if (name === "M") parts2.minute = pyInt(value);
+      else if (name === "S") parts2.second = pyInt(value);
+      else if (name === "f") parts2.micro = Number(value.padEnd(6, "0"));
+      else if (name === "z") {
+        if (value === "Z") {
+          parts2.offset = 0;
+          return;
+        }
+        let zone = value;
+        if (zone[3] === ":") {
+          zone = zone.slice(0, 3) + zone.slice(4);
+          if (cpLen(zone) > 5) {
+            if (zone[5] !== ":") valid2 = false;
+            zone = zone.slice(0, 5) + zone.slice(6);
+          }
+        }
+        const sign = zone[0] === "-" ? -1 : 1;
+        const seconds = pyInt(cpSlice(zone, 1, 3)) * 3600 + pyInt(cpSlice(zone, 3, 5)) * 60 + (cpSlice(zone, 5, 7) ? pyInt(cpSlice(zone, 5, 7)) : 0);
+        const remainder = cpSlice(zone, 8);
+        parts2.offset = sign * seconds;
+        parts2.offsetMicro = sign * (remainder ? pyInt(remainder.padEnd(6, "0")) : 0);
+        if (Math.abs(parts2.offset + parts2.offsetMicro / 1e6) >= 86400) valid2 = false;
+      }
+    });
+    if (valid2 && validDateTime(parts2)) return parts2;
+  }
+  return null;
+}
+function parseAssumedOffset(value) {
+  if (value === null || value === void 0) return null;
+  const raw = pyStrip(String(value));
+  if (raw.toUpperCase() === "Z") return 0;
+  const match = fullmatch(`([+-])(${D2}{2}):?(${D2}{2})`, raw);
+  if (!match) throw new InputError("--assume-offset must be Z or \xB1HH:MM");
+  const [hours, minutes] = [pyInt(match[2]), pyInt(match[3])];
+  if (hours > 23 || minutes > 59) throw new InputError("--assume-offset is outside the valid UTC offset range");
+  return (match[1] === "-" ? -1 : 1) * (hours * 60 + minutes) * 60;
+}
+var pad = (value, width = 2) => String(value).padStart(width, "0");
+function formatOffset(seconds) {
+  const total = Math.abs(Math.trunc(seconds / 60));
+  return `${seconds >= 0 ? "+" : "-"}${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+}
+function strftimeZ(seconds, micro) {
+  let totalMicro = seconds * 1e6 + micro;
+  const sign = totalMicro < 0 ? "-" : "+";
+  totalMicro = Math.abs(totalMicro);
+  const whole = Math.floor(totalMicro / 1e6);
+  const rest = totalMicro % 1e6;
+  let out = `${sign}${pad(Math.floor(whole / 3600))}${pad(Math.floor(whole / 60) % 60)}`;
+  if (whole % 60 || rest) out += pad(whole % 60);
+  if (rest) out += `.${pad(rest, 6)}`;
+  return out;
+}
+function utcFields(parts2) {
+  const base = /* @__PURE__ */ new Date(0);
+  base.setUTCFullYear(parts2.year, parts2.month - 1, parts2.day);
+  base.setUTCHours(parts2.hour ?? 0, parts2.minute ?? 0, parts2.second ?? 0, 0);
+  let micro = (parts2.micro ?? 0) - (parts2.offsetMicro ?? 0);
+  let seconds = base.getTime() / 1e3 - (parts2.offset ?? 0) + Math.floor(micro / 1e6);
+  micro = (micro % 1e6 + 1e6) % 1e6;
+  const date2 = new Date(seconds * 1e3);
+  if (date2.getUTCFullYear() < 1 || date2.getUTCFullYear() > 9999) return null;
+  return { date: date2, micro };
+}
+var stamp3 = (date2) => `${pad(date2.getUTCFullYear(), 4)}-${pad(date2.getUTCMonth() + 1)}-${pad(date2.getUTCDate())}T${pad(date2.getUTCHours())}:${pad(date2.getUTCMinutes())}:${pad(date2.getUTCSeconds())}`;
+function toUtc(raw, assumeOffset = null) {
+  if (raw === null || raw === void 0 || isStr(raw) && !pyStrip(raw)) return [null, null];
+  if (!(isStr(raw) || isNum(raw) || isBool(raw))) throw new InputError("timestamp must be a string, number, or null");
+  const source = pyStrip(pyStr(raw));
+  let iso = /[Zz]$/.test(source) ? `${source.slice(0, -1)}+00:00` : source;
+  const compact = fullmatch(
+    `(${D2}{4}-${D2}{2}-${D2}{2}[T ]${D2}{2}:${D2}{2}(?::${D2}{2}(?:\\.${D2}+)?)?)([+-]${D2}{2})(${D2}{2})?`,
+    iso
+  );
+  if (compact) iso = `${compact[1]}${compact[2]}:${compact[3] ?? "00"}`;
+  const parsed = fromIsoformat(iso) ?? strptime(source);
+  if (!parsed) throw new InputError(`invalid timestamp ${pyRepr(source)}`);
+  let originalOffset;
+  if (parsed.offset === null) {
+    const assumed = parseAssumedOffset(assumeOffset);
+    if (assumed === null) throw new InputError(`naive timestamp ${pyRepr(source)} requires --assume-offset`);
+    parsed.offset = assumed;
+    originalOffset = formatOffset(assumed);
+  } else {
+    const sourceOffset = new RegExp(`([+-]${D2}{2})(?::?(${D2}{2}))?$`, "u").exec(source);
+    originalOffset = sourceOffset ? `${sourceOffset[1]}:${sourceOffset[2] ?? "00"}` : strftimeZ(parsed.offset, parsed.offsetMicro);
+    if (originalOffset && !originalOffset.includes(":")) {
+      originalOffset = `${cpSlice(originalOffset, 0, 3)}:${cpSlice(originalOffset, 3)}`;
+    }
+  }
+  const utc = utcFields(parsed);
+  if (!utc) throw new InputError(`invalid timestamp ${pyRepr(source)}`);
+  return [`${stamp3(utc.date)}.${pad(Math.floor(utc.micro / 1e3), 3)}Z`, originalOffset];
+}
+function parseUtcStamp(value) {
+  if (!isStr(value)) return null;
+  const parts2 = fromIsoformat(value.replaceAll("Z", "+00:00"));
+  if (!parts2) return null;
+  const utc = utcFields(parts2);
+  return utc ? utc.date.getTime() + utc.micro / 1e3 : null;
+}
+function canonicalOutcome(row, errorValue) {
+  const [hasOutcome, supplied] = present3(row, "outcome");
+  const success = pick(row, "success");
+  let successOutcome = null;
+  if (isBool(success)) successOutcome = success ? "ok" : "fail";
+  else if (isStr(success) && ["true", "false"].includes(pyStrip(success).toLowerCase())) {
+    successOutcome = pyStrip(success).toLowerCase() === "true" ? "ok" : "fail";
+  } else if (isNum(success)) {
+    if (!Number.isFinite(num(success)) || !(pyEq(success, 0) || pyEq(success, 1))) {
+      throw new InputError("numeric success values must be finite 0 or 1");
+    }
+    successOutcome = num(success) ? "ok" : "fail";
+  } else if (success !== null && success !== void 0) {
+    throw new InputError("success must be boolean, 0/1, true/false, or null");
+  }
+  if (hasOutcome) {
+    if (!isStr(supplied) || !OUTCOMES4.includes(supplied.toLowerCase())) {
+      throw new InputError("outcome must be ok, fail, or unknown");
+    }
+    const outcome5 = supplied.toLowerCase();
+    if (successOutcome !== null && outcome5 !== successOutcome) throw new InputError("outcome conflicts with success");
+    return outcome5;
+  }
+  if (successOutcome !== null) return successOutcome;
+  return errorPresent(errorValue) ? "fail" : "unknown";
+}
+function strictStatus(value, label) {
+  if (isBlank(value)) return null;
+  let status4;
+  if (isBool(value) || isFloat(value)) throw new InputError(`${label} must be a three-digit integer or null`);
+  if (isInt(value)) status4 = Number(value);
+  else if (isStr(value) && fullmatch(`${D2}{3}`, pyStrip(value))) status4 = pyInt(pyStrip(value));
+  else throw new InputError(`${label} must be a three-digit integer or null`);
+  if (status4 < 100 || status4 > 599) throw new InputError(`${label} must be between 100 and 599`);
+  return status4;
+}
+function typedStatus(row) {
+  const values = [];
+  const names = [];
+  for (const [name, value] of Object.entries(row)) {
+    if (["status_code", "statuscode"].includes(casefold(name)) && !isBlank(value)) {
+      values.push(strictStatus(value, name));
+      names.push(name);
+    }
+  }
+  if (new Set(values).size > 1) throw new InputError(`conflicting status aliases: ${names.join(", ")}`);
+  return values.length ? values[0] : null;
+}
+function typedString(row, name) {
+  const [found, value] = present3(row, name);
+  if (!found || isBlank(value)) return null;
+  if (!isStr(value)) throw new InputError(`${name} must be a string or null`);
+  return value;
+}
+function typedIdentifier(value, name) {
+  if (isBlank(value)) return null;
+  if (isBool(value) || !(isStr(value) || isInt(value))) throw new InputError(`${name} must be a string, integer, or null`);
+  const text6 = pyStr(value);
+  if (!safeIdentifier(text6)) throw new InputError(`${name} is invalid or too long`);
+  return text6;
+}
+function typedStringList(row, name) {
+  const [found, value] = present3(row, name);
+  if (!found) return null;
+  if (value === null) return [];
+  if (!isList(value) || value.some((item) => !isStr(item) || !item || cpLen(item) > 1024)) {
+    throw new InputError(`${name} must be an array of strings`);
+  }
+  return [...value];
+}
+function adaptOperation(item, index) {
+  if (!isDict(item)) throw new InputError("operation diagnostics must be objects");
+  const path32 = get3(item, "path", `$.operations[${index}]`);
+  if (!matches3(SAFE_OPERATION_PATH, path32)) throw new InputError("operation path must be a bounded string");
+  const outcome5 = get3(item, "outcome", "unknown");
+  if (!isStr(outcome5) || !OUTCOMES4.includes(outcome5.toLowerCase())) {
+    throw new InputError("operation outcome must be ok, fail, or unknown");
+  }
+  const status4 = strictStatus(get3(item, "status_code"), "operation.status_code");
+  let errorCode = get3(item, "error_code");
+  if (isBlank(errorCode)) errorCode = null;
+  else if (!matches3(SAFE_CODE, errorCode)) throw new InputError("operation.error_code must be a bounded diagnostic token");
+  const requestIds = get3(item, "request_ids", []);
+  if (!isList(requestIds) || requestIds.some((value) => !safeIdentifier(value))) {
+    throw new InputError("operation.request_ids must be an array of identifiers");
+  }
+  return {
+    path: path32,
+    outcome: outcome5.toLowerCase(),
+    status_code: status4,
+    error_code: errorCode,
+    request_ids: [...requestIds],
+    _diagnostic_raw: get3(item, "diagnostic", "")
+  };
+}
+function scanPayloads(errorValue, resultValue) {
+  const predicates = [];
+  const operations = [];
+  const metadata3 = /* @__PURE__ */ new Map();
+  const modes = counter();
+  const limits3 = [];
+  let inconclusive = false;
+  let bodyAvailable = false;
+  for (const [source, value] of [["error", errorValue], ["result", resultValue]]) {
+    const body = stringify2(value);
+    if (!body) continue;
+    const analysis = diagnosticAnalysis(body, source);
+    bodyAvailable = bodyAvailable || analysis.body_available;
+    predicates.push(...analysis.predicates);
+    inconclusive = inconclusive || analysis.inconclusive;
+    bump(modes, analysis.scan_mode);
+    limits3.push(analysis.limits);
+    for (const [key4, values] of Object.entries(analysis.metadata)) {
+      if (!metadata3.has(key4)) metadata3.set(key4, []);
+      metadata3.get(key4).push(...values);
+    }
+    const base = operations.length;
+    analysis.operations.forEach((operation, index) => operations.push(adaptOperation(operation, base + index)));
+  }
+  return {
+    predicates: unique6(predicates),
+    operations,
+    metadata: new Map([...metadata3].map(([key4, values]) => [key4, unique6(values)])),
+    inconclusive,
+    scanModes: sortedEntries(modes),
+    limits: limits3,
+    bodyAvailable
+  };
+}
+function inferServer(tool) {
+  if (!tool) return null;
+  if (tool.toLowerCase().startsWith("mcp__")) {
+    const parts2 = tool.split("__");
+    if (parts2.length >= 3 && parts2[1]) return parts2[1];
+  }
+  return tool.split(/[-_.:/]+/)[0] || null;
+}
+var hashId = (material) => `f-${sha256Hex(Buffer.from(material, "utf8")).slice(0, 24)}`;
+function frameIdOf(frame) {
+  const identity4 = frame.session_id && frame.call_id ? { server: frame.server, session_id: frame.session_id, call_id: frame.call_id } : Object.fromEntries([
+    "server",
+    "tool",
+    "ts",
+    "outcome",
+    "effective_outcome",
+    "status_code",
+    "error_code",
+    "request_ids",
+    "embedded_failure",
+    "args",
+    "_diagnostic_raw"
+  ].map((key4) => [key4, get3(frame, key4)]));
+  return hashId(pyDumps(identity4, { sortKeys: true, ensureAscii: false, separators: [",", ":"] }));
+}
+function normaliseRow(row, adapter, assumeOffset) {
+  const errorValue = pick(row, "error");
+  const resultValue = pick(row, "result");
+  const errorText = stringify2(errorValue);
+  const resultText = stringify2(resultValue);
+  const [ts, sourceOffset] = toUtc(pick(row, "ts"), assumeOffset);
+  const tool = pyStrip(stringify2(pick(row, "tool")));
+  if (!tool || !matches3(SAFE_TOOL, tool)) {
+    throw new InputError("tool name is required and must be a bounded namespace token");
+  }
+  const outcome5 = canonicalOutcome(row, errorValue);
+  const suppliedEmbedded = typedStringList(row, "embedded_failure");
+  if (suppliedEmbedded && suppliedEmbedded.some((value) => !matches3(SAFE_PREDICATE, value))) {
+    throw new InputError("embedded_failure contains an invalid predicate");
+  }
+  const analysis = scanPayloads(errorValue, resultValue);
+  const scanned = [...analysis.predicates];
+  let scanInconclusive = analysis.inconclusive;
+  let statusCode2 = typedStatus(row);
+  if (statusCode2 !== null && statusCode2 >= 400) scanned.push(`statusCode=${statusCode2}`);
+  if (outcome5 !== "fail" && errorPresent(errorValue) && !scanned.includes("error-field")) scanned.push("error-field");
+  const [operationsPresent, suppliedOperationsValue] = present3(row, "operations");
+  let operations;
+  if (operationsPresent) {
+    const supplied = suppliedOperationsValue ?? [];
+    if (!isList(supplied) || supplied.some((item) => !isDict(item))) {
+      throw new InputError("operations must be an array of objects");
+    }
+    operations = supplied.map((item, index) => adaptOperation(item, index));
+  } else operations = analysis.operations;
+  const failedOperationStatuses = [...new Set(operations.filter((operation) => operation.outcome === "fail" && operation.status_code !== null).map((operation) => operation.status_code))].sort((a3, b) => a3 - b);
+  if (operations.some((operation) => operation.outcome === "fail" || operation.status_code !== null && operation.status_code >= 400)) {
+    scanned.push("operationFailure", ...failedOperationStatuses.map((status4) => `statusCode=${status4}`));
+  }
+  const metadata3 = analysis.metadata;
+  const structuredStatuses = [];
+  for (const rawStatus of metadata3.get("status_codes") ?? []) {
+    try {
+      structuredStatuses.push(strictStatus(rawStatus, "diagnostic status"));
+    } catch (error) {
+      if (!(error instanceof InputError)) throw error;
+      scanInconclusive = true;
+    }
+  }
+  const failingStatuses = [...new Set(structuredStatuses.filter((value) => value >= 400))].sort((a3, b) => a3 - b);
+  if (statusCode2 === null) {
+    if (failingStatuses.length === 1) statusCode2 = failingStatuses[0];
+    else if (outcome5 !== "fail" && !scanInconclusive) {
+      const allStatuses = [...new Set(structuredStatuses)];
+      if (allStatuses.length === 1) statusCode2 = allStatuses[0];
+    }
+  }
+  const errorCodes2 = [];
+  for (const value of metadata3.get("error_codes") ?? []) {
+    if (matches3(SAFE_CODE, value)) errorCodes2.push(value);
+    else scanInconclusive = true;
+  }
+  let errorCode = typedString(row, "error_code");
+  if (errorCode === null) {
+    const failingCodes = sortStrings(new Set(operations.filter((operation) => operation.outcome === "fail" && operation.error_code).map((operation) => operation.error_code)));
+    if (failingCodes.length === 1) errorCode = failingCodes[0];
+    else if (new Set(errorCodes2).size === 1) errorCode = errorCodes2[0];
+  }
+  if (errorCode && !matches3(SAFE_CODE, errorCode)) throw new InputError("error_code is invalid or too long");
+  const suppliedIds = typedStringList(row, "request_ids") || [];
+  if (suppliedIds.some((value) => !safeIdentifier(value))) {
+    throw new InputError("request_ids contains an invalid identifier");
+  }
+  const extractedIds = [];
+  for (const key4 of ["request_ids", "client_request_ids", "x_ms_request_ids", "correlation_ids"]) {
+    for (const value of metadata3.get(key4) ?? []) {
+      if (safeIdentifier(value)) extractedIds.push(value);
+      else scanInconclusive = true;
+    }
+  }
+  const requestIds = unique6([...suppliedIds, ...extractedIds]);
+  const embedded = unique6([...suppliedEmbedded || [], ...scanned]);
+  const [hasEffective, suppliedEffective] = present3(row, "effective_outcome");
+  let effective;
+  if (hasEffective) {
+    if (!isStr(suppliedEffective) || !OUTCOMES4.includes(suppliedEffective.toLowerCase())) {
+      throw new InputError("effective_outcome must be ok, fail, or unknown");
+    }
+    effective = suppliedEffective.toLowerCase();
+    if ((outcome5 === "fail" || embedded.length) && effective !== "fail") {
+      throw new InputError("effective_outcome conflicts with failure evidence");
+    }
+  } else effective = outcome5 === "fail" || embedded.length ? "fail" : outcome5;
+  let server = typedString(row, "server");
+  if (server === null) server = inferServer(tool);
+  if (server && !matches3(SAFE_SERVER, server)) throw new InputError("server must be a bounded namespace token");
+  let duration3 = pick(row, "duration_ms");
+  if (!isBlank(duration3)) {
+    if (isBool(duration3) || !isNum(duration3) || !Number.isFinite(num(duration3)) || num(duration3) < 0) {
+      throw new InputError("duration_ms must be a finite non-negative number or null");
+    }
+  } else duration3 = null;
+  const frame = {
+    ts,
+    _offset: sourceOffset,
+    session_id: typedIdentifier(pick(row, "session_id"), "session_id"),
+    call_id: typedIdentifier(pick(row, "call_id"), "call_id"),
+    server,
+    tool,
+    outcome: outcome5,
+    effective_outcome: effective,
+    embedded_failure: embedded,
+    operations,
+    duration_ms: duration3,
+    args: stringify2(pick(row, "args")),
+    _diagnostic_raw: errorText || (effective === "fail" ? resultText : ""),
+    _payload_available: analysis.bodyAvailable,
+    _payload_scan_inconclusive: scanInconclusive,
+    _payload_scan_modes: analysis.scanModes,
+    _payload_scan_limits: analysis.limits,
+    status_code: statusCode2,
+    error_code: errorCode,
+    request_ids: requestIds,
+    adapter: typedString(row, "adapter") || adapter
+  };
+  if (!matches3(SAFE_ADAPTER, frame.adapter)) throw new InputError("adapter must be a bounded token");
+  const suppliedFrameId = typedString(row, "frame_id");
+  if (suppliedFrameId) {
+    if (!/^f-[0-9a-f]{24}$/.test(suppliedFrameId)) throw new InputError("frame_id must match f-<24 lowercase hex>");
+    frame.frame_id = suppliedFrameId;
+    frame._frame_id_source = "supplied";
+  } else {
+    frame.frame_id = frameIdOf(frame);
+    frame._frame_id_source = frame.session_id && frame.call_id ? "host-call" : "anonymous";
+    if (frame._frame_id_source === "anonymous") frame._anonymous_id_base = frame.frame_id;
+  }
+  return frame;
+}
+function assignAnonymousFrameIds(frames) {
+  const occurrences = counter();
+  for (const frame of frames) {
+    if (frame._frame_id_source !== "anonymous") continue;
+    const base = frame._anonymous_id_base ?? frame.frame_id;
+    bump(occurrences, base);
+    frame.frame_id = hashId(pyDumps([base, occurrences.get(base)], { ensureAscii: false, separators: [",", ":"] }));
+  }
+}
+function sourceText(data, name, bad) {
+  if (isStr(data)) return data.replace(/\r\n?/g, "\n");
+  const [text6, at2] = decodeUtf8(data);
+  if (text6 === null) {
+    bad.push(`${name}: cannot read UTF-8 input ('utf-8' codec can't decode byte 0x${data[at2].toString(16)} in position ${at2})`);
+    return null;
+  }
+  return text6.replace(/\r\n?/g, "\n");
+}
+function sourceRows(name, data, bad) {
+  if (isList(data)) return data.map((row, index) => [`${name}[${index}]`, row]);
+  const text6 = sourceText(data, name, bad);
+  if (text6 === null) return [];
+  if (pyLstrip(text6).startsWith("[")) {
+    let parsed;
+    try {
+      parsed = jsonLoads(text6);
+    } catch (error) {
+      if (!(error instanceof JsonDecodeError || error instanceof InputError)) throw error;
+      bad.push(`${name}: not valid JSON (${error.message})`);
+      return [];
+    }
+    if (!isList(parsed)) {
+      bad.push(`${name}: JSON root must be an array`);
+      return [];
+    }
+    return parsed.map((row, index) => [`${name}[${index}]`, row]);
+  }
+  const rows = [];
+  pySplitlines(text6).forEach((line, index) => {
+    if (!pyStrip(line)) return;
+    try {
+      rows.push([`${name}:${index + 1}`, jsonLoads(line)]);
+    } catch (error) {
+      if (!(error instanceof JsonDecodeError || error instanceof InputError)) throw error;
+      bad.push(`${name}:${index + 1}: not valid JSON (${error instanceof JsonDecodeError ? error.msg : error.message})`);
+    }
+  });
+  return rows;
+}
+function normaliseSources(input) {
+  if (isStr(input) || Buffer.isBuffer(input)) return [["input", input]];
+  if (isList(input) && input.length && input.every((item) => isStr(item) || Buffer.isBuffer(item))) {
+    return input.map((item, index) => [`input${index + 1}`, item]);
+  }
+  if (isList(input)) return [["records", input]];
+  if (isDict(input) && isList(input.sources)) return input.sources.map(({ name, data }) => [name, data]);
+  throw new TypeError("records must be an array of rows, JSON/JSONL text, a Buffer, or { sources }");
+}
+function ingest(input, { adapter = "jsonl", assumeOffset = null } = {}) {
+  parseAssumedOffset(assumeOffset);
+  const frames = [];
+  const bad = [];
+  for (const [name, data] of normaliseSources(input)) {
+    for (const [location3, row] of sourceRows(name, data, bad)) {
+      if (!isDict(row)) {
+        bad.push(`${location3}: row must be an object`);
+        continue;
+      }
+      try {
+        frames.push(normaliseRow(row, adapter, assumeOffset));
+      } catch (error) {
+        if (!(error instanceof InputError)) throw error;
+        bad.push(`${location3}: ${error.message}`);
+      }
+    }
+  }
+  assignAnonymousFrameIds(frames);
+  return { frames, bad };
+}
+function filterServer(frames, server) {
+  if (!server) return [...frames];
+  const wanted = casefold(server);
+  return frames.filter((frame) => isStr(frame.server) && casefold(frame.server) === wanted);
+}
+function deduplicateFrames(frames) {
+  const output = [];
+  const byIdentity = /* @__PURE__ */ new Map();
+  const suppliedIds = /* @__PURE__ */ new Set();
+  let duplicateCount = 0;
+  for (const frame of frames) {
+    if (frame._frame_id_source === "supplied") {
+      if (suppliedIds.has(frame.frame_id)) throw new InputError(`duplicate supplied frame_id ${pyRepr(frame.frame_id)}`);
+      suppliedIds.add(frame.frame_id);
+    }
+    const { session_id: sessionId, call_id: callId } = frame;
+    if (!sessionId || !callId) {
+      output.push(frame);
+      continue;
+    }
+    const identity4 = JSON.stringify([sessionId, callId]);
+    const comparable = Object.fromEntries(Object.entries(frame).filter(([key4]) => key4 !== "_source"));
+    if (!byIdentity.has(identity4)) {
+      byIdentity.set(identity4, comparable);
+      output.push(frame);
+    } else if (pyEq(byIdentity.get(identity4), comparable)) duplicateCount += 1;
+    else {
+      throw new InputError(
+        `conflicting duplicate call identity (session_id=${pyRepr(sessionId)}, call_id=${pyRepr(callId)})`
+      );
+    }
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const frame of output) {
+    if (seen.has(frame.frame_id)) {
+      throw new InputError(
+        `duplicate frame_id ${pyRepr(frame.frame_id)}; supply unique call identity or a unique canonical frame_id`
+      );
+    }
+    seen.add(frame.frame_id);
+  }
+  return { frames: output, duplicateCount };
+}
+function windowOf(frames) {
+  const stamps = sortStrings(frames.filter((frame) => frame.ts).map((frame) => frame.ts));
+  const sessions = new Set(frames.filter((frame) => frame.session_id).map((frame) => frame.session_id)).size;
+  if (!stamps.length) return { from: null, to: null, days: null, sessions };
+  const day2 = (value) => Math.floor(parseUtcStamp(value) / 864e5);
+  return { from: stamps[0], to: stamps[stamps.length - 1], days: day2(stamps[stamps.length - 1]) - day2(stamps[0]) + 1, sessions };
+}
+function isLive(lastSeen, ref11 = /* @__PURE__ */ new Date()) {
+  if (!lastSeen) return false;
+  const observed = parseUtcStamp(lastSeen);
+  const collected = ref11 instanceof Date ? ref11.getTime() : parseUtcStamp(ref11);
+  if (observed === null || collected === null || Number.isNaN(collected)) return false;
+  const delta2 = collected - observed;
+  return delta2 >= 0 && delta2 <= LIVE_WINDOW_DAYS * 864e5;
+}
+function buildClusters(failedFrames, opaque, collectedAt) {
+  const rows = failedFrames.map((frame) => ({
+    frame_id: frame.frame_id,
+    ts: frame.ts || "",
+    session: frame.session_id || "",
+    tool: frame.tool,
+    args: frame.args,
+    err: frameDiagnostic(frame)
+  }));
+  const clusters = cluster(rows, opaque);
+  const warnings = sanity(clusters, rows, opaque);
+  const members = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const key4 = JSON.stringify([row.tool, normalise(row.err, opaque)]);
+    if (!members.has(key4)) members.set(key4, []);
+    members.get(key4).push(row);
+  }
+  for (const item of clusters) {
+    if (!/^c-[0-9a-f]{24}$/.test(item.id)) throw new InputError("cluster engine returned an invalid stable cluster ID");
+    const owning = members.get(JSON.stringify([item.tool, item.signature])) ?? [];
+    const expected2 = owning.map((row) => row.frame_id);
+    const emitted = item.frame_ids;
+    if (!isList(emitted) || emitted.some((value) => !isStr(value)) || new Set(emitted).size !== emitted.length || !pyEq(emitted, expected2)) {
+      throw new InputError(`cluster ${item.id} membership does not match its input rows`);
+    }
+    if (!pyEq(item.member_ids, emitted)) throw new InputError(`cluster ${item.id} member_ids alias is inconsistent`);
+    const dates = counter();
+    let unknownDates = 0;
+    for (const row of owning) {
+      const match = ISO_DAY2.exec(row.ts || "");
+      if (match) bump(dates, match[1]);
+      else unknownDates += 1;
+    }
+    const expectedDays = sortedEntries(dates);
+    if (!pyEq(item.day_counts, expectedDays)) throw new InputError(`cluster ${item.id} day_counts do not match its members`);
+    if (item.distinct_days !== Object.keys(expectedDays).length) {
+      throw new InputError(`cluster ${item.id} distinct_days is inconsistent`);
+    }
+    if ((item.undated_count ?? unknownDates) !== unknownDates) {
+      throw new InputError(`cluster ${item.id} undated_count is inconsistent`);
+    }
+    item.unknown_date_count = unknownDates;
+    if (sum(Object.values(item.day_counts)) + unknownDates !== item.count) {
+      throw new InputError(`cluster ${item.id} failed day-count conservation`);
+    }
+    item.recent = isLive(item.last_seen, collectedAt);
+  }
+  const allMembers = clusters.flatMap((item) => item.frame_ids);
+  const expectedMembers = failedFrames.map((frame) => frame.frame_id);
+  if (allMembers.length !== new Set(allMembers).size) throw new InputError("cluster membership contains duplicate frame IDs");
+  const expectedSet = new Set(expectedMembers);
+  if (allMembers.length !== expectedMembers.length || allMembers.some((id5) => !expectedSet.has(id5)) || new Set(allMembers).size !== expectedSet.size) {
+    throw new InputError("cluster membership does not cover the effective failure set exactly");
+  }
+  return { clusters, warnings };
+}
+var operationsOf = (frame) => frame.operations ?? [];
+var failedOperations = (frames) => sum(frames.map((frame) => operationsOf(frame).filter((op) => op.outcome === "fail").length));
+var embeddedCalls = (frames) => frames.filter((frame) => frame.outcome !== "fail" && frame.effective_outcome === "fail").length;
+function volumeOf(frames, ratesAvailable, excludedProbes = 0) {
+  const counts3 = counter();
+  for (const frame of frames) bump(counts3, frame.effective_outcome);
+  const [ok, fail15, unknown] = OUTCOMES4.map((name) => counts3.get(name) ?? 0);
+  const known = ok + fail15;
+  return {
+    calls: frames.length,
+    ok,
+    fail: fail15,
+    unknown,
+    embedded_failure_calls: embeddedCalls(frames),
+    operation_diagnostics: sum(frames.map((frame) => operationsOf(frame).length)),
+    failed_operations: failedOperations(frames),
+    excluded_test_probe_calls: excludedProbes,
+    fail_pct_of_known: ratesAvailable && known ? pyRound(100 * fail15 / known, 1) : null,
+    fail_pct_of_all: ratesAvailable && frames.length ? pyRound(100 * fail15 / frames.length, 1) : null,
+    denominator: "calls",
+    rate_available: ratesAvailable
+  };
+}
+function rawVolumeOf(frames) {
+  const host = counter();
+  const effective = counter();
+  for (const frame of frames) {
+    bump(host, frame.outcome);
+    bump(effective, frame.effective_outcome);
+  }
+  return {
+    calls: frames.length,
+    host_outcomes: Object.fromEntries(OUTCOMES4.map((name) => [name, host.get(name) ?? 0])),
+    effective_outcomes: Object.fromEntries(OUTCOMES4.map((name) => [name, effective.get(name) ?? 0])),
+    embedded_failure_calls: embeddedCalls(frames),
+    operation_diagnostics: sum(frames.map((frame) => operationsOf(frame).length)),
+    failed_operations: failedOperations(frames)
+  };
+}
+function coverageOf(frames, advertised, { ratesAvailable = false, inventoryCaptured = false, windowDays = null } = {}) {
+  const per = /* @__PURE__ */ new Map();
+  for (const frame of frames) {
+    if (!per.has(frame.tool)) {
+      per.set(frame.tool, {
+        calls: 0,
+        ok: 0,
+        fail: 0,
+        unknown: 0,
+        sessions: /* @__PURE__ */ new Set(),
+        first_seen: null,
+        last_seen: null,
+        operation_diagnostics: 0
+      });
+    }
+    const data = per.get(frame.tool);
+    data.calls += 1;
+    data[frame.effective_outcome] += 1;
+    data.operation_diagnostics += operationsOf(frame).length;
+    if (frame.session_id) data.sessions.add(frame.session_id);
+    if (frame.ts) {
+      const first = data.first_seen || frame.ts;
+      const last = data.last_seen || frame.ts;
+      data.first_seen = cmpStr(first, frame.ts) <= 0 ? first : frame.ts;
+      data.last_seen = cmpStr(last, frame.ts) >= 0 ? last : frame.ts;
+    }
+  }
+  const tools2 = [...per.entries()].sort((a3, b) => b[1].fail - a3[1].fail || cmpStr(a3[0], b[0])).map(([name, data]) => {
+    const known = data.ok + data.fail;
+    return {
+      tool: name,
+      calls: data.calls,
+      ok: data.ok,
+      fail: data.fail,
+      unknown: data.unknown,
+      fail_pct_of_known: ratesAvailable && known ? pyRound(100 * data.fail / known, 1) : null,
+      sessions: data.sessions.size,
+      first_seen: data.first_seen,
+      last_seen: data.last_seen,
+      operation_diagnostics: data.operation_diagnostics
+    };
+  });
+  const called = new Set(tools2.map((entry3) => entry3.tool));
+  return {
+    window_days: windowDays,
+    tools: tools2,
+    inventory_captured: inventoryCaptured,
+    advertised_never_called: inventoryCaptured ? sortStrings(advertised.filter((name) => !called.has(name))) : null
+  };
+}
+function jsonValue(value, label, { object: object16 = false } = {}) {
+  let parsed = value;
+  if (isStr(value) || Buffer.isBuffer(value)) {
+    try {
+      const text6 = isStr(value) ? value : decodeUtf8(value)[0];
+      if (text6 === null) throw new Error("invalid UTF-8");
+      parsed = jsonLoads(text6);
+    } catch (error) {
+      throw new InputError(`${label} is not valid UTF-8 JSON: ${error.message}`);
+    }
+  }
+  if (object16 && !isDict(parsed)) throw new InputError(`${label} root must be an object`);
+  return parsed;
+}
+function stringList2(value, label) {
+  if (!isList(value) || value.some((item) => !isStr(item) || !item || cpLen(item) > 1024)) {
+    throw new InputError(`${label} must be an array of strings`);
+  }
+  return value;
+}
+function validateFrameRefs(values, label, knownFrames, predicate = null) {
+  const refs4 = stringList2(values, label);
+  const unknown = sortStrings(new Set(refs4.filter((ref11) => !knownFrames.has(ref11))));
+  if (unknown.length) throw new InputError(`${label} references unknown frame IDs: ${unknown.join(", ")}`);
+  if (predicate && refs4.some((ref11) => !predicate(knownFrames.get(ref11)))) {
+    throw new InputError(`${label} contains a frame with the wrong outcome`);
+  }
+  return refs4;
+}
+var extraKeys = (object16, allowed) => sortStrings(Object.keys(object16).filter((key4) => !allowed.includes(key4)));
+var inSet = (set, value) => isStr(value) && set.has(value);
+function loadVerdicts(source, clusters, frames, redactor, reviewedNarrative) {
+  const empty = { headline: "", top_issue_ids: [], asks: [], our_actions: [], clusters: {}, probe_frame_ids: [] };
+  if (source === null || source === void 0) return { verdicts: empty, discarded: [] };
+  const raw = jsonValue(source, "verdicts", { object: true });
+  const unknownRoot = extraKeys(raw, [
+    "schema_version",
+    "headline",
+    "top_issues",
+    "asks",
+    "our_actions",
+    "clusters",
+    "probe_frame_ids"
+  ]);
+  if (unknownRoot.length) throw new InputError(`verdicts has unknown fields: ${unknownRoot.join(", ")}`);
+  if (!pyEq(get3(raw, "schema_version", SCHEMA_VERSION2), SCHEMA_VERSION2)) {
+    throw new InputError("verdicts schema_version must be 2");
+  }
+  const knownClusters = new Map(clusters.map((item) => [item.id, item]));
+  const knownFrames = new Map(frames.map((frame) => [frame.frame_id, frame]));
+  const probeFrameIds = validateFrameRefs(
+    get3(raw, "probe_frame_ids", []),
+    "verdicts.probe_frame_ids",
+    knownFrames,
+    (frame) => frame.effective_outcome === "fail"
+  );
+  if (probeFrameIds.length !== new Set(probeFrameIds).size) throw new InputError("verdicts.probe_frame_ids must be unique");
+  const suppliedClusters = get3(raw, "clusters", {});
+  if (!isDict(suppliedClusters)) throw new InputError("verdicts.clusters must be an object");
+  const stale = sortStrings(Object.keys(suppliedClusters).filter((id5) => !knownClusters.has(id5)));
+  if (stale.length) throw new InputError(`verdicts references unknown cluster IDs: ${stale.join(", ")}`);
+  const discarded = [];
+  const narrative = (value, label) => {
+    if (isBlank(value)) return "";
+    if (!isStr(value)) throw new InputError(`${label} must be a string`);
+    const sanitized = redactor.narrative(value, reviewedNarrative);
+    if (!reviewedNarrative) {
+      discarded.push(label);
+      return "";
+    }
+    return sanitized;
+  };
+  const outputClusters = {};
+  for (const [clusterId2, value] of Object.entries(suppliedClusters)) {
+    if (!isDict(value)) throw new InputError(`verdicts.clusters.${clusterId2} must be an object`);
+    const extras = extraKeys(value, [
+      "verdict",
+      "rw_class",
+      "evidence_track",
+      "evidence",
+      "mechanism",
+      "reproduction_disposition"
+    ]);
+    if (extras.length) throw new InputError(`verdicts.clusters.${clusterId2} has unknown fields: ${extras.join(", ")}`);
+    const verdict = get3(value, "verdict", "unclassified");
+    if (!inSet(VERDICTS, verdict)) throw new InputError(`invalid verdict for ${clusterId2}: ${pyRepr(verdict)}`);
+    const rwClass = get3(value, "rw_class", "unknown-treat-as-write");
+    if (!inSet(RW_CLASSES, rwClass)) throw new InputError(`invalid rw_class for ${clusterId2}: ${pyRepr(rwClass)}`);
+    let track = get3(value, "evidence_track");
+    if (["", "none", "\u2014"].includes(track)) track = null;
+    if (track !== null && !["A", "B"].includes(track)) {
+      throw new InputError(`invalid evidence_track for ${clusterId2}: ${pyRepr(track)}`);
+    }
+    let evidence = get3(value, "evidence", {});
+    if (!isDict(evidence)) throw new InputError(`evidence for ${clusterId2} must be an object`);
+    const disposition = get3(value, "reproduction_disposition", get3(evidence, "reproduction_disposition", "not-attempted"));
+    if (!inSet(REPRO_DISPOSITIONS, disposition)) {
+      throw new InputError(`invalid reproduction_disposition for ${clusterId2}: ${pyRepr(disposition)}`);
+    }
+    if (track === "A") {
+      const trackExtras = extraKeys(evidence, [
+        "failing_frame_ids",
+        "control_frame_ids",
+        "correlation_ids",
+        "reproduction_disposition"
+      ]);
+      if (trackExtras.length) {
+        throw new InputError(`track A evidence for ${clusterId2} has unknown fields: ${trackExtras.join(", ")}`);
+      }
+      const failingRefs = validateFrameRefs(
+        get3(evidence, "failing_frame_ids", []),
+        `${clusterId2}.evidence.failing_frame_ids`,
+        knownFrames,
+        (frame) => frame.effective_outcome === "fail"
+      );
+      const controlRefs = validateFrameRefs(
+        get3(evidence, "control_frame_ids", []),
+        `${clusterId2}.evidence.control_frame_ids`,
+        knownFrames,
+        (frame) => frame.effective_outcome === "ok"
+      );
+      const correlationIds = stringList2(get3(evidence, "correlation_ids", []), `${clusterId2}.evidence.correlation_ids`);
+      if (correlationIds.some((id5) => !safeIdentifier(id5))) {
+        throw new InputError(`${clusterId2}.evidence.correlation_ids contains an invalid identifier`);
+      }
+      if (!failingRefs.length || !controlRefs.length || !correlationIds.length) {
+        throw new InputError(
+          `evidence track A for ${clusterId2} requires failing_frame_ids, control_frame_ids, and correlation_ids`
+        );
+      }
+      const members = new Set(knownClusters.get(clusterId2).frame_ids ?? []);
+      if (failingRefs.some((ref11) => !members.has(ref11))) {
+        throw new InputError(`track A failing_frame_ids for ${clusterId2} must belong to that cluster`);
+      }
+      const projected = correlationIds.map((id5) => redactor.identifier(id5, "request"));
+      const cited = new Set([...failingRefs, ...controlRefs].flatMap((id5) => knownFrames.get(id5).request_ids ?? []));
+      if (projected.some((id5) => !cited.has(id5))) {
+        throw new InputError(`track A correlation_ids for ${clusterId2} must occur on a referenced frame`);
+      }
+      const rebuilt = { failing_frame_ids: failingRefs, control_frame_ids: controlRefs, correlation_ids: projected };
+      if (Object.hasOwn(evidence, "reproduction_disposition")) {
+        rebuilt.reproduction_disposition = evidence.reproduction_disposition;
+      }
+      evidence = rebuilt;
+    } else if (track === "B") {
+      const trackExtras = extraKeys(evidence, ["reproduction_disposition"]);
+      if (trackExtras.length) {
+        throw new InputError(`track B evidence for ${clusterId2} has unknown fields: ${trackExtras.join(", ")}`);
+      }
+      if ((knownClusters.get(clusterId2).distinct_days ?? 0) < 3) {
+        throw new InputError(`evidence track B for ${clusterId2} requires at least 3 observed days`);
+      }
+      if (!Object.hasOwn(value, "reproduction_disposition") && !Object.hasOwn(evidence, "reproduction_disposition")) {
+        throw new InputError(`evidence track B for ${clusterId2} requires reproduction_disposition`);
+      }
+    } else if (pyTruthy(evidence)) {
+      throw new InputError(`structured evidence for ${clusterId2} requires evidence_track A or B`);
+    }
+    outputClusters[clusterId2] = {
+      verdict,
+      rw_class: rwClass,
+      evidence_track: track,
+      evidence,
+      reproduction_disposition: disposition,
+      mechanism: narrative(get3(value, "mechanism", ""), `clusters.${clusterId2}.mechanism`)
+    };
+    const probes = new Set(probeFrameIds);
+    if (verdict === "test-probe" && knownClusters.get(clusterId2).frame_ids.some((id5) => !probes.has(id5))) {
+      throw new InputError(`test-probe verdict for ${clusterId2} requires every member in root probe_frame_ids`);
+    }
+  }
+  const topIssueIds = stringList2(get3(raw, "top_issues", []), "verdicts.top_issues");
+  if (topIssueIds.length > 5 || new Set(topIssueIds).size !== topIssueIds.length) {
+    throw new InputError("verdicts.top_issues must contain at most 5 unique cluster IDs");
+  }
+  const unknownTop = sortStrings(new Set(topIssueIds.filter((id5) => !knownClusters.has(id5))));
+  if (unknownTop.length) {
+    throw new InputError(`verdicts.top_issues references unknown cluster IDs: ${unknownTop.join(", ")}`);
+  }
+  const sections = [
+    ["asks", ["cluster_id", "ask", "impact", "severity"]],
+    ["our_actions", ["cluster_id", "kind", "owner", "action"]]
+  ];
+  const cleaned = {};
+  for (const [section] of sections) {
+    const items = get3(raw, section, []);
+    if (!isList(items) || items.some((item) => !isDict(item))) {
+      throw new InputError(`verdicts.${section} must be an array of objects`);
+    }
+  }
+  for (const [section, fields8] of sections) {
+    cleaned[section] = [];
+    for (const [index, item] of get3(raw, section, []).entries()) {
+      if (extraKeys(item, fields8).length) throw new InputError(`verdicts.${section}[${index}] has unknown fields`);
+      const clusterId2 = get3(item, "cluster_id");
+      if (!isStr(clusterId2) || !knownClusters.has(clusterId2)) {
+        throw new InputError(`verdicts.${section}[${index}] references an unknown cluster`);
+      }
+      if (reviewedNarrative) {
+        const clean = { cluster_id: clusterId2 };
+        for (const field of fields8.slice(1)) {
+          clean[field] = narrative(get3(item, field, ""), `${section}[${index}].${field}`);
+        }
+        cleaned[section].push(clean);
+      } else {
+        for (const field of fields8.slice(1)) {
+          if (pyTruthy(get3(item, field))) narrative(item[field], `${section}[${index}].${field}`);
+        }
+      }
+    }
+  }
+  return {
+    verdicts: {
+      headline: narrative(get3(raw, "headline", ""), "headline"),
+      top_issue_ids: topIssueIds,
+      asks: cleaned.asks,
+      our_actions: cleaned.our_actions,
+      clusters: outputClusters,
+      probe_frame_ids: probeFrameIds
+    },
+    discarded: sortStrings(new Set(discarded))
+  };
+}
+function applyVerdicts(clusters, verdicts) {
+  for (const item of clusters) {
+    const value = verdicts.clusters[item.id] ?? {};
+    item.verdict = value.verdict ?? "unclassified";
+    item.rw_class = value.rw_class ?? "unknown-treat-as-write";
+    item.evidence_track = value.evidence_track ?? null;
+    item.evidence_track_asserted = value.evidence_track ?? null;
+    item.evidence_verified = false;
+    item.evidence = value.evidence ?? {};
+    item.reproduction_disposition = value.reproduction_disposition ?? "not-attempted";
+    if (value.mechanism) item.mechanism = value.mechanism;
+  }
+}
+function annotateProbeAdjustments(clusters, frames, probeFrameIds) {
+  const byId = new Map(frames.map((frame) => [frame.frame_id, frame]));
+  for (const item of clusters) {
+    const excluded = item.frame_ids.filter((id5) => probeFrameIds.has(id5));
+    const days = counter();
+    let undated = 0;
+    for (const id5 of item.frame_ids) {
+      if (probeFrameIds.has(id5)) continue;
+      const match = ISO_DAY2.exec(byId.get(id5).ts || "");
+      if (match) bump(days, match[1]);
+      else undated += 1;
+    }
+    item.excluded_frame_ids = excluded;
+    item.adjusted_count = item.count - excluded.length;
+    item.adjusted_day_counts = sortedEntries(days);
+    item.adjusted_undated_count = undated;
+    if (item.adjusted_count !== sum(Object.values(item.adjusted_day_counts)) + undated) {
+      throw new InputError(`cluster ${item.id} adjusted counts do not reconcile`);
+    }
+  }
+}
+function topIssues(clusters, selected) {
+  const byId = new Map(clusters.map((item) => [item.id, item]));
+  const chosen = selected.length ? selected.map((id5) => byId.get(id5)) : clusters.slice(0, 5);
+  return chosen.map((item) => ({
+    cluster_id: item.id,
+    tool: item.tool,
+    diagnostic: item.mechanism || item.signature,
+    hits: item.count,
+    adjusted_hits: item.adjusted_count,
+    last_seen: item.last_seen || null,
+    recent: Boolean(item.recent),
+    verdict: item.verdict ?? "unclassified"
+  }));
+}
+function defaultEnvironment(supplied, serverLabel, collectedAt, offsets, assumeOffset) {
+  const env = {
+    collected_at: collectedAt,
+    host: { name: "unknown", version: "unknown" },
+    server: { name: serverLabel, version: "unknown", endpoint: "unknown" },
+    transport: "unknown",
+    auth_mode: "unknown",
+    clock_skew_ms: null,
+    local_offset: null,
+    source_offsets_seen: offsets,
+    assumed_offset: assumeOffset,
+    tools: [],
+    tool_inventory_captured: false
+  };
+  const assign = (target, key4, value) => Object.defineProperty(target, key4, { value, enumerable: true, writable: true, configurable: true });
+  for (const [key4, value] of Object.entries(supplied)) {
+    if ((key4 === "host" || key4 === "server") && isDict(value)) {
+      for (const [nestedKey, nested] of Object.entries(value)) assign(env[key4], nestedKey, nested);
+    } else assign(env, key4, value);
+  }
+  env.collected_at = collectedAt;
+  env.source_offsets_seen = offsets;
+  env.assumed_offset = assumeOffset;
+  if (pyTruthy(env.tools)) env.tool_inventory_captured = true;
+  return env;
+}
+function redactFrames(frames, redactor) {
+  for (const frame of frames) {
+    frame.args = redactor.argsString(frame.args);
+    frame.error = redactor.diagnostic(frame._diagnostic_raw);
+    delete frame._diagnostic_raw;
+    for (const operation of frame.operations) {
+      operation.diagnostic = redactor.diagnostic(operation._diagnostic_raw);
+      delete operation._diagnostic_raw;
+    }
+    for (const key4 of ["session_id", "call_id"]) if (frame[key4]) frame[key4] = redactor.identifier(frame[key4], key4);
+    frame.request_ids = frame.request_ids.map((value) => redactor.identifier(value, "request"));
+    if (frame.server) frame.server = redactor.identifier(frame.server, "server");
+    for (const operation of frame.operations) {
+      operation.request_ids = operation.request_ids.map((value) => redactor.identifier(value, "request"));
+    }
+  }
+}
+var serializableFrame = (frame) => Object.fromEntries(Object.entries(frame).filter(([key4]) => !key4.startsWith("_")));
+function safeSlug(value, fallback) {
+  const slug = cpSlice(pyStrip(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""), 0, 48).replace(/-+$/, "") || fallback;
+  if (!fullmatch(SAFE_SLUG, slug)) throw new InputError(`unsafe output label ${pyRepr(value)}`);
+  return slug;
+}
+var jsonArtifact = (value) => pyDumps(value, { indent: 2, ensureAscii: false, sortKeys: true, allowNan: false });
+var jsonLine = (value) => pyDumps(value, { ensureAscii: false, sortKeys: true, allowNan: false });
+var sha3 = (text6) => `sha256:${sha256Hex(Buffer.from(text6, "utf8"))}`;
+var htmlEscape = (text6) => text6.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+var display = (value) => pyStr(value === null || value === void 0 ? "\u2014" : value);
+var COLLAPSE = new RegExp(`${S3}+`, "gu");
+var plainData = (value) => pyStrip(htmlEscape(display(value)).replace(COLLAPSE, " ")).replace(/([\\`*_[\]{}()#+.!|>~-])/g, "\\$1");
+var cell = (value) => htmlEscape(display(value)).replaceAll("\\", "\\\\").replaceAll("|", "\\|").replaceAll("\r", " ").replaceAll("\n", " ");
+function table2(headers2, rows) {
+  if (!rows.length) return "_None._";
+  return [
+    `| ${headers2.map(cell).join(" | ")} |`,
+    `|${headers2.map(() => "---").join("|")}|`,
+    ...rows.map((row) => `| ${row.map(cell).join(" | ")} |`)
+  ].join("\n");
+}
+function short2(value, length = 100) {
+  const text6 = pyStrip((value || "").replaceAll("\r", " ").replaceAll("\n", " "));
+  return cpLen(text6) <= length ? text6 : `${cpSlice(text6, 0, length - 1)}\u2026`;
+}
+var day10 = (value) => cpSlice(value || "unknown", 0, 10);
+function mechanicalHeadline(summary) {
+  const { volume, capture_scope: scope } = summary;
+  if (volume.fail === 0) {
+    return `No effective failures were observed in the supplied ${scope} capture. This does not establish a zero production failure rate.`;
+  }
+  if (!volume.rate_available) {
+    return `${volume.fail} effective failed call(s) were observed in the supplied ${scope} capture. Production failure rate is withheld: ${summary.rate_reason}.`;
+  }
+  return `${volume.fail} of ${volume.calls} production-adjusted calls failed (${pyStr(volume.fail_pct_of_all)}%).`;
+}
+function buildReport(meta, summary) {
+  const { clusters, coverage: cov, environment: env, limitations: limits3, warnings, raw_volume: raw, volume, window: window2 } = summary;
+  const lines = [
+    `# MCP diagnostic \u2014 ${cell(summary.server)} \u2014 ${meta.date}`,
+    "",
+    `**Bundle** \`${cell(summary.bundle_id)}\` \xB7 schema ${SCHEMA_VERSION2} \xB7 profile ${cell(summary.profile)} \xB7 capture scope **${cell(summary.capture_scope)}**  `,
+    `**Collected** ${cell(summary.generated_at)} \xB7 observed window ${cell(window2.from)} \u2192 ${cell(window2.to)}  `,
+    `**Raw host outcomes** ${raw.calls} calls: ${raw.host_outcomes.ok} ok, ${raw.host_outcomes.fail} fail, ${raw.host_outcomes.unknown} unknown  `,
+    `**Production-adjusted effective outcomes** ${volume.calls} calls: ${volume.ok} ok, ${volume.fail} fail, ${volume.unknown} unknown  `,
+    volume.rate_available ? `**Failure rate** ${pyStr(volume.fail_pct_of_all)}% of calls` : `**Failure rate withheld** \u2014 ${cell(summary.rate_reason)}`,
+    "",
+    "## Headline",
+    "",
+    summary.headline ? plainData(summary.headline) : mechanicalHeadline(summary),
+    "",
+    "## Top 5 issues",
+    "",
+    table2(
+      ["Cluster", "Tool", "Diagnostic", "Raw calls", "Adjusted calls", "Last observed", "Recent?", "Verdict"],
+      summary.top_issues.map((item) => [
+        item.cluster_id,
+        item.tool,
+        short2(item.diagnostic, 90),
+        item.hits,
+        item.adjusted_hits,
+        day10(item.last_seen),
+        item.recent ? "yes" : "no",
+        item.verdict
+      ])
+    ),
+    "",
+    "## Owner actions",
+    "",
+    summary.asks.length ? table2(
+      ["Cluster", "Ask", "Impact", "Severity"],
+      summary.asks.map((item) => [item.cluster_id, item.ask, item.impact, item.severity])
+    ) : "_No reviewed owner-action narrative was supplied._",
+    "",
+    "## Caller actions",
+    "",
+    summary.our_actions.length ? table2(
+      ["Cluster", "Kind", "Owner", "Action"],
+      summary.our_actions.map((item) => [item.cluster_id, item.kind, item.owner, item.action])
+    ) : "_No reviewed caller-action narrative was supplied._",
+    "",
+    "## Failure clusters",
+    "",
+    table2(
+      [
+        "ID",
+        "Tool",
+        "Diagnostic signature",
+        "Raw calls",
+        "Adjusted calls",
+        "Days",
+        "First \u2192 last",
+        "Recent?",
+        "Verdict",
+        "R/W",
+        "Asserted evidence",
+        "Reproduction assertion"
+      ],
+      clusters.map((item) => [
+        item.id,
+        item.tool,
+        short2(item.signature, 90),
+        item.count,
+        item.adjusted_count,
+        item.distinct_days,
+        `${day10(item.first_seen)} \u2192 ${day10(item.last_seen)}`,
+        item.recent ? "yes" : "no",
+        item.verdict,
+        item.rw_class,
+        item.evidence_track_asserted ? `${item.evidence_track_asserted} (unverified)` : "none",
+        item.reproduction_disposition
+      ])
+    ),
+    "",
+    "## Failures hiding in successes",
+    ""
+  ];
+  if (summary.embedded_failures.length) {
+    const population = summary.embedded_failure_population;
+    lines.push(
+      `Raw evidence: ${population.raw_affected_calls} call(s) with a non-failed host outcome carried ${population.predicate_hits} structured predicate hit(s). Production-adjusted remaining affected calls: ${population.adjusted_remaining_calls}. Predicate hits are diagnostics, not additional calls.`,
+      "",
+      table2(["Predicate", "Tool", "Calls"], summary.embedded_failures.map((item) => [item.predicate, item.tool, item.count]))
+    );
+  } else if (summary.payload_scan.missing_nonfailed_payloads) {
+    lines.push("_No hidden failure was established, but payload coverage is incomplete; this is not negative evidence._");
+  } else lines.push("_No structured embedded failure predicate was detected._");
+  let advertised;
+  if (cov.advertised_never_called?.length) {
+    advertised = `**Advertised but never called:** ${cov.advertised_never_called.map((name) => `\`${cell(name)}\``).join(", ")}`;
+  } else if (cov.inventory_captured) advertised = "**Advertised but never called:** _none._";
+  else advertised = "**Advertised but never called:** _unknown \u2014 inventory not captured._";
+  lines.push(
+    "",
+    "## Coverage",
+    "",
+    table2(
+      ["Tool", "Calls", "OK", "Fail", "Unknown", "Fail %", "Sessions", "Last observed", "Operations"],
+      cov.tools.map((item) => [
+        item.tool,
+        item.calls,
+        item.ok,
+        item.fail,
+        item.unknown,
+        item.fail_pct_of_known !== null ? item.fail_pct_of_known : "withheld",
+        item.sessions,
+        day10(item.last_seen),
+        item.operation_diagnostics
+      ])
+    ),
+    "",
+    advertised,
+    "",
+    "## Environment",
+    ""
+  );
+  const envRows = [];
+  for (const [section, value] of Object.entries(env)) {
+    if (isDict(value)) {
+      for (const [key4, nested] of Object.entries(value)) envRows.push([`${section}.${key4}`, short2(stringify2(nested), 100) || "unknown"]);
+    } else envRows.push([section, short2(stringify2(value), 100) || "unknown"]);
+  }
+  lines.push(
+    table2(["Field", "Value"], envRows),
+    "",
+    "## Limitations",
+    "",
+    `- Capture scope: \`${summary.capture_scope}\`.`,
+    `- Reconciliation: \`${pyStr(summary.reconciliation.status)}\`. ${cell(summary.reconciliation.note)}`,
+    `- Payload scan: ${summary.payload_scan.scanned_calls} call(s) had payload material; ${summary.payload_scan.missing_nonfailed_payloads} nonfailed/unknown call(s) lacked a payload; ${summary.payload_scan.inconclusive_calls} scan(s) were inconclusive.`,
+    `- Reviewed narrative included: \`${pyStr(limits3.narrative.reviewed)}\`; discarded fields: ${limits3.narrative.discarded_fields.length}.`,
+    `- Successful controls published: ${summary.controls.count}; evidence-track labels are operator assertions and remain unverified.`,
+    "- The collector performed no live reproduction and assumes no permission to replay or write.",
+    ...limits3.not_visible.map((value) => `- Not visible: ${cell(value)}`),
+    ...Object.entries(limits3.excluded).map(([reason2, count8]) => `- Excluded: ${cell(reason2)} \u2014 ${count8} row(s).`),
+    ...limits3.redaction_losses.map((value) => `- Redaction loss: ${cell(value)}`),
+    "",
+    "## Appendix",
+    "",
+    "### Per-cluster daily evidence",
+    ""
+  );
+  const chronic = clusters.filter((item) => item.distinct_days >= 3);
+  if (chronic.length) {
+    for (const item of chronic) {
+      const days = sortStrings(/* @__PURE__ */ new Set([...Object.keys(item.day_counts), ...Object.keys(item.adjusted_day_counts)]));
+      const rows = days.map((day2) => [day2, item.day_counts[day2] ?? 0, item.adjusted_day_counts[day2] ?? 0]);
+      if (item.unknown_date_count || item.adjusted_undated_count) {
+        rows.push(["unknown", item.unknown_date_count, item.adjusted_undated_count]);
+      }
+      lines.push(`**\`${cell(item.id)}\` \xB7 ${cell(item.tool)}**`, "", table2(["Day", "Raw calls", "Adjusted calls"], rows), "");
+    }
+  } else lines.push("_None._", "");
+  lines.push(
+    "### Collector warnings",
+    "",
+    warnings.map((value) => `- ${cell(value)}`).join("\n") || "_None._",
+    "",
+    "### Integrity",
+    "",
+    "The complete final-byte checksum inventory is in `manifest.json`. The manifest is excluded from hashing itself and is included in the final redaction gate.",
+    ""
+  );
+  return lines.join("\n");
+}
+var README = ({ bundleId: bundleId2, profile, generated }) => `# MCP diagnostic bundle
+
+\`${bundleId2}\` \xB7 schema ${SCHEMA_VERSION2} \xB7 profile **${profile}** \xB7 generated ${generated} by
+\`collect_bundle.py ${COLLECTOR_VERSION}\`.
+
+Read \`report.md\` first. \`manifest.json\` declares the exact file set and final-byte
+checksums for every other artifact. \`failures.jsonl\` contains one sanitized frame per
+effective failed call; operation diagnostics remain nested and are never added to the
+call denominator. When Track A cites successful controls, their sanitized frames are
+published in optional \`controls.jsonl\`.
+
+The redaction gate checks finite structural and pattern rules. A passing gate is not
+semantic certification of arbitrary prose or permission to distribute, replay calls,
+or write to a tracker. No live reproduction was performed by this collector.
+`;
+function artifactLimits(files, { maxFileBytes = MAX_FILE_BYTES, maxBundleBytes = MAX_BUNDLE_BYTES } = {}) {
+  let total = 0;
+  for (const [name, body] of Object.entries(files)) {
+    const size = Buffer.byteLength(body, "utf8");
+    if (size > maxFileBytes) throw new InputError(`artifact ${name} exceeds ${maxFileBytes} bytes`);
+    total += size;
+  }
+  if (total > maxBundleBytes) throw new InputError(`bundle exceeds ${maxBundleBytes} uncompressed bytes`);
+}
+function verdictsTemplate() {
+  return {
+    schema_version: SCHEMA_VERSION2,
+    headline: "",
+    top_issues: [],
+    probe_frame_ids: [],
+    asks: [],
+    our_actions: [],
+    clusters: {}
+  };
+}
+var utcStamp = (date2) => stamp3(date2);
+var compactStamp = (date2) => utcStamp(date2).replace(/[-:]/g, "");
+function validateOptions2(options) {
+  const { expectedCalls = null, expectedFailures = null, unmatchedStarts = 0 } = options;
+  const count8 = (value, label) => {
+    if (value === null) return;
+    if (!Number.isInteger(value)) throw new InputError(`${label} must be an integer`);
+    if (value < 0) throw new InputError(`${label} cannot be negative`);
+  };
+  count8(expectedCalls, "--expected-calls");
+  count8(expectedFailures, "--expected-failures");
+  count8(unmatchedStarts, "--unmatched-starts");
+  if (expectedCalls === null !== (expectedFailures === null)) {
+    throw new InputError("--expected-calls and --expected-failures must be supplied together");
+  }
+  if (options.server && !matches3(SAFE_SERVER, options.server)) throw new InputError("--server must be a bounded namespace token");
+  if (!matches3(SAFE_ADAPTER, options.adapter)) throw new InputError("--adapter must be a bounded token");
+  for (const [label, value] of [["--org", options.org], ["--collector", options.collector]]) {
+    if (!isStr(value) || cpLen(value) > 200 || /[\r\n\0]/.test(value)) throw new InputError(`${label} is invalid or too long`);
+  }
+  if (!PROFILE_NAMES.includes(options.profile)) throw new InputError("--profile must be internal or external");
+  if (!CAPTURE_SCOPES.includes(options.captureScope)) throw new InputError("--capture-scope must be complete, failures-only, or sample");
+  if (!Number.isInteger(options.opaque) || options.opaque < 1) throw new InputError("--opaque must be a positive integer");
+}
+var PROFILE_NAMES = ["internal", "external"];
+function buildBundle(records, options = {}) {
+  const settings2 = {
+    server: null,
+    org: "unknown",
+    profile: "internal",
+    adapter: "jsonl",
+    captureScope: "sample",
+    expectedCalls: null,
+    expectedFailures: null,
+    assumeOffset: null,
+    allowPartial: false,
+    sourceTruncated: false,
+    retentionIncomplete: false,
+    unmatchedStarts: 0,
+    environment: null,
+    verdicts: null,
+    probe: null,
+    reviewedNarrative: false,
+    notVisible: [],
+    collector: process.env.USER ?? "unknown",
+    opaque: 20,
+    now: /* @__PURE__ */ new Date(),
+    nonce: null,
+    salt: null,
+    verify,
+    ...Object.fromEntries(Object.entries(options).filter(([, value]) => value !== void 0))
+  };
+  if (options.assumeOffset === void 0 && options.assumeUtcOffset !== void 0) {
+    settings2.assumeOffset = options.assumeUtcOffset;
+  }
+  validateOptions2(settings2);
+  const collected = settings2.now;
+  const collectedAt = `${utcStamp(collected)}Z`;
+  const nonce = settings2.nonce ?? randomBytes10(4).toString("hex");
+  if (!/^[0-9a-f]{8}$/.test(nonce)) throw new InputError("nonce must be 8 lowercase hex characters");
+  let { frames, bad } = ingest(records, { adapter: settings2.adapter, assumeOffset: settings2.assumeOffset });
+  if (bad.length && !settings2.allowPartial) {
+    throw new InputError(
+      `${bad.length} malformed row(s) refused; use allowPartial to exclude them`,
+      { details: bad.slice(0, 20) }
+    );
+  }
+  if (!frames.length) {
+    if (bad.length) throw new InputError("no usable rows after validation", { details: bad.slice(0, 20) });
+    throw new InputError("No usable rows. Check the adapter and field names.", { exitCode: 1 });
+  }
+  const ingestedCount = frames.length;
+  frames = filterServer(frames, settings2.server);
+  const foreignCount = ingestedCount - frames.length;
+  if (!frames.length) throw new InputError(`No rows matched server ${pyRepr(settings2.server)}.`, { exitCode: 1 });
+  assignAnonymousFrameIds(frames);
+  const deduplicated = deduplicateFrames(frames);
+  frames = deduplicated.frames;
+  const { duplicateCount } = deduplicated;
+  const redactor = new Redactor(settings2.profile, { salt: settings2.salt });
+  redactFrames(frames, redactor);
+  const offsets = sortStrings(new Set(frames.map((frame) => frame._offset).filter(Boolean)));
+  const missingTimestamps = frames.filter((frame) => frame.ts === null).length;
+  const missingNonfailedPayloads = frames.filter((frame) => frame.outcome !== "fail" && !frame._payload_available).length;
+  const inconclusivePayloadScans = frames.filter((frame) => frame._payload_scan_inconclusive).length;
+  const payloadScanModes = counter();
+  const payloadScanLimits = [];
+  for (const frame of frames) {
+    for (const [mode, count8] of Object.entries(frame._payload_scan_modes)) bump(payloadScanModes, mode, count8);
+    for (const limit of frame._payload_scan_limits) {
+      if (!payloadScanLimits.some((existing) => pyEq(existing, limit))) payloadScanLimits.push(limit);
+    }
+  }
+  const effectiveFailures = frames.filter((frame) => frame.effective_outcome === "fail");
+  const { clusters, warnings } = buildClusters(effectiveFailures, settings2.opaque, collected);
+  const { verdicts, discarded: discardedNarrative } = loadVerdicts(
+    settings2.verdicts,
+    clusters,
+    frames,
+    redactor,
+    settings2.reviewedNarrative
+  );
+  applyVerdicts(clusters, verdicts);
+  const probeFrameIds = new Set(verdicts.probe_frame_ids);
+  annotateProbeAdjustments(clusters, frames, probeFrameIds);
+  for (const frame of frames) {
+    frame.excluded_from_production = probeFrameIds.has(frame.frame_id);
+    frame.exclusion_reason = frame.excluded_from_production ? "test-probe" : null;
+  }
+  const productionFrames = frames.filter((frame) => !frame.excluded_from_production);
+  const controlFrameIds = new Set(Object.values(verdicts.clusters).flatMap((value) => value.evidence?.control_frame_ids ?? []));
+  const controlFrames = frames.filter((frame) => controlFrameIds.has(frame.frame_id));
+  const observedHostFailures = frames.filter((frame) => frame.outcome === "fail").length;
+  let reconciliationStatus = null;
+  let reconcileNote = "Host totals were not supplied.";
+  const sourceLosses = Boolean(bad.length || settings2.sourceTruncated || settings2.retentionIncomplete || settings2.unmatchedStarts);
+  if (settings2.expectedCalls !== null) {
+    const countsMatch = settings2.expectedCalls === frames.length && settings2.expectedFailures === observedHostFailures;
+    reconciliationStatus = countsMatch && !sourceLosses;
+    if (reconciliationStatus) reconcileNote = "Observed calls and host failures match the supplied host totals.";
+    else {
+      reconcileNote = `Expected ${settings2.expectedCalls} calls and ${settings2.expectedFailures} host failures; observed ${frames.length} calls and ${observedHostFailures} host failures.`;
+      if (bad.length) reconcileNote += ` ${bad.length} malformed row(s) were excluded.`;
+      if (settings2.sourceTruncated) reconcileNote += " The source export was declared truncated.";
+      if (settings2.retentionIncomplete) reconcileNote += " Source retention was declared incomplete.";
+      if (settings2.unmatchedStarts) reconcileNote += ` ${settings2.unmatchedStarts} unmatched call start(s) were reported.`;
+    }
+  }
+  const rateAvailable = settings2.captureScope === "complete" && reconciliationStatus === true && missingNonfailedPayloads === 0 && inconclusivePayloadScans === 0;
+  let rateReason;
+  if (settings2.captureScope !== "complete") rateReason = `capture scope is ${settings2.captureScope}, not complete`;
+  else if (reconciliationStatus === null) rateReason = "complete scope lacks expected call and host-failure totals";
+  else if (reconciliationStatus === false) rateReason = "host call/failure totals did not reconcile";
+  else if (missingNonfailedPayloads) rateReason = "payload scan coverage is incomplete";
+  else if (inconclusivePayloadScans) rateReason = "one or more payload scans were inconclusive";
+  else rateReason = "available";
+  const rawVolume = rawVolumeOf(frames);
+  const volume = volumeOf(productionFrames, rateAvailable, probeFrameIds.size);
+  const observedWindow = windowOf(frames);
+  const suppliedEnvironment = settings2.environment === null ? {} : jsonValue(settings2.environment, "environment", { object: true });
+  const outputServer = redactor.identifier(settings2.server || "unknown", "server");
+  const outputOrg = redactor.identifier(settings2.org, "org");
+  const outputCollector = redactor.identifier(settings2.collector, "collector");
+  let environment = defaultEnvironment(suppliedEnvironment, outputServer, collectedAt, offsets, settings2.assumeOffset);
+  environment = redactor.environment(environment);
+  const setDefault = (object16, key4, value) => {
+    if (!Object.hasOwn(object16, key4)) object16[key4] = value;
+    return object16[key4];
+  };
+  setDefault(environment, "collected_at", collectedAt);
+  const hostEnvironment = setDefault(environment, "host", /* @__PURE__ */ Object.create(null));
+  setDefault(hostEnvironment, "name", "unknown");
+  setDefault(hostEnvironment, "version", "unknown");
+  const serverEnvironment = setDefault(environment, "server", /* @__PURE__ */ Object.create(null));
+  setDefault(serverEnvironment, "name", outputServer);
+  setDefault(serverEnvironment, "version", "unknown");
+  setDefault(serverEnvironment, "endpoint", "unknown");
+  setDefault(environment, "transport", "unknown");
+  setDefault(environment, "auth_mode", "unknown");
+  setDefault(environment, "clock_skew_ms", null);
+  setDefault(environment, "local_offset", null);
+  setDefault(environment, "source_offsets_seen", offsets);
+  environment.assumed_offset = settings2.assumeOffset;
+  setDefault(environment, "tools", []);
+  environment.tool_inventory_captured = pyTruthy(environment.tools);
+  let probeProjection = null;
+  if (settings2.probe !== null) {
+    const probe = jsonValue(settings2.probe, "probe");
+    if (!isContainer3(probe)) throw new InputError("probe root must be an object or array");
+    probeProjection = redactor.probe(probe);
+  }
+  const advertised = (isList(environment.tools) ? environment.tools : []).filter((item) => isDict(item) && isStr(item.name)).map((item) => item.name);
+  const cov = coverageOf(productionFrames, advertised, {
+    ratesAvailable: rateAvailable,
+    inventoryCaptured: pyTruthy(environment.tool_inventory_captured),
+    windowDays: observedWindow.days
+  });
+  const hiddenFrames = frames.filter((frame) => frame.outcome !== "fail" && frame.effective_outcome === "fail");
+  const adjustedHidden = hiddenFrames.filter((frame) => !probeFrameIds.has(frame.frame_id));
+  const predicateCounts = counter();
+  for (const frame of hiddenFrames) {
+    for (const predicate of frame.embedded_failure) bump(predicateCounts, JSON.stringify([predicate, frame.tool]));
+  }
+  const embeddedSummary = mostCommon(predicateCounts).map(([key4, count8]) => {
+    const [predicate, tool] = JSON.parse(key4);
+    return { predicate, tool, count: count8 };
+  });
+  const embeddedHostOutcomes = counter();
+  for (const frame of hiddenFrames) bump(embeddedHostOutcomes, frame.outcome);
+  const embeddedPopulation = {
+    raw_affected_calls: hiddenFrames.length,
+    adjusted_remaining_calls: adjustedHidden.length,
+    predicate_hits: sum([...predicateCounts.values()]),
+    raw_host_outcomes: Object.fromEntries(OUTCOMES4.map((name) => [name, embeddedHostOutcomes.get(name) ?? 0]))
+  };
+  const excluded = {};
+  if (bad.length) excluded["malformed or invalid rows"] = bad.length;
+  if (foreignCount) excluded["other servers"] = foreignCount;
+  if (duplicateCount) excluded["identical duplicate call identities"] = duplicateCount;
+  if (probeFrameIds.size) excluded["confirmed test-probe calls from production metrics"] = probeFrameIds.size;
+  if (settings2.unmatchedStarts) excluded["unmatched call starts"] = settings2.unmatchedStarts;
+  const notVisible = [];
+  settings2.notVisible.forEach((value, index) => {
+    const sanitized = redactor.narrative(value, settings2.reviewedNarrative);
+    if (settings2.reviewedNarrative) notVisible.push(sanitized);
+    else discardedNarrative.push(`not_visible[${index}]`);
+  });
+  if (missingTimestamps) notVisible.push(`${missingTimestamps} call(s) have no timestamp; temporal fields are null`);
+  if (missingNonfailedPayloads) {
+    notVisible.push(`${missingNonfailedPayloads} nonfailed/unknown call(s) lack payloads; embedded-failure coverage is incomplete`);
+  }
+  if (inconclusivePayloadScans) {
+    notVisible.push(`${inconclusivePayloadScans} call payload scan(s) hit parser bounds or unsupported containers and are inconclusive`);
+  }
+  if (!frames.some((frame) => frame.duration_ms !== null)) notVisible.push("call duration was not recorded");
+  if (!frames.some((frame) => frame.request_ids.length)) notVisible.push("request IDs were not present");
+  if (settings2.environment === null) {
+    notVisible.push("environment inventory/version/transport/auth/clock-skew metadata was not supplied");
+  }
+  if (settings2.sourceTruncated) notVisible.push("the source export was declared truncated");
+  if (settings2.retentionIncomplete) notVisible.push("source retention was declared incomplete");
+  const redactionNow = redactor.report();
+  const redactionLosses = redactionNow.rules_fired.filter((item) => ["content", "size"].includes(item.class)).map((item) => `${item.rule} \u2014 ${item.hits} occurrence(s)`);
+  if (redactionNow.unknown_fields_dropped.length) {
+    redactionLosses.push(`unknown structured fields were dropped: ${redactionNow.unknown_fields_dropped.slice(0, 12).join(", ")}`);
+  }
+  const limits3 = {
+    not_visible: notVisible,
+    excluded,
+    redaction_losses: redactionLosses,
+    narrative: {
+      reviewed: Boolean(settings2.reviewedNarrative),
+      discarded_fields: discardedNarrative,
+      scanner_scope: settings2.reviewedNarrative ? "Manual review assertion plus finite secret/identity scanning." : "Operator narrative omitted; no semantic content review claimed."
+    }
+  };
+  const bundleId2 = `mcp-diag-${safeSlug(settings2.profile, "bundle")}-${compactStamp(collected)}Z-${nonce}`;
+  const meta = {
+    server: outputServer,
+    org: outputOrg,
+    collector: outputCollector,
+    date: utcStamp(collected).slice(0, 10),
+    bundle_id: bundleId2,
+    profile: settings2.profile,
+    adapter: settings2.adapter
+  };
+  const sourceIntegrity = {
+    truncated: Boolean(settings2.sourceTruncated),
+    retention_incomplete: Boolean(settings2.retentionIncomplete),
+    unmatched_starts: settings2.unmatchedStarts,
+    identical_duplicates: duplicateCount,
+    malformed_rows: bad.length
+  };
+  const summary = {
+    schema_version: SCHEMA_VERSION2,
+    bundle_id: bundleId2,
+    generated_at: collectedAt,
+    server: outputServer,
+    org: outputOrg,
+    profile: settings2.profile,
+    adapter: settings2.adapter,
+    capture_scope: settings2.captureScope,
+    clustering: { engine_version: CLUSTER_ENGINE_VERSION, opaque: settings2.opaque },
+    window: observedWindow,
+    raw_volume: rawVolume,
+    volume,
+    rate_reason: rateReason,
+    reconciliation: {
+      status: reconciliationStatus,
+      expected_calls: settings2.expectedCalls,
+      observed_calls: frames.length,
+      expected_host_failures: settings2.expectedFailures,
+      observed_host_failures: observedHostFailures,
+      note: reconcileNote
+    },
+    payload_scan: {
+      scanned_calls: frames.filter((frame) => frame._payload_available).length,
+      missing_nonfailed_payloads: missingNonfailedPayloads,
+      inconclusive_calls: inconclusivePayloadScans,
+      scan_modes: sortedEntries(payloadScanModes),
+      limits: payloadScanLimits
+    },
+    headline: verdicts.headline,
+    probe_frame_ids: frames.filter((frame) => probeFrameIds.has(frame.frame_id)).map((frame) => frame.frame_id),
+    top_issues: topIssues(clusters, verdicts.top_issue_ids),
+    asks: verdicts.asks,
+    our_actions: verdicts.our_actions,
+    controls: { count: controlFrames.length, frame_ids: controlFrames.map((frame) => frame.frame_id) },
+    clusters,
+    embedded_failures: embeddedSummary,
+    embedded_failure_population: embeddedPopulation,
+    coverage: cov,
+    environment,
+    limitations: limits3,
+    warnings,
+    live_reproduction_performed: false,
+    permission_to_replay_or_write: false,
+    source_integrity: sourceIntegrity
+  };
+  const serialControls = controlFrames.map(serializableFrame);
+  const files = {
+    "summary.json": jsonArtifact(summary),
+    "clusters.json": jsonArtifact(clusters),
+    "coverage.json": jsonArtifact(cov),
+    "environment.json": jsonArtifact(environment),
+    "embedded.json": jsonArtifact(hiddenFrames.map(serializableFrame)),
+    "failures.jsonl": effectiveFailures.map((frame) => jsonLine(serializableFrame(frame))).join("\n")
+  };
+  if (probeProjection !== null) files["probe-results.json"] = jsonArtifact(probeProjection);
+  if (serialControls.length) files["controls.jsonl"] = serialControls.map(jsonLine).join("\n");
+  files["report.md"] = buildReport(meta, summary);
+  files["README.md"] = README({ bundleId: bundleId2, profile: settings2.profile, generated: collectedAt });
+  files["redaction-report.json"] = jsonArtifact(redactor.report({
+    ran: true,
+    passed: true,
+    findings: [],
+    finding_count: 0,
+    scope: "exact final artifact set including manifest and redaction report"
+  }));
+  const checksums = Object.fromEntries(sortStrings(Object.keys(files)).map((name) => [name, sha3(files[name])]));
+  const omitted = [];
+  if (probeProjection === null) omitted.push({ file: "probe-results.json", reason: "offline probe not supplied" });
+  if (!serialControls.length) omitted.push({ file: "controls.jsonl", reason: "no successful control frame was referenced" });
+  const manifest = {
+    schema_version: SCHEMA_VERSION2,
+    bundle_id: bundleId2,
+    generated_at: collectedAt,
+    generated_by: `collect_bundle.py ${COLLECTOR_VERSION}`,
+    profile: settings2.profile,
+    server: outputServer,
+    adapter: settings2.adapter,
+    capture_scope: settings2.captureScope,
+    clustering: summary.clustering,
+    collector: outputCollector,
+    window: observedWindow,
+    counts: {
+      raw: rawVolume,
+      production_adjusted: volume,
+      clusters: clusters.length,
+      controls: serialControls.length,
+      excluded_rows: sum(Object.values(excluded))
+    },
+    reconciliation: summary.reconciliation,
+    reconciled: reconciliationStatus,
+    truncated: sourceLosses ? true : settings2.captureScope !== "complete" || reconciliationStatus === null ? null : !reconciliationStatus,
+    omitted,
+    checksums,
+    checksum_scope: "every emitted file except manifest.json",
+    live_reproduction_performed: false,
+    permission_to_replay_or_write: false,
+    source_integrity: sourceIntegrity
+  };
+  files["manifest.json"] = jsonArtifact(manifest);
+  artifactLimits(files);
+  const verification = settings2.verify(files, settings2.profile);
+  if (!verification.passed) throw new RedactionGateError(verification);
+  return {
+    files,
+    summary: toPlain(summary),
+    manifest: toPlain(manifest),
+    report: files["report.md"],
+    archiveName: `${bundleId2}.zip`,
+    bundleId: bundleId2,
+    generatedAt: collected,
+    warnings,
+    discardedNarrative,
+    verification
+  };
+}
+var ARCHIVE_NAME = /^mcp-diag-[a-z0-9][a-z0-9-]{0,47}-\d{8}T\d{6}Z-[0-9a-f]{8}\.zip$/;
+function bundleZip(result) {
+  const names = sortStrings(Object.keys(result.files));
+  return createZip(
+    names.map((name) => ({ name: `${result.bundleId}/${name}`, data: result.files[name] })),
+    { date: result.generatedAt }
+  );
+}
+function writeBundle2(result, directory2) {
+  if (!ARCHIVE_NAME.test(result.archiveName) || result.archiveName !== `${result.bundleId}.zip`) {
+    throw new InputError("unsafe archive name");
+  }
+  const existed = existsSync(directory2);
+  mkdirSync(directory2, { recursive: true, mode: 448 });
+  if (!existed) chmodSync(directory2, 448);
+  const target = join(directory2, result.archiveName);
+  if (existsSync(target) || existsSync(join(directory2, result.bundleId))) {
+    throw new InputError("refusing to reuse an existing bundle path");
+  }
+  const bytes2 = bundleZip(result);
+  const staging = join(directory2, `.${result.bundleId}.zip.staging-${randomBytes10(4).toString("hex")}`);
+  const writeExclusive2 = (path32) => {
+    const handle = openSync(path32, "wx", 384);
+    try {
+      writeSync(handle, bytes2);
+    } finally {
+      closeSync(handle);
+    }
+    chmodSync(path32, 384);
+  };
+  writeExclusive2(staging);
+  try {
+    linkSync(staging, target);
+  } catch (error) {
+    if (error.code === "EEXIST") throw new InputError("refusing to reuse an existing bundle path");
+    writeExclusive2(target);
+  } finally {
+    unlinkSync(staging);
+  }
+  return target;
+}
+
+// lib/mcp-diagnostics/inspect.mjs
+import { readFileSync as readFileSync3, statSync as statSync4 } from "node:fs";
+var MAX_FILE_BYTES2 = 16 * 1024 * 1024;
+var MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+var MAX_ARCHIVE_BYTES = MAX_TOTAL_BYTES + 1024 * 1024;
+var MAX_MEMBERS = 32;
+var REQUIRED = /* @__PURE__ */ new Set([
+  "README.md",
+  "report.md",
+  "summary.json",
+  "manifest.json",
+  "environment.json",
+  "clusters.json",
+  "failures.jsonl",
+  "embedded.json",
+  "coverage.json",
+  "redaction-report.json"
+]);
+var OPTIONAL = /* @__PURE__ */ new Set(["probe-results.json", "controls.jsonl"]);
+var VERDICTS2 = /* @__PURE__ */ new Set([
+  "unclassified",
+  "test-probe",
+  "caller-error",
+  "product-bug",
+  "contract-gap",
+  "by-design",
+  "client-side",
+  "infra-transient",
+  "fixed-since",
+  "not-reproduced-now"
+]);
+var OUTCOMES5 = ["ok", "fail", "unknown"];
+var BundleRefusedError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "BundleRefusedError";
+  }
+};
+function require9(condition, message) {
+  if (!condition) throw new BundleRefusedError(message);
+}
+var get4 = (object16, key4, fallback = null) => Object.hasOwn(object16, key4) ? object16[key4] : fallback;
+var isCount = (value) => isInt(value) && Number(value) >= 0;
+var setEquals = (left, right) => left.size === right.size && [...left].every((value) => right.has(value));
+function count7(value, label) {
+  require9(isCount(value), `Invalid count: ${label}`);
+  return Number(value);
+}
+var decodeJson = (text6) => pyLoads(text6, {
+  duplicates: "error",
+  constants: "error",
+  duplicateError: () => new BundleRefusedError("Duplicate JSON key"),
+  constantError: () => new BundleRefusedError("Non-finite JSON number")
+});
+var isStatus = (status4) => status4 === null || isInt(status4) && status4 >= 100 && status4 <= 599;
+function frameSchema(frame, expected2) {
+  require9(isDict(frame), "Frame must be an object");
+  require9(isStr(get4(frame, "frame_id")) && /^f-[0-9a-f]{24}$/.test(frame.frame_id), "Invalid frame ID format");
+  require9(OUTCOMES5.includes(get4(frame, "outcome")), "Invalid host outcome");
+  require9(get4(frame, "effective_outcome") === expected2, "Frame effective outcome mismatch");
+  require9(isStr(get4(frame, "tool")) && Boolean(frame.tool), "Missing frame tool");
+  require9(isStr(get4(frame, "error")) && isStr(get4(frame, "args")), "Frame diagnostics and args must be strings");
+  for (const key4 of ["session_id", "call_id", "server", "error_code"]) {
+    require9(get4(frame, key4) === null || isStr(frame[key4]), `Invalid frame ${key4}`);
+  }
+  for (const key4 of ["request_ids", "embedded_failure"]) {
+    const values = get4(frame, key4);
+    require9(isList(values) && values.every((value) => isStr(value) && value) && new Set(values).size === values.length, `Invalid frame ${key4}`);
+  }
+  require9(isList(get4(frame, "operations")) && frame.operations.every(isDict), "Invalid operations");
+  for (const operation of frame.operations) {
+    require9(OUTCOMES5.includes(get4(operation, "outcome")), "Invalid operation outcome");
+    const status5 = get4(operation, "status_code");
+    require9(isStatus(status5), "Invalid operation status");
+    if (expected2 === "ok") {
+      require9(
+        operation.outcome !== "fail" && !(pyTruthy(status5) && status5 >= 400),
+        "Successful control contains a failed operation"
+      );
+    }
+  }
+  const status4 = get4(frame, "status_code");
+  require9(isStatus(status4), "Invalid frame status");
+  const duration3 = get4(frame, "duration_ms");
+  require9(duration3 === null || isNum(duration3) && num(duration3) >= 0 && num(duration3) <= 2 ** 63 - 1 && Number.isFinite(num(duration3)), "Invalid duration");
+  if (expected2 === "ok") {
+    require9(
+      frame.outcome !== "fail" && !(pyTruthy(status4) && status4 >= 400),
+      "Failed evidence cannot be a successful control"
+    );
+  }
+  const timestamp = get4(frame, "ts");
+  if (timestamp !== null) {
+    require9(isStr(timestamp) && timestamp.endsWith("Z"), "Timestamp must be UTC");
+    const iso = `${timestamp.slice(0, -1)}+00:00`;
+    if (!fromIsoformat(iso)) throw new BundleRefusedError(`Invalid isoformat string: ${pyRepr(iso)}`);
+  }
+  require9(isBool(get4(frame, "excluded_from_production")), "Missing exclusion disposition");
+  require9(
+    pyEq(get4(frame, "exclusion_reason"), frame.excluded_from_production ? "test-probe" : null),
+    "Exclusion reason conflicts with disposition"
+  );
+  if (expected2 === "ok") require9(!frame.excluded_from_production, "A control cannot be excluded as a probe");
+}
+function readMembers(buffer, limits3) {
+  require9(buffer.length <= limits3.maxArchiveBytes, "Archive file exceeds size limit");
+  const files = /* @__PURE__ */ new Map();
+  const roots = /* @__PURE__ */ new Set();
+  const seen = /* @__PURE__ */ new Set();
+  let total = 0;
+  const members = listEntries(buffer);
+  require9(members.length <= limits3.maxMembers, "Too many archive members");
+  for (const info of members) {
+    require9(info.method === STORED || info.method === DEFLATED, "Unsupported archive compression");
+    const { name } = info;
+    require9(!seen.has(name), "Duplicate archive member");
+    seen.add(name);
+    require9(!name.includes("\\") && !name.includes(":") && !name.includes("\0"), "Unsafe archive member name");
+    const { parts: parts2, absolute } = posixParts(name);
+    require9(!absolute && !parts2.includes(".."), "Unsafe archive path");
+    const kind2 = info.mode & S_IFMT;
+    require9([0, S_IFREG, S_IFDIR].includes(kind2), "Unsupported archive member type");
+    if (info.isDir) {
+      require9(parts2.length === 1, "Unexpected archive directory");
+      continue;
+    }
+    require9(kind2 !== S_IFDIR, "File has directory attributes");
+    require9(parts2.length === 2, "Expected one bundle root and a flat file set");
+    const [root, leaf] = parts2;
+    require9(REQUIRED.has(leaf) || OPTIONAL.has(leaf), "Unexpected archive file");
+    require9(!files.has(leaf), "Duplicate logical archive file");
+    roots.add(root);
+    require9(info.size <= limits3.maxFileBytes, "Archive file too large");
+    total += info.size;
+    require9(total <= limits3.maxTotalBytes, "Archive exceeds uncompressed size limit");
+    require9(!(info.flags & 1), "Encrypted archives are unsupported");
+    const body = readEntry(buffer, info, { maxBytes: limits3.maxFileBytes });
+    require9(body.length === info.size && body.length <= limits3.maxFileBytes, "Archive size mismatch");
+    files.set(leaf, body);
+  }
+  require9(roots.size === 1, "Archive must have exactly one bundle root");
+  require9([...REQUIRED].every((name) => files.has(name)), "Missing required bundle files");
+  return [[...roots][0], files];
+}
+function loadArchive(input, limits3) {
+  if (isStr(input)) {
+    require9(statSync4(input).size <= limits3.maxArchiveBytes, "Archive file exceeds size limit");
+    return readFileSync3(input);
+  }
+  return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+}
+function inspectBundle(input, { limits: limits3 = {} } = {}) {
+  const bounds = {
+    maxFileBytes: MAX_FILE_BYTES2,
+    maxTotalBytes: MAX_TOTAL_BYTES,
+    maxArchiveBytes: MAX_ARCHIVE_BYTES,
+    maxMembers: MAX_MEMBERS,
+    ...limits3
+  };
+  try {
+    return inspect(loadArchive(input, bounds), bounds);
+  } catch (error) {
+    if (error instanceof BundleRefusedError) throw error;
+    if (error instanceof ZipError || error instanceof JsonDecodeError || error.code === "ENOENT" || error.code === "EISDIR" || error.code === "EACCES") {
+      throw new BundleRefusedError(error.message);
+    }
+    throw error;
+  }
+}
+function inspect(buffer, limits3) {
+  const [root, files] = readMembers(buffer, limits3);
+  const text6 = /* @__PURE__ */ new Map();
+  for (const [name, body] of files) {
+    const [decoded, at2] = decodeUtf8(body);
+    require9(decoded !== null, `'utf-8' codec can't decode ${name} at byte ${at2}`);
+    text6.set(name, decoded);
+  }
+  const manifest = decodeJson(text6.get("manifest.json"));
+  require9(isDict(manifest), "Manifest must be an object");
+  require9(
+    isInt(get4(manifest, "schema_version")) && Number(manifest.schema_version) === 2,
+    "Unsupported schema; regenerate legacy bundles"
+  );
+  require9(get4(manifest, "bundle_id") === root, "Manifest/archive root mismatch");
+  require9(/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(root), "Invalid bundle identifier");
+  require9(["internal", "external"].includes(get4(manifest, "profile")), "Invalid profile");
+  const hashes2 = get4(manifest, "checksums");
+  const emitted = new Set([...files.keys()].filter((name) => name !== "manifest.json"));
+  require9(
+    isDict(hashes2) && setEquals(new Set(Object.keys(hashes2)), emitted),
+    "Checksum inventory differs from emitted file set"
+  );
+  for (const [name, expected2] of Object.entries(hashes2)) {
+    require9(expected2 === `sha256:${sha256Hex(files.get(name))}`, `Checksum mismatch: ${name}`);
+  }
+  const data = /* @__PURE__ */ new Map();
+  for (const [name, body] of text6) if (name.endsWith(".json")) data.set(name, decodeJson(body));
+  const summary = data.get("summary.json");
+  const clusters = data.get("clusters.json");
+  const coverage4 = data.get("coverage.json");
+  const environment = data.get("environment.json");
+  require9(isDict(summary) && pyEq(get4(summary, "schema_version"), 2), "Invalid summary schema");
+  require9(get4(summary, "bundle_id") === root, "Summary/manifest identity mismatch");
+  require9(pyEq(get4(summary, "profile"), manifest.profile), "Summary/manifest profile mismatch");
+  require9(isList(clusters) && clusters.every(isDict), "Clusters must be objects");
+  require9(isDict(coverage4) && isDict(environment), "Invalid coverage/environment");
+  require9(pyEq(get4(summary, "coverage"), coverage4), "Summary/coverage mismatch");
+  require9(pyEq(get4(summary, "environment"), environment), "Summary/environment mismatch");
+  require9(["complete", "failures-only", "sample"].includes(get4(summary, "capture_scope")), "Invalid capture scope");
+  for (const key4 of ["capture_scope", "window", "source_integrity", "reconciliation", "clustering"]) {
+    require9(pyEq(get4(manifest, key4), get4(summary, key4)), `Manifest/summary mismatch: ${key4}`);
+  }
+  const clustering = get4(summary, "clustering");
+  require9(
+    isDict(clustering) && isInt(get4(clustering, "engine_version")) && Number(clustering.engine_version) === 2 && isInt(get4(clustering, "opaque")) && clustering.opaque >= 1 && clustering.opaque <= 1e4,
+    "Unsupported clustering policy"
+  );
+  const reconciliation = get4(summary, "reconciliation");
+  require9(isDict(reconciliation), "Missing reconciliation");
+  const reconciled = get4(reconciliation, "status");
+  require9(reconciled === null || isBool(reconciled), "Invalid reconciliation state");
+  require9(get4(manifest, "reconciled") === reconciled, "Reconciled flag mismatch");
+  require9(get4(manifest, "truncated") === null || isBool(manifest.truncated), "Invalid truncation state");
+  for (const flag of ["live_reproduction_performed", "permission_to_replay_or_write"]) {
+    require9(
+      get4(manifest, flag) === false && get4(summary, flag) === false,
+      "Bundle must not authorize actions or claim collection performed a live repro"
+    );
+  }
+  const omissions = get4(manifest, "omitted");
+  require9(isList(omissions) && omissions.every(isDict), "Invalid omissions record");
+  const omittedNames = omissions.map((item) => get4(item, "file"));
+  require9(
+    omittedNames.every(isStr) && new Set(omittedNames).size === omittedNames.length,
+    "Invalid omitted file names"
+  );
+  const missingOptional = new Set([...OPTIONAL].filter((name) => !files.has(name)));
+  require9(setEquals(new Set(omittedNames), missingOptional) && omissions.every((item) => isStr(get4(item, "reason")) && item.reason), "Omissions differ from actual file set");
+  const lines = (name) => pySplitlines(text6.get(name) ?? "").filter((line) => pyStrip(line)).map(decodeJson);
+  const frames = lines("failures.jsonl");
+  for (const frame of frames) frameSchema(frame, "fail");
+  const ids = frames.map((frame) => get4(frame, "frame_id"));
+  require9(ids.every((id5) => isStr(id5) && id5) && new Set(ids).size === ids.length, "Missing or duplicate failure frame IDs");
+  require9(frames.every((frame) => frame.effective_outcome === "fail"), "Failure corpus contains a nonfailure");
+  const byId = new Map(ids.map((id5, index) => [id5, frames[index]]));
+  const controls = lines("controls.jsonl");
+  for (const frame of controls) frameSchema(frame, "ok");
+  const controlIds = controls.map((frame) => frame.frame_id);
+  require9(
+    new Set(controlIds).size === controlIds.length && !controlIds.some((id5) => byId.has(id5)),
+    "Duplicate or overlapping control IDs"
+  );
+  const controlById = new Map(controls.map((frame) => [frame.frame_id, frame]));
+  const clusterIds = clusters.map((item) => get4(item, "id"));
+  require9(
+    clusterIds.every((id5) => isStr(id5) && /^c-[0-9a-f]{24}$/.test(id5)) && new Set(clusterIds).size === clusterIds.length,
+    "Invalid cluster IDs"
+  );
+  const rows = frames.map((frame) => ({
+    frame_id: frame.frame_id,
+    tool: frame.tool,
+    ts: get4(frame, "ts") || "",
+    session: get4(frame, "session_id") || "",
+    args: frame.args,
+    err: frameDiagnostic(frame)
+  }));
+  const computed = new Map(cluster(rows, Number(clustering.opaque)).map((item) => [item.id, item]));
+  require9(setEquals(new Set(computed.keys()), new Set(clusterIds)), "Content-derived cluster identities differ");
+  const assigned = [];
+  const referencedControls = /* @__PURE__ */ new Set();
+  for (const item of clusters) {
+    require9(VERDICTS2.has(get4(item, "verdict")), "Invalid cluster verdict");
+    require9(["read", "write", "unknown-treat-as-write"].includes(get4(item, "rw_class")), "Invalid read/write classification");
+    const n = count7(get4(item, "count"), "cluster.count");
+    const members = get4(item, "frame_ids");
+    require9(isList(members) && members.length === n, "Cluster member count mismatch");
+    require9(members.every((id5) => isStr(id5) && byId.has(id5)), "Unknown cluster member");
+    require9(members.every((id5) => pyEq(get4(byId.get(id5), "tool"), get4(item, "tool"))), "Cluster tool/member mismatch");
+    const days = get4(item, "day_counts");
+    require9(isDict(days), "Missing daily accounting");
+    require9(Object.values(days).every(isCount), "Invalid daily count");
+    const dated = members.filter((id5) => pyTruthy(get4(byId.get(id5), "ts"))).length;
+    require9(
+      Object.values(days).reduce((total, value) => total + Number(value), 0) === dated,
+      "Cluster daily counts do not reconcile"
+    );
+    const actualDays = {};
+    for (const id5 of members) {
+      const ts = get4(byId.get(id5), "ts");
+      if (!pyTruthy(ts)) continue;
+      require9(isStr(ts), "Invalid member timestamp");
+      const day2 = [...ts].slice(0, 10).join("");
+      actualDays[day2] = (actualDays[day2] ?? 0) + 1;
+    }
+    require9(pyEq(days, actualDays), "Daily counts disagree with members");
+    require9(pyEq(get4(item, "distinct_days"), Object.keys(actualDays).length), "Distinct-day count mismatch");
+    const actual = computed.get(item.id);
+    for (const key4 of [
+      "tool",
+      "signature",
+      "count",
+      "day_counts",
+      "distinct_days",
+      "undated_count",
+      "first_seen",
+      "last_seen"
+    ]) {
+      require9(pyEq(get4(item, key4), get4(actual, key4)), `Recomputed cluster mismatch: ${key4}`);
+    }
+    require9(setEquals(new Set(members), new Set(actual.frame_ids)), "Recomputed cluster membership mismatch");
+    const excludedMembers = members.filter((id5) => pyTruthy(byId.get(id5).excluded_from_production));
+    require9(pyEq(get4(item, "excluded_frame_ids"), excludedMembers) && pyEq(get4(item, "adjusted_count"), n - excludedMembers.length), "Cluster probe-adjusted accounting mismatch");
+    if (get4(item, "verdict") === "test-probe") {
+      require9(excludedMembers.length === n, "Test-probe verdict lacks explicit member exclusions");
+    }
+    const evidence = get4(item, "evidence", {});
+    require9(isDict(evidence), "Invalid evidence object");
+    const track = get4(item, "evidence_track");
+    require9([null, "A", "B"].includes(track), "Invalid evidence track");
+    require9(get4(item, "evidence_verified") === false, "Offline evidence must remain unverified");
+    if (track === "A") {
+      const failingRefs = get4(evidence, "failing_frame_ids");
+      const controlRefs = get4(evidence, "control_frame_ids");
+      require9(isList(failingRefs) && failingRefs.length > 0 && failingRefs.every((id5) => isStr(id5) && members.includes(id5)), "Unresolved failing evidence references");
+      require9(isList(controlRefs) && controlRefs.length > 0 && controlRefs.every((id5) => isStr(id5) && controlById.has(id5)), "Unresolved successful control references");
+      for (const id5 of controlRefs) referencedControls.add(id5);
+    }
+    assigned.push(...members);
+  }
+  require9(pyEq(sortStrings(assigned), sortStrings(ids)), "Cluster membership does not partition failures");
+  require9(setEquals(referencedControls, new Set(controlIds)), "Published control set differs from evidence references");
+  const embedded = data.get("embedded.json");
+  require9(isList(embedded) && embedded.every(isDict), "Invalid embedded failure records");
+  const embeddedIds = embedded.map((frame) => get4(frame, "frame_id"));
+  require9(
+    embeddedIds.every((id5) => isStr(id5) && byId.has(id5)) && new Set(embeddedIds).size === embeddedIds.length,
+    "Invalid embedded overlap"
+  );
+  require9(embedded.every((frame) => pyEq(frame, byId.get(frame.frame_id))), "Embedded and failure records disagree");
+  require9(
+    setEquals(new Set(embeddedIds), new Set(frames.filter((frame) => frame.outcome !== "fail").map((f2) => f2.frame_id))),
+    "Embedded failure coverage mismatch"
+  );
+  const summaryClusters = get4(summary, "clusters");
+  require9(isList(summaryClusters), "Missing summary clusters");
+  require9(pyEq(summaryClusters, clusters), "Summary clusters must exactly mirror clusters.json");
+  require9(summaryClusters.every((item) => isDict(item) && isStr(get4(item, "id"))), "Invalid summary cluster objects");
+  require9(setEquals(new Set(summaryClusters.map((item) => item.id)), new Set(clusterIds)), "Summary cluster identities differ");
+  const sourceClusters = new Map(clusters.map((item) => [item.id, item]));
+  for (const item of summaryClusters) {
+    require9(sourceClusters.has(item.id), "Unknown summary cluster");
+    const actual = sourceClusters.get(item.id);
+    require9(Object.entries(item).every(([key4, value]) => pyEq(get4(actual, key4), value)), "Summary/cluster value mismatch");
+  }
+  const volume = get4(summary, "volume");
+  require9(isDict(volume), "Missing volume");
+  for (const key4 of ["calls", ...OUTCOMES5]) count7(get4(volume, key4), `volume.${key4}`);
+  require9(
+    Number(volume.ok) + Number(volume.fail) + Number(volume.unknown) === Number(volume.calls),
+    "Volume outcomes do not reconcile"
+  );
+  const tools2 = get4(coverage4, "tools");
+  require9(isList(tools2) && tools2.every(isDict), "Missing per-tool coverage");
+  for (const key4 of ["calls", ...OUTCOMES5]) {
+    const total = tools2.reduce((acc, tool) => acc + count7(get4(tool, key4), `coverage.${key4}`), 0);
+    require9(total === Number(volume[key4]), "Coverage/volume mismatch");
+  }
+  const adjustedFailures = frames.filter((frame) => !frame.excluded_from_production).length;
+  require9(Number(volume.fail) === adjustedFailures, "Probe-adjusted failure count mismatch");
+  const raw = get4(summary, "raw_volume");
+  require9(isDict(raw), "Missing raw volume");
+  const rawCalls = count7(get4(raw, "calls"), "raw_volume.calls");
+  for (const label of ["host_outcomes", "effective_outcomes"]) {
+    const outcomes3 = get4(raw, label);
+    require9(isDict(outcomes3), "Missing raw outcome counts");
+    const total = OUTCOMES5.reduce((acc, key4) => acc + count7(get4(outcomes3, key4), `${label}.${key4}`), 0);
+    require9(total === rawCalls, "Raw outcomes do not reconcile");
+  }
+  require9(Number(raw.effective_outcomes.fail) === frames.length, "Raw failure count mismatch");
+  require9(count7(get4(raw, "embedded_failure_calls"), "raw embedded calls") === embedded.length, "Embedded count mismatch");
+  require9(
+    Number(raw.host_outcomes.fail) <= Number(raw.effective_outcomes.fail),
+    "Host failures cannot become effective successes"
+  );
+  const probeCount = frames.length - adjustedFailures;
+  require9(rawCalls - probeCount === Number(volume.calls), "Probe-adjusted total call count mismatch");
+  require9(pyEq(get4(volume, "excluded_test_probe_calls"), probeCount), "Probe exclusion count mismatch");
+  const counts3 = get4(manifest, "counts");
+  require9(isDict(counts3), "Missing manifest counts");
+  require9(pyEq(get4(counts3, "raw"), raw) && pyEq(get4(counts3, "production_adjusted"), volume) && count7(get4(counts3, "clusters"), "manifest clusters") === clusters.length, "Manifest count mismatch");
+  const limitations = get4(summary, "limitations");
+  require9(isDict(limitations) && isDict(get4(limitations, "excluded")), "Missing exclusion accounting");
+  const excludedRows = Object.values(limitations.excluded).reduce((acc, value) => acc + count7(value, "excluded"), 0);
+  require9(pyEq(get4(counts3, "excluded_rows"), excludedRows), "Manifest exclusion mismatch");
+  const sourceIntegrity = get4(summary, "source_integrity");
+  require9(isDict(sourceIntegrity), "Missing source integrity");
+  for (const key4 of ["truncated", "retention_incomplete"]) require9(isBool(get4(sourceIntegrity, key4)), "Invalid source-integrity flag");
+  for (const key4 of ["unmatched_starts", "identical_duplicates", "malformed_rows"]) {
+    count7(get4(sourceIntegrity, key4), `source_integrity.${key4}`);
+  }
+  require9(
+    pyEq(get4(reconciliation, "observed_calls"), rawCalls) && pyEq(get4(reconciliation, "observed_host_failures"), raw.host_outcomes.fail),
+    "Reconciliation observed counts differ from raw volume"
+  );
+  for (const key4 of ["expected_calls", "expected_host_failures"]) {
+    if (get4(reconciliation, key4) !== null) count7(reconciliation[key4], `reconciliation.${key4}`);
+  }
+  require9(
+    get4(reconciliation, "expected_calls") === null === (get4(reconciliation, "expected_host_failures") === null),
+    "Expected reconciliation counts must be supplied together"
+  );
+  const complete = summary.capture_scope === "complete" && reconciled === true;
+  const losses = ["truncated", "retention_incomplete", "unmatched_starts", "malformed_rows"].some((key4) => pyTruthy(get4(sourceIntegrity, key4)));
+  if (reconciled === true) {
+    require9(!losses && pyEq(get4(reconciliation, "expected_calls"), rawCalls) && pyEq(get4(reconciliation, "expected_host_failures"), raw.host_outcomes.fail), "Unsupported reconciled claim");
+  }
+  const scan2 = get4(summary, "payload_scan");
+  require9(isDict(scan2), "Missing payload scan accounting");
+  for (const key4 of ["scanned_calls", "missing_nonfailed_payloads", "inconclusive_calls"]) {
+    count7(get4(scan2, key4), `payload_scan.${key4}`);
+  }
+  require9(
+    Number(scan2.inconclusive_calls) <= Number(scan2.scanned_calls) && Number(scan2.scanned_calls) <= rawCalls,
+    "Scan counts exceed observed population"
+  );
+  require9(isBool(get4(volume, "rate_available")), "Rate availability must be boolean");
+  if (volume.rate_available) {
+    require9(
+      complete && !losses && !pyTruthy(scan2.missing_nonfailed_payloads) && !pyTruthy(scan2.inconclusive_calls),
+      "Rate claims unsupported completeness"
+    );
+    const known = Number(volume.ok) + Number(volume.fail);
+    const expectedKnown = known ? pyRound(100 * Number(volume.fail) / known, 1) : null;
+    const expectedAll = Number(volume.calls) ? pyRound(100 * Number(volume.fail) / Number(volume.calls), 1) : null;
+    require9(
+      pyEq(get4(volume, "fail_pct_of_known"), expectedKnown) && pyEq(get4(volume, "fail_pct_of_all"), expectedAll),
+      "Rate arithmetic mismatch"
+    );
+  } else {
+    require9(
+      get4(volume, "fail_pct_of_known") === null && get4(volume, "fail_pct_of_all") === null,
+      "Unavailable rates must be null"
+    );
+  }
+  const top = get4(summary, "top_issues");
+  require9(isList(top) && top.length <= 5 && top.every(isDict), "Invalid top issues");
+  require9(
+    new Set(top.map((issue) => get4(issue, "cluster_id")).filter(isStr)).size === top.length,
+    "Duplicate or invalid top issue IDs"
+  );
+  for (const issue of top) {
+    require9(sourceClusters.has(get4(issue, "cluster_id")), "Unknown top issue");
+    const actual = sourceClusters.get(issue.cluster_id);
+    require9(pyEq(get4(issue, "hits"), actual.count) && pyEq(get4(issue, "tool"), actual.tool) && pyEq(get4(issue, "verdict"), get4(actual, "verdict")), "Top issue differs from cluster");
+  }
+  const expectedPredicates = /* @__PURE__ */ new Map();
+  for (const frame of embedded) {
+    for (const predicate of frame.embedded_failure) {
+      const key4 = JSON.stringify([predicate, frame.tool]);
+      expectedPredicates.set(key4, (expectedPredicates.get(key4) ?? 0) + 1);
+    }
+  }
+  const predicateTable = get4(summary, "embedded_failures");
+  require9(isList(predicateTable) && predicateTable.every(isDict), "Invalid embedded predicate table");
+  const actualPredicates = /* @__PURE__ */ new Map();
+  for (const row of predicateTable) {
+    require9(isStr(get4(row, "predicate")) && isStr(get4(row, "tool")), "Invalid embedded predicate");
+    const key4 = JSON.stringify([row.predicate, row.tool]);
+    require9(!actualPredicates.has(key4), "Duplicate predicate table entry");
+    actualPredicates.set(key4, count7(get4(row, "count"), "predicate.count"));
+  }
+  require9(
+    actualPredicates.size === expectedPredicates.size && [...expectedPredicates].every(([key4, value]) => actualPredicates.get(key4) === value),
+    "Raw embedded predicate counts differ from frames"
+  );
+  const redaction = data.get("redaction-report.json");
+  require9(isDict(redaction), "Invalid redaction report");
+  const verification = get4(redaction, "verification", {});
+  require9(isDict(verification), "Invalid verification record");
+  require9(get4(verification, "ran") === true && get4(verification, "passed") === true, "Redaction gate did not pass");
+  require9(!pyTruthy(get4(verification, "findings")), "Redaction findings remain");
+  return { manifest: toPlain(manifest), summary: toPlain(summary), files: sortStrings(files.keys()) };
+}
 
 // lib/copilot-extension.mjs
 var panels = /* @__PURE__ */ new Map();
@@ -92356,6 +97272,7 @@ var runtimeFor = (port) => {
   return runtimes.get(port);
 };
 async function ensureRuntime(port) {
+  if (superseded) throw new CanvasError("runtime_update_required", "WIRE was updated. Start a new chat or reload extensions to use the new version.");
   const hosted = runtimeFor(port);
   try {
     await hosted.ensure();
@@ -92426,6 +97343,64 @@ var toolHandlers = {
   async wire_analytics(input) {
     return (await agent()).action(AGENT_INSTANCE, "get_analytics", input ?? {});
   },
+  async wire_diagnostic_calls(input) {
+    return (await agent()).action(AGENT_INSTANCE, "get_diagnostic_calls", input);
+  },
+  async wire_diagnostic_bundle({ from, to, tools: tools2, captureScope = "sample", profile = "internal", verdicts, reviewedNarrative = false, save = false }) {
+    const calls2 = await (await agent()).action(
+      AGENT_INSTANCE,
+      "get_diagnostic_calls",
+      { ...from ? { from } : {}, ...to ? { to } : {}, ...tools2?.length ? { tools: tools2 } : {} }
+    );
+    if (captureScope === "complete" && !calls2.coverage.complete) {
+      throw Object.assign(new Error("This window isn't completely covered, so a failure rate can't be stated. Use captureScope sample."), { code: "incomplete-capture" });
+    }
+    const bundle2 = buildBundle(calls2.records, {
+      server: "workiq",
+      org: "wire",
+      adapter: "wire",
+      profile,
+      captureScope,
+      ...captureScope === "complete" ? { expectedCalls: calls2.totals.calls, expectedFailures: calls2.totals.hostFailures } : {},
+      ...verdicts ? { verdicts } : {},
+      reviewedNarrative
+    });
+    const clusters = JSON.parse(bundle2.files["clusters.json"]).map(({ id: id5, tool, signature_display, count: count8, adjusted_count, sessions, distinct_days, first_seen, last_seen, error_codes, status_codes, verdict }) => ({ id: id5, tool, signature_display, count: count8, adjusted_count, sessions, distinct_days, first_seen, last_seen, error_codes, status_codes, verdict }));
+    const result = {
+      totals: calls2.totals,
+      coverage: calls2.coverage,
+      report: bundle2.report,
+      clusters,
+      warnings: bundle2.warnings,
+      verdictsTemplate: verdictsTemplate()
+    };
+    if (!save) return { saved: false, ...result };
+    const directory2 = path31.join(path31.dirname(process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir()), "diagnostics");
+    await mkdir11(directory2, { recursive: true, mode: 448 });
+    const archive = writeBundle2(bundle2, directory2);
+    const reportPath = archive.replace(/\.zip$/, ".md");
+    await writeFile(reportPath, bundle2.report, { flag: "wx", mode: 384 });
+    const { report, ...rest } = result;
+    return { saved: true, archive, reportPath, ...rest };
+  },
+  async wire_inspect_bundle({ path: file }) {
+    if (!path31.isAbsolute(file) || !file.toLowerCase().endsWith(".zip")) throw new Error("Give the absolute path of a .zip bundle.");
+    const { summary: s } = await inspectBundle(file);
+    return {
+      accepted: true,
+      bundleId: s.bundle_id,
+      captureScope: s.capture_scope,
+      profile: s.profile,
+      window: s.window,
+      volume: s.volume,
+      rateReason: s.rate_reason,
+      reconciliation: s.reconciliation,
+      payloadScan: s.payload_scan,
+      limitations: s.limitations,
+      warnings: s.warnings,
+      clusters: s.clusters.map(({ id: id5, tool, count: count8, adjusted_count, distinct_days, first_seen, last_seen, error_codes, status_codes, verdict, evidence_track }) => ({ id: id5, tool, count: count8, adjusted_count, distinct_days, first_seen, last_seen, error_codes, status_codes, verdict, evidence_track }))
+    };
+  },
   async wire_search({ query, types, limit = 25 }) {
     const outcome5 = await (await agent()).search(AGENT_INSTANCE, { query, types });
     const hits = outcome5.results?.matches.hits ?? [];
@@ -92474,6 +97449,24 @@ joinedSession = await joinSession({
     }
   })] }
 });
+var bundleFile = fileURLToPath5(import.meta.url);
+var bundleStamp = (file) => {
+  try {
+    const info = statSync5(file);
+    return `${info.size}:${info.mtimeMs}`;
+  } catch {
+    return "missing";
+  }
+};
+var loadedStamp = bundleStamp(bundleFile);
+var superseded = false;
+var updateWatch = setInterval(() => {
+  if (bundleStamp(bundleFile) === loadedStamp) return;
+  superseded = true;
+  clearInterval(updateWatch);
+  void Promise.allSettled([...runtimes.values()].map((runtime) => runtime.close()));
+}, 15e3);
+updateWatch.unref();
 var stopping;
 function stop2() {
   stopping ??= (async () => {
