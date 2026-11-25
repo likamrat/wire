@@ -44,6 +44,16 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await expect(page.getByRole("dialog").getByRole("row").filter({hasText:dateText})).toContainText("200,000 tokens");
     await page.keyboard.press("Escape"); await page.getByRole("button",{name:"Back to Analyze"}).click();
     await expect(date).toBeFocused();
+    const models=page.locator('[data-percentage-card="models"]');
+    await models.getByRole("button",{name:"Token share",exact:true}).click();
+    const row=models.locator(".usage-model");
+    await expect(row).toHaveCount(1);
+    await expect(row.locator(".percentage-value")).toHaveText("200,000 tokens");
+    await expect(row.locator(".percentage-bar-track")).toHaveCount(0);
+    await expect(models).not.toContainText("interactions metered.");
+    await row.getByRole("link").click();
+    await expect(page.locator("#activityList article")).toHaveCount(1);
+    await expect(page.locator("#activityList article")).toContainText("Review calendar");
 });
 
 test("a metered zero is a token point on the baseline, not an unknown or an empty day",async t=>{
@@ -375,7 +385,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await expect(cards.filter({hasText:"Find review owners"}).locator(".usage-chip")).toHaveText("33,000 tokens");
     await page.getByRole("button",{name:"Token share",exact:true}).click();
     await expect(page.locator(".usage-model").first()).toBeVisible();
-    await expect(page.locator("[data-breakdown=models]")).toContainText("7 of 8 interactions metered");
+    await expect(page.locator("[data-percentage-card=models]").getByRole("list",{name:"Model token counts from 7 of 8 matching interactions"})).toBeVisible();
     const launch=cards.filter({hasText:"Launch notes"}), open=launch.locator(".request-card-open").first();
     await open.click();const reading=page.locator("[data-reader-section=usage]");
     await expect(reading).toContainText("30,000 tokens · 2 model calls");

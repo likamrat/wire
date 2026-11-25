@@ -90,12 +90,17 @@ function renderModelCounts(el, host, u) {
     host.append(table);
 }
 function modelShareReading(el, host, s, nativeCount, linkForModel) {
+    if (!s.models.length) {
+        host.append(el("p","percentage-empty",s.eligible+nativeCount ? "No model token counts available." : "No matching interactions."));
+        return;
+    }
     const list = el("ul", "percentage-legend percentage-tool-list");
+    const compareShares = s.models.length > 1 && s.total > 0;
     for (const row of s.models) {
-        const block = el("li", "percentage-legend-row usage-model"), fraction = s.total ? row.total / s.total : null;
+        const block = el("li", "percentage-legend-row usage-model");
         const value = el("span", "percentage-value");
-        if (fraction === null) value.textContent = `${number(row.total)} tokens`;
-        else value.append(el("strong", "", `${Math.round(fraction*100)}%`), " ", el("span", "", `(${number(row.total)} tokens)`));
+        if (compareShares) value.append(el("strong", "", `${Math.round(row.total*100/s.total)}%`), " ", el("span", "", `(${number(row.total)} tokens)`));
+        else value.textContent = `${number(row.total)} tokens`;
         const label = linkForModel?.(row.model) ?? el("span");
         label.classList.add("percentage-label");
         label.textContent = row.model;
@@ -104,12 +109,14 @@ function modelShareReading(el, host, s, nativeCount, linkForModel) {
             label.setAttribute("aria-label", `${row.model}: ${value.textContent}. View ${number(row.interactions)} metered ${row.interactions === 1 ? "interaction" : "interactions"}.`);
         }
         block.append(label, value);
-        const track = el("div", "percentage-bar-track"), fill = el("span", "percentage-bar");
-        fill.style.width = `${100 * (fraction ?? 0)}%`; track.setAttribute("aria-hidden", "true"); track.append(fill); block.append(track);
+        if (compareShares) {
+            const track = el("div", "percentage-bar-track"), fill = el("span", "percentage-bar");
+            fill.style.width = `${100 * row.total / s.total}%`; track.setAttribute("aria-hidden", "true"); track.append(fill); block.append(track);
+        }
         list.append(block);
     }
-    if (list.children.length) host.append(list);
-    host.append(el("p", "muted", `${number(s.metered)} of ${number(s.eligible + nativeCount)} interactions metered.`));
+    list.setAttribute("aria-label",`Model token counts from ${number(s.metered)} of ${number(s.eligible+nativeCount)} matching interactions`);
+    host.append(list);
 }
 function usageCalendar(scenarios,rows,identity,dayOf) {
     const records = new Map(scenarios.filter(s => s.recordKind !== "native-conversation").map(s => [s.scenarioId,s]));
