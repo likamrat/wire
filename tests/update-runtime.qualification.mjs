@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile, fork } from "node:child_process";
+import { execFile, fork, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,7 +20,8 @@ const exec = promisify(execFile);
 const project = fileURLToPath(new URL("../", import.meta.url));
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
-const releaseJourney = process.env.WIRE_UPDATE_BROWSER === "release";
+const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
+const releaseJourney = sleepingGuide || process.env.WIRE_UPDATE_BROWSER === "release";
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
@@ -35,8 +36,9 @@ test("full WIRE clone updates on the original address and reopens the same saved
     for (const key of Object.keys(env)) if (/^(?:GH|GITHUB|COPILOT).*TOKEN$/.test(key) || key === "NODE_OPTIONS") delete env[key];
     const git = async (cwd, ...args) => (await exec("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
         "-c", "commit.gpgSign=false", ...args], { cwd, env, maxBuffer: 4 * 1024 * 1024 })).stdout.trimEnd();
-    let app, ended, independent, independentExit, stderr = "", stdout = "";
+    let app, ended, independent, independentExit, closeNativeBrowser, stderr = "", stdout = "";
     t.after(async () => {
+        if (closeNativeBrowser) await closeNativeBrowser();
         if (independent?.connected) independent.disconnect();
         if (independentExit) await independentExit;
         if (app?.connected) app.disconnect();
@@ -164,10 +166,32 @@ test("full WIRE clone updates on the original address and reopens the same saved
         const otherUrl=await until(()=>output.match(/ready at (http:\/\/127\.0\.0\.1:\d+\/)/)?.[1]);
         const secondHealth=()=>fetch(otherUrl+"health").then(r=>r.json()), beforeSecond=await secondHealth();
         const edge=await chromium.launch({channel:"msedge"});t.after(()=>edge.close());
-        const chrome=await chromium.launch();t.after(()=>chrome.close());
-        const first=await edge.newContext(), peer=await chrome.newContext();
+        let peer;
+        if (sleepingGuide) {
+            // Playwright normally forces every target to be focused. A background target
+            // in the native default context can actually freeze instead.
+            const profile=path.join(temp,"sleeping-browser");
+            const proc=spawn(chromium.executablePath(),["--remote-debugging-port=0","--remote-debugging-address=127.0.0.1",
+                `--user-data-dir=${profile}`,"--headless=new","--disable-background-networking","--no-first-run","about:blank"],{stdio:"ignore"});
+            const exited=new Promise(resolve=>proc.once("exit",resolve));
+            let chrome;
+            closeNativeBrowser=async()=>{
+                if (chrome?.isConnected()) {
+                    const cdp=await chrome.newBrowserCDPSession();
+                    await cdp.send("Browser.close").catch(()=>{});await chrome.close();
+                }
+                if(proc.exitCode===null)proc.kill();
+                await exited;
+            };
+            const port=await until(async()=>readFile(path.join(profile,"DevToolsActivePort"),"utf8").then(s=>s.split("\n")[0],
+                e=>{if(e.code!=="ENOENT")throw e;return null}),10000);
+            chrome=await chromium.connectOverCDP(`http://127.0.0.1:${port}`,{noDefaults:true});peer=chrome.contexts()[0];
+        } else {
+            const chrome=await chromium.launch();t.after(()=>chrome.close());peer=await chrome.newContext();
+        }
+        const first=await edge.newContext();
         for(const c of [first,peer]) await c.route("**/*",r=>[new URL(url).origin,new URL(otherUrl).origin].includes(new URL(r.request().url()).origin)?r.continue():r.abort());
-        const settings=await first.newPage(), guide=await first.newPage(), reports=await peer.newPage(), separate=await peer.newPage();
+        const settings=await first.newPage(), guide=await (sleepingGuide?peer:first).newPage(), reports=await peer.newPage(), separate=await peer.newPage();
         await Promise.all([settings.goto(url+"settings"),guide.goto(url+"documentation#reading-updates"),
             reports.goto(url+"reports?bundle="+bundle.bundleId),separate.goto(otherUrl+"settings")]);
         const participants=[settings,guide,reports];
@@ -175,6 +199,17 @@ test("full WIRE clone updates on the original address and reopens the same saved
         await expect(guide.locator(".docs-article")).toContainText("Installed guide before update.");
         await expect(reports.locator("#savedReportReader h1")).toBeVisible();
         const reportTitle=await reports.locator("#savedReportReader h1").textContent();
+        const lifecycle = sleepingGuide && await guide.context().newCDPSession(guide);
+        async function freezeGuide() {
+            await reports.bringToFront();
+            await expect.poll(()=>guide.evaluate(()=>document.visibilityState)).toBe("hidden");
+            const frozen=guide.waitForEvent("console",{predicate:m=>m.text()==="fixture: trusted freeze",timeout:5000});
+            await guide.evaluate(()=>document.addEventListener("freeze",e=>{
+                if(e.isTrusted) console.log("fixture: trusted freeze");
+            },{once:true}));
+            await lifecycle.send("Page.setWebLifecycleState",{state:"frozen"});
+            await frozen;
+        }
         await writeFile(path.join(origin,"docs","README.md"),guideText("Revised release guidance."));
         await writeFile(path.join(origin,"docs","images","example.svg"),guideImage(64));
         await git(origin,"commit","-qam","Guide and illustration only");
@@ -191,12 +226,38 @@ test("full WIRE clone updates on the original address and reopens the same saved
         await settings.goBack(); await settings.locator("#appUpdateDismiss").click();
         await expect(settings.locator("#appUpdateNotice")).toBeHidden();
         const destinations=participants.map(p=>p.url()), starts=stdout.match(/WIRE ready at /g).length;
+        const awake = sleepingGuide ? [settings,reports] : participants;
+        let wakeNavigation;
+        if (lifecycle) {
+            // Observe the new document response; WIRE consumes and removes its bootstrap element.
+            guide.on("response",response=>{
+                if (response.request().isNavigationRequest() && response.request().frame()===guide.mainFrame()) wakeNavigation=response;
+            });
+            await freezeGuide();
+        }
+        const applied = settings.waitForResponse(r=>r.url()===url+"api/app-update" && r.request().postDataJSON()?.action==="apply");
         await settings.locator("#settingsAppUpdate").click();
-        await Promise.all(participants.map(p=>expect(p.getByRole("dialog",{name:"WIRE is updating"})).toBeVisible()));
+        await Promise.all(awake.map(p=>expect(p.getByRole("dialog",{name:"WIRE is updating"})).toBeVisible()));
         await expect(separate.locator("#appUpdateFence")).toBeHidden();
-        await Promise.all(participants.map(p=>expect(p.locator("#appUpdateHeading")).toHaveText("WIRE updated to v1.1.1",{timeout:120000})));
-        assert.deepEqual(participants.map(p=>p.url()),destinations);
+        try {
+            const decision=await applied;
+            assert.equal(decision.status(),200,await decision.text());
+            await Promise.all(awake.map(p=>expect(p.locator("#appUpdateHeading")).toHaveText("WIRE updated to v1.1.1",{timeout:120000})));
+        } finally {
+            if (lifecycle) {
+                await lifecycle.send("Page.setWebLifecycleState",{state:"active"});
+                await guide.bringToFront();
+            }
+        }
         const after=await health();
+        if (lifecycle) {
+            await expect(guide.locator("#appUpdateVersion")).toHaveText("WIRE v1.1.1");
+            assert.ok(wakeNavigation,"the frozen view loaded a fresh document on wake");
+            const bootstrap = JSON.parse((await wakeNavigation.text()).match(/id="wireBootstrap"[^>]*>([^<]+)<\/script>/)[1]);
+            assert.equal(bootstrap.accessBootstrap.runtimeId,after.runtimeId);
+            await expect(guide.locator("#appUpdateNotice")).toBeHidden();
+        }
+        assert.deepEqual(participants.map(p=>p.url()),destinations);
         assert.equal(after.build,tip); assert.notEqual(after.runtimeId,prior.runtimeId);
         assert.equal(after.clientEntry,prior.clientEntry,"docs-only update can reuse the identical browser bundle");
         assert.equal(stdout.match(/WIRE ready at /g).length,starts+1);
@@ -206,7 +267,30 @@ test("full WIRE clone updates on the original address and reopens the same saved
         await expect(reports.locator("#savedReportReader h1")).toHaveText(reportTitle);
         await expect(settings.locator("#appUpdateVersion")).toHaveText("WIRE v1.1.1");
         await verifyPreserved();
-        t.diagnostic("Edge and Chromium: one docs-only release restart across three pages, same browser bundle, unchanged second instance and saved report.");
+        if (sleepingGuide) {
+            await publish("v1.1.2",await git(origin,"rev-parse","HEAD"),"### Changed\n- Another guide change.");
+            await guide.bringToFront();
+            await guide.goto(url+"settings?section=connection");
+            await expect(guide.locator("#workspace")).toHaveAttribute("aria-busy","false");
+            await guide.locator("#collectionWindow-control").click();
+            await guide.locator('.select-popup [role=option][data-value="7"]').click();
+            await expect(guide.locator("#cancelPreferences")).toBeVisible();
+            await check.click();await expect(settings.locator("#appUpdateStatus")).toContainText("v1.1.2");
+            await freezeGuide();
+            try {
+                const refused=settings.waitForResponse(r=>r.url()===url+"api/app-update" && r.request().postDataJSON()?.action==="apply");
+                await settings.locator("#settingsAppUpdate").click();
+                const response=await refused;
+                assert.equal(response.status(),409);
+                assert.match((await response.json()).error,/did not answer/);
+                assert.deepEqual(await health(),after);
+            } finally { await lifecycle.send("Page.setWebLifecycleState",{state:"active"}); }
+            await guide.bringToFront();
+            await expect(guide.locator("#collectionWindow")).toHaveValue("7");
+            await expect(guide.locator("#cancelPreferences")).toBeVisible();
+            await verifyPreserved();
+        }
+        t.diagnostic(`Edge and Chromium: one docs-only release restart across three pages${sleepingGuide ? ", including a natively frozen Guide verified after wake" : ""}, same browser bundle, unchanged second instance and saved report.`);
         return;
     }
     if (process.env.WIRE_UPDATE_BROWSER === "reloaded") {

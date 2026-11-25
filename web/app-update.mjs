@@ -35,6 +35,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     let notesTag = null, notesText;
     let coordination = false, peerWatch, peerTimer;
     let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
+    let parked = false, presenceSequence = 0, checkingWake = false, wakeTimer;
     function receipt(value) {
         if (value) sessionStorage.setItem(receiptKey, JSON.stringify(value));
         else sessionStorage.removeItem(receiptKey);
@@ -125,13 +126,13 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function schedule() {
         clearTimeout(scheduleTimer);
-        if (!state?.supported || expected || manualOnly(state)) return;
+        if (parked || !state?.supported || expected || manualOnly(state)) return;
         if (coordination) watchPeers();
         if (["checking", "preparing", "restarting"].includes(state.phase)) scheduleTimer = setTimeout(() => void run("status"), 2500);
         else if (state.automatic) scheduleTimer = setTimeout(() => void run("auto-check"), day);
     }
     async function run(action, fields, opening = false) {
-        if (busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
+        if (parked || busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
         const generation = lifetime;
         openingStatusOnly = opening;
         const returnFocus = action === "check" && document.activeElement === manual;
@@ -211,8 +212,53 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (hold) return hold.kind;
         return !storageAvailable || unfinishedAtSuspension || changingPreferences ? "operation" : "";
     }
+    const presence = sequence => fetch("/api/app-update/presence", { ...fixed, method: "POST", keepalive: true,
+        headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
+        body: JSON.stringify({ runtimeId, sequence }), signal: AbortSignal.timeout(5000) });
+    function onFreeze(event) {
+        if (!event.isTrusted || parked || !document.hidden || !panelVerified || !coordination || busy || expected
+            || !uuid(runtimeId) || !sha(state?.installed) || readinessHold()) return;
+        parked = true;
+        document.documentElement.inert = true;
+        clearTimeout(scheduleTimer); clearTimeout(peerTimer); peerTimer = undefined;
+        peerWatch?.abort();
+        // The browser can suspend JS before delivery. Only receipt on the server
+        // removes the blocker; on resume we rejoin even if this reply was lost.
+        void presence(++presenceSequence).catch(() => { /* Delivery unknown: rejoin on wake in either case. */ });
+    }
+    async function onWake() {
+        if (!parked || checkingWake) return;
+        clearTimeout(wakeTimer); checkingWake = true;
+        if (presenceSequence % 2) presenceSequence++;
+        try {
+            const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
+            const health = response.ok && await response.json();
+            if (health?.service !== "workiq-evidence" || health.protocol !== 1 || !uuid(health.runtimeId)
+                || !sha(health.build) || !asset(health.clientEntry)) throw Error("Unverified runtime");
+            if (health.updating) { fence(updatingMessage); return; }
+            if (health.runtimeId !== runtimeId) {
+                // This view slept through the offer. Load the current document at its
+                // original address; it must not manufacture an Apply/success receipt.
+                allowReload = true; location.reload(); return;
+            }
+            const joined = await presence(presenceSequence);
+            if (joined.status === 403) { allowReload = true; location.reload(); return; }
+            if (!joined.ok || (await joined.json()).state !== "ready") { fence(updatingMessage); return; }
+            parked = false;
+            document.documentElement.inert = false;
+            if (dialog.open) dialog.close();
+            await run("status");
+        } catch {
+            if (parked) fence("Reconnecting to WIRE");
+        } finally {
+            checkingWake = false;
+            if (parked && !allowReload) wakeTimer = setTimeout(onWake, 1000);
+        }
+    }
+    document.addEventListener("freeze", onFreeze, { capture: true });
+    document.addEventListener("resume", onWake, { capture: true });
     async function watchPeers() {
-        if (peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
+        if (parked || peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
         const controller = new AbortController(), generation = lifetime;
         peerWatch = controller;
         let wait = 0;
@@ -249,7 +295,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             wait = 1500;
         } finally {
             if (peerWatch === controller) peerWatch = null;
-            if (!expected && generation === lifetime && coordination && !controller.signal.aborted) {
+            if (!parked && !expected && generation === lifetime && coordination && !controller.signal.aborted) {
                 peerTimer = setTimeout(() => { peerTimer = undefined; void watchPeers(); }, wait);
             }
         }
@@ -357,7 +403,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     dialog.addEventListener("cancel", event => event.preventDefault());
     for (const type of ["click", "auxclick", "keydown", "pointerdown", "beforeinput", "input", "change", "paste", "drop", "submit"]) {
         window.addEventListener(type, event => {
-            if (expected && !dialog.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+            if (parked || expected && !dialog.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
         }, true);
     }
     window.addEventListener("beforeunload", event => { if (expected && !allowReload) { event.preventDefault(); event.returnValue = ""; } });
@@ -381,6 +427,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         }).catch(() => {});
     }, true);
     window.addEventListener("pageshow", event => {
+        if (event.persisted && parked) { void onWake(); return; }
         if (event.persisted && !expected) {
             state = null; render();
             if (busy) restoring = true;
@@ -433,7 +480,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         render,
         showNotes(tag) { notesTag = tag; if (tag !== null) render(); },
         reconnecting,
-        locked: () => Boolean(expected),
+        locked: () => parked || Boolean(expected),
         beforeOwnerRetirement() { unfinishedAtSuspension ||= Boolean(reason()); },
     };
 }

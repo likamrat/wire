@@ -240,6 +240,7 @@ address and verifies its bytes. It doesn't update your installation.
 | `WIRE_UPDATE_BROWSER` | What it exercises |
 | --- | --- |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
+| `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |
 | `1` | **Update and restart** in Settings, then verifies that the reloaded browser runs the new build. Needs Microsoft Edge Stable on Windows, or Playwright Chromium on WSL. |
 | `reloaded` | Settings and Analyze in two windows of the same browser profile. It replaces the disposable starter, reloads Analyze during a read, checks a missing readiness acknowledgment in both windows, then verifies each window's original destination after one restart. |
 | `manual` | Lets you try the update yourself on Windows or WSL. |

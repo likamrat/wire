@@ -60,12 +60,19 @@ random capabilities, TTL and the 128-panel limit still apply.
 - Each page GET allocates a capability, including on reload. Fetching HTML alone
   doesn't register an update blocker; a managed browser view participates after
   it uses its capability.
-- Each participating view must fence its own edits and acknowledge the same
+- Each awake participating view must fence its own edits and acknowledge the same
   update operation before one launcher restarts the installation. The
   notification carries no private data and can't authorize an update or renew
   data access.
 - On a clean departure, a verified browser page releases only its original
-  panel. Suspended pages and pages with unfinished work don't release it.
+  panel. A verified clean page receiving a native browser freeze can park its
+  participation in this instance. It cannot use its capability to resume work
+  until it rejoins. On wake, it checks the runtime at the original address;
+  if replaced, the new document verifies its actual installed build. A late
+  freeze notification cannot undo a later wake.
+- An unfinished edit, unconfirmed operation, unverified page or failure to
+  deliver the clean freeze leaves the blocker in place. Merely being hidden,
+  unreachable, or expired is never enough to classify a view as clean.
 - If the browser can't deliver the release, the ordinary session expires after
   inactivity. Expiry doesn't clear a managed installation's update interlock.
 - If a clean document leaves while its first update status is in transit, its
