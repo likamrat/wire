@@ -615,6 +615,9 @@ commits do not require the whole Copilot database to become idle. Changed
 selected mappings, withdrawn access and changed history still refuse.
 These observations carry **no whole-database publication stamp** and cannot
 replace the strict stamped reader used by collection or Prepare/Apply.
+The retained board, configuration and index must still stay unchanged during
+each page. A long review needs a stable WIRE store cut; the separate Copilot
+producer can remain active.
 The selected mapping proof binds continuations and proposals. The revised
 continuation seal rejects pages from the earlier stamped-review reader; start
 a newly bound review rather than joining an old partial scan. Prepare and

@@ -4,7 +4,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, writeFile, readdir, appendFile, rename } from "node:fs/promises";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { directMessageReference, promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
@@ -816,6 +816,55 @@ test("read-only pages finish under unrelated metadata churn but their proposal c
         mock.mock.restore();
         const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
         assert.equal(prepared.status, "prepared");
+    } finally { writer.close(); }
+});
+
+test("an active index write refuses an author page while a stable store tolerates ongoing producer metadata commits", async t => {
+    const f = await setup(t, "paged-review"), scope = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const originalIndex = JSON.parse(await readFile(f.indexFile)), checkpoint = await readFile(f.checkpointFile);
+    const source = await readFile(f.app.sourceFiles[1]), writer = new DatabaseSync(f.app.config.appDbPath);
+    const prepare = DatabaseSync.prototype.prepare;
+    let indexWriterActive = true, indexWrites = 0;
+    try {
+        writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE producer_activity(n INTEGER); INSERT INTO producer_activity VALUES(0)");
+        t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+            const statement = prepare.call(this, sql);
+            if (sql === "PRAGMA user_version") {
+                const get = statement.get.bind(statement);
+                statement.get = () => {
+                    const value = get();
+                    writer.exec("UPDATE producer_activity SET n=n+1");
+                    if (indexWriterActive) {
+                        indexWrites++;
+                        writeFileSync(f.indexFile, JSON.stringify({ ...originalIndex,
+                            metrics: { ...originalIndex.metrics, cycles: originalIndex.metrics.cycles + indexWrites } }));
+                    }
+                    return value;
+                };
+            }
+            return statement;
+        });
+        const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+        await assert.rejects(reviewPromptOriginClass({ ...scope, batch }),
+            /The author review changed\. List the current retained candidates again\./);
+        assert.equal(indexWrites, 1);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await readFile(f.app.sourceFiles[1]), source);
+        indexWriterActive = false;
+        const freshIndex = await readFile(f.indexFile);
+        const fresh = await reviewPromptOriginClass(scope);
+        const first = await reviewPromptOriginClass({ ...scope, batch: fresh.batches[0].batch });
+        assert.equal(first.status, "continue");
+        const final = await reviewPromptOriginClass({ ...scope, batch: fresh.batches[0].batch, continuation: first.continuation });
+        assert.equal(final.status, "reviewed");
+        assert.deepEqual(final.targets.map(target => target.prompt.authorship.basis), ["host-agent-envelope"]);
+        assert.deepEqual(final.unresolved.map(row => row.reason), ["duplicate-original"]);
+        assert.equal(final.source.indexSha256, hash(freshIndex));
+        assert.deepEqual(await readFile(f.indexFile), freshIndex);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await readFile(f.app.sourceFiles[1]), source);
     } finally { writer.close(); }
 });
 
