@@ -820,6 +820,10 @@ notes** in General opens the installed version's notes. A single click updates
 the local instance across its browsers; a WIRE instance on a different port
 with its own installation and data is unchanged.
 
+A clean tab that tells WIRE its browser is putting it to sleep catches up when
+it wakes, at the same address. If the browser disconnects without confirming
+that the tab is clean, WIRE stops before restarting rather than risking an edit.
+
 - Dismissing the notification leaves the update available in General.
 - If installation fails, General shows **Update not installed** and the
   reason. Away from General, the notification shows the same message.

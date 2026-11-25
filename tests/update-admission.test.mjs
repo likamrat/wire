@@ -49,6 +49,32 @@ test("expiry withdraws data access without retiring a suspended browser's update
     assert.equal((await apply(await page())).status, 200);
 });
 
+test("a clean freeze parks only its own registered page; a late freeze cannot undo wake", async t => {
+    const { page, post, apply, runtime, calls } = await managedFixture(t);
+    const sleeper = await page(), caller = await page();
+    const path = "/api/app-update/presence", route = "/api/app-update";
+    const report = (sequence, runtimeId = runtime.runtimeId) => post(path, { sequence, runtimeId }, sleeper);
+    assert.equal((await report(1)).status, 409, "an unused grant cannot announce sleep");
+    await post(route, { action: "status" }, sleeper);
+    assert.equal((await report(1, "old-runtime")).status, 403);
+    assert.deepEqual(await (await report(1)).json(), { state: "asleep" });
+    assert.equal((await post(route, { action: "status" }, sleeper)).status, 409);
+    assert.deepEqual(await (await report(2)).json(), { state: "ready" });
+    assert.equal((await report(1)).status, 409);
+    const watching = post("/api/app-update/watch", {}, sleeper);
+    const applying = apply(caller);
+    const offer = await (await watching).json();
+    assert.equal((await post("/api/app-update/readiness", { ...offer, hold: "operation" }, sleeper)).status, 200);
+    const refused = await applying;
+    assert.equal(refused.status, 409);
+    assert.match((await refused.json()).error, /pending WIRE operation/);
+    assert.equal(calls.some(c => c.action === "apply"), false);
+    assert.deepEqual(await (await report(3)).json(), { state: "asleep" });
+    assert.equal((await apply(caller)).status, 200);
+    assert.deepEqual(await (await report(4)).json(), { state: "updating" });
+    assert.equal(calls.filter(c => c.action === "apply").length, 1);
+});
+
 test("an admitted collector owner defers cutover; no scheduled or queued work starts behind the fence", async t => {
     const { page, apply, runtime, prepare, channel } = await managedFixture(t);
     assert.equal((await apply(await page())).status, 200);
