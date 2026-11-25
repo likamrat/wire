@@ -17,7 +17,7 @@ export const analyzeLayoutStyles = `
 .token-history {--day-lane:max(var(--day-min-pitch),calc(100cqi / var(--days)));--plot-height:calc(max(44px,1.2rem + 16px) + 12px + min(var(--day-column-width) * 1.25,var(--day-lane) * .8));position:relative;padding-block-start:var(--space-sm)}
 .token-history-scroll {min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;padding-bottom:8px}
 .token-history-strip {display:grid;width:max-content;min-width:100%}
-.token-history-plot {position:relative;height:var(--plot-height);min-width:0;cursor:default}
+.token-history-plot {position:relative;height:var(--plot-height);min-width:0;contain:inline-size;cursor:default}
 .token-history-plot svg {width:100%;height:100%;display:block;overflow:visible}
 .token-history-scroll:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
 .token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--control);stroke-width:1}

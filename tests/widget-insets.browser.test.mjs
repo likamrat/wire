@@ -78,6 +78,10 @@ for (const frontend of ["react", "bundled"]) test(`${frontend}: compiled Analyze
                 dateGap: Math.round(tick.getBoundingClientRect().top - root.querySelector(baseline).getBoundingClientRect().bottom) };
         }));
         assert.deepEqual(frames[1], frames[0], "Both daily charts use the same card, column width and baseline-to-date spacing");
+        if (frontend === "react" && width === 390) {
+            const tokenStrip = page.locator(".token-history-scroll");
+            assert.ok(await tokenStrip.evaluate(n => n.scrollWidth <= n.clientWidth + 1), "Four fitting days aren't widened by the SVG's intrinsic size");
+        }
         await models.getByRole("button", { name: "Token share", exact: true }).click();
         await measure(page, [["token-share", '[data-percentage-card="models"]']], `${frontend}-${width}-${theme}`, readings);
         await models.getByRole("button", { name: "Interactions", exact: true }).click();
