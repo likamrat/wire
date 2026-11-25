@@ -642,8 +642,13 @@ The reader's order follows the user's question:
 
 1. Selected prompt: what was requested.
 2. Recorded activity: calls and their own results, timing and errors.
-3. Available Copilot reply.
-4. Source details.
+3. Token usage for the interaction's model requests.
+4. Available Copilot reply.
+5. Source details.
+
+Each section folds independently. Jumping to a folded section opens it and
+focuses its heading. Reopening a reply or linked context doesn't read the
+retained reply text; **Read response** does that.
 
 A quiet date and time line beneath the selected prompt matches its card's
 recorded time and display zone. Any first-action fallback stays explicitly
@@ -653,11 +658,10 @@ labeled.
 
 Selected prompts over six rendered lines start with those six lines visible. This
 keeps a useful exact excerpt above the recorded activity without a nested scroll
-area. Short prompts have no toggle.
+area. Short prompts need no excerpt control.
 
-- The author heading of a long prompt is a single disclosure with a chevron. It
-  expands the exact retained text and collapses it back to the excerpt without
-  moving focus to a different button.
+- **Show full prompt** and **Show less** change the excerpt without folding the
+  prompt section. Focus stays on the same control.
 - Copy is a separate header action.
 - Width and font changes recheck actual overflow.
 - The choice belongs to that interaction's in-memory reading state, never its

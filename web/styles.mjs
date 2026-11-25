@@ -809,6 +809,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}
 .card-identities .service-cue>.wire-icon {align-self:flex-start;margin-block-start:.15em}
 :is(.card-reading-details,.tool-call-heading) {--call-key-width:4.5rem;--call-key-gap:var(--space-sm)}
+.card-reading-details:has(.usage-chip) {--call-key-width:5.75rem}
 :is(.card-reading-details,.reader-call-services) .card-identity-field {grid-template-columns:var(--call-key-width) minmax(0,1fr);gap:var(--call-key-gap)}
 .card-reading-details .card-identity-field+.card-identity-field {margin-top:6px}
 :is(.card-reading-details,.reader-call-services) .card-targets .card-identity-values {flex-flow:column nowrap;align-items:flex-start;gap:2px}

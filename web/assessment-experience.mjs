@@ -658,7 +658,7 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 load.hidden = true;
                 about.hidden = true;
                 if (restoreFocus && (document.activeElement === load || document.activeElement === document.body)) {
-                    ux.restoreFocus(reader.querySelector(".full-text-toggle") || liveText.querySelector("pre"));
+                    ux.restoreFocus(reader.querySelector(".full-text-toggle") || liveText.querySelector(".full-text-content"));
                 }
             } catch (error) {
                 if (currentRead()) {
@@ -722,8 +722,11 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 if (!currentReader()) return;
                 load.hidden = false;
                 about.hidden = false;
-            } else if (open) void readResponse();
-            else clearResponse("", true);
+            } else if (open) {
+                load.textContent = "Read response";
+                load.hidden = false;
+                about.hidden = false;
+            } else clearResponse("", true);
         });
         if (!currentReader()) { stop?.(); return; }
         if (eager) {

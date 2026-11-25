@@ -37,11 +37,7 @@ export const analyzeLayoutStyles = `
 .token-history[data-day-actionable] .token-day-reading a {pointer-events:auto}
 .token-day-date {color:var(--muted)}.token-day-date a {display:inline-flex;align-items:center;min-height:24px}
 @media(pointer:coarse){.token-day-date a {min-height:44px}}
-.usage-chip.usage-missing {color:var(--muted);border-color:transparent;background:transparent}
-.context-sidebar-header .reader-token-jump {margin-inline-end:auto;display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:3px 6px;color:var(--accent);background:transparent;border:0;box-shadow:none;font-size:var(--type-small)}
-.reader-token-jump .wire-icon {width:1em;height:1em;flex:none}
 #analyzeUsageContent>p {margin:10px 0 0;text-box:trim-end cap alphabetic}
-.usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
 .usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .usage-switch {margin-block:6px}
 .usage-sort {justify-self:end}.usage-sort.select-field {display:inline-flex;flex-direction:row;align-items:center;gap:8px}

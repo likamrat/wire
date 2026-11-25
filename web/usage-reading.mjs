@@ -28,7 +28,6 @@ function questionControls(doc, prefix, change, { filters = false } = {}) {
     }
     sync(); return { host, sync };
 }
-const usageChip = u => `${number(u.total)} tokens`;
 function textSize(bytes) {
     if (bytes === 0) return "0 bytes";
     const estimate = Math.round(bytes / 4);
@@ -148,5 +147,5 @@ function usageCalendar(scenarios,rows,identity,dayOf) {
     }
     return {range,days:[...days.values()].sort((a,b) => (b.date ?? "").localeCompare(a.date ?? ""))};
 }
-return { usageChip, usageReading, toolTokenFields, modelShareReading, usageCalendar, usageSummary, questionControls };
+return { usageReading, toolTokenFields, modelShareReading, usageCalendar, usageSummary, questionControls };
 }

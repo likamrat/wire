@@ -1292,10 +1292,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             entry.pending = false;
             let reading;
             if (entry.focus === "prompt") {
+                readerSections?.reveal($("selectedContext"));
                 textAccess.revealPrompt($("selectedContext")?.querySelector(".full-text"));
                 reading = $("selectedContext")?.querySelector(".full-text-content") ?? $("selectedContext");
             }
             else if (entry.focus === "activity") reading = contextBody.querySelector('[data-reader-section="activity"] .reader-section-heading');
+            else if (entry.focus === "usage") reading = contextBody.querySelector('[data-reader-section="usage"] .reader-section-heading');
             else if (entry.focus === "record") {
                 const resolved = callInvestigation.resolve(workspaceState.evidence.requestActivity, workspaceState.evidence.scenarios, entry.target, entry.revision);
                 if (resolved.status === "available") reading = contextBody.querySelector(entry.target.layer === "reported-api"
@@ -6536,8 +6538,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const facts = el("div", "request-card-summary");
         const header = ux.cardMetadata(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value),
             sourceIdentity && sharedNativeView()?.aggregates.conversations ? el("span", "request-card-source", `Source: ${sourceIdentity.label}`) : null);
-        if (!reportPicker && (scenario.usage || ["copilot-app","copilot-app-chat"].includes(scenario.sourceHost)))
-            header.append(el("span",scenario.usage ? "usage-chip" : "usage-chip usage-missing",scenario.usage ? assessmentFactories.usageChip(scenario.usage) : "Tokens unavailable"));
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         } else if (!reportPicker && outcome && summary[outcome.key] < summary.count) {
@@ -6577,6 +6577,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return control;
         }
         const identities = activityIdentities(rows, layer, layer === "tool" && !reportPicker ? { inspectGap, inspectTool } : {});
+        if (!reportPicker && (scenario.usage || ["copilot-app", "copilot-app-chat"].includes(scenario.sourceHost))) {
+            const value = scenario.usage ? count(scenario.usage.total) : "Unavailable";
+            const link = open(value, "usage", target, "card-evidence-link usage-chip" + (scenario.usage ? "" : " usage-missing"));
+            const help = scenario.usage ? "Interaction total\nInput and output tokens recorded for this interaction's model requests, not for an individual tool call."
+                : "Tokens unavailable\nNo model token total was verified for this interaction. This is not a measured zero.";
+            link.setAttribute("aria-label", `Model tokens: ${value}. Show token details`);
+            link.setAttribute("aria-description", help);
+            link.append(ux.icon("forward"));
+            ux.tooltip(link, help, { tone: "chart" });
+            const field = el("div", "card-identity-field"), items = el("dd", "card-identity-values");
+            items.append(link); field.append(el("dt", "", "Model tokens"), items); identities.append(field);
+        }
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
@@ -6885,9 +6897,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         readerSections = sections;
         const sectionKey = name => JSON.stringify(["reader", workspaceState.route.request, name]);
-        const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
-        const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
-        const usageSection = sections.add("usage", "Token usage", { key: sectionKey("usage"), collapsible: false });
+        const promptSection = sections.add("prompt", "Prompt", { key: sectionKey("prompt") });
+        const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity") });
+        const usageSection = sections.add("usage", "Token usage", { key: sectionKey("usage") });
         const selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
         const selectedOrdinals = requestContext.actionOrdinals(selectedScenario);
         assessmentFactories.usageReading(el, usageSection.body, selectedScenario, at => time.formatTime(at, workspaceState.scope.timeContext),
@@ -6914,12 +6926,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return control;
         }
         const sourceJump = sectionJump(sourceSection, "Source", "section-source");
-        const tokenJump = sectionJump(usageSection,selectedScenario.usage ? assessmentFactories.usageChip(selectedScenario.usage) : "Tokens unavailable","section-charts");
-        tokenJump.classList.add("reader-token-jump");
-        tokenJump.setAttribute("aria-label",`Interaction token usage: ${tokenJump.textContent}. Show details`);
-        $("contextSidebarTitle").after(tokenJump);
-        readerTextReleases.push(()=>{tokenJump.replaceChildren();tokenJump.removeAttribute("aria-label");tokenJump.remove();});
-        jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"), sourceJump);
+        jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"),
+            sectionJump(usageSection, "Tokens", "section-charts"), sourceJump);
         const quickReport = underlyingRoute().view === "analyze" && namedRequest(workspaceState.route.request);
         if (quickReport) jumps.append(namedDrafts.make(quickReport.scenarioId, { reader: true }));
         if (hiddenCards.available(workspaceState.route.request)) {
@@ -7272,7 +7280,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(readerText(scenario.userPrompt, {
             key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true,
-            previewTitle: isSelected ? promptSection.toggle : undefined,
+            previewActions: isSelected ? promptSection.actions : undefined,
             originKind, visibility: isSelected ? promptSection.visibility : linkedVisibility,
             actionsHost: isSelected ? promptSection.actions : undefined,
             contextTitle: isSelected ? undefined : group.relation === "preceding" ? "Earlier message" : "Following message",
@@ -7345,7 +7353,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     return item;
                 } });
             sections.refresh();
-            return { visibility: isSelected ? responseSection.visibility : linkedVisibility,
+            return { eager: isSelected, visibility: isSelected ? responseSection.visibility : linkedVisibility,
                 actionsHost: isSelected && position?.total === 1 ? responseSection.actions : undefined,
                 copyLabel: isSelected && position?.total === 1 ? undefined : "Copy " + responseName.toLowerCase(),
                 headingLabel: responseName };

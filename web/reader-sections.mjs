@@ -159,7 +159,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         setAll(open) { request(open, present()); },
         reveal(node) {
             if (!current()) return;
-            for (const view of present()) if (view.body.contains(node) && !view.isOpen()) view.apply(true, false);
+            for (const view of present()) if (view.element.contains(node) && !view.isOpen()) view.apply(true, false);
             refresh();
         },
         dispose() {

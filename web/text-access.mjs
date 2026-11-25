@@ -124,7 +124,7 @@ export function createTextAccess(ux, presentation, authorship, metadata, message
         bindings.set(node, () => clearOwnedContent(node));
         return node;
     }
-    function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel, previewTitle }) {
+    function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel, previewActions }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -260,7 +260,7 @@ export function createTextAccess(ux, presentation, authorship, metadata, message
             control?.removeEventListener("click", onToggle);
             unsubscribe?.();
             unsubscribe = null;
-            visibility = navigationNode = actionsHost = previewTitle = null;
+            visibility = navigationNode = actionsHost = previewActions = null;
             for (const owner of [root, readerActions]) clearOwnedContent(owner, true);
             readerActions.remove();
             cleared = true;
@@ -289,17 +289,14 @@ export function createTextAccess(ux, presentation, authorship, metadata, message
             const toggle = document.createElement("button"), chevron = ux.icon("disclosure");
             pre.id = "text-content-" + encodeURIComponent(key);
             toggle.type = "button";
-            toggle.className = "reader-section-toggle prompt-preview-toggle";
+            toggle.className = "quiet prompt-preview-toggle";
+            const caption = document.createElement("span");
+            toggle.append(caption, chevron);
             toggle.setAttribute("aria-controls", pre.id);
             toggle.id = "prompt-preview-toggle-" + encodeURIComponent(key);
             let active = true;
             const current = () => active && !released && root.isConnected
                 && (!visibility || visibility.isCurrent() && visibility.isOpen());
-            function restoreTitle() {
-                if (toggle.parentNode !== previewTitle) return;
-                chevron.remove();
-                toggle.replaceWith(...toggle.childNodes);
-            }
             function measure() {
                 if (!current() || !pre.clientWidth) return;
                 const overflow = pre.scrollHeight > parseFloat(getComputedStyle(pre).lineHeight) * 6 + 1;
@@ -307,12 +304,10 @@ export function createTextAccess(ux, presentation, authorship, metadata, message
                 const focused = document.activeElement === toggle;
                 pre.classList.toggle("prompt-preview-clamped", overflow && !open);
                 if (overflow) {
-                    if (!toggle.parentNode) {
-                        toggle.append(...previewTitle.childNodes, chevron);
-                        previewTitle.append(toggle);
-                    }
+                    if (!toggle.parentNode) previewActions.prepend(toggle);
+                    caption.textContent = open ? "Show less" : "Show full prompt";
                     toggle.setAttribute("aria-expanded", String(open));
-                } else restoreTitle();
+                } else toggle.remove();
                 if (!overflow && focused) pre.focus({ preventScroll: true });
             }
             function setExpanded(open, focus = false) {
@@ -339,7 +334,7 @@ export function createTextAccess(ux, presentation, authorship, metadata, message
                 observer.disconnect();
                 document.fonts.removeEventListener("loadingdone", measure);
                 promptReveals.delete(root);
-                restoreTitle();
+                toggle.remove();
                 toggle.removeEventListener("click", onPreviewToggle);
                 clearOwnedContent(toggle);
             };
@@ -403,7 +398,7 @@ export function createTextAccess(ux, presentation, authorship, metadata, message
                         if (!copyNoticeId) readerActions.append(scope);
                     }
                     body.append(pre);
-                    if (previewTitle && complete && subject === "request") {
+                    if (previewActions && complete && subject === "request") {
                         const releaseFormatted = releasePreview, releaseClamp = previewPrompt(pre);
                         releasePreview = () => { releaseClamp(); releaseFormatted?.(); };
                     }

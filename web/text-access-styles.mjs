@@ -225,7 +225,6 @@ body[data-reader-expanded]>main {visibility:hidden}
 .context-sidebar-controls,#readerWidthControls {display:flex;align-items:center;flex:none}
 #contextSidebar[data-interaction-reader][data-mode=overlay] .context-sidebar-header {display:grid;grid-template-columns:minmax(0,1fr) auto}
 #contextSidebar[data-interaction-reader][data-mode=overlay] .context-sidebar-controls {grid-area:1/2}
-#contextSidebar[data-interaction-reader][data-mode=overlay] .reader-token-jump {grid-column:1/-1;justify-self:start;max-inline-size:100%}
 .context-sidebar-controls button {display:grid;place-items:center;flex:none;width:44px;height:44px;min-height:44px;padding:10px}
 .context-sidebar-controls button[aria-disabled=true] {color:var(--muted);cursor:default}
 #readerResize {position:absolute;inset:0 auto 0 0;width:12px;cursor:ew-resize;touch-action:none;z-index:3;outline-offset:-3px}
@@ -301,7 +300,8 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-section-actions>.full-text-reader-actions {display:flex;align-items:center;gap:2px;margin:0}
 #requestContent .full-text-content.prompt-preview-clamped {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:clip}
 #requestContent .full-text-content.prompt-preview-clamped[data-message-format=markdown] {display:block;max-block-size:6lh;overflow:clip}
-#requestContent .reader-section-title:has(.prompt-preview-toggle) {min-width:0;max-width:100%}
+#requestContent .prompt-preview-toggle {display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:var(--type-control);color:var(--accent)}
+#requestContent .prompt-preview-toggle[aria-expanded=true]>.wire-icon {transform:rotate(90deg)}
 #requestContent .prompt-preview-toggle:is(:hover,:focus-visible)>.wire-icon {color:var(--ink);background:var(--hover);outline:4px solid var(--hover);border-radius:2px}
 #requestContent .reader-section .reader-facts {display:grid;gap:12px;margin:12px 0 0}
 #requestContent .reader-section .reader-facts>.reader-fields {display:grid;gap:12px;margin:0}

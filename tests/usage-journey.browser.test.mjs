@@ -421,7 +421,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
         }
         await expect(listControl).toHaveText(label);
         await expect(prompts(page)).toHaveText(order);
-        if (label==="Most tokens") await expect(page.locator("#activityList article .usage-chip")).toHaveText(["33,000 tokens","30,000 tokens","12,000 tokens","Tokens unavailable"]);
+        if (label==="Most tokens") await expect(page.locator("#activityList article .usage-chip")).toHaveText(["33,000","30,000","12,000","Unavailable"]);
         assert.equal(page.url(),scope); assert.equal(await page.locator("#activityListSummary").innerText(),summary);
         await expect(page.locator("#analyzeUsage").getByRole("slider")).toHaveAccessibleDescription("75,000 tokens in this period. 3 of 4 interactions measured.");
         assert.deepEqual(await layout(page),initialLayout);
@@ -576,10 +576,10 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(cards.first()).toContainText("Draft next steps");
     await selectActivityOption(page,"activityUsageSort","recent");
     const missing=cards.filter({hasText:"Search for notes"});
-    await expect(missing.locator(".usage-chip")).toHaveText("Tokens unavailable");
+    await expect(missing.locator(".usage-chip")).toHaveText("Unavailable");
     await missing.locator(".request-card-open").first().click();
-    const missingJump=page.locator(".context-sidebar-header").getByRole("button",{name:/Interaction token usage: Tokens unavailable/});
-    await expect(missingJump).toBeInViewport();await missingJump.click();
+    const missingJump=page.getByRole("navigation",{name:"In this interaction"}).getByRole("button",{name:"Tokens",exact:true});
+    await missingJump.scrollIntoViewIfNeeded();await missingJump.click();
     await expect(page.locator("[data-reader-section=usage] h2")).toBeFocused();
     await expect(page.locator("[data-reader-section=usage]")).toContainText("No token counts matched this prompt's model calls.");
     const tokenReader=page.locator("[data-reader-section=usage]");
@@ -598,14 +598,20 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(page.locator("#activityUsageSort")).toHaveValue("recent");
     await page.reload(); await expect(cards.first()).toContainText("Draft next steps");
     const outline=cards.filter({hasText:"Meeting outline"});
-    await expect(outline.locator(".usage-chip")).toHaveText("30,500 tokens");
-    await outline.locator(".request-card-open").first().click();
+    await expect(outline.locator(".usage-chip")).toHaveText("30,500");
+    const usageLink=outline.locator(".card-reading-details .usage-chip");
+    await usageLink.scrollIntoViewIfNeeded();await page.mouse.move(0,0);
+    await usageLink.hover();await expect(page.getByRole("tooltip")).toContainText("model requests");
+    await page.keyboard.press("Escape");await page.mouse.move(0,0);
+    await usageLink.press("Tab");await page.keyboard.press("Shift+Tab");
+    await expect(usageLink).toBeFocused();await expect(page.getByRole("tooltip")).toContainText("model requests");
+    await usageLink.press("Enter");
     const reader=page.locator("[data-reader-section=usage]");
-    await expect(page.locator(".reader-token-jump")).toHaveText("30,500 tokens");
+    await expect(reader.locator("h2")).toBeFocused();
     await expect(reader).toContainText("30,500 tokens"); await expect(reader).toContainText("preview-model");
     await capture("reader-tokens",reader);
     await page.keyboard.press("Escape");
-    await expect(outline.locator(".request-card-open").first()).toBeFocused();
+    await expect(usageLink).toBeFocused();
     const direct = cards.filter({hasText:"Find review owners"}).locator(".request-card-open").first();
     await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("~8,500 tokens of returned text");
     await expect(reader.locator(".usage-context")).toHaveCount(0);
@@ -713,7 +719,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await expect(cards).toHaveCount(8); await expect(page.locator(".usage-chip:not(.usage-missing)")).toHaveCount(7);
     await selectActivityOption(page,"activityUsageSort","tokens");
     await expect(cards.first()).toContainText("Draft next steps");await expect(cards.last()).toContainText("Search for notes");
-    await expect(cards.filter({hasText:"Find review owners"}).locator(".usage-chip")).toHaveText("33,000 tokens");
+    await expect(cards.filter({hasText:"Find review owners"}).getByRole("link",{name:"Model tokens: 33,000. Show token details"})).toHaveText("33,000");
     await page.getByRole("button",{name:"Token share",exact:true}).click();
     await expect(page.locator(".usage-model").first()).toBeVisible();
     await expect(page.locator("[data-percentage-card=models]").getByRole("list",{name:"Model token counts from 7 of 8 matching interactions"})).toBeVisible();
@@ -729,7 +735,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await expect(cards).toHaveCount(7);
     await page.getByRole("button",{name:"Hidden cards (1)"}).click();
     await page.getByRole("dialog",{name:"Hidden cards"}).getByRole("button",{name:"Restore",exact:true}).click();
-    await expect(launch.locator(".usage-chip")).toHaveText("30,000 tokens");
+    await expect(launch.locator(".usage-chip")).toHaveText("30,000");
     await page.goto(new URL("/settings?section=reports",runtime.url).href);
     await expect(page.locator("#costRateReference")).toHaveCount(0);
     await page.goto(new URL("/trends?section=charts",runtime.url).href);
@@ -779,7 +785,7 @@ test("save the same single interaction total seen on its card and reader", async
     const browser=await chromium.launch(); cleanup.push(()=>browser.close());
     const page=await browser.newPage(); await page.goto(runtime.url);
     const card=page.locator("#activityList article").filter({hasText:"Launch notes"});
-    await expect(card.locator(".usage-chip")).toHaveText("30,000 tokens");
+    await expect(card.locator(".usage-chip")).toHaveText("30,000");
     await card.locator(".request-card-open").first().click();
     await expect(page.locator("[data-reader-section=usage]")).toContainText("30,000 tokens · 2 model calls");
     await page.keyboard.press("Escape"); await expect(card.locator(".request-card-open").first()).toBeFocused();

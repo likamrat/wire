@@ -217,6 +217,7 @@ test("resizing the interaction reader gives the reply and its table more room", 
     await shot("hidden");
     await read.click();
     await expect(body).toHaveAttribute("data-message-format", "markdown");
+    await expect(body).toBeFocused();
     await scroller.evaluate(node => { node.scrollTop = 0; });
     await shot("revealed");
     const full = await measure();

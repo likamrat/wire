@@ -370,12 +370,12 @@ were used.
 Long prompts start with a six-line preview so the recorded activity stays
 close.
 
-- Use the chevron beside the prompt author to expand or collapse the text in
-  place.
+- Use a heading's chevron to fold its section. **Show full prompt** or
+  **Show less** changes the excerpt while the prompt section stays open.
 - **Copy prompt** still copies the whole retained prompt.
 - Search opens the full prompt rather than hiding a match behind the preview.
-- **Prompt**, **Activity** or **Source** at the top of the interaction jumps to
-  that section. **Reply** appears when the interaction has a recorded reply.
+- Choose **Prompt**, **Activity**, **Tokens** or **Source** to open that
+  section. **Reply** appears when the interaction has a recorded reply.
 
 Each call shows its own outcome, such as **1 tool call completed**, even if one
 returned entry reported an error.
@@ -409,13 +409,15 @@ or add its local path.
 Copy controls copy the exact retained original, unmasked. Readers show
 Markdown in prompts and replies as formatted text, including tables and links;
 Copy still returns the original Markdown. A saved Copilot reply
-is the assistant's text, not a tool result. Enabling reply saving does not
-restore previously omitted replies.
+is the assistant's text, not a tool result. After folding a reply, reopen its
+section and choose **Read response** to read it again. Enabling reply saving
+does not restore previously omitted replies.
 
 ### Tokens and returned text
 
-On an interaction card or in the reader header, read the count or **Tokens
-unavailable**. Select the header reading for the breakdown or the known reason.
+Alongside **Tools** and **Targets**, **Model tokens** shows the interaction's
+recorded total or **Unavailable**. Hover or focus the value for its meaning. Select it,
+or choose **Tokens** in the reader, for the breakdown or the known reason.
 The breakdown separates fresh input, cache reads, cache writes and output.
 
 To inspect one invocation, open **Call details** for its numbered row:

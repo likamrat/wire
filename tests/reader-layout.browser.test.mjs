@@ -169,9 +169,21 @@ async function readerShot(page, name) {
 }
 
 for (const withReply of [false, true]) test(`reader section jumps pair named icons with their real destinations (reply: ${withReply})`, async t => {
-    const { page } = await setup(t, [readerRecord()], withReply ? { responseText: "The invented release notes are ready." } : {});
+    const record = readerRecord();
+    if (withReply) record.toolCalls = Array.from({ length: 4 }, (_, i) => ({
+        ...record.toolCalls[0], toolCallId: `workshop-call-${i}`, startEventId: `workshop-start-${i}`,
+        ...(i === 3 ? { toolSucceeded: false, reportedOutcome: "failed", errorMessage: "The workshop lookup timed out.", apiResults: [] } : {}),
+    }));
+    const { page } = await setup(t, [record], withReply ? { responseText: "The invented release notes are ready." } : {});
     const jumps = page.getByRole("navigation", { name: "In this interaction" });
-    const destinations = [["Prompt", "prompt", "message-square"], ["Activity", "activity", "rotate-ccw-clock"],
+    if (withReply) {
+        const activity = page.locator('[data-reader-section="activity"]');
+        const full = activity.getByRole("link", { name: "Show full activity" });
+        if (await full.isVisible()) await full.click();
+        await expect(activity.locator("h2 > button").first()).toHaveText("4 recorded calls");
+        await expect(activity.locator(".reader-call-row")).toHaveCount(4);
+    }
+    const destinations = [["Prompt", "prompt", "message-square"], ["Activity", "activity", "rotate-ccw-clock"], ["Tokens", "usage", "layers"],
         ...(withReply ? [["Reply", "response", "message-square-reply"]] : []), ["Source", "source", "list-tree"]];
     if (withReply) await expect(page.locator('[data-reader-section=response] pre')).toBeVisible();
     await chooseTheme(page, withReply ? "light" : "dark");
@@ -181,7 +193,7 @@ for (const withReply of [false, true]) test(`reader section jumps pair named ico
         await readerSettled(page);
         await jumps.scrollIntoViewIfNeeded();
         await readerShot(page, `section-jumps-${withReply ? "with-reply" : "ordinary"}-${width}`);
-        await expect(jumps.getByRole("button")).toHaveText([...destinations.map(([label]) => label), "Add to report"]);
+        await expect(jumps.getByRole("button")).toHaveText([...destinations.map(([label]) => label), "Add to report", "Hide"]);
         await expect(jumps.getByRole("button", { name: "Add to report" })).toHaveAttribute("aria-haspopup", "dialog");
         for (const [label, name, icon] of destinations) {
             const control = jumps.getByRole("button", { name: label, exact: true });
@@ -198,8 +210,11 @@ for (const withReply of [false, true]) test(`reader section jumps pair named ico
                     && glyph.width > 0 && glyph.right < label.left && label.right <= rect.right
                     && Math.abs((glyph.top + glyph.bottom - label.top - label.bottom) / 2) <= 2;
             }));
-            await page.keyboard.press("Enter");
             const section = page.locator(`[data-reader-section="${name}"]`);
+            const toggle = section.locator(":scope > h2 > .reader-section-toggle");
+            if (await toggle.getAttribute("aria-expanded") === "true") await toggle.press("Space");
+            await expect(section.locator(":scope > .reader-section-clip")).toHaveJSProperty("inert", true);
+            await control.press("Enter");
             await expect(section.locator(":scope > h2")).toBeFocused();
             await expect(section).toHaveAttribute("data-open", "true");
             await expect(control).toHaveAttribute("aria-current", "location");
@@ -381,6 +396,7 @@ test("retained response has one section owner that clears and restores exact tex
     await expect(response.locator("pre")).toHaveCount(0);
     await expect(response.getByRole("button", { name: "Copy response", exact: true })).toHaveCount(0);
     await response.locator(".reader-section-toggle").click();
+    await response.getByRole("button", { name: "Read response", exact: true }).click();
     await expect(response.locator("pre")).toHaveText(exact);
     await response.getByRole("button", { name: "Copy response", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [exact, exact]);
@@ -421,20 +437,29 @@ test("response folding fences a late read and keeps failed reads behind explicit
     };
     await page.route("**/api/assessment/evidence", delayed);
     try {
-        await toggle.click(); await toggle.click(); await arrived;
-        await toggle.click();
+        await toggle.click(); await toggle.click();
+        const read = response.getByRole("button", { name: "Read response", exact: true });
+        await expect(read).toBeVisible();
+        assert.equal(reads, 0, "Expanding the section is not an evidence read");
+        await read.click(); await arrived;
+        await toggle.press("Space");
+        await expect(response).toHaveAttribute("data-open", "false");
         release(); await Promise.all(deliveries);
         await expect(response.locator("pre,.ux-copy")).toHaveCount(0);
         await oldCopy.evaluate(node => node.click());
         assert.deepEqual(await page.evaluate(() => window.readerCopies), []);
         assert.equal(reads, 1);
     } finally { release(); await Promise.all(deliveries); await page.unroute("**/api/assessment/evidence", delayed); }
-    await toggle.click();
+    await toggle.press("Enter");
+    await expect(response).toHaveAttribute("data-open", "true");
+    await expect(response).toContainText("Read response");
+    await response.getByRole("button", { name: "Read response", exact: true }).click();
     await expect(response.locator("pre")).toHaveText(text);
     let failures = 0;
     const failed = route => { failures++; return route.fulfill({ status: 503, json: { error: "Invented retained evidence unavailable" } }); };
     await page.route("**/api/assessment/evidence", failed);
     await toggle.click(); await toggle.click();
+    await response.getByRole("button", { name: "Read response", exact: true }).click();
     await expect(response.getByRole("button", { name: "Retry response", exact: true })).toBeVisible();
     await toggle.click(); await toggle.click();
     await expect(response.getByRole("button", { name: "Retry response", exact: true })).toBeVisible();
@@ -467,6 +492,7 @@ test("capture revocation scrubs response text and fences an in-flight old-basis 
     try {
         await response.locator(".reader-section-toggle").click();
         await response.locator(".reader-section-toggle").click();
+        await response.getByRole("button", { name: "Read response", exact: true }).click();
         await arrived;
         assessmentView.consent = { ...contract.defaultConsent(), revision: 2 };
         assessmentView.basis.consentRevision = 2;
@@ -498,6 +524,8 @@ test("plural responses keep separate exact subjects beneath one shared section o
     await response.locator(".reader-section-toggle").click();
     await expect(response.locator("pre,.ux-copy")).toHaveCount(0);
     await response.locator(".reader-section-toggle").click();
+    const replies = response.locator(".reader-response-list>.journey-item");
+    for (const item of await replies.all()) await item.getByRole("button", { name: "Read response", exact: true }).click();
     await expect(response.locator("pre")).toHaveCount(2);
     await expect(response.getByText("Final-answer status unverified", { exact: true })).toHaveCount(2);
 });
