@@ -38,20 +38,31 @@ export const documentationStyles = `
 .docs-badge{flex:none;margin-inline-start:auto;font-size:11px;line-height:1;font-weight:var(--weight-medium);padding:3px 6px;border-radius:var(--radius-pill);border:1px solid currentColor;color:var(--muted)}
 .docs-badge-new{color:var(--accent)}
 
-.docs-source{display:grid;justify-items:start;gap:8px;margin:0 0 var(--space-lg);font-size:var(--type-caption);color:var(--muted);line-height:1.5}
-.docs-source>p{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0}
-.docs-source-label{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%}
-.docs-source-label select{max-width:100%;font:inherit;color:var(--ink)}
-.docs-sep{opacity:.6}
-.docs-commit{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:.95em;border-radius:var(--radius-small);padding:1px 6px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
-.docs-source-warning{display:inline-flex;align-items:center;gap:6px;color:var(--ink)}
-.docs-source-warning .docs-icon{color:var(--warning)}
-.docs-source-local{color:var(--ink);font-weight:var(--weight-medium)}
+.docs-library{display:flex;align-items:center;gap:var(--space-md);min-block-size:44px;min-inline-size:0;margin:0 0 var(--space-lg);padding:0 0 var(--space-sm);border-bottom:1px solid var(--surface-divider)}
+.docs-library-title{display:inline-flex;align-items:center;gap:var(--pill-gap);color:var(--ink);font-size:var(--type-section);font-weight:var(--weight-strong);line-height:var(--leading-section)}
+.docs-library-trigger{display:inline-grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--pill-gap);min-inline-size:0;max-inline-size:min(33ch,52%);padding-inline:var(--pill-inset);font:var(--type-control)/var(--leading-control) var(--font)}
+.docs-source-value{min-inline-size:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.docs-library-note{font-size:var(--type-small);color:var(--muted);margin:0 0 var(--space-md)}
+.docs-library-menu{position:fixed;inset:auto;margin:0;width:min(22rem,calc(100vw - 16px));max-height:min(25rem,70dvh);box-sizing:border-box;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:var(--space-xs);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-edge);border-radius:var(--radius);box-shadow:var(--surface-shadow);font:var(--type-control)/var(--leading-control) var(--font)}
+.docs-library-menu .docs-icon{display:inline-flex;flex:none;align-items:center;justify-content:center;width:1.1em;height:1.1em}
+.docs-library-menu .docs-icon .wire-icon{width:100%;height:100%}
+.docs-source-search{display:flex;align-items:center;gap:8px;margin:4px 4px 6px;padding-inline:10px;border:1px solid var(--surface-divider);border-radius:var(--radius-field);color:var(--muted);background:var(--paper)}
+.docs-source-search:focus-within{outline:2px solid var(--focus);outline-offset:-1px}
+.docs-source-search input[type=search]{flex:1;min-width:0;border:0;background:transparent;padding:5px 0;min-height:36px;outline:none}
+.docs-source-group{margin:var(--space-xs) 0 2px;padding:var(--space-sm) 10px 4px;border-top:1px solid var(--surface-divider);font-size:var(--type-caption);color:var(--muted)}
+.docs-source-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--pill-gap);align-items:center;text-align:start;inline-size:100%;min-block-size:40px;padding:6px 10px}
+.docs-source-option>span:not(.docs-icon){overflow-wrap:anywhere}
+.docs-source-option[aria-pressed=true]{font-weight:var(--weight-medium);background:var(--canvas)}
+.docs-source-option[aria-pressed=true]>.docs-icon:last-child{color:var(--accent)}
+.docs-source-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 10px;color:var(--muted);font-size:var(--type-small)}
+.docs-source-status:has([role=status]:empty){display:none}
+.docs-source-status button{white-space:nowrap}
+@container docs (max-width:480px){.docs-library{gap:var(--space-xs)}.docs-library-title{font-size:var(--type-body)}.docs-library-trigger{margin-inline-start:auto}}
+@media(prefers-reduced-motion:no-preference){.docs-library-menu:popover-open{animation:docs-picker-appear 120ms ease-out}@keyframes docs-picker-appear{from{opacity:0}to{opacity:1}}}
 .docs-text-button,.docs-asset-link{display:inline-flex;align-items:center;gap:var(--pill-gap)}
-.docs-source-switch{display:flex;flex-wrap:wrap;gap:var(--pill-gap)}
-#documentationView :is(.docs-text-button,.docs-source-switch button,.docs-image-dialog button:not(.icon-only)):focus-visible{outline:none}
-#documentationView :is(.docs-text-button,.docs-source-switch button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline:2px solid var(--focus);outline-offset:2px}
-@media(forced-colors:active){#documentationView :is(.docs-text-button,.docs-source-switch button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline-color:Highlight}}
+#documentationView :is(.docs-text-button,.docs-image-dialog button:not(.icon-only)):focus-visible{outline:none}
+#documentationView :is(.docs-text-button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline:2px solid var(--focus);outline-offset:2px}
+@media(forced-colors:active){#documentationView :is(.docs-text-button,.docs-image-dialog button:not(.icon-only)):focus-visible::before{outline-color:Highlight}}
 
 .docs-article{font-size:var(--type-reading);line-height:var(--leading-reading);max-inline-size:76ch;overflow-wrap:anywhere}
 .docs-article>:first-child{margin-top:0}
@@ -158,7 +169,7 @@ export const documentationStyles = `
 .docs-left-toggle .docs-tree{padding-top:6px}}
 @container docs (max-width:700px){.docs-paper{padding:20px 16px 32px;border-radius:var(--radius-small)}}
 @container docs (max-width:480px){.docs-paper{padding:16px 14px 28px}}
-@media (pointer:coarse){.docs-tree a,.docs-outline a,.docs-left-toggle>summary,.docs-outline-inline>summary,#documentationView .docs-source-switch button{min-block-size:44px}#documentationView button.doc-copy{inline-size:44px;block-size:44px}}
+@media (pointer:coarse){.docs-tree a,.docs-outline a,.docs-left-toggle>summary,.docs-outline-inline>summary,.docs-source-option{min-block-size:44px}#documentationView button.doc-copy{inline-size:44px;block-size:44px}}
 
 @media (prefers-reduced-motion:reduce){
 .docs-article .doc-permalink,#documentationView button.doc-copy{transition:none}}

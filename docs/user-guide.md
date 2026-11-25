@@ -968,10 +968,11 @@ the guides they open.
 build. A documentation-only release uses the same **Update and restart**
 process as a code release.
 
-In an official Git-backed installation, open **Guide source**, choose
-**Preview a branch…**, then pick a pushed branch. Its text and images come from
-one commit. Only this tab reads those guides: WIRE does not run branch code
-or change which app updates are offered. Choose **Installed version** to return.
+In an official Git-backed installation, open **Installed version** beside
+**Documentation**, then choose a pushed branch. The guide list, pages and images
+in this tab all come from that branch's selected commit. You can move between
+guides without choosing again. WIRE does not run branch code or change which
+app updates are offered. Choose **Installed version** to return.
 Images hosted on other sites aren't loaded; WIRE shows a link instead.
 
 If you're editing guides in your own clone or fork, see

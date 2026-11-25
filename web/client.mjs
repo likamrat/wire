@@ -735,9 +735,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         node.prepend(ux.icon(`navigation-${node.dataset.nav}`));
     });
     $("openEvidenceHelp").prepend(ux.icon("navigation-help"));
-    documentation = assessmentFactories.mountDocumentation?.({ host: $("documentationView"), api, icon: role => ux.icon(role).outerHTML,
-        open(guide, fragment) {
-            if (navigate({ view: "documentation", guide, analysisQuery: null }) !== false && fragment)
+    documentation = assessmentFactories.mountDocumentation?.({ host: $("documentationView"), api, icon: role => ux.icon(role).outerHTML, ux,
+        open(guide, fragment, replace = false) {
+            if (navigate({ view: "documentation", guide, analysisQuery: null }, replace) !== false && fragment)
                 history.replaceState(history.state, "", location.pathname + location.search + "#" + encodeURIComponent(fragment));
         },
         announce: message => announce(message, "documentation") }) ?? null;

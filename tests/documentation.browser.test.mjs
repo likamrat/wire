@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { documentationRepository } from "./documentation-fixture.mjs";
 
-async function setup(t, { frontend = "react", width = 752 } = {}) {
+async function setup(t, { frontend = "react", width = 752, reducedMotion = "reduce" } = {}) {
     const cleanups = [];
     t.after(async () => { for (const close of cleanups.reverse()) await close(); });
     const fixture = { after: fn => cleanups.push(fn) };
@@ -14,11 +14,11 @@ async function setup(t, { frontend = "react", width = 752 } = {}) {
     const app = await searchFixture(fixture, { frontend, copilotAccess: true, reply: false, documentation: { source: repo.source() } });
     const browser = await chromium.launch();
     cleanups.push(() => browser.close());
-    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion });
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
     const errors = [], outside = [];
-    page.on("pageerror", error => errors.push(error.message));
+    page.on("pageerror", error => errors.push(error.stack));
     await context.route("**/*", route => {
         if (new URL(route.request().url()).origin !== new URL(app.runtime.url).origin) { outside.push(route.request().url()); return route.abort(); }
         return route.continue();
@@ -53,7 +53,7 @@ test("Documentation keeps installed guides pinned, preserves ordinary Back, and 
     await page.locator('.docs-tree a[data-guide="user-guide"]').click();
     await expect(page).toHaveURL(/\/documentation\?guide=user-guide$/);
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
-    await expect(page.locator(".docs-source")).toContainText(repo.head().slice(0, 7));
+    await expect(page.locator("#guideSource-control")).toHaveAccessibleName("Documentation source: Installed version");
     await expect(page.locator("#docTitle")).toBeFocused();
     await expect(page.locator('.docs-tree a[data-guide="user-guide"]')).toHaveAttribute("aria-current", "page");
     assert.ok(await page.locator(".docs-tree-sections a").count() > 4);
@@ -89,15 +89,14 @@ test("Documentation keeps installed guides pinned, preserves ordinary Back, and 
     const branch = "docs/report-guide";
     await repo.publish("docs/images/preview.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="127" height="32"></svg>', "Add preview artwork", branch);
     const published = await repo.publish("docs/user-guide.md", "# Use WIRE today\n\nNewer guidance.\n\n## Trends\n\n![Branch illustration](images/preview.svg)\n","Preview guide",branch);
-    const chooser = page.locator("#guideSource");
+    const chooser = page.locator("#guideSource-control");
     const choose = async value => {
-        await page.locator("#guideSource-control").click();
-        await page.locator(`.select-popup [role=option][data-value="${value}"]`).click();
+        await chooser.click();
+        await page.locator(`#guideSourceMenu [data-source="${value}"]`).click();
     };
-    await choose("branches");
     await choose("branch:docs/report-guide");
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE today");
-    await expect(page.locator(".docs-source")).toContainText(published.slice(0, 7));
+    await expect(chooser).toHaveText(branch);
     await expect(page.getByRole("link", { name: /^View this guide on GitHub/ })).toHaveAttribute("href", new RegExp(`/blob/${published}/docs/user-guide\\.md$`));
     const enlarge = page.getByRole("button", { name: "Enlarge image: Branch illustration" });
     await enlarge.scrollIntoViewIfNeeded();
@@ -107,7 +106,7 @@ test("Documentation keeps installed guides pinned, preserves ordinary Back, and 
     await expect(viewer.getByRole("img")).toHaveJSProperty("naturalWidth", 127);
     await page.keyboard.press("Escape");
     await expect(enlarge).toBeFocused();
-    await expect(chooser).toHaveValue("branch:docs/report-guide");
+    await expect(chooser).toHaveText(branch);
     assert.equal(page.url(), at);
     assert.equal(await page.evaluate(() => scrollY), top);
 
@@ -116,19 +115,83 @@ test("Documentation keeps installed guides pinned, preserves ordinary Back, and 
     await expect(second.locator("#docTitle")).toHaveText("Use WIRE");
     await second.close();
     await rename(repo.origin, repo.origin + ".offline");
-    await choose("branches");
-    await expect(page.locator(".docs-source [role=status]")).toContainText("Couldn't list");
+    await chooser.click();
+    await expect(page.locator("#guideSourceMenu [role=status]")).toContainText("Couldn't list");
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE today");
 
     // A contributor's checkout: saved edits appear in place, marked against main.
-    await choose("checkout");
-    await expect(page.locator(".docs-source-local")).toContainText("Previewing this checkout");
-    await expect(chooser).toHaveValue("checkout");
+    await page.locator('#guideSourceMenu [data-source="checkout"]').click();
+    await expect(chooser).toHaveText("This checkout");
     await appendFile(path.join(repo.work, "docs", "user-guide.md"), "\nLocal preview paragraph.\n");
     await expect(page.locator(".docs-article")).toContainText("Local preview paragraph.", { timeout: 8000 });
     await expect(page.locator('.docs-tree a[data-guide="user-guide"] .docs-badge')).toHaveText("Edited");
     await expect(page.locator(".docs-article-footer")).toContainText("Local file: docs/user-guide.md (edited, differs from your last commit)");
 });
+
+for (const [width, mode, reducedMotion] of [[1440,"light","no-preference"],[568,"dark","reduce"]]) {
+    test(`one workspace picker keeps the ${width}px article steady during slow, failed and retried branch reads`, async t => {
+        const {page,repo} = await setup(t,{width,reducedMotion});
+        await page.evaluate(theme=>document.documentElement.dataset.evidenceTheme=theme,mode);
+        const branch = "docs/reporting/preview-with-a-long-branch-name-to-check-wrapping";
+        await repo.publish("docs/branch-only.md","# Branch-only guide\n\n## Saved copies\n\nRead your saved copy here.", "Add preview guide",branch);
+        await repo.publish("docs/README.md","# WIRE documentation\n\nBranch library.\n\n## Guide tasks\n\n[Open a branch-only guide](branch-only.md).","Change guide index",branch);
+        await page.goto(new URL("/documentation",page.url()).href);
+        await page.evaluate(theme=>document.documentElement.dataset.evidenceTheme=theme,mode);
+        const picker=page.locator("#guideSource-control"), menu=page.getByRole("dialog",{name:"Documentation sources"});
+        await expect(picker).toBeVisible();
+        await expect(page.locator(".docs-article #guideSource-control")).toHaveCount(0);
+        const start=await page.evaluate(()=>{
+            window.fixturePicker = document.querySelector("#guideSource-control");
+            window.fixtureArticle = document.querySelector(".docs-article");
+            return [document.querySelector("#docTitle"),document.querySelector(".app-header")].map(n=>n.getBoundingClientRect().top).concat(scrollY);
+        });
+        const unchanged = async () => {
+            assert.deepEqual(await page.evaluate(()=>[document.querySelector("#docTitle"),document.querySelector(".app-header")].map(n=>n.getBoundingClientRect().top).concat(scrollY)),start);
+            assert.equal(await page.evaluate(()=>document.querySelector("#guideSource-control")===window.fixturePicker && document.querySelector(".docs-article")===window.fixtureArticle),true);
+        };
+        const fetched=Promise.withResolvers(), release=Promise.withResolvers();
+        let calls=0;
+        await page.route("**/api/documentation/branches",async route=>{
+            if (++calls===1) {fetched.resolve();await release.promise;await route.fulfill({status:503,json:{error:"Couldn't list WIRE branches. Check your network and Git access, then try again."}});}
+            else await route.continue();
+        });
+        await picker.hover(); await expect(page.locator("#evidence-tooltip")).toContainText("Switch the guides");
+        await picker.focus();await picker.press("Enter");
+        try {
+            await fetched.promise;await expect(menu.getByRole("searchbox")).toBeFocused();
+            await expect(menu.getByRole("status")).toHaveText("Loading branches…");
+            await unchanged();
+        } finally { release.resolve(); }
+        await expect(menu.getByRole("status")).toContainText("Couldn't list");
+        await unchanged();await menu.getByRole("button",{name:"Try again"}).click();
+        const row=menu.locator(`[data-source="branch:${branch}"]`);
+        await expect(row).toBeVisible();await unchanged();
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+        await expect(page.locator("#message")).not.toContainText("Branches loaded");
+        await menu.getByRole("searchbox").fill("absent-choice");
+        await expect(menu.getByRole("status")).toHaveText("No matching branches.");
+        await page.keyboard.press("Escape");await expect(picker).toBeFocused();
+        await unchanged();await picker.click();await expect(row).toBeVisible();
+        await row.focus();await row.press("Enter");await expect(menu).toBeHidden();
+        await expect(picker).toBeFocused();await expect(picker).toHaveText(branch);
+        await expect(page.locator(".docs-article")).toContainText("Branch library.");
+        assert.equal(await page.evaluate(()=>document.querySelector("#guideSource-control")===window.fixturePicker),true);
+        const listCalls=calls;
+        await page.getByRole("link",{name:"Open a branch-only guide",exact:true}).click();
+        await expect(page.locator("#docTitle")).toHaveText("Branch-only guide");
+        await page.goBack();await expect(page.locator(".docs-article")).toContainText("Branch library.");
+        await expect(picker).toHaveText(branch);
+        await page.getByRole("link",{name:"Open a branch-only guide",exact:true}).click();
+        await expect(page.locator("#docTitle")).toHaveText("Branch-only guide");
+        assert.equal(calls,listCalls,"normal navigation doesn't fetch the branch list");
+        await picker.click();await menu.locator('[data-source="installed"]').click();
+        await expect(picker).toHaveText("Installed version");
+        await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
+        await expect(page.locator(".docs-library-note")).toContainText("isn't in the selected source");
+        await expect(page).toHaveURL(/\/documentation$/);
+        await expect(picker).toBeFocused();
+    });
+}
 
 test("guides render GitHub Markdown safely, with images from the same revision and checked links", async t => {
     const { page, repo } = await setup(t, { width: 1440 });

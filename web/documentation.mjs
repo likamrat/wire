@@ -1,3 +1,5 @@
+import { createGuideSourcePicker } from "./documentation-source-picker.mjs";
+
 // Documentation page: guides from the repository's docs, read in WIRE with a guide tree and an outline.
 // Repository HTML is parsed in an inert template and only allow-listed elements and attributes survive.
 const ELEMENTS = new Set(["a", "abbr", "b", "blockquote", "br", "code", "dd", "del", "details", "div", "dl", "dt", "em",
@@ -13,12 +15,12 @@ const SOURCE_KEY = "wire.documentationSource";
 
 export const documentationMarkup = `<section id="documentationView" class="wire-docs" aria-label="Documentation" hidden></section>`;
 
-export function mountDocumentation({ host, api, icon, open, announce = () => {} }) {
+export function mountDocumentation({ host, api, icon, ux, open, announce = () => {} }) {
     const doc = host.ownerDocument, win = doc.defaultView;
     const reduce = win.matchMedia("(prefers-reduced-motion: reduce)");
     let catalog = null, page = null, view = null, token = 0, spyFrame = 0, liveTimer = 0, liveVersion = null, visible = false, loading = null;
     let sourceChoice = (() => { try { return win.sessionStorage.getItem(SOURCE_KEY) === "checkout" ? "checkout" : "installed"; } catch { return "installed"; } })();
-    let preview = null, branchList = null;
+    let preview = null;
     const pages = new Map(), positions = new Map(), origins = new Map(), sources = new Map(), listeners = new AbortController();
 
     const el = (tag, props = {}, ...children) => {
@@ -33,12 +35,19 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         return node;
     };
     const glyph = role => { const span = el("span", { class: "docs-icon", "aria-hidden": "true" }); span.innerHTML = icon(role); return span; };
-    const short = commit => commit?.slice(0, 7) ?? "";
     const hrefFor = (guide, fragment = "") => `/documentation${guide ? "?guide=" + encodeURIComponent(guide) : ""}${fragment ? "#" + encodeURIComponent(fragment) : ""}`;
     const guides = () => catalog?.groups.flatMap(group => group.items) ?? [];
     const base = () => catalog?.source.comparedWith === "main" ? "GitHub main" : "your last commit";
     const positionKey = () => `${win.location.pathname}${win.location.search}${win.location.hash}@${win.history.state?.evidenceView?.position ?? ""}`;
     let imageDialog = null, pendingGuide = null;
+    const reader = el("div", { class: "docs-library-reader" });
+    const note = el("p", { class:"docs-library-note", role:"status", hidden:true });
+    const picker = createGuideSourcePicker({ doc, el, glyph, ux, list: () => api("/api/documentation/branches",{}), choose: chooseLibrary });
+    let noticeGuide = null;
+    function mountView(node) {
+        if (!reader.isConnected) host.replaceChildren(picker.bar, note, reader);
+        reader.replaceChildren(node);
+    }
 
     function openImage(button, src, description) {
         if (imageDialog?.open) return;
@@ -77,10 +86,10 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         imageDialog = null;
     }
 
-    const loadCatalog = () => api("/api/documentation/catalog", { source: sourceChoice, ...(sourceChoice === "branch" && preview) });
-    async function loadPage(guide) {
-        const key = `${catalog.source.revision}|${guide}`;
-        if (!pages.has(key)) pages.set(key, api("/api/documentation/page", { revision: catalog.source.revision, guide })
+    const loadCatalog = (choice = sourceChoice, branch = preview) => api("/api/documentation/catalog", { source: choice, ...(choice === "branch" && branch) });
+    async function loadPage(guide, source = catalog.source) {
+        const key = `${source.revision}|${guide}`;
+        if (!pages.has(key)) pages.set(key, api("/api/documentation/page", { revision: source.revision, guide })
             .catch(error => { pages.delete(key); throw error; }));
         return pages.get(key);
     }
@@ -263,52 +272,6 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             })))));
     }
 
-    function sourceLine() {
-        const source = catalog.source, parts = [], sep = () => el("span", { class: "docs-sep", "aria-hidden": "true" }, "·");
-        const commit = value => value ? el("span", { class: "docs-commit", title: value }, glyph("doc-commit"), short(value)) : null;
-        if (source.kind === "branch") {
-            parts.push(el("span", {}, "Branch preview · guides only"), commit(source.commit));
-        } else if (source.kind === "build") {
-            parts.push(el("span", {}, "Guides included with this WIRE build"), sep(), commit(source.commit));
-        } else if (source.kind === "copy") {
-            parts.push(el("span", {}, "Guides included with this copy of WIRE."), el("span", { class: "docs-quiet" }, "It has no Git history, so it can't check GitHub main."));
-        } else {
-            const changed = Object.keys(source.changed ?? {}).length;
-            parts.push(el("span", { class: "docs-source-local" }, `Previewing this checkout${source.branch ? ` on ${source.branch}` : ""}`), sep(), commit(source.head), sep(),
-                el("span", {}, source.compared ? changed ? `${changed} ${changed === 1 ? "guide differs" : "guides differ"} from ${base()}` : `Same as ${base()}` : "Not compared"),
-                sep(), el("span", {}, "updates when you save"));
-        }
-        const line = el("div", { class: `docs-source docs-source-${source.kind}` }, el("p", {}, ...parts));
-        if (!source.checkout && !source.canCheck) return line;
-        const select = el("select", {id:"guideSource"}, el("option",{value:"installed"},"Installed version"));
-        if (source.checkout) select.append(el("option",{value:"checkout"},"This checkout"));
-        if (source.canCheck) {
-            select.append(el("option",{value:"branches"},branchList ? "Reload branch list…" : "Preview a branch…"));
-            if (branchList) select.append(el("optgroup",{label:"Pushed branches"}, ...branchList.map(({branch}) => el("option",{value:`branch:${branch}`},branch))));
-        }
-        select.value = sourceChoice === "branch" ? `branch:${preview.branch}` : sourceChoice;
-        const info = el("span", {role:"status"});
-        select.addEventListener("change", async () => {
-            const value = select.value;
-            if (value === "branches") {
-                select.disabled = true; info.textContent = "Loading branches…";
-                try {
-                    const result = await api("/api/documentation/branches",{});
-                    if (!visible || !select.isConnected) return;
-                    branchList = result.branches;
-                    line.replaceWith(sourceLine());
-                    win.requestAnimationFrame(() => (host.querySelector("#guideSource-control") ?? host.querySelector("#guideSource"))?.focus({preventScroll:true}));
-                    announce(branchList.length ? "Branches loaded. Choose a branch to preview." : "No pushed branches available.");
-                } catch (error) { info.textContent = error.message; select.disabled = false; select.value = sourceChoice === "branch" ? `branch:${preview.branch}` : sourceChoice; }
-                return;
-            }
-            preview = value.startsWith("branch:") ? branchList.find(item => `branch:${item.branch}` === value) : null;
-            switchSource(preview ? "branch" : value);
-        });
-        line.prepend(el("div", {class:"docs-source-label"}, el("label",{for:"guideSource"},"Guide source"), select, info));
-        return line;
-    }
-
     function pager(guide) {
         const list = guides(), index = list.findIndex(item => item.guide === guide);
         if (index < 0) return null;
@@ -325,7 +288,6 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         let title = article.querySelector("h1");
         if (!title) { title = el("h1", {}, data.title); article.prepend(title); }
         title.id = "docTitle"; title.tabIndex = -1;
-        title.after(sourceLine());
         // The guide's own "Contents" list repeats the outline beside it.
         for (const paragraph of article.querySelectorAll(":scope > p")) {
             if (paragraph.querySelector("strong")?.textContent.replace(":", "").trim() !== "Contents") continue;
@@ -341,7 +303,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         };
         const inline = sections.length ? el("details", { class: "docs-outline-inline" }, summary("On this page"),
             el("nav", { class: "docs-outline", "aria-label": "On this page" }, outlineList(sections, data.guide))) : null;
-        if (inline) article.querySelector(".docs-source").after(inline);
+        if (inline) title.after(inline);
         const footer = el("footer", { class: "docs-article-footer" },
             data.sourceUrl ? (() => { const link = el("a", { href: data.sourceUrl, class: "navigation-action" }, "View this guide on GitHub"); external(link, "opens on GitHub"); return link; })()
                 : catalog.source.kind === "checkout" ? el("p", { class: "docs-quiet" }, `Local file: ${data.file}${catalog.source.changed?.[data.file] ? catalog.source.changed[data.file] === "new" ? ` (new, not in ${base()})` : ` (edited, differs from ${base()})` : ""}`) : null,
@@ -393,12 +355,11 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         if (!view?.contains(node)) return null;
         if (node.id) return `#${win.CSS.escape(node.id)}`;
         if (node.dataset.docImage) return `button[data-doc-image="${win.CSS.escape(node.dataset.docImage)}"]`;
-        const region = [".docs-left", ".docs-right", ".docs-outline-inline", ".docs-source-switch", ".docs-article", ".docs-pager"].find(selector => node.closest(selector));
+        const region = [".docs-left", ".docs-right", ".docs-outline-inline", ".docs-article", ".docs-pager"].find(selector => node.closest(selector));
         if (!region) return null;
         if (node.matches("a[href]")) return `${region} a[href="${win.CSS.escape(node.getAttribute("href"))}"]`;
         if (node.matches("summary")) return `${region} summary`;
         if (node.matches(".docs-text-button")) return ".docs-text-button";
-        if (node.matches(".docs-source-switch button")) return `${region} button:nth-child(${[...node.parentElement.children].indexOf(node) + 1})`;
         return null;
     }
     function rememberLink(link) {
@@ -433,10 +394,12 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             dismissImage();
             sources.set(positionKey(), { choice:sourceChoice, preview });
             if (sources.size > 64) sources.delete(sources.keys().next().value);
+            if (noticeGuide !== guide) { note.textContent = ""; note.hidden = true; noticeGuide = null; }
             const previousFocus = quiet && focusSelector(doc.activeElement), previousTop = win.scrollY;
             const folds = quiet ? [...host.querySelectorAll(".docs-left-toggle[open], .docs-outline-inline[open]")].map(node => node.className) : [];
             view = layout(data);
-            host.replaceChildren(view);
+            mountView(view);
+            picker.update(catalog.source);
             page = data;
             if (quiet) {
                 for (const name of folds) { const fold = view.querySelector(`.${name}`); if (fold) fold.open = true; }
@@ -459,18 +422,34 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             view = el("div", { class: "docs-paper docs-error", role: "alert" },
                 el("h1", { id: "docTitle", tabindex: "-1" }, error?.status === 404 ? "Guide not found" : "Couldn't load the guides"),
                 el("p", {}, error.message || "WIRE couldn't read the documentation."),
-                sourceChoice !== "installed" ? el("button",{type:"button",onclick:()=>{branchList=null;preview=null;switchSource("installed");}},"Read installed guides") : null,
                 el("p", {}, el("a", { href: hrefFor(""), "data-guide": "" }, "Go to the documentation index")));
-            host.replaceChildren(view);
+            mountView(view);
+            if (catalog) picker.update(catalog.source);
             if (!quiet) view.querySelector("#docTitle").focus({ preventScroll: true });
         } finally { if (mine === token) loading = null; }
     }
 
-    function switchSource(choice) {
-        sourceChoice = choice;
+    async function chooseLibrary(choice, branch, current) {
+        const visit = token, previous = page?.guide ?? "", anchor = fragment();
+        const next = await loadCatalog(choice, branch);
+        const missing = previous && !next.groups.some(g => g.items.some(i => i.guide === previous));
+        const guide = missing ? "" : previous;
+        const data = await loadPage(guide, next.source);
+        if (!visible || visit !== token || !current()) return;
+        const lostSection = anchor && !data.headings.some(h => h.id === anchor);
+        const nextAddress = missing || lostSection ? hrefFor(guide) : null;
+        if (nextAddress) win.history.replaceState(win.history.state, "", nextAddress);
+        catalog = next; sourceChoice = choice; preview = branch;
         try { win.sessionStorage.setItem(SOURCE_KEY, choice); } catch { /* the choice lasts for this view */ }
-        catalog = null; pages.clear();
-        void render({ guide: page?.guide ?? "" }, { quiet: true });
+        note.textContent = missing ? "This guide isn't in the selected source. Showing its documentation index."
+            : lostSection ? "This section isn't in the selected source. Showing the beginning of the guide." : "";
+        noticeGuide = note.textContent ? guide : null;
+        note.hidden = !note.textContent;
+        await render({ guide }, { quiet: true });
+        if (nextAddress) {
+            if (missing) open(guide, "", true);
+            win.scrollTo({top:0,behavior:"instant"});
+        } else if (anchor) scrollToFragment(anchor,{focus:false});
     }
 
     // A contributor's saved edits appear without reloading; the current reading position stays.
@@ -542,8 +521,8 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             }
             void render(route, { restore });
         },
-        hide() { visible = false; dismissImage(); win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
-        withdraw() { visible = false; dismissImage(); win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; preview = branchList = null; sourceChoice = "installed"; pages.clear(); positions.clear(); origins.clear(); sources.clear(); host.replaceChildren(); },
+        hide() { visible = false; picker.close(false); dismissImage(); win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
+        withdraw() { visible = false; picker.clear(); note.hidden=true; note.textContent=""; reader.replaceChildren(); dismissImage(); win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; preview = null; sourceChoice = "installed"; pages.clear(); positions.clear(); origins.clear(); sources.clear(); host.replaceChildren(); },
         close() { this.withdraw(); listeners.abort(); },
     };
 }
