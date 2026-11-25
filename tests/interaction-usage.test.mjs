@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { firstUsageDays, recordedUsage, usageSummary, usageQuestionGroups } from "../lib/interaction-usage.mjs";
 import { createUsageReading } from "../web/usage-reading.mjs";
-import { modelRequestKey, retainedReceiptContext, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
+import { modelRequestKey, retainedReceiptContext, retainedUsage, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
 import { retainInteractionModelMetadata } from "../lib/interaction-model.mjs";
 import { qualifiedResultPaths } from "../lib/history.mjs";
 
@@ -75,6 +75,61 @@ test("pending request-only metering excludes rival run, message, request and del
     }
     assert.equal(kept([p,a],{ ...record,sourceSessionId:"other" }), false);
     assert.equal(kept([p,a],{ ...record,assessmentMembershipPruned:true }), false);
+});
+
+function sharedRun() {
+    let ordinal = 0;
+    const e = (id, type, data) => ({ id, type, timestamp:new Date(1700000000000 + ordinal++).toISOString(), data });
+    const receipt = (id, input) => e(`receipt-${id}`, "session.usage_record",
+        { apiCallId:id, origin:"shared", model:"example", tokens:{input,freshInput:null,cacheRead:null,cacheWrite:null,output:1} });
+    const records = [], events = [];
+    for (const n of [1,2]) {
+        const prompt = e(`prompt-${n}`, "user.message", {messageId:`message-${n}`,wireUsageOrigin:"shared"});
+        records.push({sourceSessionId:"source",userPrompt:{sourceEventId:prompt.id,sourceTimestamp:prompt.timestamp},
+            toolCalls:[{startEventId:`start-${n}`,toolCallId:`tool-${n}`}]});
+        const response = (id, api, extra) => e(id, "assistant.message", {wireUsageOrigin:"shared",
+            originatingMessageId:`message-${n}`,turnId:`turn-${n}`,wireOriginalModel:{apiCallId:api,model:"example"},...extra});
+        events.push(prompt, response(`request-${n}`,`request-api-${n}`,{hasToolRequests:true,wireToolRequestIds:[`tool-${n}`]}),
+            e(`start-${n}`,"tool.execution_start",{toolCallId:`tool-${n}`}),receipt(`request-api-${n}`,10*n),
+            response(`answer-${n}`,`answer-api-${n}`,{finalAnswer:true}),receipt(`answer-api-${n}`,20*n),
+            e(`end-${n}`,"assistant.turn_end",{turnId:`turn-${n}`}));
+    }
+    return {events,records};
+}
+
+test("a reused telemetry run can meter two independently closed exact-message request sets", () => {
+    const {events,records} = sharedRun(), before = structuredClone(events);
+    const first = retainedUsage(events,records[0],false), second = retainedUsage(events,records[1],false);
+    assert.deepEqual(first?.map(r=>r.apiCallId),["request-api-1","answer-api-1"]);
+    assert.deepEqual(second?.map(r=>r.apiCallId),["request-api-2","answer-api-2"]);
+    assert.deepEqual([recordedUsage(first).total,recordedUsage(second).total],[32,62]);
+    assert.deepEqual(first[0].linkedToolStarts,["start-1"]);
+    assert.deepEqual(second[0].linkedToolStarts,["start-2"]);
+    assert.deepEqual(events,before,"The shared original claim is preserved, not deleted to force a match");
+});
+
+test("independent-message metering never bypasses ambiguous ownership, privacy, partial receipts or closure", () => {
+    const cases = [
+        events => { delete events.find(e=>e.id==="answer-1").data.originatingMessageId; },
+        events => { events.find(e=>e.id==="answer-2").data.wireOriginalModel.apiCallId="answer-api-1"; },
+        events => { events.find(e=>e.id==="answer-2").agentId="nested"; },
+        events => { events.find(e=>e.id==="prompt-2").data.wirePromptCapture={reason:"credential-excluded"}; },
+        events => { events.find(e=>e.id==="receipt-answer-api-1").data.origin="different"; },
+        events => { events.find(e=>e.id==="receipt-answer-api-1").data.accounting={source:"another-source"}; },
+        events => { events.push({...events.find(e=>e.id==="receipt-answer-api-2"),id:"run-only",data:{
+            apiCallId:"unowned",origin:"shared",model:"example",tokens:{input:1,output:1}}}); },
+        events => { events.splice(events.findIndex(e=>e.id==="receipt-answer-api-1"),1); },
+        events => { events.find(e=>e.id==="answer-1").data.finalAnswer=false; },
+        events => { events.splice(3,0,{id:"delegate",type:"subagent.started",data:{}}); },
+        events => { events.find(e=>e.id==="answer-2").data.wireToolRequestIds=["tool-1"]; },
+    ];
+    for (const change of cases) {
+        const {events,records} = sharedRun();
+        change(events);
+        let refusal;
+        assert.equal(retainedUsage(events,records[0],false,reason=>{refusal=reason;return null;}),null);
+        assert.ok(refusal,"An incomplete or conflicting original must retain an explicit refusal");
+    }
 });
 
 test("opaque request keys match old assistant metadata without admitting raw digest lookalikes or credentials", () => {

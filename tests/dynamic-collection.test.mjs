@@ -163,6 +163,44 @@ test("history compatibility: a request-only meter for a retained run survives a 
     assert.equal(checkpoint.events.some(e => e.id === unrelated.id), false);
 });
 
+test("history compatibility: shared run receipts stay with their exact messages through restart and a rival withdraws them", async t => {
+    const app = await installation(t), id = app.session(), interactionId = "reused-run", model = "example";
+    const batch = [];
+    for (const n of [1,2]) {
+        const messageId = `message-${n}`, turnId = `turn-${n}`, toolCallId = `tool-${n}`, start = call(toolCallId);
+        start.data.turnId = turnId;
+        const response = (apiCallId, fields) => event("assistant.message", {interactionId,messageId:`response-${apiCallId}`,
+            originatingMessageId:messageId,turnId,apiCallId,model,...fields});
+        const receipt = (apiCallId,inputTokens) => event("session.usage_record",
+            {usage:{interactionId,apiCallId,model,inputTokens,outputTokens:1}});
+        batch.push(event("user.message",{messageId,interactionId,content:`Read invented item ${n}.`}),
+            response(`request-${n}`,{toolRequests:[{toolCallId}]}),start,
+            event("tool.execution_complete",{toolCallId,success:n===2}),
+            receipt(`request-${n}`,10*n),response(`answer-${n}`,{phase:"final_answer",toolRequests:[]}),
+            receipt(`answer-${n}`,20*n),event("assistant.turn_end",{turnId}));
+    }
+    const base = Date.now()-20000;
+    batch.forEach((e,index)=>{e.timestamp=new Date(base+index*100).toISOString();});
+    const file = await logFor(app,id,batch);
+    let collector = await createCollector(app.context,{timers:false});
+    app.cleanup.push(()=>collector.close());
+    await collector.configure({...app.config,approved:true,enabled:false,windowDays:30,pollSeconds:5});
+    const read = async () => (await currentStatePayload(app.context,await loadBoardState(app.context))).scenarios
+        .sort((a,b)=>a.userPrompt.text.localeCompare(b.userPrompt.text));
+    await collector.collectNow();
+    const first = await read();
+    assert.deepEqual(first.map(r=>r.usage?.total),[32,62]);
+    assert.deepEqual(first.map(r=>r.toolCalls[0].toolSucceeded),[false,true]);
+    await collector.close(); collector = await createCollector(app.context,{timers:false});
+    await collector.collectNow();
+    const reopened = await read();
+    assert.deepEqual(reopened.map(r=>[r.scenarioId,r.usage?.total]),first.map(r=>[r.scenarioId,r.usage?.total]));
+    await appendFile(file,JSON.stringify(event("assistant.message",{interactionId,originatingMessageId:"message-2",
+        apiCallId:"request-1",model,turnId:"rival",phase:"final_answer",toolRequests:[]}))+"\n");
+    await collector.collectNow();
+    assert.deepEqual((await read()).map(r=>r.usage),[null,null]);
+});
+
 test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {
     const app = await installation(t), id = app.session(), start = call("metered-fetch");
     const model = "claude-sonnet-5-5", messageId = "metered-prompt", interactionId = "interaction-one";

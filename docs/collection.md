@@ -249,7 +249,12 @@ may be `user` for a model request carrying a prompt or `agent` for the next
 request after a tool result. Neither proves prompt authorship or request
 ownership. Nested activity, a competing owner, or an incomplete window cannot
 establish a whole-interaction total. Missing cache counts still allow an
-exact input/output total. WIRE does not sum `session.usage_checkpoint`, reason from chat
+exact input/output total. When a telemetry run ID is reused, WIRE can use each
+prompt's unique message and request identities instead only if every competing
+claim and run receipt has an exclusive request owner. The complete-root,
+tool-link, privacy and receipt-conflict checks still apply; the shared run does
+not contribute additional receipts to either prompt.
+WIRE does not sum `session.usage_checkpoint`, reason from chat
 order alone, subscribe to live SDK events, or start a backfill. Conflicting,
 partial, or unsupported receipts do not establish a whole-interaction count.
 These optional fields use the existing evidence snapshot; no store conversion
