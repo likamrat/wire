@@ -32,40 +32,54 @@ async function inView(page, id) {
 
 test("Documentation reads the repository guides at the 752px panel with ordinary addresses, Back and a live freshness check", async t => {
     const { page, repo } = await setup(t);
+    const firstCheck = Promise.withResolvers();
+    await page.route("**/api/documentation/check", async route => {
+        await firstCheck.promise;
+        await route.continue();
+    }, { times: 1 });
+    t.after(() => firstCheck.resolve());
+    const newer = await repo.publish("docs/published.md", "# Published guide\n");
 
     // The entry sits at the bottom of the sidebar, directly above the account block.
     const entry = page.locator('.navigation-bottom > nav.documentation-navigation a[data-nav="documentation"]');
     await expect(entry).toBeVisible();
     assert.equal(await entry.evaluate(node => Boolean(node.closest("nav").compareDocumentPosition(document.getElementById("navigationFooter")) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
     assert.ok((await entry.boundingBox()).y + (await entry.boundingBox()).height <= (await page.locator("#navigationFooter").boundingBox()).y);
-    await entry.click();
+    await entry.focus();
+    await entry.press("Enter");
     await expect(page).toHaveURL(/\/documentation$/);
     await expect(page).toHaveTitle("Documentation | WIRE");
     await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
     await expect(page.locator("#docTitle")).toBeFocused();
     await expect(entry).toHaveAttribute("aria-current", "page");
-    // The first visit checks GitHub main in the background and quietly moves to it.
-    await expect(page.locator(".docs-source")).toContainText("From GitHub main");
-    await expect(page.locator(".docs-source")).toContainText(repo.head().slice(0, 7));
-
     // At 752px the guide tree folds behind "All guides"; the active guide lists its sections.
     await page.locator(".docs-left-toggle > summary").click();
     await page.locator('.docs-tree a[data-guide="user-guide"]').click();
     await expect(page).toHaveURL(/\/documentation\?guide=user-guide$/);
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    // A late automatic check updates the guide being read, not the index where it started.
+    firstCheck.resolve();
+    await expect(page.locator(".docs-source")).toContainText(newer.slice(0, 7));
+    await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
+    await expect(page.locator("#docTitle")).toBeFocused();
     await expect(page.locator('.docs-tree a[data-guide="user-guide"]')).toHaveAttribute("aria-current", "page");
     assert.ok(await page.locator(".docs-tree-sections a").count() > 4);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 
     // Section links are document anchors: #trends must not be read as the old Trends address.
-    await page.locator(".docs-outline-inline > summary").click();
-    await page.locator('.docs-outline-inline a[data-fragment="trends"]').first().click();
+    const contents = page.locator(".docs-outline-inline > summary");
+    const trends = page.locator('.docs-outline-inline a[data-fragment="trends"]').first();
+    await contents.press("Enter");
+    await trends.press("Enter");
     await expect(page).toHaveURL(/\/documentation\?guide=user-guide#trends$/);
     await inView(page, "trends");
+    await expect(heading(page, "trends")).toBeFocused();
     await page.goBack();
     await expect(page).toHaveURL(/\/documentation\?guide=user-guide$/);
+    await expect(trends).toBeFocused();
     await page.goBack();
     await expect(page.locator("#docTitle")).toHaveText("WIRE documentation");
+    await expect(page.locator('.docs-tree a[data-guide="user-guide"]')).toBeFocused();
     await page.goForward();
     await expect(page.locator("#docTitle")).toHaveText("Use WIRE");
     await page.goto(new URL("/documentation?guide=user-guide#trends", page.url()).href);

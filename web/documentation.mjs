@@ -18,7 +18,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     const reduce = win.matchMedia("(prefers-reduced-motion: reduce)");
     let catalog = null, page = null, view = null, token = 0, spyFrame = 0, liveTimer = 0, liveVersion = null, visible = false, loading = null;
     let sourceChoice = (() => { try { return win.sessionStorage.getItem(SOURCE_KEY) === "checkout" ? "checkout" : "official"; } catch { return "official"; } })();
-    const pages = new Map(), positions = new Map(), listeners = new AbortController();
+    const pages = new Map(), positions = new Map(), origins = new Map(), listeners = new AbortController();
 
     const el = (tag, props = {}, ...children) => {
         const node = doc.createElement(tag);
@@ -116,6 +116,8 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         }
         for (const image of content.querySelectorAll("img")) {
             const raw = image.getAttribute("src") ?? "";
+            // Only the checked source may load, including on high-density displays.
+            image.removeAttribute("srcset");
             const themed = /#gh-(dark|light)-mode-only$/.exec(raw);
             if (themed) image.classList.add(`doc-theme-${themed[1]}-only`);
             const found = target(raw);
@@ -311,6 +313,31 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
     }
     function fragment() { try { return decodeURIComponent(win.location.hash.slice(1)); } catch { return ""; } }
 
+    function focusSelector(node) {
+        if (!view?.contains(node)) return null;
+        if (node.id) return `#${win.CSS.escape(node.id)}`;
+        const region = [".docs-left", ".docs-right", ".docs-outline-inline", ".docs-source-switch", ".docs-article", ".docs-pager"].find(selector => node.closest(selector));
+        if (!region) return null;
+        if (node.matches("a[href]")) return `${region} a[href="${win.CSS.escape(node.getAttribute("href"))}"]`;
+        if (node.matches("summary")) return `${region} summary`;
+        if (node.matches(".docs-text-button")) return ".docs-text-button";
+        if (node.matches(".docs-source-switch button")) return `${region} button:nth-child(${[...node.parentElement.children].indexOf(node) + 1})`;
+        return null;
+    }
+    function rememberLink(link) {
+        origins.set(positionKey(), { selector: focusSelector(link), top: win.scrollY });
+    }
+    function restoreOrigin() {
+        const origin = origins.get(positionKey()), link = origin && view?.querySelector(origin.selector);
+        if (!link) return false;
+        const fold = link.closest("details");
+        if (fold) fold.open = true;
+        if (!link.checkVisibility()) return false;
+        win.scrollTo({ top: origin.top, behavior: "instant" });
+        link.focus({ preventScroll: true });
+        return true;
+    }
+
     // ---------- rendering ----------
     async function render(route, { restore = false, quiet = false } = {}) {
         const mine = ++token, guide = route.guide ?? "";
@@ -321,14 +348,20 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (guide && !guides().some(item => item.guide === guide)) throw Object.assign(new Error("There's no guide at this address in these guides. It may have been renamed."), { status: 404 });
             const data = await loadPage(guide);
             if (mine !== token || !visible) return;
+            const previousFocus = quiet && focusSelector(doc.activeElement), previousTop = win.scrollY;
+            const folds = quiet ? [...host.querySelectorAll(".docs-left-toggle[open], .docs-outline-inline[open]")].map(node => node.className) : [];
             const swap = () => { view = layout(data); host.replaceChildren(view); page = data; };
             const previous = page;
             if (!quiet && previous && previous.guide !== data.guide && doc.startViewTransition && !reduce.matches) await doc.startViewTransition(swap).updateCallbackDone;
             else swap();
-            const saved = positions.get(positionKey());
-            if (fragment()) scrollToFragment(fragment(), { focus: !restore && !quiet });
-            else if (restore || quiet) win.scrollTo({ top: saved ?? (quiet ? win.scrollY : 0), behavior: "instant" });
-            else { win.scrollTo({ top: 0, behavior: "instant" }); view.querySelector("#docTitle")?.focus({ preventScroll: true }); }
+            if (quiet) {
+                for (const name of folds) { const fold = view.querySelector(`.${name}`); if (fold) fold.open = true; }
+                win.scrollTo({ top: previousTop, behavior: "instant" });
+                if (previousFocus) (view.querySelector(previousFocus) ?? view.querySelector("#docTitle")).focus({ preventScroll: true });
+            } else if (!(restore && restoreOrigin()) && !scrollToFragment(fragment())) {
+                win.scrollTo({ top: restore ? positions.get(positionKey()) ?? 0 : 0, behavior: "instant" });
+                view.querySelector("#docTitle")?.focus({ preventScroll: true });
+            }
             setActive();
             watchCheckout();
         } catch (error) {
@@ -346,18 +379,26 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
 
     async function refresh({ force = false } = {}) {
         if (!catalog || !catalog.source.canCheck || sourceChoice !== "official") return;
-        const before = catalog.source.revision, route = { guide: page?.guide ?? "" };
+        const before = catalog.source.revision;
         if (force) announce("Checking GitHub main for newer guides…");
-        try { await api("/api/documentation/check", { force }); } catch { /* the catalog reports the failure */ }
-        if (!visible) return;
+        try { await api("/api/documentation/check", { force }); } catch {
+            if (visible && sourceChoice === "official") announce("Couldn't check for newer guides. Try again from Documentation.");
+            return;
+        }
+        if (!visible || sourceChoice !== "official") return;
         try {
             const reloaded = await api("/api/documentation/catalog", { source: sourceChoice });
-            if (!visible) return;
+            if (!visible || sourceChoice !== "official") return;
             catalog = reloaded;
         } catch { return; /* access changed or WIRE stopped; the page on screen stays as it was */ }
         const changed = catalog.source.revision !== before;
-        if (changed) { pages.clear(); await render(route, { quiet: true }); }
-        else view?.querySelector(".docs-source")?.replaceWith(sourceLine());
+        if (changed) { pages.clear(); await render({ guide: loading ?? page?.guide ?? "" }, { quiet: true }); }
+        else {
+            const line = view?.querySelector(".docs-source");
+            const focus = line?.contains(doc.activeElement) && focusSelector(doc.activeElement);
+            line?.replaceWith(sourceLine());
+            if (focus) view.querySelector(focus)?.focus({ preventScroll: true });
+        }
         if (changed) announce("Updated to the latest guides from GitHub main.");
         else if (force) announce(catalog.source.failedAt && catalog.source.failedAt > (catalog.source.checkedAt ?? "") ? "Couldn't reach GitHub main." : "These are the latest guides on GitHub main.");
     }
@@ -392,11 +433,13 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
         if (!link || !host.contains(link) || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         if (link.dataset.guide !== undefined && link.dataset.guide !== (page?.guide ?? "")) {
             event.preventDefault();
+            rememberLink(link);
             positions.set(positionKey(), win.scrollY);
             open(link.dataset.guide, link.dataset.fragment ?? "");
         } else if (link.dataset.fragment !== undefined && (link.dataset.guide === undefined || link.dataset.guide === (page?.guide ?? ""))) {
             // Same-guide sections use the browser's own fragment navigation, so Back returns to the earlier section.
             event.preventDefault();
+            rememberLink(link);
             positions.set(positionKey(), win.scrollY);
             const url = hrefFor(page?.guide ?? "", link.dataset.fragment);
             if (win.location.pathname + win.location.search + win.location.hash !== url) win.location.hash = encodeURIComponent(link.dataset.fragment);
@@ -405,7 +448,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (details) details.open = false;
         }
     }, { signal: listeners.signal });
-    win.addEventListener("hashchange", () => { if (visible && page) scrollToFragment(fragment(), { smooth: true }); }, { signal: listeners.signal });
+    win.addEventListener("hashchange", () => { if (visible && page && !restoreOrigin()) scrollToFragment(fragment(), { smooth: true }); }, { signal: listeners.signal });
     // Rails fold below 880px. Only a width crossing changes them, so opening the fold (which adds height) stays open.
     let wideLayout = null;
     new win.ResizeObserver(([entry]) => {
@@ -424,7 +467,8 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (page && page.guide === (route.guide ?? "") && catalog) {
                 if (!first && !restore) return;
                 const saved = positions.get(positionKey());
-                if (fragment()) scrollToFragment(fragment(), { focus: !restore });
+                if (restore && restoreOrigin()) { watchCheckout(); return; }
+                if (fragment()) scrollToFragment(fragment());
                 else if (restore && saved !== undefined) win.scrollTo({ top: saved, behavior: "instant" });
                 watchCheckout();
                 return;
@@ -432,7 +476,7 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             void render(route, { restore }).then(() => { if (first) void refresh(); });
         },
         hide() { visible = false; win.clearInterval(liveTimer); liveTimer = 0; token++; loading = null; },
-        withdraw() { visible = false; win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; pages.clear(); host.replaceChildren(); },
+        withdraw() { visible = false; win.clearInterval(liveTimer); token++; loading = null; catalog = null; page = null; view = null; pages.clear(); positions.clear(); origins.clear(); host.replaceChildren(); },
         close() { this.withdraw(); listeners.abort(); },
     };
 }
