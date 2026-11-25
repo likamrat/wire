@@ -17,7 +17,8 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await expect(card.locator(".token-history-total")).toHaveCount(0);
     await expect(slider).toHaveAccessibleDescription("200,000 tokens in this period. 1 of 2 interactions measured.");
     await expect(card.locator(".token-day-reading")).toHaveAttribute("aria-hidden","true");
-    await expect(card.locator(".token-day-guide")).toHaveCSS("opacity","0");
+    await expect(card.locator(".token-history-plot")).toHaveCSS("cursor","default");
+    await expect(card.locator(".token-hover-point")).toHaveCSS("opacity","0");
     await expect(card).not.toContainText("Recorded tokens");
     await expect(card.locator("[data-measured-day]")).toHaveCount(1);
     await expect(card.locator(".token-line")).toHaveCount(0);
@@ -25,14 +26,21 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     const lastTick=card.locator(".token-history-dates time").last();await lastTick.scrollIntoViewIfNeeded();
     const labelBox=await lastTick.boundingBox(),box=await slider.boundingBox(),endX=labelBox.x+labelBox.width/2,endY=box.y+box.height/2;
     if(width<500) await page.touchscreen.tap(endX,endY);
-    else await page.mouse.move(endX,endY);
+    else await lastTick.hover();
     await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable · 0 of 1 measured/);
     if(width>=500) {
-        await page.mouse.click(endX,endY);
+        await lastTick.click();
         await date.hover();await expect(slider).toHaveAttribute("aria-valuetext",/Token count unavailable/);
     }
     await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching activity/);
     await slider.press("Home");await expect(slider).toHaveAttribute("aria-valuetext",/200,000 tokens/);
+    if(width>=500) {
+        const point=card.locator(".token-point");await point.scrollIntoViewIfNeeded();
+        const b=await point.boundingBox();
+        await page.mouse.move(b.x+b.width/2,b.y+b.height/2+24);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
+        await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","1");
+        await page.mouse.click(b.x+b.width/2,b.y+b.height/2);
+    }
     const expected=new Date(); expected.setUTCHours(10,0,0,0); expected.setUTCDate(expected.getUTCDate()-20);
     const dateText=expected.toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",year:"numeric",month:"short",day:"numeric"});
     await expect(date).toHaveText(dateText);
@@ -84,26 +92,30 @@ for(const frontend of ["react","bundled"])test(`${frontend}: daily chart reading
         await card.evaluate(c=>c.scrollIntoView({block:"center"}));await page.evaluate(()=>document.fonts.ready);
         for(let i=0;i<4;i++){
             const tick=card.locator(".token-history-dates time").nth(i);await tick.scrollIntoViewIfNeeded();
-            const box=await plot.boundingBox(),label=await tick.boundingBox();
-            const x=label.x+label.width/2,y=box.y+box.height*.45;
+            const point=await plot.locator(".token-point").nth(i).boundingBox(),x=point.x+point.width/2,y=point.y+point.height/2;
             await page.mouse.move(x,y);await expect(slider).toHaveValue(String(i));
             await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","1");
             assert.deepEqual(await card.evaluate((c,{x,y})=>{
                 const issues=[],rect=n=>n.getBoundingClientRect(),bounds=rect(c),p=c.querySelector(".token-history-plot");
-                const box=rect(p),read=c.querySelector(".token-day-reading"),detail=rect(read);
-                if(document.elementFromPoint(x,y)!==p.querySelector("input"))issues.push("hover blocked");
-                if(detail.top<box.bottom-.5)issues.push("reading overlaps plot");
+                const read=c.querySelector(".token-day-reading"),detail=rect(read),target=document.elementFromPoint(x,y);
+                if(!p.contains(target) || getComputedStyle(target).cursor!=="default")issues.push("hover blocked or cursor changed");
+                if(x>=detail.left-3 && x<=detail.right+3 && y>=detail.top-3 && y<=detail.bottom+3)issues.push("reading covers its hovered point");
+                if(Math.hypot(Math.max(0,detail.left-x,x-detail.right),Math.max(0,detail.top-y,y-detail.bottom))>25)issues.push("reading detached from hovered point");
                 const glyphs=n=>{const r=document.createRange();r.selectNodeContents(n);return [...r.getClientRects()];};
                 const view=rect(c.querySelector(".token-history-scroll"));
                 const ticks=[...c.querySelectorAll(".token-history-dates time")].flatMap(glyphs).filter(b=>b.left>=view.left && b.right<=view.right);
                 const overlap=(a,b)=>a.left<b.right-.5 && a.right>b.left+.5 && a.top<b.bottom-.5 && a.bottom>b.top+.5;
-                if(ticks.some((a,i)=>ticks.slice(i+1).some(b=>overlap(a,b)) || overlap(a,detail)))issues.push("date labels overlap");
-                const text=[...ticks,...glyphs(read.querySelector(".token-day-value")),...glyphs(read.querySelector(".token-day-date"))];
-                if(text.some(b=>b.left<bounds.left || b.right>bounds.right || b.bottom>bounds.bottom || b.top<bounds.top))issues.push("text clipped");
+                if(ticks.some((a,i)=>ticks.slice(i+1).some(b=>overlap(a,b))))issues.push("date labels overlap");
+                if([...ticks,...[...c.querySelectorAll(".token-history-scale span")].flatMap(glyphs)].some(b=>overlap(b,detail)))issues.push("tooltip hides scale or dates");
+                if(ticks.some(b=>b.left<bounds.left || b.right>bounds.right || b.bottom>bounds.bottom || b.top<bounds.top))issues.push("axis label clipped");
+                const text=[...glyphs(read.querySelector(".token-day-value")),...glyphs(read.querySelector(".token-day-date"))];
+                if(text.some(b=>b.left<detail.left-1 || b.right>detail.right+1 || b.bottom>detail.bottom+1 || b.top<detail.top-1
+                    || b.left<0 || b.right>innerWidth || b.bottom>innerHeight || b.top<0))issues.push("tooltip text clipped");
                 return issues;
             },{x,y}),[],`${width}px / ${scale*100}% text / day ${i}`);
         }
-        await page.mouse.move(0,0);await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
+        await page.keyboard.press("Escape");await expect(card.locator(".token-day-reading")).toHaveCSS("opacity","0");
+        await page.mouse.move(0,0);
     }
 });
 
@@ -129,6 +141,39 @@ test("the Analyze time axis names every selected day, including empty dates and 
         assert.ok(await chart.evaluate(c=>c.scrollWidth<=c.clientWidth+1));
         await slider.press("Escape");await expect(chart.locator(".token-day-reading")).toHaveCSS("opacity","0");
         await expect(chart).not.toContainText(/interactions measured/);
+    }
+});
+
+for(const frontend of ["react","bundled"])test(`${frontend}: tapping a scrolled day keeps the touched date and scroll position`,async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend);
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width:390,height:900},hasTouch:true,timezoneId:"UTC"});
+    await page.goto(new URL("/?range=custom&from=2026-08-20&to=2026-11-24",runtime.url).href);
+    const chart=page.locator("#analyzeUsage"),slider=chart.getByRole("slider"),scroll=chart.locator(".token-history-scroll");
+    const offset=()=>scroll.evaluate(s=>s.scrollLeft);
+    await expect(slider).toHaveAttribute("max","96");await slider.press("End");
+    for(const [button,date,index] of [["Earlier days","2026-10-14",55],["Later days","2026-11-21",93]]){
+        await chart.getByRole("button",{name:button}).tap();
+        const tick=chart.locator(`time[datetime="${date}"]`);
+        await tick.evaluate(t=>t.scrollIntoView({block:"center",inline:"center"}));
+        const before=await offset(),label=await tick.boundingBox(),plot=await slider.boundingBox();
+        const x=label.x+label.width/2,y=plot.y+plot.height/2;
+        await page.touchscreen.tap(x,y);
+        await expect(slider).toHaveValue(String(index));
+        await expect(chart.locator(".token-day-date")).toHaveText(new Date(date+"T12:00Z").toLocaleDateString("en-US",{dateStyle:"medium",timeZone:"UTC"}));
+        assert.equal(await offset(),before,"a tap must not move the date strip");
+        if(index===55){
+            const session=await page.context().newCDPSession(page);
+            const touch=(type,points)=>session.send("Input.dispatchTouchEvent",{type,touchPoints:points});
+            const settled=scroll.evaluate(s=>new Promise(resolve=>s.addEventListener("scrollend",()=>resolve(),{once:true})));
+            await touch("touchStart",[{x,y}]);
+            for(const delta of [15,40,70,100])await touch("touchMove",[{x:x-delta,y}]);
+            await touch("touchEnd",[]);await settled;await session.detach();
+            await expect.poll(offset).toBeGreaterThan(before+30);
+            await expect(slider).toHaveValue(String(index));
+            await expect(chart.locator(".token-day-reading")).toHaveAttribute("aria-hidden","true");
+        }
     }
 });
 

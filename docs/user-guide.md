@@ -354,11 +354,13 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 In Analyze, **Token usage** labels each day in the chosen range, including
 days without a count. Scroll along the date axis on narrow screens or long
-ranges; periods over 90 days have earlier and later windows. Hover, tap or use
-the arrow keys to inspect a date. A dot on zero is a measured zero. For a gap,
+ranges; periods over 90 days have earlier and later windows. Hover over a point
+to see its date and token count beside the pointer. Tap a day or use the arrow
+keys to inspect it. A dot on zero is a measured zero. For a gap,
 the date reading distinguishes activity without a count from no matching activity.
 WIRE leaves gaps between measured days; it doesn't estimate the missing usage.
-Open a date in Trends for its evidence, or choose **View by day** for the period.
+Click or tap to hold a reading, then select its date to open the evidence in
+Trends. Choose **View by day** for the whole period.
 On an interaction card or in the slide-out header, read the count or **Tokens
 unavailable**. Select the header reading for the breakdown or the known reason.
 
