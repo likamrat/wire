@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readMetadataProjection, readMetadataSnapshot, validateMetadataProjection, metadataReadVersion,
     SOURCE_METADATA_MAX_BYTES, SOURCE_METADATA_READER_VERSION } from "../lib/source-metadata.mjs";
-import { readSourceMetadata, sourceMetadataStamp } from "../lib/source-reader.mjs";
+import { readSourceMetadata, sourceMetadataStamp, observeSourceMetadataSelection } from "../lib/source-reader.mjs";
 import { BoardError } from "../lib/store.mjs";
 
 test("missing required metadata is qualified consistently by stamp, native read and helper snapshot", async t => {
@@ -106,8 +106,8 @@ test("source-native metadata changes before SQL begins are included rather than 
     assert.equal(result.roster[0].name, "Freshly committed before the read");
 });
 
-async function fixtureResponse(file) {
-    return { schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32", ...readMetadataSnapshot(file) };
+async function fixtureResponse(file, observeChange = false) {
+    return { schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32", ...readMetadataSnapshot(file, { observeChange }) };
 }
 
 async function fixture(t) {
@@ -236,6 +236,58 @@ const selectedRow = value => {
     const { checkedAt, ...row } = value.roster.find(row => row.sessionId === "00000000-0000-4000-8000-000000000001");
     return JSON.stringify([value.adapter, value.schemaVersion, value.sourceIdentity, row]);
 };
+
+for (const hosted of [false, true]) test(`read-only selected observations tolerate unrelated commits without issuing a stamp: ${hosted ? "helper" : "native"}`, async t => {
+    const app = await fixture(t), writer = new DatabaseSync(app.file);
+    writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE unrelated(n INTEGER); INSERT INTO unrelated VALUES(0)");
+    let checks = 0, reads = 0;
+    const verify = () => { checks++; writer.exec("UPDATE unrelated SET n=n+1"); };
+    const run = async (command, args) => {
+        if (command === "wslpath") return { stdout: "C:\\owned\\read-copilot-metadata.mjs" };
+        assert.equal(args.at(-1), "--observe-selection");
+        reads++;
+        const response = await fixtureResponse(app.file, true);
+        writer.exec("UPDATE unrelated SET n=n+1");
+        return { stdout: JSON.stringify(response) };
+    };
+    try {
+        const result = await observeSourceMetadataSelection({ ...app.files, windowsDatabase: hosted ? app.files.windowsDatabase : null },
+            { verify, proof: selectedRow, run });
+        assert.equal(result.roster[0].sessionId, app.projection.roster[0].sessionId);
+        assert.match(result.sourceIdentity, /^[a-f0-9]{64}$/);
+        assert.equal(Object.hasOwn(result, "metadataStamp"), false, "An observation cannot become a whole-database publication fence.");
+        assert.equal(checks, hosted ? 6 : 4);
+        assert.equal(reads, hosted ? 2 : 0);
+        await assert.rejects(readSourceMetadata({ ...app.files, windowsDatabase: null },
+            { selection: { verify, proof: selectedRow } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
+    } finally { writer.close(); }
+});
+
+for (const change of ["selected", "revoked", "replacement", "unreadable"]) test(`read-only selected observations refuse ${change}`, async t => {
+    const app = await fixture(t), replacement = await fixture(t), writer = new DatabaseSync(app.file);
+    let reads = 0, revoked = false, file = app.file;
+    const files = { ...app.files, databaseFile: () => file };
+    try {
+        writer.exec("PRAGMA journal_mode=WAL");
+        await assert.rejects(observeSourceMetadataSelection(files, {
+            proof: selectedRow,
+            verify() { if (revoked) throw Object.assign(new Error("Withdrawn source grant"), { code: "wire_access_revoked" }); },
+            run: async command => {
+                if (command === "wslpath") return { stdout: "C:\\owned\\read-copilot-metadata.mjs" };
+                reads++;
+                if (reads === 2 && change === "unreadable") throw Object.assign(new Error("Timed out"), { killed: true });
+                const response = await fixtureResponse(file, true);
+                if (reads === 1) {
+                    if (change === "selected") writer.exec("UPDATE sessions SET title='Changed selected mapping'");
+                    if (change === "revoked") revoked = true;
+                    if (change === "replacement") file = replacement.file;
+                }
+                return { stdout: JSON.stringify(response) };
+            },
+        }), { code: { revoked: "wire_access_revoked", unreadable: "source_reader_unavailable" }[change] ?? "COLLECTION_SOURCE_CHANGED" });
+        assert.equal(reads, ["selected", "unreadable"].includes(change) ? 2 : 1);
+    } finally { writer.close(); }
+});
 
 test("a selected read returns only the fresh Windows helper roster and its verified stamp", { skip: process.platform !== "win32" }, async t => {
     const app = await fixture(t), execute = promisify(execFile);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, writeFile, readdir, appendFile, rename } from "node:fs/promises";
@@ -675,6 +675,9 @@ test("later pages locate a candidate and disqualify a competing original; source
     const changed = structuredClone(first.continuation);
     changed.core.found = {};
     await assert.rejects(reviewPromptOriginClass({ dataDir, batch, continuation: changed }), /continuation is stale or invalid/);
+    const retired = structuredClone(first.continuation);
+    retired.seal = createHmac("sha256", f.state.pseudonymKey).update(JSON.stringify(["wire-author-scan-v1", retired.core])).digest("hex");
+    await assert.rejects(reviewPromptOriginClass({ dataDir, batch, continuation: retired }), /continuation is stale or invalid/);
     const previous = path.join(f.app.root, "previous.json");
     await writeFile(previous, JSON.stringify(first));
     const reply = spawnSync(process.execPath, [path.resolve("scripts/maintain-prompt-origins.mjs"),
@@ -757,7 +760,7 @@ for (const change of ["unrelated", "selected", "repeated", "review cut"]) test(`
             return statement;
         });
         const review = reviewPromptOriginClass({ ...scope, batch });
-        if (change === "unrelated") {
+        if (change === "unrelated" || change === "repeated") {
             const result = await review;
             assert.equal(result.authorized, false);
             assert.deepEqual(result.targets.map(t => t.prompt.authorship.basis), ["host-direct-input"]);
@@ -767,11 +770,52 @@ for (const change of ["unrelated", "selected", "repeated", "review cut"]) test(`
             await assert.rejects(review, /author review changed/);
             assert.equal(checks, 1, "The stale selection must not consume its fresh transaction.");
         } else {
-            await assert.rejects(review, { code: "COLLECTION_SOURCE_CHANGED", sourceChange: change === "selected" ? "membership" : "metadata-read" });
+            await assert.rejects(review, { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "membership" });
             assert.equal(checks, 2);
         }
         assert.deepEqual(await readFile(f.checkpointFile), before);
         assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    } finally { writer.close(); }
+});
+
+test("read-only pages finish under unrelated metadata churn but their proposal cannot bypass strict Prepare", async t => {
+    const f = await setup(t, "paged-review"), scope = { dataDir: f.app.context.dataDir };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const checkpoint = await readFile(f.checkpointFile), writer = new DatabaseSync(f.app.config.appDbPath);
+    const prepare = DatabaseSync.prototype.prepare;
+    try {
+        writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE unrelated_activity(n INTEGER); INSERT INTO unrelated_activity VALUES(0)");
+        const mock = t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+            const statement = prepare.call(this, sql);
+            if (sql === "PRAGMA user_version") {
+                const get = statement.get.bind(statement);
+                statement.get = () => {
+                    const value = get();
+                    writer.exec("UPDATE unrelated_activity SET n=n+1");
+                    return value;
+                };
+            }
+            return statement;
+        });
+        const first = await reviewPromptOriginClass({ ...scope, batch });
+        assert.equal(first.status, "continue");
+        assert.equal(first.targets, undefined);
+        const result = await reviewPromptOriginClass({ ...scope, batch, continuation: first.continuation });
+        assert.equal(result.authorized, false);
+        assert.equal(result.prepared, false);
+        assert.deepEqual(result.targets.map(target => target.prompt.authorship.basis), ["host-agent-envelope"]);
+        assert.deepEqual(result.unresolved.map(row => row.reason), ["duplicate-original"]);
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        f.plan.targets = result.targets;
+        await writeFile(f.options.planFile, JSON.stringify(f.plan));
+        f.options.planSha256 = digest(f.plan);
+        await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "prepare" }), { code: "COLLECTION_SOURCE_CHANGED" });
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        mock.mock.restore();
+        const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+        assert.equal(prepared.status, "prepared");
     } finally { writer.close(); }
 });
 

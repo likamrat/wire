@@ -143,7 +143,7 @@ The source reader preserves these checks:
 - Metadata changes during publication require a fresh bounded projection and
   unchanged selected-source eligibility, membership and provenance. Source-file,
   authority or store conflicts still refuse.
-- During an authorized selected-chat read, a concurrent metadata commit can
+- During an authorized stamped selected-chat read, a concurrent metadata commit can
   trigger one fresh read-only transaction. WIRE requires the same database,
   selected mappings and managed event identities. Only the fresh transaction's
   fully checked stamp can advance the read. If metadata changes again during
@@ -607,13 +607,18 @@ streaming check can establish just its unique outer ID, type and timestamp.
 It does not project a sender or payload. A collision still counts, and an
 oversized selected original cannot become a target. Malformed input, excessive
 parser work, and entries that cannot fit a verified page still refuse.
-If the metadata database changes during a named review read, the selected-chat
-reader can take one fresh transaction. Only its fully fenced result is used.
-The physical database, schema, complete selected mapping (including managed
-events), retained controls and journal boundary must still agree. Repeated
-churn or a changed selected mapping refuses the read. The same mapping proof
-binds page continuations and new proposals; Prepare and Apply still perform
-their own original and checkpoint checks.
+Named read-only author reviews use two independent metadata observations at
+each page boundary. Both must identify the same physical database, schema and
+complete selected mapping, including managed events. Access, retained controls
+and the journal boundary are checked around each observation. Unrelated app
+commits do not require the whole Copilot database to become idle. Changed
+selected mappings, withdrawn access and changed history still refuse.
+These observations carry **no whole-database publication stamp** and cannot
+replace the strict stamped reader used by collection or Prepare/Apply.
+The selected mapping proof binds continuations and proposals. The revised
+continuation seal rejects pages from the earlier stamped-review reader; start
+a newly bound review rather than joining an old partial scan. Prepare and
+Apply still perform their own strict metadata, original and checkpoint checks.
 
 The final `targets` are the corrections the original records actually support.
 If an agent-created chat lacks its saved first-prompt ID, a completed review
