@@ -12,6 +12,18 @@ Client changes need the [bootstrap protocol](#bootstrap-and-capabilities),
 [access watch](#one-latest-state-watch) and [withdrawal rules](#client-publication-and-withdrawal).
 Collector changes also need the [writer-admission contract](#collector-and-writer-admission).
 
+**Contents**
+
+- [Authority and operation effects](#authority-and-operation-effects)
+- [Bootstrap and capabilities](#bootstrap-and-capabilities)
+- [One latest-state watch](#one-latest-state-watch): [check a background return](#check-a-background-return)
+- [Client publication and withdrawal](#client-publication-and-withdrawal)
+- [Local WIRE account commands](#local-wire-account-commands)
+- [Collector and writer admission](#collector-and-writer-admission)
+- [Existing owner responsibilities](#existing-owner-responsibilities)
+- [Fixture bindings](#fixture-bindings)
+- [Check an access change](#check-an-access-change)
+
 ## Authority and operation effects
 
 | State/change | Retained reading | Acquisition |

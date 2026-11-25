@@ -5,6 +5,10 @@
 consumer interface. It reads authorized retained content; it does not collect
 original history, grant permission, render UI or persist an index.
 
+**Contents:** [Admitted sources](#admitted-sources) · [Saved-file extraction](#saved-file-extraction) ·
+[Index, delivery and invalidation](#index-delivery-and-invalidation) · [Exact Open](#exact-open) ·
+[Validation](#validation)
+
 ## Admitted sources
 
 | Type | Authoritative input and reader | Destination and limit |

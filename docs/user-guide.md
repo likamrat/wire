@@ -6,6 +6,30 @@ reports from your local GitHub Copilot app history.
 Follow [setup](../README.md#getting-started) first. For WSL or a second instance beside
 Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
+**Contents**
+
+- [Pages and addresses](#pages-and-addresses)
+- [Connect local history](#connect-local-history)
+- [Analyze](#analyze): [charts](#read-the-charts), [prompt authors](#prompt-authors),
+  [failed calls](#failed-calls-and-returned-entries), [filters and dates](#filters-and-dates),
+  [services](#services-and-operations), [activity over time](#activity-over-time),
+  [token usage](#token-usage), [Guide](#analyze-guide), [homepage layout](#homepage-layout)
+- [Inspect an interaction](#inspect-an-interaction): [calls and results](#calls-and-results),
+  [tokens](#tokens-and-returned-text), [prompt sender](#prompt-sender),
+  [reader size](#resize-or-maximize-the-reader), [hide and restore cards](#hide-and-restore-cards)
+- [Trends](#trends): [period and activity](#choose-the-period-and-activity),
+  [measures](#read-the-measures), [inspect a change](#inspect-a-change),
+  [several charts](#show-several-charts)
+- [Compare](#compare)
+- [Make a report](#make-a-report)
+- [Find saved text](#find-saved-text)
+- [Settings](#settings): [search settings](#search-settings), [update WIRE](#update-wire),
+  [themes](#themes), [defaults](#wire-defaults)
+- [Collection, privacy and account](#collection-privacy-and-account)
+- [Help, Feedback and the sidebar](#help-feedback-and-the-sidebar)
+
+## Pages and addresses
+
 **Analyze is the home page.** Open the address printed by WIRE as-is. Trends,
 Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
 `/compare` and `/settings`). You can bookmark a page or a Settings category.
@@ -53,16 +77,24 @@ while older history is still catching up; **Collection status** shows pending,
 blocked, missing or bounded history rather than guaranteeing complete coverage.
 
 Approval lets WIRE read that local history; it does not rerun prompts or make
-new Work IQ requests. Microsoft 365 Chat and Cowork are not supported connections
-in this release. Saving Copilot reply text is a separate choice under
+new Work IQ requests. WIRE does not connect to Microsoft 365 Chat or Cowork.
+Saving Copilot reply text is a separate choice under
 **Settings > Privacy & saved data > Recorded replies** and starts off.
 
-## Read the overview
+<a id="read-the-overview"></a>
 
-**Analyze** shows recorded outcomes, activity over time, tools, services and
-available response-model names, plus prompt authors. The interaction list
-follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
-Outcome or Prompt author; **More filters** holds the additional choices.
+## Analyze
+
+**Analyze** shows recorded outcomes, activity over time, token usage, tools,
+services and available response-model names, plus prompt authors. The
+interaction list follows the same filters. Open **Filters** to narrow the view
+by Dates, Tool, Service involved, Outcome or Prompt author; **More filters**
+holds the additional choices.
+
+![Analyze Results with daily tool calls, recorded outcomes, daily token usage and the interactions behind them.](images/analyze.png)
+
+### Read the charts
+
 On opening Analyze, the charts build to the recorded counts. This is not collection progress.
 With reduced motion, the final values appear immediately. In **Tool call results**,
 the donut shows the total. The strip shows how the calls split across outcomes;
@@ -72,34 +104,10 @@ by its tool or path. Its outcome describes the tool execution; returned entries
 keep their own statuses in the call reader. **Show all matching activity**
 returns to the interaction list.
 
-<a id="analyze-homepage-layout"></a>
-
-In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
-**Interactions** list. The preview outlines the section you moved and shows which
-breakdowns share a row. The time chart, tool call results, token usage and
-Interactions each keep their own row.
-Your browser remembers each move. Choose **View Analyze** to open the homepage.
-**Restore WIRE Default Layout** returns the sections to their original order.
-An older custom layout keeps its order and adds the usage widget at the end.
-**Default interaction sort** sets the starting order; sorting above the list
-changes this visit only. Neither setting changes your filters or activity.
-
-To read one conversation, open **Filters**, expand **More filters** if needed,
-and choose **Chat**. Type part of its title in a long list, then choose the
-row. Typing narrows the choices; Escape leaves the selection alone. A chat is
-a conversation recorded by the Copilot app. A WIRE sign-in session controls
-access to this local instance. Choosing a chat does not switch accounts,
-sign out or read new history.
-
-Open **Filters** to check how much history WIRE has checked. A routine partial
-check stays there while results are available. An empty result can explain
-what history was checked; an actual read error still appears with the results.
-Find the prompt in the list and follow its outcome link to see the tools,
-services and results in the right-hand reader. A note such as **1 tool call failed** or
-**Reported result issue** helps identify exceptions. These are different:
-a completed tool call can return an error for an individual item.
-
-![Analyze Results with daily tool calls, recorded outcomes and the interactions behind them.](images/analyze.png)
+Hover or focus a chart row for its meaning. Select a model or author to see
+matching interactions. Select an outcome or a segment of a dated bar for
+that result; the number above the bar includes all results for the interval.
+A zero opens the chart definition instead of a list of records.
 
 An interaction groups a prompt with its recorded calls. One interaction can
 contain several calls, and one call can involve several services. Service
@@ -112,6 +120,8 @@ tool and model cards, read each pair from left to right, then down. Model
 percentages use all matching interactions, including those without model names;
 an interaction with several recorded models counts under each.
 
+### Prompt authors
+
 **Prompt authors** counts each originating interaction once across all matching
 pages. **Human prompts** came from a person; **Agent prompts** came from an
 agent. **Sender unclear** means WIRE can't tell which one sent the prompt from
@@ -122,6 +132,13 @@ In the reader, **Source** distinguishes a direct link to the prompt from
 grouping by message order. Seeing a skill or system message before a call
 doesn't tell you who asked for the work.
 
+### Failed calls and returned entries
+
+Find the prompt in the list and follow its outcome link to see the tools,
+services and results in the right-hand reader. A note such as **1 tool call failed** or
+**Reported result issue** helps identify exceptions. These are different:
+a completed tool call can return an error for an individual item.
+
 On an Analyze card, **2 tool calls failed** opens both failed calls. The
 **Problem** area names the affected calls and shows what went wrong. If no
 reason was saved, the card says so.
@@ -129,6 +146,8 @@ reason was saved, the card says so.
 error or another entry with the same status. Open the reader for the full retained
 wording, code and status. A completed tool can still return an error. A missing
 completion does not establish that anyone cancelled the call.
+
+### Filters and dates
 
 In Analyze Filters, Trends, Reports and Compare, open **Dates** to choose a preset.
 Choose **Custom dates** to edit below the presets. **Apply dates** uses your range;
@@ -143,22 +162,19 @@ no matching retained evidence, not proof that no activity occurred.
 
 Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
-Under **Analyze**, choose **Results** to inspect activity or **Guide** to read
-about recorded outcomes. The underline marks the current section. **Refresh**
-and **Filters** apply to Results and stay out of the Guide.
-Pick another topic beside the explanation, or use **Topics** on a narrow
-screen. Worked examples illustrate distinctions such as a completed call
-returning an error for one item; they are not records from your activity.
-Choose **See exact numbers** for values in your current scope and matching
-records where available. Choose **Results** or use browser Back to return to
-the same filtered results and reading position. In
-**Settings > Analyze > Open Guide to**, you can choose recorded outcomes (default)
-or the last topic read in this tab. This preference does not change the charts.
 
-Hover or focus a chart row for its meaning. Select a model or author to see
-matching interactions. Select an outcome or a segment of a dated bar for
-that result; the number above the bar includes all results for the interval.
-A zero opens the chart definition instead of a list of records.
+Open **Filters** to check how much history WIRE has checked. A routine partial
+check stays there while results are available. An empty result can explain
+what history was checked; an actual read error still appears with the results.
+
+To read one conversation, open **Filters**, expand **More filters** if needed,
+and choose **Chat**. Type part of its title in a long list, then choose the
+row. Typing narrows the choices; Escape leaves the selection alone. A chat is
+a conversation recorded by the Copilot app. A WIRE sign-in session controls
+access to this local instance. Choosing a chat does not switch accounts,
+sign out or read new history.
+
+### Services and operations
 
 In **Services and operations**, **Search endpoint** means the recorded path
 identifies a search endpoint. **Search requested** means the tool requested
@@ -166,6 +182,7 @@ a search without naming a target app. **Business app not named** means the
 recorded path was `/businessapps/me`; WIRE cannot identify the app. Each row
 opens its matching records. A call with several targets can appear in more
 than one row.
+
 On an interaction card, an operation or service detail with a right arrow
 opens the matching call. **API discovery**, for example, opens the call that
 looked for available paths, not a later call that fetched data. Without a
@@ -176,6 +193,8 @@ In the reader, expand a numbered call to see its target and result.
 To inspect a path, use **Guide > Paths and operations > See exact numbers**,
 select the path or batch, then inspect the matching interaction. Read the targets and
 outcome on the individual call rather than inferring them from the interaction summary.
+
+### Activity over time
 
 The **Work IQ tool calls over time** chart shows individual calendar days by
 default, even with All dates or a long range. If the days don't fit across the
@@ -193,6 +212,179 @@ activity occurred. Undated calls stay outside the timeline. Existing links
 that explicitly request weekly or monthly grouping keep that interval when dates
 change. Compare's separate Day/Week/Month control does not change Analyze.
 
+### Token usage
+
+**Token usage** labels each day in the chosen range, including
+days without a count. Scroll along the date axis on narrow screens or long
+ranges; periods over 90 days have earlier and later windows. Hover over a point
+to see its date and token count beside the pointer. Tap a day or use the arrow
+keys to inspect it. A dot on zero is a measured zero. For a gap,
+the date reading distinguishes activity without a count from no matching activity.
+WIRE leaves gaps between measured days; it doesn't estimate the missing usage.
+Click or tap to hold a reading, then select its date to open the evidence in
+Trends. Choose **View by day** for the whole period.
+
+Choose **Most tokens** in **Sort** above the Analyze list to find the
+interactions that used the most. Each metered card shows its total.
+In **Response models**, choose **Token share** to compare each model's share
+of the recorded tokens. Select a model to see only the interactions with token
+counts for that model. **Interactions** also includes uses without token counts.
+
+In **Interactions** mode, choose a model to show its cards. Open **Filters** to
+see or remove that model under **Applied filters**. This narrows the card list;
+the chart still shows all models in your date range and other filters.
+
+### Analyze Guide
+
+Under **Analyze**, choose **Results** to inspect activity or **Guide** to read
+about recorded outcomes. The underline marks the current section. **Refresh**
+and **Filters** apply to Results and stay out of the Guide.
+Pick another topic beside the explanation, or use **Topics** on a narrow
+screen. Worked examples illustrate distinctions such as a completed call
+returning an error for one item; they are not records from your activity.
+Choose **See exact numbers** for values in your current scope and matching
+records where available. Choose **Results** or use browser Back to return to
+the same filtered results and reading position. In
+**Settings > Analyze > Open Guide to**, you can choose recorded outcomes (default)
+or the last topic read in this tab. This preference does not change the charts.
+
+<a id="analyze-homepage-layout"></a>
+
+### Homepage layout
+
+In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
+**Interactions** list. The preview outlines the section you moved and shows which
+breakdowns share a row. The time chart, tool call results, token usage and
+Interactions each keep their own row.
+Your browser remembers each move. Choose **View Analyze** to open the homepage.
+**Restore WIRE Default Layout** returns the sections to their original order.
+An older custom layout keeps its order and adds the usage widget at the end.
+**Default interaction sort** sets the starting order; sorting above the list
+changes this visit only. Neither setting changes your filters or activity.
+
+## Inspect an interaction
+
+The count above the cards follows your filters. **Collection status** shows
+the contributing chats, projects and source coverage. An actual coverage
+warning stays beside the affected activity.
+
+Hover highlights the card, but the card itself is not a link.
+Select the outcome below the prompt preview to open
+the right-hand reader. Hover over its arrow or focus the link to see **View call details**.
+
+![The View call details tip beside 1 tool call failed on an Analyze card, with the failed call and its returned HTTP 403 in the reader.](images/interaction.png)
+
+### Calls and results
+
+In the reader, choose **Prompt** to read and copy the retained original.
+**Human prompt**, **Agent prompt** or
+**Sender unclear** describes the prompt’s origin, not its app. A label such
+as **1 tool call failed** opens the failed call; it does not mean the whole
+request failed. **4 tool calls completed** opens those four calls. If filters
+exclude other calls, they stay out of that list. A completed call can still
+contain a returned API error. Repeated tools show a count with its unit. Tools, requested targets and operations
+are separate; a search or Copilot request does not confirm which apps were used.
+When a tool fails and another call returns an issue, use their separate links.
+
+Long prompts start with a six-line preview so recorded activity stays close.
+Use the chevron beside the prompt author to expand or collapse the text in place.
+**Copy prompt** still copies the whole retained prompt. Search opens the full
+prompt rather than hiding a match behind the preview.
+Use **Prompt**, **Activity** or **Source** at the top of the interaction to jump
+to that section. **Reply** appears when the selected interaction has a recorded reply.
+
+Each call shows its own outcome, such as **1 tool call completed**, even if
+one returned entry reported an error. **Call duration** measures the whole call.
+Returned entries stay in order and carry their own statuses and timing. If an
+error message is shortened, **Full diagnostic** opens its saved wording.
+Open the call for its exact input; **Source details** holds provenance and
+identifiers. Close or Back returns to the originating results.
+
+**WIRE interpretation** explains a recorded condition or evidence gap separately
+from the source diagnostic. It uses fixed local rules, without AI or provider
+calls, and explains what the evidence establishes without suggesting fixes or
+next steps. A clear source explanation needs no additional interpretation.
+
+**Tool latency** is the recorded call interval. **Prompt to final response**
+measures from the originating message to its recorded final response when
+that link is available. Concurrent calls are not added into a task duration.
+Missing timing is not zero.
+
+A file attachment may appear as a label such as `notes.md` rather than its
+contents. WIRE keeps the text recorded in Copilot; it does not open the attachment
+or add its local path.
+
+Copy controls copy the exact retained original, unmasked. A saved Copilot reply
+is the assistant's text, not a tool result. Enabling reply saving does not
+restore previously omitted replies.
+
+### Tokens and returned text
+
+On an interaction card or in the reader header, read the count or **Tokens
+unavailable**. Select the header reading for the breakdown or the known reason.
+The breakdown separates fresh input, cache reads, cache writes and output.
+
+To inspect a particular invocation, open **Call details** for its
+numbered row. **Tool operation tokens** shows what the tool service reported
+for that call, when available. **Returned text (estimate)** describes the size
+of its response. Neither figure is a share of the model's token total.
+
+For a report on one interaction, choose **Add to report** on its card and add
+it to a new draft. Open that draft in Reports to save the same total. Adding
+more interactions gives you their combined total and how many had token counts.
+
+### Prompt sender
+
+The sender label tells you who asked, not who carried out each call. Choosing
+Human and Agent excludes prompts whose sender is unclear.
+Those cards show the saved reason separately from the call result. In
+**Analyze > Guide > Recorded prompt authors**, **Why the sender is unclear**
+counts those reasons across all pages of the current view and shows the saved
+rule version when available. In the reader, **Source details** shows the selected
+prompt's saved rule version and whether its calls link directly to that prompt.
+Neither view rereads chats or changes an author. For
+example, WIRE may not recognize the host's message format even when the prompt
+text and tool result were saved. Older records may lack that specific reason.
+
+### Resize or maximize the reader
+
+Drag the reader's left edge or use its minus/plus buttons to change its width.
+Choose **Maximize interaction** to read the calls across the workspace. Each
+call shows its operation and outcome together. A recorded failure reason stays
+with the call it explains; **Call details** opens that call's evidence.
+**Restore reader width** keeps your place. **Close interaction** returns to the
+previous view. On a narrow screen, the reader uses one pane without sizing controls.
+
+![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
+
+### Add to a report
+
+Use **Add to report** on the card or in its reader. Choose a draft to add the entire interaction without
+leaving Analyze. Reopen the picker to add it to another draft or remove it from
+one. See [Keep interactions in a draft](reporting.md#keep-interactions-in-a-draft)
+to prepare, save or delete that selection.
+
+### Hide and restore cards
+
+On a local Copilot interaction card in Analyze, choose **Hide**. To bring it
+back right away, choose **Undo hide** above the list. Later, open **Hidden
+cards** and choose **Restore** beside a card. If several are hidden, **Restore all**
+below the list brings them all back.
+
+![Hidden cards lists each card by number and the time you hid it, without showing its prompt.](images/hidden-cards.png)
+
+Cards stay hidden until you restore them. For a shorter duration, go to
+**Settings > Analyze > Keep hidden cards out of view** and choose **Only in
+this tab**. The setting applies the next time you hide a card.
+
+Hiding a card leaves the counts in Analyze, Trends and Compare unchanged.
+Its prompt and call details stay out of view, including in Search. A report
+draft keeps its selection, but WIRE won’t show a preview that could reveal
+the card. While any card is hidden in this tab, **all saved reports and
+comparisons** stay closed in WIRE and out of Search: even a report about
+other work can quote the hidden interaction. Files you’ve saved or shared
+don’t change.
+
 ## Trends
 
 Choose **Trends** in the sidebar. By default, **Overview** shows how many
@@ -207,8 +399,8 @@ from cache. **View daily values** shows daily readings and coverage. Tool groups
 overlap: an interaction that used both fetch and retrieve appears in both,
 but its tokens count only once in the period total.
 **Chart guide** explains the units.
-On Analyze,
-choose **View trend** on a widget to open its corresponding measure. With
+
+On Analyze, choose **View trend** on a widget to open its corresponding measure. With
 **All dates**, the trend spans the first through last dated calls in the
 current view. **Response models** opens interaction counts or measured tokens
 by model according to the switch on the widget. From
@@ -321,12 +513,14 @@ Choose **View daily values** below the chart. On a narrow screen, scroll within
 the table; keyboard users can focus it
 and use the arrow keys. Dates and column headers stay attached to the values.
 
+### Show several charts
+
 To read several separate charts for the same dates, choose **Show or hide charts**
 above the chart, check the ones to show below it and choose **Apply**.
 Uncheck them all to keep just the current chart. Choosing another measure in
 the index starts with that chart alone. These extra charts are not saved on reload.
 
-For the full-width stack choose **Show or hide charts → Open all charts**.
+For the full-width stack choose **Show or hide charts > Open all charts**.
 **Back to selected charts** returns to your selection. From a maximized chart,
 **Back to all charts** returns to its row. **Collapse all** folds the current
 stack; **Expand all** opens every chart in it. Neither changes your measures,
@@ -348,140 +542,13 @@ For a two-period comparison or a saved copy, use
 
 Choose **Compare** in the sidebar to compare two periods. To compare two
 measures over *one* period, stay in Trends. See [Compare two periods](reporting.md#compare)
-for baseline and selected dates, missing values, and the calls behind a change.
-
-## Inspect an interaction
-
-In Analyze, **Token usage** labels each day in the chosen range, including
-days without a count. Scroll along the date axis on narrow screens or long
-ranges; periods over 90 days have earlier and later windows. Hover over a point
-to see its date and token count beside the pointer. Tap a day or use the arrow
-keys to inspect it. A dot on zero is a measured zero. For a gap,
-the date reading distinguishes activity without a count from no matching activity.
-WIRE leaves gaps between measured days; it doesn't estimate the missing usage.
-Click or tap to hold a reading, then select its date to open the evidence in
-Trends. Choose **View by day** for the whole period.
-On an interaction card or in the slide-out header, read the count or **Tokens
-unavailable**. Select the header reading for the breakdown or the known reason.
-
-Choose **Most tokens** above the Analyze list to find the interactions that
-used the most. Each metered card shows its total. Open it for fresh input, cache reads, cache writes and
-output. To inspect a particular invocation, open **Call details** for its
-numbered row. **Tool operation tokens** shows what the tool service reported
-for that call, when available. **Returned text (estimate)** describes the size
-of its response. Neither figure is a share of the model's token total.
-In **Response models**, choose **Token share** to compare each model's share
-of the recorded tokens. Select a model to see only the interactions with token
-counts for that model. **Interactions** also includes uses without token counts.
-
-For a report on one interaction, choose **Add to report** on its card and add
-it to a new draft. Open that draft in Reports to save the same total. Adding
-more interactions gives you their combined total and how many had token counts.
-
-In **Interactions** mode, choose a model to show its cards. Open **Filters** to
-see or remove that model under **Applied filters**. This narrows the card list;
-the chart still shows all models in your date range and other filters.
-
-The count above the cards follows your filters. **Collection status** shows
-the contributing chats, projects and source coverage. An actual coverage
-warning stays beside the affected activity.
-
-Hover highlights the card, but the card itself is not a link.
-Select the outcome below the prompt preview to open
-the right-hand reader. Hover over its arrow or focus the link to see **View call details**.
-In the reader, choose **Prompt** to read and copy the retained original.
-**Human prompt**, **Agent prompt** or
-**Sender unclear** describes the prompt’s origin, not its app. A label such
-as **1 tool call failed** opens the failed call; it does not mean the whole
-request failed. **4 tool calls completed** opens those four calls. If filters
-exclude other calls, they stay out of that list. A completed call can still
-contain a returned API error. Repeated tools show a count with its unit. Tools, requested targets and operations
-are separate; a search or Copilot request does not confirm which apps were used.
-When a tool fails and another call returns an issue, use their separate links.
-Long prompts start with a six-line preview so recorded activity stays close.
-Use the chevron beside the prompt author to expand or collapse the text in place.
-**Copy prompt** still copies the whole retained prompt. Search opens the full
-prompt rather than hiding a match behind the preview.
-Use **Prompt**, **Activity** or **Source** at the top of the interaction to jump
-to that section. **Reply** appears when the selected interaction has a recorded reply.
-Each call shows its own outcome, such as **1 tool call completed**, even if
-one returned entry reported an error. **Call duration** measures the whole call.
-Returned entries stay in order and carry their own statuses and timing. If an
-error message is shortened, **Full diagnostic** opens its saved wording.
-Open the call for its exact input; **Source details** holds provenance and
-identifiers. Close or Back returns to the originating results.
-
-**WIRE interpretation** explains a recorded condition or evidence gap separately
-from the source diagnostic. It uses fixed local rules, without AI or provider
-calls, and explains what the evidence establishes without suggesting fixes or
-next steps. A clear source explanation needs no additional interpretation.
-
-![The View call details tip beside 1 tool call failed on an Analyze card, with the failed call and its returned HTTP 403 in the reader.](images/interaction.png)
-
-Drag the reader's left edge or use its minus/plus buttons to change its width.
-Choose **Maximize interaction** to read the calls across the workspace. Each
-call shows its operation and outcome together. A recorded failure reason stays
-with the call it explains; **Call details** opens that call's evidence.
-**Restore reader width** keeps your place. **Close interaction** returns to the
-previous view. On a narrow screen, the reader uses one pane without sizing controls.
-
-![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
-
-The sender label tells you who asked, not who carried out each call. Choosing
-Human and Agent excludes prompts whose sender is unclear.
-Those cards show the saved reason separately from the call result. In
-**Analyze > Guide > Recorded prompt authors**, **Why the sender is unclear**
-counts those reasons across all pages of the current view and shows the saved
-rule version when available. In the reader, **Source details** shows the selected
-prompt's saved rule version and whether its calls link directly to that prompt.
-Neither view rereads chats or changes an author. For
-example, WIRE may not recognize the host's message format even when the prompt
-text and tool result were saved. Older records may lack that specific reason.
-
-A file attachment may appear as a label such as `notes.md` rather than its
-contents. WIRE keeps the text recorded in Copilot; it does not open the attachment
-or add its local path.
-
-**Tool latency** is the recorded call interval. **Prompt to final response**
-measures from the originating message to its recorded final response when
-that link is available. Concurrent calls are not added into a task duration.
-Missing timing is not zero.
-
-Copy controls copy the exact retained original, unmasked. A saved Copilot reply
-is the assistant's text, not a tool result. Enabling reply saving does not
-restore previously omitted replies.
-
-Use **Add to report** on the card or in its reader. Choose a draft to add the entire interaction without
-leaving Analyze. Reopen the picker to add it to another draft or remove it from
-one. See [Keep interactions in a draft](reporting.md#keep-interactions-in-a-draft)
-to prepare, save or delete that selection.
-
-### Hide and restore cards
-
-On a local Copilot interaction card in Analyze, choose **Hide**. To bring it
-back right away, choose **Undo hide** above the list. Later, open **Hidden
-cards** and choose **Restore** beside a card. If several are hidden, **Restore all**
-below the list brings them all back.
-
-![Hidden cards lists each card by number and the time you hid it, without showing its prompt.](images/hidden-cards.png)
-
-Cards stay hidden until you restore them. For a shorter duration, go to
-**Settings → Analyze → Keep hidden cards out of view** and choose **Only in
-this tab**. The setting applies the next time you hide a card.
-
-Hiding a card leaves the counts in Analyze, Trends and Compare unchanged.
-Its prompt and call details stay out of view, including in Search. A report
-draft keeps its selection, but WIRE won’t show a preview that could reveal
-the card. While any card is hidden in this tab, **all saved reports and
-comparisons** stay closed in WIRE and out of Search: even a report about
-other work can quote the hidden interaction. Files you’ve saved or shared
-don’t change.
+for baseline and selected dates, missing values, token usage and the calls behind a change.
 
 ## Make a report
 
 In **Reports**, select a named draft or start a **New report**. Check its
-activity, dates, text and formats, then choose **Prepare preview**. No report
-files have been saved. Read the finding and its examples before choosing **Save
+activity, dates, text and formats, then choose **Prepare preview**. Preparing
+does not save any files. Read the finding and its examples before choosing **Save
 report**. Open an existing report by name in **Saved library**.
 
 [Create and read reports](reporting.md) covers scope, text masking, file
@@ -508,49 +575,21 @@ content is not silently replaced with a nearby result. Search runs locally,
 without AI, providers, new collection or credit spending. Its query is not
 placed in URLs or saved as a persistent Search index.
 
-## Find a setting
+<a id="find-a-setting"></a>
 
-Open **Settings** at the bottom of the left sidebar and type in **Search
-settings**. Matching destinations appear under their categories.
-**General** shows your WIRE version, update status and last successful check.
-On [supported installations](development.md#updating-wire), automatic checks
-are on by default. You can turn them off and still choose **Check for updates**.
-Choose **Update and restart** in General or in the update notification. Leave
-your tabs open: each participating window shows **WIRE is updating**, then
-reloads its own page. If a window has an unfinished edit, save or cancel it
-there before updating. If a window doesn't confirm it's ready, WIRE stops
-before restarting. That message alone doesn't mean you left an edit unfinished.
-When an update is available, **Check open views** in General asks the registered
-views whether they have unfinished work. It doesn’t install anything. If a view
-doesn’t answer, keep your windows and work intact; another update click won’t
-tell you which view was missing. WIRE checks again when you choose to restart.
-Dismissing the notification leaves the update available in General. If your copy can't check for updates,
-General links to **Update instructions** instead.
+## Settings
 
-The Check button shows **Checking** while it looks for an update. If installation
-fails, General shows **Update not installed** and the reason. Away from General,
-look for the same message in the notification.
+Open **Settings** at the bottom of the left sidebar. It opens in **General**,
+which shows your WIRE version, update status and last successful check.
 
 Below updates, **Current theme** shows your palette name, Light or Dark mode,
 and a preview with its colors.
 Select **Change theme** to open **Themes**, or select **Time zone** to open
 **Regional**. **Back to General** returns to the shortcut with your current choice.
 
-<a id="wire-defaults"></a>
+### Search settings
 
-Under **WIRE defaults**, choose how views open and new reports and comparisons start in this browser:
-
-| Category | What you can change |
-| --- | --- |
-| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. **View Analyze** and the sidebar use this range for a fresh view and keep any dates or filters you chose in an existing view. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
-| Trends | Choose the trend chart to show on a fresh visit. Changing measures within Charts does not change its address. |
-| Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
-| Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
-
-Defaults do not rewrite a view you return to, an existing draft, or a saved
-report. If the browser cannot save a preference, Settings tells you that the
-choice applies only to the current panel.
-
+Type in **Search settings**. Matching destinations appear under their categories.
 Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network
 diagnostic; `city` finds Time zone.
@@ -568,7 +607,29 @@ This search runs on-device over fixed setting information. It is separate from
 the main Search field for saved activity and reports, and does not read private
 path values.
 
-<a id="themes"></a>
+### Update WIRE
+
+On [supported installations](development.md#updating-wire), automatic checks
+are on by default. You can turn them off and still choose **Check for updates**
+in **General**. The button shows **Checking** while it looks for an update.
+
+Choose **Update and restart** in General or in the update notification. Leave
+your tabs open: each participating window shows **WIRE is updating**, then
+reloads its own page. If a window has an unfinished edit, save or cancel it
+there before updating. If a window doesn't confirm it's ready, WIRE stops
+before restarting. That message alone doesn't mean you left an edit unfinished.
+
+When an update is available, **Check open views** in General asks the registered
+views whether they have unfinished work. It doesn’t install anything. If a view
+doesn’t answer, keep your windows and work intact; another update click won’t
+tell you which view was missing. WIRE checks again when you choose to restart.
+
+Dismissing the notification leaves the update available in General. If installation
+fails, General shows **Update not installed** and the reason. Away from General,
+look for the same message in the notification. If your copy can't check for updates,
+General links to **Update instructions** instead.
+
+### Themes
 
 In **Themes**, choose Light or Dark and one of five color palettes for this browser.
 Change the time zone separately in **Regional**. The toolbar switch changes only Light/Dark. Select a palette card to
@@ -579,7 +640,24 @@ only. Changing appearance does not rewrite saved reports or their original time 
 
 ![Themes with five compact palette previews. Petrol & coral is active in Light mode.](images/settings-display.png)
 
-## Keep collection and saved data separate
+### WIRE defaults
+
+Under **WIRE defaults**, choose how views open and new reports and comparisons start in this browser:
+
+| Category | What you can change |
+| --- | --- |
+| Analyze | Open on All dates (the initial default) or the last 7, 14 or 30 days, including today. **View Analyze** and the sidebar use this range for a fresh view and keep any dates or filters you chose in an existing view. This filters saved activity. Start the list with **Most recent** or **Most tokens**, choose Guide's opening topic, or [reorder the homepage widgets and Interactions](#homepage-layout). |
+| Trends | Choose the trend chart to show on a fresh visit. Changing measures within Charts does not change its address. |
+| Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
+| Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
+
+Defaults do not rewrite a view you return to, an existing draft, or a saved
+report. If the browser cannot save a preference, Settings tells you that the
+choice applies only to the current panel.
+
+<a id="keep-collection-and-saved-data-separate"></a>
+
+## Collection, privacy and account
 
 **Settings > Source access** shows which paths WIRE can read. **Collection**
 sets the history window, check frequency and Pause. Edit the values to show
@@ -590,36 +668,12 @@ explains missing files, bounded reads and other known coverage gaps.
 
 If **Collection cannot check history** appears, open **Collection status** for
 the failing operation and reason. Retained activity stays available.
-
-Collector updates improve supported reads; they do not automatically repair
-older retained activity or rewrite saved reports.
-
-**Account > Sign out of this instance** stops collection and hides saved private
-activity in every tab of that WIRE instance, without deleting it. It does not
-sign out of GitHub, the Copilot app or another independent WIRE instance.
-Open **Account** at the bottom of the navigation (inside the navigation drawer
-on small screens). WIRE reads the GitHub name and avatar from the approved Copilot app
-source: the recorded workspace's linked account, otherwise the app's GitHub
-default. This display profile does not control access to history. A neutral
-icon means the profile is unavailable, not that collection needs a different
-GitHub CLI login.
-
-Drag the sidebar's right edge to resize it. With the divider focused, use the
-left and right arrow keys. WIRE remembers your width in this browser;
-double-click the edge or press Enter on it to restore the default.
-
-Open **? (Help)** at the bottom of the sidebar for **Prepare a report**,
-**Find missing activity**, **Understand activity counts**, or **Read tool results**.
-Select a topic to read its answer. Your browser’s Back and Forward buttons
-revisit topics and earlier pages. Chart definitions and examples stay in the Analyze and Trends guides.
-
 In Collection status, **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.
 
-Use **Feedback** beside Help to report a WIRE bug or suggest a feature.
-Enter a title and, optionally, a description. **Open on GitHub** fills in
-those fields on WIRE's new issue form. The issue is public only after you submit it.
+Collector updates improve supported reads; they do not automatically repair
+older retained activity or rewrite saved reports.
 
 In **Privacy & saved data**, **Review deletion** previews the activity you
 choose before you confirm deletion. **Read history again > Choose chats**
@@ -631,3 +685,28 @@ retain copies after activity deletion.
 If a change's result is uncertain, use its offered status/result check rather
 than repeating the action. The [collection and recovery reference](collection.md)
 explains each operation's effects and limits.
+
+**Account > Sign out of this instance** stops collection and hides saved private
+activity in every tab of that WIRE instance, without deleting it. It does not
+sign out of GitHub, the Copilot app or another independent WIRE instance.
+Open **Account** at the bottom of the navigation (inside the navigation drawer
+on small screens). WIRE reads the GitHub name and avatar from the approved Copilot app
+source: the recorded workspace's linked account, otherwise the app's GitHub
+default. This display profile does not control access to history. A neutral
+icon means the profile is unavailable, not that collection needs a different
+GitHub CLI login.
+
+## Help, Feedback and the sidebar
+
+Open **? (Help)** at the bottom of the sidebar for **Prepare a report**,
+**Find missing activity**, **Understand activity counts**, or **Read tool results**.
+Select a topic to read its answer. Your browser’s Back and Forward buttons
+revisit topics and earlier pages. Chart definitions and examples stay in the Analyze and Trends guides.
+
+Use **Feedback** beside Help to report a WIRE bug or suggest a feature.
+Enter a title and, optionally, a description. **Open on GitHub** fills in
+those fields on WIRE's new issue form. The issue is public only after you submit it.
+
+Drag the sidebar's right edge to resize it. With the divider focused, use the
+left and right arrow keys. WIRE remembers your width in this browser;
+double-click the edge or press Enter on it to restore the default.

@@ -9,6 +9,21 @@ For report edits or writing files, use [preparation and Save](#preparation-discl
 Saved readers and comparisons have their own [file](#frozen-files-and-saved-reading)
 and [comparison](#comparisons) requirements.
 
+**Contents**
+
+- [Report facts](#report-facts)
+- [Evidence and membership](#evidence-and-membership)
+- [Service, outcome and time meaning](#service-outcome-and-time-meaning):
+  [report presets and notes](#report-presets-and-notes)
+- [Preparation, disclosure and Save](#preparation-disclosure-and-save):
+  [frozen preparation](#frozen-preparation), [report text choices](#report-text-choices),
+  [Save authorization](#save-authorization), [prepared bytes and recovery](#prepared-bytes-and-recovery)
+- [Bounded linked context](#bounded-linked-context)
+- [Frozen files and saved reading](#frozen-files-and-saved-reading)
+- [Comparisons](#comparisons): [retained-period comparison](#report-a-retained-period-comparison)
+- [Saved-artifact deletion](#saved-artifact-deletion)
+- [Validation pointers](#validation-pointers)
+
 ## Report facts
 
 Reports contain recorded outcomes, source/service facts, canonical membership

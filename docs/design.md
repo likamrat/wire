@@ -9,6 +9,13 @@ states and return behavior, use [Interaction design](interaction-design.md).
 Evidence definitions and frozen-file requirements remain in the
 [report contract](report-contract.md).
 
+**Contents:** [Find a screen's behavior](#find-a-screens-behavior) ·
+[One coherent workspace](#one-coherent-workspace) ·
+[Reading hierarchy](#reading-hierarchy) ([surfaces and color](#surfaces-and-color),
+[icons and controls](#icons-and-controls), [brand assets](#brand-assets)) ·
+[Chart reading](#chart-reading) · [Motion, focus and text](#motion-focus-and-text) ·
+[Check a screen change](#check-a-screen-change)
+
 ## Find a screen's behavior
 
 | Screen or task | Reference |

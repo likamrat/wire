@@ -5,8 +5,18 @@ Use it to explain repeated errors, operations and working patterns. The recorded
 examples can also serve as a starting point for eval cases. WIRE does not
 generate evals or rate answer quality.
 
-Go to [report choices](#open-a-report), [named drafts](#keep-interactions-in-a-draft), [text and privacy options](#read-and-adjust),
-[saving and reopening](#save-and-reopen) or [comparisons](#compare).
+**Contents**
+
+- [Open a report](#open-a-report): [what Show includes](#what-show-includes),
+  [dates and activity](#dates-and-activity), [named drafts](#keep-interactions-in-a-draft)
+- [Read the findings](#read-the-findings)
+- [Read and adjust](#read-and-adjust): [usage and tokens](#usage-and-tokens),
+  [notes and copies](#notes-and-copies), [report text and privacy](#report-text-and-privacy),
+  [formats and viewing](#formats-and-viewing)
+- [Save and reopen](#save-and-reopen)
+- [Compare](#compare)
+- [Remove a saved copy](#remove-a-saved-copy)
+
 Contributors changing report behavior should also read the
 [membership and frozen-output contract](report-contract.md).
 
@@ -14,8 +24,8 @@ Contributors changing report behavior should also read the
 
 Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
 to search the library. Under **New report**, choose which chat details to
-include, then check **Show**, **Dates**, **Activity source** and
-**Formats**.
+include, then check **Show**, **Dates**, **Usage question**, **Activity source**
+and **Formats**.
 **Show** filters what the report covers, such as errors or human prompts.
 **Activity source** selects the interactions to start from. A named draft
 supplies its own selected interactions; selecting it does not prepare or save.
@@ -28,6 +38,14 @@ If recorded activity changes while you read, a note in the drawer tells you
 that the preview still contains the activity it was prepared with.
 If you kept chat details, the confirmation names those formats. Nothing is sent.
 
+![Report setup with Show, Dates and Usage question beside recently saved reports.](images/report-choices.png)
+
+### What Show includes
+
+To start an error report, choose **New report**, set **Show** to
+**Errors & failures**, then choose **Prepare preview**. The default dates,
+formats and text choice apply unless you change them.
+
 | Report | Includes |
 | --- | --- |
 | All activity | Recorded prompts, Work IQ calls and results. Eligible interactions with an unverified author remain included. |
@@ -39,6 +57,8 @@ If you kept chat details, the confirmation names those formats. Nothing is sent.
 If a returned status and its diagnostic disagree, both remain visible. Recorded
 error evidence on either side qualifies for **Errors & failures**; a disagreement
 without an error does not. The tool's recorded completion stays unchanged.
+
+### Dates and activity
 
 New reports start with **Last 7 days** (including today in the display time zone)
 and HTML unless you choose a different period or file formats in **Settings >
@@ -155,6 +175,26 @@ text and report-author notes, and does not recommend next steps.
 
 ## Read and adjust
 
+The report shows its period, scope and recorded patterns. An error report
+can say, for example, that 4 of 12 interactions contained a recorded error.
+Only those 4 cases contribute prompt or diagnostic copies. The other
+interactions supply the frozen reference count, not additional disclosed text.
+
+![An error report with its frozen frequency, section links and separate file selection and viewing controls.](images/report-preview.png)
+
+Use the section links to jump to patterns, interactions, timing, token
+breakdown or coverage. Open a section or interaction to read its full evidence.
+**Expand sections** opens everything; collapsing changes only the view, not the
+report's contents. The reader keeps its navigation visible while you scroll.
+**Coverage** holds the preparation and time-zone metadata.
+
+![An expanded report interaction with its prompt and recorded calls below the section navigation.](images/report-expanded.png)
+
+Changing choices in the outline does not prepare a report until you select **Prepare preview**.
+Reopening the same unfinished report keeps its frozen activity.
+
+### Usage and tokens
+
 In **New report**, **Usage question** lets you compare Human and Agent prompts,
 find tools used in high-usage interactions, or compare model mix and cache
 reuse. An unverified sender stays separate. For an interaction report, the
@@ -169,23 +209,10 @@ tool calls. Its **Preview this report** action carries that selection into
 Reports and leaves an unrelated unfinished report alone.
 
 Token and cache counts start on. To see each interaction beside the total,
-choose **Change what's included → Include per-interaction table**. The saved
+choose **Change what's included > Include per-interaction table**. The saved
 report keeps the same counts as the preview.
 
-The report shows its period, scope and recorded patterns. An error report
-can say, for example, that 4 of 12 interactions contained a recorded error.
-Only those 4 cases contribute prompt or diagnostic copies. The other
-interactions supply the frozen reference count, not additional disclosed text.
-
-![An error report with its frozen frequency, section links and separate file selection and viewing controls.](images/report-preview.png)
-
-Use the section links to jump to patterns, interactions, timing or coverage.
-Open a section or interaction to read its full evidence. **Expand sections**
-opens everything; collapsing changes only the view, not the report's contents.
-The reader keeps its navigation visible while you scroll. **Coverage**
-holds the preparation and time-zone metadata.
-
-![An expanded report interaction with its prompt and recorded calls below the section navigation.](images/report-expanded.png)
+### Notes and copies
 
 Every included interaction remains accessible. Open it, then **Add a note or edit this
 example** lets you explain what you expected, change a prompt copy or omit it.
@@ -194,12 +221,6 @@ metrics. Select **Update note** or **Update prompt copy** to apply an edit.
 The interaction stays open so you can check the changed copy where you were reading.
 
 ![An interaction's optional note and editable prompt copy, with separate update controls.](images/report-example.png)
-
-The toolbar changes the report name, **Report text** and files to save.
-The text control stays blue for masking, gray when prompts and replies are
-left out, and red with a warning icon when chat details are kept. Labels and
-icons identify each state without relying on color. Masking can miss names
-or sensitive wording.
 
 **Change what's included** holds author/service/outcome choices and optional
 linked context. **Authors in report** keeps your choices as a draft until
@@ -212,6 +233,14 @@ copy**, changes only that report copy. The original stays unchanged.
 Return to **Report in WIRE** or a file through **Viewing**.
 
 ![Report text showing one included copy, its author and a separate Local original choice.](images/report-text.png)
+
+### Report text and privacy
+
+The toolbar changes the report name, **Report text** and files to save.
+The text control stays blue for masking, gray when prompts and replies are
+left out, and red with a warning icon when chat details are kept. Labels and
+icons identify each state without relying on color. Masking can miss names
+or sensitive wording.
 
 To hide a name WIRE missed, open the **Report text** control in the toolbar,
 expand **Hide specific words**, and enter one name or phrase per line.
@@ -232,6 +261,18 @@ case; other spellings stay. This optional step does not change original chats.
 Masking, edits and omissions still control the diagnostic copies. A fixed WIRE
 interpretation can remain when you leave out error-message text; it does not
 restore the omitted wording or read prompts, replies or arguments.
+
+Additional masking terms, edits and omissions affect report copies only.
+Missing or partial text stays qualified; editing does not recover source text.
+Changing Report text keeps edits and omissions for included copies. Leaving out
+prompts also turns off linked context; edits to that excluded context are retired.
+Turning linked context on or off preserves edits and omissions for ordinary copies
+that remain included. Only copies removed with the linked context lose their edits.
+If the same recorded message appears as both an originating prompt and a follow-up,
+it shares one copy choice with context enabled. Conflicting choices are refused,
+not silently replaced.
+
+### Formats and viewing
 
 **Formats** lets you select HTML, PDF, Markdown and JSON in any combination.
 **Viewing** changes only what you are reading: **Report in WIRE** is the readable page,
@@ -254,18 +295,6 @@ report period or call filters. Removing that file
 from **Formats** returns to **Report in WIRE**. Save is unavailable until the update finishes.
 
 ![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)
-
-Additional masking terms, edits and omissions affect report copies only.
-Missing or partial text stays qualified; editing does not recover source text.
-Changing Report text keeps edits and omissions for included copies. Leaving out
-prompts also turns off linked context; edits to that excluded context are retired.
-Turning linked context on or off preserves edits and omissions for ordinary copies
-that remain included. Only copies removed with the linked context lose their edits.
-If the same recorded message appears as both an originating prompt and a follow-up,
-it shares one copy choice with context enabled. Conflicting choices are refused,
-not silently replaced.
-Changing choices in the outline does not prepare a report until you select **Prepare preview**.
-Reopening the same unfinished report keeps its frozen activity.
 
 <a id="approve-save-and-reopen"></a>
 
@@ -337,7 +366,7 @@ last seven complete days, ending yesterday; Baseline covers the seven days
 before that. A fresh comparison uses all eligible retained activity. Change
 its starting period in **Settings > Compare**.
 
-![Compare with the accepted dates, outcome counts and shared reading actions.](images/compare-periods.png)
+![Compare with call results, what changed and token usage for the baseline and selected periods.](images/compare-periods.png)
 
 **Last 14 days** and **Last 30 days** use the same complete-day rule.
 Choose **Custom dates** to change both ranges, or select the date in one
@@ -371,6 +400,15 @@ Outcomes and By tool use a shared **Call count** scale, not percentage-scaled
 bars. Percentage-first values use each period's own denominator. Selecting a
 mark narrows both the exact rows and their interaction/service captions.
 
+**Token usage** appears below the outcome readings when either period has
+interactions that can carry a token count. It counts whole interactions with
+matching records: **Metered tokens**, **Metered / eligible** and **Input read
+from cache** for each period, then **Tokens by model**. A period without a
+measured count shows **Not recorded**, not zero, and has no change value.
+**Usage question** regroups the same periods by prompt author, by tools in
+interactions with at least 30,000 or 60,000 tokens, or by model and cache reuse.
+An interaction can appear under several tools; its tokens are not multiplied.
+
 **Create report** freezes the accepted pair and opens the existing report
 experience with the same formats, masking, optional notes and local Save.
 Changing which chat text to include updates the preview, not the calls in either period.
@@ -379,8 +417,8 @@ access remains valid.
 
 To read an existing report, open **Reports > Saved library** and choose its
 name. Older comparisons between saved reports remain readable there, even
-if a source report is later deleted. New comparisons use retained periods;
-there is no longer a command to compare two saved files.
+if a source report is later deleted. Compare works on retained activity
+periods; it does not compare two saved report files.
 
 ## Remove a saved copy
 

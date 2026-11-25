@@ -5,6 +5,9 @@ not rerun those calls. Normal startup does not connect Microsoft 365 Chat
 or Cowork. The [README overview](../README.md#how-wire-fits) shows how that
 history becomes evidence for inspection and reports.
 
+**Contents:** [Local runtime](#local-runtime) · [Evidence boundaries](#evidence-boundaries) ·
+[Diagram sources](#diagram-sources)
+
 ## Local runtime
 
 The browser talks to one local Node server. Collection, analysis, literal

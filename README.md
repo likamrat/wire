@@ -24,10 +24,13 @@ Those real interactions can become the basis for better synthetic eval cases.
 Product teams and customers building agents on Work IQ APIs and MCP can use
 that evidence to test the behaviors people rely on and improve their agents.
 
-[![Analyze with matching interactions and an open reader showing the prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
+[![Analyze with outcome, activity and token charts, and an open reader showing a prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
+
+**Contents:** [Getting started](#getting-started) · [How WIRE fits](#how-wire-fits) ·
+[Trends](#trends) · [Reports](#reports) · [Compare](#compare) · [Guides](#guides)
 
 <a id="start"></a>
 
@@ -123,7 +126,7 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 
 Follow changes in daily tool use, errors or timing. Select a day to inspect
 the calls behind it, or compare two measures over the same dates.
-See [Trends](docs/user-guide.md#trends) for the seven measures and what each counts.
+See [Trends](docs/user-guide.md#trends) for the eight measures and what each counts.
 
 [![Trends Overview showing daily interactions with errors and the option to compare two measures.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
@@ -131,10 +134,11 @@ See [Trends](docs/user-guide.md#trends) for the seven measures and what each cou
 
 In Analyze, choose **Add to report** on an interaction card or in the reader to
 [add it to a named draft](docs/reporting.md#keep-interactions-in-a-draft).
-You can also start in Reports with a focus such as **Errors & failures**.
+To report on a pattern instead, open **Reports**, choose **New report** and set
+**Show** to a focus such as **Errors & failures**.
 [Preview the report](docs/reporting.md) before saving a local copy.
 
-[![Report setup beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
+[![Report setup with Show, Dates and Usage question beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
@@ -142,10 +146,11 @@ You can also start in Reports with a focus such as **Errors & failures**.
 
 ## Compare
 
-Compare a selected period with a baseline. Open either period's count to see
-the calls it includes. See [Compare two periods](docs/reporting.md#compare).
+Compare a selected period with a baseline, including call results and token
+usage. Open either period's count to see the calls it includes. See
+[Compare two periods](docs/reporting.md#compare).
 
-[![Compare with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+[![Compare with call results, what changed and token usage for the baseline and selected periods.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
 ## Guides
 
@@ -153,7 +158,7 @@ the calls it includes. See [Compare two periods](docs/reporting.md#compare).
 - [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
 - [Create and read reports](docs/reporting.md)
 - [Develop and troubleshoot](docs/development.md)
-- [Technical documentation](docs/README.md)
+- [Documentation index](docs/README.md)
 
 ## Contributing
 

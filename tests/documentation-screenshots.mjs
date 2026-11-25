@@ -95,6 +95,13 @@ function documentationRecords() {
                 model: ["gpt-5.4", "claude-sonnet-4.6"][index % 2], modelStatus: "recorded",
             }],
         };
+        // Invented token receipts; a few interactions stay unmetered so coverage gaps remain visible.
+        if (![5, 9, 11].includes(index)) row.usageCalls = [{
+            receiptId: "documentation-usage-" + index, apiCallId: "documentation-api-" + index,
+            model: ["gpt-5.4", "claude-sonnet-4.6"][index % 2], at: at(days, 8),
+            tokens: { freshInput: 4000 + index * 1700, cacheRead: 9000 + (index % 5) * 6000,
+                cacheWrite: index % 4 === 0 ? 1200 : 0, output: 800 + index * 90 },
+        }];
         return row;
     });
 }

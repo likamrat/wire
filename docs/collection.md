@@ -4,6 +4,23 @@ WIRE reads approved local GitHub Copilot app metadata and history. This
 reference explains collection permissions, read limits and saved-data operations.
 For setup, see [Connect local history](user-guide.md#connect-local-history).
 
+**Contents**
+
+- [Operations and permissions](#operations-and-permissions)
+- [Store ownership](#store-ownership)
+- [Source mapping and bounded reads](#source-mapping-and-bounded-reads): [approved paths](#approved-paths),
+  [account profile](#account-profile), [native metadata reads](#native-metadata-reads),
+  [read bounds](#schema-and-read-bounds), [committed progress](#event-reading-and-committed-progress)
+- [Evidence fidelity](#evidence-fidelity): [token usage](#token-usage),
+  [services and diagnostics](#services-paths-and-diagnostics),
+  [retained-error restoration](#guarded-retained-error-restoration),
+  [prompt authorship](#prompt-authorship), [reader compatibility](#prompt-origin-reader-compatibility),
+  [review older authors](#review-older-unverified-authors-as-a-group)
+- [Optional replies](#optional-replies)
+- [Deletion](#deletion)
+- [Explicit recollection](#explicit-recollection): [verified records only](#verified-records-only)
+- [Refresh and uncertain outcomes](#refresh-and-uncertain-outcomes)
+
 Collection does not rerun Work IQ requests or read remote-only chats through a
 provider. Normal startup supports the GitHub Copilot app only. The separate
 development-only Microsoft 365 Chat and Cowork adapters are not additional
@@ -213,6 +230,8 @@ still agree. It does not reset cursors or adopt another host's store.
 
 ## Evidence fidelity
 
+### Token usage
+
 For token usage, WIRE reads numeric `session.usage_record` receipts during
 ordinary approved collection. A call needs an exact model/API-call match to a
 response linked to the originating message or a directly linked interaction
@@ -266,6 +285,8 @@ installed source has all the required fields.
 | Automatic continuation | No new message is distinct from a missing/excluded prompt. Event kind does not establish author; unknown records do not default to User. |
 | Tool diagnostic | Screened message/code/status/details stay with their original call or returned entry, separately from optional assistant replies. |
 | Model and final-response timing | Require qualified source/message/response/turn links. Tool hints, deployment names and the current account cannot fill missing provenance. |
+
+### Services, paths and diagnostics
 
 Service classification uses recorded target paths, not the connector's display
 name or prompt wording. User-profile relationships such as `/me/manager` and
@@ -358,6 +379,8 @@ can restart. There is no generic rollback command.
 `scripts/maintain-retained-errors.mjs` uses this policy through the existing
 maintenance protocol. `inspectRetainedErrorRepair` is a read-only projection
 check, not Prepare, approval or permission to apply it.
+
+### Prompt authorship
 
 Prompt authorship comes from supported host provenance, not the `user.message`
 role or the wording. Host-added image references must match the event's attachment
@@ -773,7 +796,9 @@ approved day, only records inside the original window can be proposed. If
 any proposed record leaves the rolling window before saving, the whole
 selection is refused rather than silently shortened.
 
-**Verified records only (day incomplete; runtime opt-in).**
+### Verified records only
+
+**Verified records only (day incomplete)** is a runtime opt-in.
 Strict recovery stays selected by default. A Copilot-only runtime started
 with `--verified-record-recovery` also offers this operation. Opening the
 chooser on that runtime does not read the chat list. **Load eligible chats**
@@ -871,7 +896,7 @@ its matching close is the next original event. The supported forms carry no
 tool arguments or canvas input; an empty arguments object is also allowed.
 Their IDs must be disjoint across the whole journal, including original
 fields that JSON parsing could hide. Even separate canvas lifecycles reusing
-an extension or canvas ID are currently refused. Neither an external
+an extension or canvas ID are refused. Neither an external
 completion nor a canvas close can supply a missing call outcome.
 
 A compact, text-free post-tool hook may close directly after its matching

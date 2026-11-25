@@ -4,6 +4,22 @@ WIRE runs as a local Node server with a browser interface. Start with the
 [README](../README.md#getting-started) to clone and install it. This guide covers working
 on the source, checking a change and troubleshooting a local installation.
 
+**Contents**
+
+- [Run locally](#run-locally): [updating WIRE](#updating-wire),
+  [interrupted managed writer](#recover-an-interrupted-managed-writer),
+  [test the updater](#test-the-updater)
+- [Windows, WSL and Linux](#windows-wsl-and-linux)
+- [Changing the local port](#changing-the-local-port)
+- [Keep development data separate](#keep-development-data-separate)
+- [Check a change](#check-a-change): [journal formats](#changing-a-copilot-journal-format),
+  [browser build and React evaluation](#browser-build-and-react-evaluation)
+- [PDF and browser tools](#pdf-and-browser-tools):
+  [documentation screenshots](#capture-documentation-screenshots)
+- [Troubleshoot a local run](#troubleshoot-a-local-run)
+- [WIRE development skills](#wire-development-skills)
+- [Find the owning code](#find-the-owning-code)
+
 ## Run locally
 
 Use Node.js 24 or newer in the environment that will run WIRE. On WSL or Linux,
@@ -58,7 +74,33 @@ The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
 
-**Interrupted managed writer (Windows or WSL).** A dead PID or free port does
+Store read/write protocol 2 includes the explicit agent-authored origin. The
+managed updater refuses a protocol-1/protocol-2 transition before stopping
+the current writer. Qualify both the primary and fallback for the new retained
+and saved-report vocabulary before a manual transition or author repair;
+see [prompt origin reader compatibility](collection.md#prompt-origin-reader-compatibility).
+
+Archives without `.git`, contributor worktrees, forks, modified clones and special
+development launch modes stay manual. Do not use a new data folder to resolve an update problem.
+For a directly launched runtime, **General** shows the package version and
+**Update instructions**. WIRE cannot check or restart this copy. Keep its usual
+update and restart process.
+One-click activation is qualified on Windows and WSL. Standalone Linux and
+macOS use the same-folder manual path.
+Special modes cannot bypass an active staged build or unresolved handoff.
+When a candidate changes the registered canvas adapter or its dependencies,
+WIRE declines the switch rather than silently running the old adapter.
+An expired tab can lose data access without resolving its draft or Save.
+If WIRE cannot confirm that all panels finished, resolve their original
+operations before manually restarting; do not replay them from a new tab.
+When adding a document consumed at runtime, list its tracked path in
+`lib/update-runtime-docs.json` so changes to that document qualify. An
+incompatible store, launcher or canvas change must update the compatibility
+contract rather than silently treating older readers as compatible.
+
+### Recover an interrupted managed writer
+
+On Windows or WSL, a dead PID or free port does
 not make the last child receipt a clean close. Ordinary startup still refuses
 a child marked `running`. Do not remove its journals or collector leases, move
 the data, or use a development launch to get around that refusal.
@@ -97,29 +139,7 @@ reader can use its genuine close receipt; never roll back data. Without the
 required evidence, or if an operation, lease or transition is unresolved,
 leave the installation stopped.
 
-Store read/write protocol 2 includes the explicit agent-authored origin. The
-managed updater refuses a protocol-1/protocol-2 transition before stopping
-the current writer. Qualify both the primary and fallback for the new retained
-and saved-report vocabulary before a manual transition or author repair;
-see [prompt origin reader compatibility](collection.md#prompt-origin-reader-compatibility).
-
-Archives without `.git`, contributor worktrees, forks, modified clones and special
-development launch modes stay manual. Do not use a new data folder to resolve an update problem.
-For a directly launched runtime, **General** shows the package version and
-**Update instructions**. WIRE cannot check or restart this copy. Keep its usual
-update and restart process.
-One-click activation is qualified on Windows and WSL. Standalone Linux and
-macOS use the same-folder manual path until their cutover tests pass natively.
-Special modes cannot bypass an active staged build or unresolved handoff.
-When a candidate changes the registered canvas adapter or its dependencies,
-WIRE declines the switch rather than silently running the old adapter.
-An expired tab can lose data access without resolving its draft or Save.
-If WIRE cannot confirm that all panels finished, resolve their original
-operations before manually restarting; do not replay them from a new tab.
-When adding a document consumed at runtime, list its tracked path in
-`lib/update-runtime-docs.json` so changes to that document qualify. An
-incompatible store, launcher or canvas change must update the compatibility
-contract rather than silently treating older readers as compatible.
+### Test the updater
 
 `npm run test:update-runtime` builds and updates a disposable clone using
 the platform's own Git, Node and npm, then reopens a saved report at the
