@@ -1,8 +1,9 @@
 # Development
 
-WIRE runs as a local Node server with a browser interface. Start with the
-[README](../README.md#getting-started) to clone and install it. This guide covers working
-on the source, checking a change and troubleshooting a local installation.
+WIRE runs as a local Node server with a browser interface. Most people install
+it as a GitHub Copilot app plugin; see the [README](../README.md#getting-started).
+This guide covers working on the source, building the plugin, checking a change
+and troubleshooting a local installation.
 
 ## Run locally
 
@@ -20,6 +21,10 @@ Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
 that terminal to stop WIRE; closing the browser tab leaves it running.
 
 ### Updating WIRE
+
+If you installed the Copilot app plugin, run `copilot plugin update wire`, then
+reload extensions or start a new chat. The rest of this section applies to a
+standalone `npm start` installation.
 
 On Windows or WSL, in-app updates require a clean standalone clone of the
 official WIRE repository on `main`, with the updater already included.
@@ -191,8 +196,8 @@ actual printed port and a distinct canvas instance; omitting the port selects
 main's default 4000. If the canvas does not offer `runtimePort`, use the
 browser URL or run `npm run install:canvas` in this checkout and reload
 extensions. This points your personal canvas launcher at this checkout's
-adapter for future sessions. It does not start
-a writer or grant source access. A closed or replaced runtime requires a
+adapter for future sessions. With a `runtimePort`, the canvas only connects;
+it never starts a writer or grants source access. A closed or replaced runtime requires a
 fresh canvas; resolve uncertain operations in the original instance, never
 replay them on another.
 
@@ -204,6 +209,31 @@ Browser tests set up temporary stores through
 [`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
 Reuse that pattern for tests and image capture. A different port alone does
 not create a separate store.
+
+## Build the Copilot app plugin
+
+The plugin in `plugin/` is generated and committed, because plugin installs copy
+the repository folder as is. It contains one bundled `extension.mjs` (esbuild),
+the built browser client, PDF.js files, assets and the `wire` skill. Runtime
+dependencies are bundled; Playwright is contributor-only and never shipped.
+
+```text
+npm run build:plugin   # regenerate plugin/ and .github/plugin/marketplace.json
+npm run check:plugin   # fail if the committed plugin is out of date
+```
+
+Run `npm run build:plugin` and commit the result with any change to `lib/`,
+`web/`, `assets/` or `plugin/skills/`. To try it locally, run
+`copilot plugin marketplace add .` and `copilot plugin install wire@wire` in
+this checkout; it loads live from `plugin/`, so rebuild and reload extensions
+after each change.
+
+Inside the app, WIRE runs in the extension process on the app's embedded Node.
+The first canvas open or WIRE tool call connects to a compatible WIRE on port
+4000, or starts one with the normal Copilot-only startup and data folder. Other
+Copilot sessions reuse that runtime; it stops when its owning session's
+extension stops. The embedded runtime can't fork Node children, so Search
+reports saved PDF text as unavailable there.
 
 ## Check a change
 
@@ -384,15 +414,12 @@ installation or browser checks. `npm test` does not include it.
 
 ## PDF and browser tools
 
-PDF generation uses the pinned Playwright runtime dependency and a local
-Chromium browser:
-
-```text
-npx playwright install chromium
-```
-
-This is an optional browser download. HTML, JSON and Markdown do not need it.
-If Chromium is unavailable, install it or deselect PDF and prepare the report again.
+PDF generation uses the installed Microsoft Edge or Google Chrome, run headless
+with page scripts and all network requests blocked. Set `WIRE_PDF_BROWSER` to
+choose a specific Chromium-based executable. Without one, a contributor checkout
+falls back to Playwright's Chromium (`npx playwright install chromium`).
+HTML, JSON and Markdown do not need a browser. If none is available, install one
+or deselect PDF and prepare the report again.
 
 Saved-PDF reading uses PDF.js locally and does not require Chromium. It reads
 the text layer, not OCR; no remote conversion service is used.

@@ -226,10 +226,10 @@ test("registered canvas binds its selected contributor runtime; no implicit acti
     }
     export const createCanvas = value => value;
     export const joinSession = async value => { globalThis[${JSON.stringify(key)}] = value; return {}; };`;
-    const entry = new URL("../extension.mjs", import.meta.url);
+    const entry = new URL("../extension.mjs", import.meta.url), adapter = new URL("../lib/copilot-extension.mjs", import.meta.url);
     const hooks = registerHooks({
         resolve(specifier, context, next) {
-            if (context.parentURL?.startsWith(entry.href)) {
+            if (context.parentURL?.startsWith(entry.href) || context.parentURL?.startsWith(adapter.href)) {
                 const source = specifier === "@github/copilot-sdk/extension" ? sdk : null;
                 if (source) return { url: "data:text/javascript," + encodeURIComponent(source), shortCircuit: true };
             }
@@ -238,7 +238,7 @@ test("registered canvas binds its selected contributor runtime; no implicit acti
     });
     t.after(() => { hooks.deregister(); delete globalThis[key]; });
     await import(entry.href + "?fixture=" + randomUUID());
-    const canvas = globalThis[key].canvases[0];
+    const canvas = globalThis[key].canvases.definitions[0];
     const calls = [];
     t.mock.method(globalThis, "fetch", (url, options) => {
         assert.equal(new URL(url).origin, origin, "No request may reach the default or another store");
@@ -255,7 +255,8 @@ test("registered canvas binds its selected contributor runtime; no implicit acti
         { code: "runtime_changed" });
     await canvas.onClose({ instanceId: "registered-fixture" });
     await assert.rejects(summary.handler({ instanceId: "registered-fixture", actionName: "get_summary", input: {} }), /open/i);
-    assert.deepEqual(calls, ["/health", "/api/session", "/health", "/api/canvas", "/api/session/release"]);
+    // Each open first probes for the runtime it will use; the panel binding then reads health again.
+    assert.deepEqual(calls, ["/health", "/health", "/api/session", "/health", "/health", "/api/canvas", "/api/session/release"]);
     assert.equal(canvas.actions.some(action => ["refresh_history", "record_graph_metadata"].includes(action.name)), false);
     t.mock.method(globalThis, "fetch", (url, options) => url === origin + "/api/session"
         ? Promise.resolve(Response.json({ code: "WIRE_CLIENT_UPDATE_REQUIRED",

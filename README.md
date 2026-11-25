@@ -33,56 +33,30 @@ HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
 
 ## Getting started
 
-### Platforms
-
-Run WIRE with Node.js 24 or newer on:
-
-- Windows
-- WSL
-- Linux
-- macOS
-
-Collection also needs accessible, supported GitHub Copilot app history.
-See [platform setup](docs/development.md#windows-wsl-and-linux) for source
-requirements and running separate instances.
-
-### Coding agent
-
-Copy this prompt into your coding agent:
-
-```text
-Set up and run WIRE locally from the main branch of
-https://github.com/likamrat/wire.
-
-Follow README.md and docs/development.md for this machine. Check for
-Node.js 24+ and a running WIRE instance before installing or starting
-anything. Preserve existing work and data.
-
-Use npm ci, npm run build and npm start for a new installation. Open the printed local
-URL and verify that WIRE loads. Leave it running and tell me how to
-reopen it. Ask me when setup choices need my input. Leave source
-approval and reply-saving consent to me in WIRE.
-```
-
-<a id="install-and-run"></a>
-
-### Manual setup
+WIRE installs as a plugin for the GitHub Copilot app. It runs inside the app,
+so you don't need Node.js, npm or a terminal.
 
 ```sh
-git clone https://github.com/likamrat/wire.git
-cd wire
-npm ci
-npm run build
-npm start
+copilot plugin marketplace add likamrat/wire
+copilot plugin install wire@wire
 ```
 
-The default browser address is `localhost:4000`. Keep the terminal running
-while you use WIRE.
+Then reload extensions or start a new chat, and ask Copilot to open WIRE.
+You can also ask questions directly, for example "which Work IQ calls failed
+this week and why?". The plugin's skill and read-only tools answer from your
+local evidence without opening the canvas.
 
-On Windows or WSL, a clean `main` clone checks for updates by default.
-Choose **Update and restart** to reopen WIRE at the same address with your settings
-and reports. You can also check or turn off automatic checks in **Settings > General**.
-For other installations, see [Updating WIRE](docs/development.md#updating-wire).
+WIRE runs while the Copilot app is open, so collection pauses when you close
+the app. To update, run `copilot plugin update wire`.
+
+PDF reports use the Microsoft Edge or Google Chrome already on your computer.
+HTML, Markdown and JSON reports need nothing else.
+
+Collection needs accessible, supported GitHub Copilot app history. To work on
+the source or run WIRE as a standalone server, see
+[Development](docs/development.md#run-locally).
+
+<a id="install-and-run"></a>
 
 ### Connect your history
 

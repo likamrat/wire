@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "wire",
+  "version": "1.0.1",
+  "description": "WIRE (Work IQ Request Explorer): inspect recorded Work IQ activity and prepare reviewed product feedback reports.",
+  "license": "MIT",
+  "repository": "https://github.com/likamrat/wire",
+  "keywords": [
+    "work-iq",
+    "copilot",
+    "evidence",
+    "canvas"
+  ]
+}

@@ -322,9 +322,10 @@ test("repository extension retains one existing joined handle and exposes an emp
     assert.equal(joins, 1);
     assert.equal(config.requestedEnvironmentVariables, undefined);
     assert.equal(fixture.calls.length, 0, "No metadata read merely from extension initialization");
-    const actions = config.canvases[0].actions;
-    assert.equal(config.tools.length, 1);
-    const tool = config.tools.find(value => value.name === "wire_github_account_snapshot");
+    const actions = config.canvases.definitions[0].actions;
+    assert.deepEqual(config.tools.definitions.map(value => value.name).sort(),
+        ["wire_analytics", "wire_github_account_snapshot", "wire_search", "wire_status"]);
+    const tool = config.tools.definitions.find(value => value.name === "wire_github_account_snapshot");
     assert.ok(tool);
     assert.equal(actions.some(value => value.name === "get_state"), true);
     assert.deepEqual(tool.parameters.properties, {});

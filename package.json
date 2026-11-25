@@ -12,7 +12,6 @@
   "dependencies": {
     "marked": "18.1.1",
     "pdfjs-dist": "6.3.289",
-    "playwright": "1.63.0",
     "stream-chain": "4.2.6",
     "stream-json": "3.7.0"
   },
@@ -23,6 +22,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.3.0",
     "esbuild": "0.28.2",
+    "playwright": "1.63.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-icons": "5.7.0",
@@ -35,6 +35,8 @@
     "start": "node scripts/launch.mjs",
     "icons:generate": "node scripts/build-icon-assets.mjs --write",
     "build": "node scripts/build-icon-assets.mjs && vite build",
+    "build:plugin": "npm run build && node scripts/build-plugin.mjs",
+    "check:plugin": "npm run build && node scripts/build-plugin.mjs --check",
     "typecheck": "tsc --noEmit",
     "check": "node scripts/check.mjs",
     "pretest": "npm run build",
