@@ -15,6 +15,34 @@ function callFrom(error) {
         startedAt: "2026-11-01T12:00:00.000Z" }, retained) };
 }
 
+test("an unreadable Work IQ message does not discard independently recorded completion diagnostics", () => {
+    const message = `MCP server 'workiq': {"unknown":"EXCLUDED_CONTENT"}`;
+    const error = { message, code: "failure", statusCode: 409, details: [
+        { code: "VersionMismatch", message: "Check the version with editor@example.invalid.", target: "EXCLUDED_TARGET" },
+    ] };
+    const { call, retained } = callFrom(error);
+    assert.deepEqual(call.failureEvidence.diagnostic, { version: 1, source: "completion-error", status: "unsupported-format",
+        code: "failure", statusCode: 409, details: [{ code: "VersionMismatch", message: "Check the version with [redacted]." }] });
+    assert.equal(call.resultEvidence.statusCode, null);
+    assert.deepEqual(call.apiResults, []);
+    assert.doesNotMatch(JSON.stringify(retained), /EXCLUDED_|editor@example/);
+    const resultOnly = completeWorkIqCall({}, { data: { success: false, result: { structuredContent: { error } } } });
+    assert.deepEqual(resultOnly.failureEvidence.diagnostic, { ...call.failureEvidence.diagnostic, source: "result-error" });
+    assert.deepEqual(callFrom({ message }).call.failureEvidence.diagnostic,
+        { version: 1, source: "completion-error", status: "unsupported-format" });
+
+    for (const [patch, status] of [
+        [{ message: `MCP server 'workiq': {"unknown":"Confidential example"}` }, "sensitive-excluded"],
+        [{ details: [...error.details, { message: "Bearer " + "a".repeat(40) }] }, "sensitive-excluded"],
+        [{ details: [{ message: "x".repeat(8193) }] }, "size-excluded"],
+    ]) {
+        const { call, retained } = callFrom({ ...error, ...patch });
+        assert.equal(call.failureEvidence.diagnostic.status, status);
+        assert.equal(call.failureEvidence.diagnostic.details, undefined);
+        assert.doesNotMatch(JSON.stringify(retained), /VersionMismatch|EXCLUDED_|Confidential|Bearer|x{100}/);
+    }
+});
+
 test("a large Work IQ batch keeps the small original returned error without retaining successful bodies", () => {
     const message = "The requested operation is not available for this item.";
     const { call, retained } = callFrom({ code: "failure",

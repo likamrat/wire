@@ -440,6 +440,10 @@ headers and inner identifiers.
 - Missing diagnostics stay unavailable. The reader doesn't reconstruct them
   from other calls.
 
+If a Work IQ error message is unreadable, a separately recorded status, code or
+error detail on the same error can still explain the failure. WIRE screens
+those fields separately and does not assign them to individual requested paths.
+
 A Work IQ error envelope may supply only an HTTP status, with no error text.
 WIRE keeps and shows that status without treating the envelope as unreadable or
 inventing a cause. An older record's saved status stays readable without
