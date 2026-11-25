@@ -153,8 +153,8 @@ for(const frontend of ["react","bundled"])test(`${frontend}: tapping a scrolled 
     const chart=page.locator("#analyzeUsage"),slider=chart.getByRole("slider"),scroll=chart.locator(".token-history-scroll");
     const offset=()=>scroll.evaluate(s=>s.scrollLeft);
     await expect(slider).toHaveAttribute("max","96");await slider.press("End");
-    for(const [button,date,index] of [["Earlier days","2026-10-14",55],["Later days","2026-11-21",93]]){
-        await chart.getByRole("button",{name:button}).tap();
+    for(const [date,index] of [["2026-11-21",93],["2026-10-14",55]]){
+        if(index===55){await slider.press("End");await chart.getByRole("button",{name:"Earlier days"}).tap();}
         const tick=chart.locator(`time[datetime="${date}"]`);
         await tick.evaluate(t=>t.scrollIntoView({block:"center",inline:"center"}));
         const before=await offset(),label=await tick.boundingBox(),plot=await slider.boundingBox();
@@ -166,10 +166,9 @@ for(const frontend of ["react","bundled"])test(`${frontend}: tapping a scrolled 
         if(index===55){
             const session=await page.context().newCDPSession(page);
             const touch=(type,points)=>session.send("Input.dispatchTouchEvent",{type,touchPoints:points});
-            const settled=scroll.evaluate(s=>new Promise(resolve=>s.addEventListener("scrollend",()=>resolve(),{once:true})));
             await touch("touchStart",[{x,y}]);
             for(const delta of [15,40,70,100])await touch("touchMove",[{x:x-delta,y}]);
-            await touch("touchEnd",[]);await settled;await session.detach();
+            await touch("touchEnd",[]);await session.detach();
             await expect.poll(offset).toBeGreaterThan(before+30);
             await expect(slider).toHaveValue(String(index));
             await expect(chart.locator(".token-day-reading")).toHaveAttribute("aria-hidden","true");
