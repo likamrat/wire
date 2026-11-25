@@ -886,7 +886,7 @@ test("real pointer inspection supplies specific values for every chart and never
     await page.locator('.trends-panel[data-family="authors"] .trends-sizing button:first-child').click();
     const cases = [
         ["authors", /Calls in these interactions/], ["tools", /Additional calls/], ["services", /another service/],
-        ["problems", /Failed tool calls/], ["timing", /Timing coverage/], ["models", /Model not recorded/], ["rhythm", /Interactions/],
+        ["problems", /Failed tool calls/], ["timing", /calls? timed/], ["models", /Model not recorded/], ["rhythm", /Interactions/],
     ];
     for (const [family, expected] of cases) {
         if (family !== "authors") await selectActivityOption(page, "trendsTrend", family);

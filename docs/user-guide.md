@@ -287,7 +287,7 @@ totals, including series hidden in the chart.
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |
-| Call duration | Recorded tool-call intervals in milliseconds, summarized as Median and 95th percentile. The coverage note identifies how many matching calls have qualified timing. |
+| Call duration | Median and 95th percentile of recorded durations, in milliseconds. A blank date has no matching calls; a dash means calls had no recorded duration. **View daily values** shows both the number of calls and how many were timed. |
 | Token usage | Each matching interaction contributes its tokens once, on its first matching call date in the period. The coverage count shows how many interactions have a token reading. |
 
 Prompt authors counts interactions with activity that day, not every message

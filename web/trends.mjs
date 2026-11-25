@@ -50,6 +50,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     const rate = value => value === null ? "Unavailable" : `${number(value)}%`;
     const axisDate = date => date === time.day(new Date().toISOString(), data.timeContext.timeZone) ? "Today" : time.formatDate(date, data.timeContext);
     const fullDate = date => `${axisDate(date) === "Today" ? "Today · " : ""}${time.formatDate(date, data.timeContext, true)}`;
+    const windowText = (first,last,count) => first ? `${axisDate(first)}${first===last ? "" : ` – ${axisDate(last)}`} in view · ${count} days in this chart` : "";
     const authorColors = { user: "var(--screen-prompt-user)", agent: "var(--screen-prompt-agent)", unknown: "var(--muted)" };
     const colors = new Map(), tools = ["fetch", "retrieve", "ask", "get_schema", "call_function", "do_action",
         "search_paths", "fetch_blob", "create_entity", "update_entity", "delete_entity", "list_agents"];
@@ -280,7 +281,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         formatDate: fullDate, formatAxisDate: axisDate, weekContext, onInspect: () => {}, onSelect: date => openErrorsChart(date),
         onWindow(first, last, count) {
             landingWindow.hidden = !first;
-            landingWindow.textContent = first ? `${axisDate(first)} – ${axisDate(last)} in view · ${count} days in this chart` : "";
+            landingWindow.textContent = windowText(first,last,count);
         } });
     function openErrorsChart(date) {
         if (!current() || section !== "overview") return;
@@ -295,7 +296,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     const pairHost=el("section","trends-panel-pair"), landingExtra=el("div","trends-discover");
     let pairActive=false, pairOrigin=null;
     pairHost.hidden=landingExtra.hidden=true;
-    const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,missingTokens,
+    const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,missingTokens,timingScope,
         evidence:(choice,day,ids,origin,gap)=>openMembers(day,choice.label,ids,origin,choice.key,choice.family === "usage",gap),
         close:()=>{pairActive=false;paint();(pairOrigin?.checkVisibility() ? pairOrigin : index.querySelector(`[data-measure="${activeMeasure}"]`)).focus();}});
     const examples=el("section","trends-start"), explore=el("section","trends-start trends-explore");
@@ -470,7 +471,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         card.chart = mountChart({ root: plot, tooltip, color, authorIcon, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate, weekContext, missingTokens,
             onWindow(first, last, count) {
                 visibleDays.hidden = !first;
-                const text = first ? `${axisDate(first)} – ${axisDate(last)} in view · ${count} days in this chart` : "";
+                const text = windowText(first,last,count);
                 if (visibleDays.textContent !== text) visibleDays.textContent = text;
             },
             onInspect() { if (inspecting !== card) inspecting?.chart.hide(); inspecting = card; },
@@ -712,6 +713,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (!day.calls) return "No matching calls";
         return value.id === "usage" ? "Interaction counted on an earlier day" : "No matching interaction in this group";
     }
+    function timingScope(day) {
+        return day.timedCalls ? `${number(day.timedCalls)} of ${quantity(day.calls,"call")} timed`
+            : day.calls ? "No recorded duration" : "No matching calls";
+    }
     function metricStat(value, label) {
         const stat = el("div", "trends-stat"); stat.append(el("span", "trends-stat-value", value));
         if (label) stat.append(el("span", "muted", label));
@@ -856,17 +861,21 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
         else if (id === "rhythm" && mode === "share" && source.days.some(day => weekContext(day).partial))
             limits.push("Underlined weeks include only the selected dates.");
-        card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         const unitIsInteraction = ["authors", "models", "problems"].includes(id) || mode === "reach";
         const population = unitIsInteraction ? totals.interactions : totals.calls;
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${quantity(totals.calls,"call")} timed`
             : quantity(population,unitIsInteraction ? "originating interaction" : "dated call");
         if (id !== "usage") captions.push(summary + " in this period");
+        if (id === "timing" && totals.calls && source.window.count === source.window.totalDays && source.days.length > 1) {
+            const active = source.days.filter(d=>d.calls);
+            if (active.length === 1) (allCharts ? limits : captions).push(`All calls on ${axisDate(active[0].date)}`);
+        }
         if (seriesSubset) captions.push(seriesSubset);
         if (id === "timing") captions.push("milliseconds");
         if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${quantity(totals.missingServices,"call")}`);
         if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
         if (Object.keys(filters).length) captions.push(restrictionText.textContent);
+        card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         card.indexScope.textContent = captions.join(" · ");
         card.indexScope.hidden = allCharts || collapsed || !captions.length;
         paintPoint(card);
@@ -912,7 +921,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     function dayScope(day, card) {
         const usage = day.usagePopulation ?? day.values.usage?.[0];
         const scope = card.id === "usage" ? (usage.eligible ? usageCoverage(usage) : missingTokens(day,{...usage,id:data.usageQuestion === "all" ? "usage" : null}))
-            : card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
+            : card.id === "timing" ? timingScope(day)
             : ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? `${day.interactions} interactions` : `${day.calls} calls`;
         const measure = card.id === "timing" ? "" : `${families[card.id].modes.find(([id]) => id === card.mode)[1]} · `;
         if (card.id === "rhythm" && card.mode === "share") {
@@ -935,7 +944,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             let measure = quantity(ids.size,"matching call");
             if (selected) {
                 if (card.id === "usage") measure = selected.total === null ? missingTokens(day,selected) : `${valueText(selected, card)} · ${usageCoverage(selected)}`;
-                else if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${quantity(day.calls,"call")} timed`;
+                else if (card.id === "timing") measure = day.timedCalls ? `${valueText(selected, card)} · ${timingScope(day)}` : timingScope(day);
                 else if (card.mode === "count") measure = quantity(selected.count,card.id === "problems" ? "affected interaction" : unit);
                 else {
                     const reach = card.mode === "reach", share = reach ? selected.reach : selected.percent;
@@ -1041,15 +1050,17 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const windowLabel = source.window.count < source.window.totalDays ? ` · Daily rows: ${dayPage()}` : "";
         table.append(el("caption", "", `${families[family].label} · ${formatRange()}${windowLabel}`));
         for (const label of ["Date", ...source.definitions[family].map(value => family === "usage" && value.id === "usage" ? "Tokens" : value.label),
-            ...(family === "usage" ? ["Interactions metered"] : []), "Interactions", "Calls"]) {
+            ...(family === "usage" ? ["Interactions metered"] : family === "timing" ? ["Calls timed"] : []), "Interactions", "Calls"]) {
             const cell = el("th", "", label); cell.scope = "col"; header.append(cell);
         }
         head.append(header); table.append(head, body);
         for (const day of includePeriod ? [source.totals, ...source.days] : source.days) {
             const row = el("tr"), date = el("th", "", day.date ? fullDate(day.date) : "Entire period"); date.scope = "row"; row.append(date);
             for (const value of day.values[family]) row.append(el("td", "", day.date && family === "usage" && value.total === null ? missingTokens(day,value)
+                : family === "timing" && !day.timedCalls ? timingScope(day)
                 : !day.date && family === "rhythm" && card.mode === "share" ? "Not a daily share" : valueText(value, card)));
             if (family === "usage") row.append(el("td","",`${number(day.usagePopulation.metered)} of ${number(day.usagePopulation.eligible)}`));
+            if (family === "timing") row.append(el("td","",number(day.timedCalls)));
             row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls))); body.append(row);
         }
         target.append(table);

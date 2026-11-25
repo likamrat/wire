@@ -47,7 +47,7 @@ export function createTrendPairModel() {
     return { choices, point, compatible, correlation };
 }
 
-export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close, missingTokens }) {
+export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close, missingTokens, timingScope }) {
     let data, choices = [], a = "", b = "", date = null, preferAligned = false, collapsed = false;
     let visible = false, sourceKey = "", drawnKey = "", scopeNotice = "", folded = [false, false];
     const title = el("h2", "", "Compare measures"), fold = button("Collapse chart", () => {
@@ -109,7 +109,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     function detail(p, c, day) {
         if (c.family === "usage") return p.amount === null ? missingTokens(day,{id:c.id,eligible:p.denominator}) :
             `${number(p.numerator)} of ${number(p.denominator)} ${p.denominator === 1 ? "interaction" : "interactions"} metered`;
-        if (c.basis === "ms") return `${number(p.numerator)} of ${number(p.denominator)} calls timed`;
+        if (c.basis === "ms") return timingScope(day);
         if (!c.basis.endsWith("share")) return `${number(p.rowIds.length)} matching calls`;
         const unit = c.basis === "daily interaction share" ? "interaction" : "call";
         const fraction = `${number(p.numerator)} of ${number(p.denominator)} ${unit}${p.denominator === 1 ? "" : "s"}`;
@@ -120,7 +120,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
         return `${fraction} that day`;
     }
     function dailyReading(p,c,day) {
-        return c.family === "usage" && p.amount === null ? detail(p,c,day) : `${amount(p,c)} · ${detail(p,c,day)}`;
+        return (c.family === "usage" || c.family === "timing") && p.amount === null ? detail(p,c,day) : `${amount(p,c)} · ${detail(p,c,day)}`;
     }
     const scenes = [0, 1].map(n => {
         const host = el("section", "trend-pair-scene"), head = el("div","trends-landing-head"), name = el("h3"),
