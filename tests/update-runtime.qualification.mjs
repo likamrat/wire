@@ -8,7 +8,9 @@ import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { fixture } from "./helpers.mjs";
+import { chooseTheme, fixture } from "./helpers.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
+import { palettes } from "../web/theme.mjs";
 import { replaceEvidence, loadBoardState } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createRuntimeClient } from "../lib/runtime-client.mjs";
@@ -224,7 +226,13 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await install.click();
             const response = await applied;
             assert.equal(response.status(), 200, (await response.json()).error);
-            await Promise.all([settings, analyze].map(page => expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 })));
+            const updated = `WIRE updated to v${pkg.version}`;
+            for (const page of [settings, analyze]) {
+                const notice = page.getByRole("complementary", { name: updated });
+                await expect(notice.getByRole("status")).toHaveText(updated, { timeout: 120000 });
+                await expect(notice.locator('[data-icon-role="result-success"]')).toBeVisible();
+                await expect(notice.getByRole("button")).toHaveCount(1);
+            }
             assert.deepEqual([settings.url(), analyze.url()], destinations);
             await expect(settings.locator('[data-settings-section="general"]')).toBeVisible();
             await expect(analyze).toHaveTitle("Analyze | WIRE");
@@ -235,6 +243,45 @@ test("full WIRE clone updates on the original address and reopens the same saved
             for (const page of [settings, analyze]) await expect(page.locator("html")).toHaveAttribute("data-wire-fixture-build", "updated");
             await expect(settings.locator("#appUpdateAuto")).toBeChecked();
             assert.equal(stdout.match(/WIRE ready at /g).length, 2, "starter and exactly one activation");
+            await settings.getByRole("link", { name: "Change theme" }).click();
+            const notice = settings.locator("#appUpdateNotice"), dismiss = notice.getByRole("button", { name: "Dismiss" });
+            const proof = process.env.WIRE_APP_UPDATE_PROOFS;
+            for (const palette of Object.keys(palettes)) {
+                await settings.locator(`label:has(#palette-${palette})`).click();
+                for (const theme of ["light", "dark"]) {
+                    await chooseTheme(settings, theme);
+                    const surface = await notice.evaluate(n => getComputedStyle(n).backgroundColor);
+                    const rail = await settings.locator("#sidebar").evaluate(n => getComputedStyle(n).backgroundColor);
+                    const text = await notice.getByRole("status").evaluate(n => getComputedStyle(n).color);
+                    const button = await dismiss.evaluate(measureControlSurface);
+                    const label = contrast(text, surface), close = contrast(button.ink, button.face), boundary = contrast(surface, rail);
+                    assert.ok(label >= 4.5 && close >= 4.5 && boundary >= 3, `${palette} ${theme}: text ${label}, dismiss ${close}, rail ${boundary}`);
+                    if (proof) t.diagnostic(`${palette} ${theme}: text ${label.toFixed(2)}, dismiss ${close.toFixed(2)}, rail ${boundary.toFixed(2)}.`);
+                }
+            }
+            await settings.getByRole("button", { name: "Back to General" }).click();
+            if (proof) {
+                await mkdir(proof, { recursive: true });
+                await settings.screenshot({ path: path.join(proof, "updated-settings-desktop.png") });
+                await analyze.screenshot({ path: path.join(proof, "updated-analyze-desktop.png") });
+                await chooseTheme(settings, "light");
+                await settings.screenshot({ path: path.join(proof, "updated-settings-light.png") });
+                await chooseTheme(settings, "dark");
+            }
+            await settings.setViewportSize({ width: 390, height: 844 });
+            await notice.scrollIntoViewIfNeeded();
+            assert.ok(await dismiss.evaluate(n => n.getBoundingClientRect().right <= innerWidth));
+            if (proof) await settings.screenshot({ path: path.join(proof, "updated-settings-narrow.png") });
+            for (const page of [settings, analyze]) {
+                const close = page.locator("#appUpdateDismiss");
+                await close.focus(); await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
+                await expect(close).toBeFocused();
+                await page.keyboard.press("Enter");
+                await expect(page.locator("#appUpdateNotice")).toBeHidden();
+                await expect(page.locator(page === settings ? "#appUpdateCheck" : "#pageTitle")).toBeFocused();
+                await page.reload(); await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+                await expect(page.locator("#appUpdateNotice")).toBeHidden();
+            }
             cap = await getPage();
             assert.ok(await post("api/report/open", { bundleId: bundle.bundleId }));
             await verifyPreserved();
@@ -446,11 +493,10 @@ test("full WIRE clone updates on the original address and reopens the same saved
                 if (text.startsWith("Update not installed")) throw Error(text);
                 return (await health().catch(() => null))?.build === tip;
             });
-            await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });
-            await expect(other.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });
+            for (const window of [page, other]) await expect(window.locator("#appUpdateNotice").getByRole("status"))
+                .toHaveText(`WIRE updated to v${pkg.version}`, { timeout: 120000 });
             await expect(other.locator("#appUpdateCheck")).toBeEnabled();
             assert.equal(await other.locator("html").getAttribute("data-wire-fixture-build"), "updated");
-            await expect(page.locator("#appUpdateDetail")).toHaveText(`WIRE v${pkg.version} is running.`);
             const after = await health();
             assert.equal(after.build, tip); assert.notEqual(after.runtimeId, before.runtimeId);
             assert.notEqual(after.clientEntry, before.clientEntry);

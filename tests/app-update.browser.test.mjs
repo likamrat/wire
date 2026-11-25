@@ -584,7 +584,7 @@ test("single activation stays fenced through transport loss until the authentica
     setup.status = route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Page permission expired." } });
     await page.reload();
     await expect(page.locator("#appUpdateHint")).toContainText("could not verify");
-    await expect(modal).toBeVisible(); await expect(page.locator("#appUpdateHeading")).not.toHaveText("WIRE updated");
+    await expect(modal).toBeVisible(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
     setup.status = route => route.abort("connectionreset");
     await page.locator("#appUpdateRecover").click();
     await expect(page.locator("#appUpdateHint")).toContainText("could not verify"); await expect(modal).toBeVisible();
@@ -595,7 +595,10 @@ test("single activation stays fenced through transport loss until the authentica
     await page.locator("#appUpdateRecover").click();
     await expect(page.locator("#appUpdateHint")).toContainText("does not confirm"); await expect(modal).toBeVisible();
     state.clientEntry = setup.entry;
-    await page.locator("#appUpdateRecover").click(); await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated");
+    delete state.packageVersion;
+    await page.locator("#appUpdateRecover").click();
+    const notice = page.locator("#appUpdateNotice");
+    await expect(notice.getByRole("status")).toHaveText("WIRE updated");
     await expect(modal).not.toBeVisible();
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }, { action: "apply", candidate: next }]);
     assert.equal(actions.filter(a => a.action === "preferences").length, 0);

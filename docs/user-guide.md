@@ -618,7 +618,8 @@ in **General**. The button shows **Checking** while it looks for an update.
 
 Choose **Update and restart** in General or in the update notification. Leave
 your tabs open: each participating window shows **WIRE is updating**, then
-reloads its own page. If a window has an unfinished edit, save or cancel it
+reloads its own page. Once the page verifies the restart, **WIRE updated** shows
+the running version when available. If a window has an unfinished edit, save or cancel it
 there before updating. If a window doesn't confirm it's ready, WIRE stops
 before restarting. That message alone doesn't mean you left an edit unfinished.
 

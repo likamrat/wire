@@ -2,6 +2,16 @@ export const settingsStyles = `
 #appUpdateNotice {position:relative;box-sizing:border-box;max-width:100%;padding:var(--space-lg);margin-bottom:var(--space-lg);
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
+#appUpdateNotice>.wire-icon,#appUpdateDismiss>.wire-icon {display:none}
+#appUpdateNotice[data-updated] {display:flex;align-items:center;gap:var(--space-xs);padding:var(--space-xs);padding-inline-start:var(--space-md);
+ background:var(--success);border-color:var(--success);color:var(--on-accent)}
+#appUpdateNotice[data-updated]>.wire-icon,#appUpdateNotice[data-updated] #appUpdateDismiss>.wire-icon {display:block;flex:none}
+#appUpdateNotice[data-updated] .app-update-copy {flex:1;min-width:0;overflow-wrap:anywhere}
+#appUpdateNotice[data-updated] .app-update-actions {flex:none;margin:0}
+#appUpdateNotice[data-updated] #appUpdateDismiss {display:grid;place-items:center;width:44px;min-height:44px;padding:0;color:inherit;
+ --pill-hover:color-mix(in srgb,currentColor 10%,transparent);--pill-pressed:color-mix(in srgb,currentColor 16%,transparent)}
+#appUpdateNotice[data-updated] #appUpdateDismiss>span {display:none}
+#appUpdateNotice[data-updated] #appUpdateDismiss:focus-visible {outline:2px solid currentColor;outline-offset:-2px}
 #appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(1.25rem);transition-duration:180ms}
 body:has(#appUpdateFence[open]) #appUpdateNotice,body:has(#workspace:not([hidden]) #settingsView:not([hidden]) [data-settings-section=general]:not([hidden])) #appUpdateNotice[data-install-result] {display:none;transition:none}
 @media(min-width:64rem) {
