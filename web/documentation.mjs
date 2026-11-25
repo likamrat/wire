@@ -329,7 +329,11 @@ export function mountDocumentation({ host, api, icon, open, announce = () => {} 
             if (links.length && links.every(link => link.dataset.fragment !== undefined)) { paragraph.classList.add("docs-inline-contents"); list?.classList.add("docs-inline-contents"); }
         }
         const sections = nest(data.headings, 2, 3);
-        const summary = label => el("summary", {}, glyph("doc-contents"), label, glyph("chevron"));
+        const summary = label => {
+            const chevron = glyph("disclosure").firstElementChild;
+            chevron.classList.add("disclosure-icon");
+            return el("summary", {}, glyph("doc-contents"), label, chevron);
+        };
         const inline = sections.length ? el("details", { class: "docs-outline-inline" }, summary("On this page"),
             el("nav", { class: "docs-outline", "aria-label": "On this page" }, outlineList(sections, data.guide))) : null;
         if (inline) article.querySelector(".docs-source").after(inline);
