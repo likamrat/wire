@@ -807,7 +807,8 @@ To install an update:
 
 1. Choose **Update and restart** in General or in the update notification.
 2. Leave your tabs open. Each participating window shows **WIRE is updating**,
-   then reloads its own page.
+   then reloads its own page. Once the page verifies the restart, **WIRE updated**
+   shows the running version when available.
 
 If a window has an unfinished edit, save or cancel it there before updating. If
 a window doesn't confirm it's ready, WIRE stops before restarting. That message

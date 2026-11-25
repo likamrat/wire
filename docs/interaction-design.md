@@ -1058,6 +1058,9 @@ update result and the time of the last successful check when known.
 - The notification glides in without moving the page or taking focus. Dismiss
   hides only the notification. With reduced motion it appears and disappears
   without sliding.
+- After the restarted page verifies the build, show one success-colored notice
+  with a circled check, the confirmed version when available, and a dismiss
+  button.
 
 Below updates, show the current theme with a miniature WIRE screen, its name and
 mode, and swatches drawn from the active screen palette.
