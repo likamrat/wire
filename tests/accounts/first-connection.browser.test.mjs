@@ -519,8 +519,8 @@ test("Copilot's token records start on for a new source but stay unread until ap
     await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(recordsFile);
     const help = page.locator("#sourceUsageRecordsHelp");
     await expect(help).toBeVisible();
-    await expect(help).toContainText("token counts Copilot already recorded");
-    await expect(swtch).toHaveAccessibleDescription(/doesn't generate new tokens or cost you anything/);
+    await expect(help.getByText("Reading token records uses no tokens and costs nothing.", { exact: true })).toBeVisible();
+    await expect(swtch).toHaveAccessibleDescription(/^Reading token records uses no tokens and costs nothing\./);
     await expect(page.locator("#sourceUsageRecordsFacts")).toContainText("match calls but doesn't save them");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);

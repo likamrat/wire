@@ -136,7 +136,7 @@ export const settingsMarkup = `
           <div id="sourceUsageRecordsRow" class="source-records">
             <div class="source-records-heading"><div class="source-records-title"><h4><label for="sourceUsageRecords">Token records</label></h4><span id="sourceUsageRecordsState" class="source-records-state"></span></div>
               <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsFacts approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label></div>
-            <p id="sourceUsageRecordsHelp" class="settings-help">WIRE can fill gaps in older chats using token counts Copilot already recorded. Reading these counts doesn't generate new tokens or cost you anything.</p>
+            <p id="sourceUsageRecordsHelp" class="source-cost-note">${uxIcons.info}<span><strong>Reading token records uses no tokens and costs nothing.</strong> WIRE reads counts Copilot already recorded to fill gaps in older chats.</span></p>
             <dl id="sourceUsageRecordsFacts" class="source-records-facts"><dt>Reads</dt><dd>Each call's model, token count, time and whether it came from a sub-agent</dd><dt>Prompts</dt><dd>WIRE uses prompts from this file to match calls but doesn't save them.</dd><dt>File</dt><dd><span id="sourceUsageRecordsFile"></span><span id="sourceUsageRecordsAccount"></span></dd></dl>
             <div id="usageCountRow" class="source-records-count" hidden><div class="settings-row-copy"><h4>Count tokens in chats already read</h4>
               <p id="usageCountHelp" class="settings-help">Nothing is saved until you confirm.</p>

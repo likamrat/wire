@@ -1136,6 +1136,9 @@ Source access links open it.
 - Each source has its own block: provider mark, approval summary, file paths,
   then optional reads such as token records with what they read. The schedule
   follows the sources because it applies to all of them.
+- Put the cost of reading token records next to the switch, before the file
+  details. Lead with “Reading token records uses no tokens and costs nothing.”
+  Use an informational tint, not a warning or an indication that access is on.
 - A source's name collapses or expands its block. One button on the **Local
   sources** heading reads **Collapse all** or **Expand all** for the current
   state. A collapsed source keeps its summary and any unsaved edit, marked

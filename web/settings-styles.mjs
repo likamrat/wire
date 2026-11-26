@@ -351,7 +351,9 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .source-records-state[data-state=on] {color:var(--ink)}
 .source-records-state[data-state=changed] {color:var(--ink);font-weight:var(--weight-medium)}
 .source-records-state[data-state=attention] {color:var(--warning)}
-.settings-view #sourceUsageRecordsHelp {margin:4px 0 0;max-width:none;color:var(--muted)}
+.settings-section .source-cost-note {display:flex;align-items:flex-start;gap:8px;margin:var(--space-sm) 0 0;max-width:none;padding:8px 12px;border-inline-start:3px solid var(--accent);border-radius:var(--radius-small);background:color-mix(in srgb,var(--accent) 12%,var(--accent-soft));color:var(--ink);font-size:var(--type-body);line-height:var(--leading-ui)}
+.source-cost-note>.wire-icon {flex:none;width:1.125rem;height:1.125rem;margin-block-start:.125rem;color:var(--accent)}
+.source-cost-note strong {display:block;font-weight:var(--weight-strong)}
 .source-records-facts {display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr);gap:4px 20px;margin:var(--space-md) 0 0;font-size:var(--type-small)}
 .source-records-facts dt {color:var(--muted);overflow-wrap:anywhere}
 #sourceUsageRecordsFile {white-space:break-spaces}
