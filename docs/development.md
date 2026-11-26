@@ -458,7 +458,7 @@ node --test tests/search-text.test.mjs
 | Change | Command | What it covers |
 | --- | --- | --- |
 | Production installation | `npm run test:packaging` | Builds the browser assets, then checks the packaged browser and local Search against the same disposable install. |
-| Analyze homepage ordering | `node --test tests/analyze-layout.qualification.mjs` (after building the browser assets) | Playwright uses the Settings arrows to visit all 40,320 arrangements in both renderers and checks the preview against wide and narrow Analyze tabs. It then restarts Chromium on the same disposable profile to verify both a custom order and **Restore WIRE Default Layout**. Uses invented records and no mocked network responses. |
+| Analyze homepage ordering | `node --test tests/analyze-layout.qualification.mjs` (after building the browser assets) | Playwright exercises both arrows for each widget in both renderers. It checks full-width and paired widgets against the Settings preview on wide and narrow Analyze tabs, then restarts Chromium to verify the custom and restored layouts. Uses invented records. |
 | Native report selection, saving or recovery | `npm run build`, then `node --test tests/native-report-save.qualification.mjs` | A browser check with invented Microsoft activity and a disposable store. Needs no live Microsoft account or separate backend checkout. Runs separately from `npm test`. |
 
 ### Checks that need an explicit environment
