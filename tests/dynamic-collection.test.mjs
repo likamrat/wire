@@ -26,6 +26,8 @@ import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { setImmediate } from "node:timers/promises";
 import { createRecollectionController } from "../lib/recollection.mjs";
+import { createUsageRecordCountController } from "../lib/usage-record-counting.mjs";
+import { utimes } from "node:fs/promises";
 import { currentStatePayload } from "../lib/server.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
@@ -457,6 +459,123 @@ test("history compatibility: Copilot's token records never replace a total the j
     const record = await read();
     assert.equal(record.usage?.total, 4400);
     assert.equal(record.usageBasis, undefined);
+});
+// Two invented chats read in full before token records were approved: one the app's records can count, one they can't.
+async function readChatsWithoutTotals(t) {
+    const app = await installation(t), id = app.session(), other = app.session();
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    app.cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const text = "Summarize the invented launch notes.", base = Date.now() - 60000;
+    const exchange = (prompt, callId) => [event("user.message", { content: prompt, delivery: "idle" }),
+        event("assistant.turn_start", { turnId: "a" }), event("assistant.message", { turnId: "a", toolRequests: [{ toolCallId: callId }] }), call(callId),
+        event("tool.execution_complete", { toolCallId: callId, success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: "a" }),
+        event("assistant.turn_start", { turnId: "b" }), event("assistant.message", { turnId: "b", content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: "b" })];
+    const batch = exchange(text, "indexed-fetch"), unmatched = exchange("Find the invented budget.", "unmatched-fetch");
+    [...batch, ...unmatched].forEach((e, n) => { e.timestamp = new Date(base + n * 1000).toISOString(); });
+    const after = turn => new Date(Date.parse(batch.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString();
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Invented answer");
+    const usage = index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',?,?,?,?,?)");
+    usage.run(id, 5000, 100, 4000, 500, after("a"));
+    usage.run(id, 6000, 300, 5500, 400, after("b"));
+    const file = await logFor(app, id, batch);
+    await logFor(app, other, unmatched);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    const settings = { ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 };
+    await collector.configure(settings);
+    await collector.collectNow();
+    await collector.configure({ ...settings, usageRecords: true, expectedConfigVersion: (await collector.status()).configVersion });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.find(s => s.userPrompt?.text === text);
+    assert.equal((await read()).usage, null, "A chat WIRE already read stays unmeasured until it changes");
+    const counting = createUsageRecordCountController(app.context);
+    return { app, id, file, index, usage, text, settings, counting, read, after: ms => new Date(Date.parse(unmatched.at(-1).timestamp) + ms).toISOString(),
+        collector: () => collector, restart: async () => { await collector.close(); collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close()); } };
+}
+test("history compatibility: counting tokens in chats already read writes only the previewed totals, keeps one receipt and survives restart and the next append", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read } = fixture;
+    const before = await loadBoardState(app.context), evidence = structuredClone(before.evidence);
+    const preview = await counting.preview("panel");
+    assert.deepEqual(preview.counts, { interactions: 1, chats: 1, tokens: 11400, refused: 1 });
+    assert.deepEqual(preview.refusals, [{ reason: "no-records", count: 1 }]);
+    const unchanged = await loadBoardState(app.context);
+    assert.equal(unchanged.revision, before.revision, "Preview writes nothing");
+    assert.deepEqual(unchanged.evidence, evidence);
+
+    const receipt = await counting.confirm("panel", { operationId: preview.operationId, confirmed: true });
+    assert.deepEqual(receipt.counts, preview.counts);
+    assert.equal(receipt.phase, "complete");
+    const after = await loadBoardState(app.context);
+    assert.equal(after.revision, before.revision + 1);
+    for (const [n, record] of after.evidence.entries()) {
+        const { usageCalls, usageGap, ...rest } = record, { usageCalls: priorCalls, usageGap: priorGap, ...prior } = evidence[n];
+        assert.deepEqual(rest, prior, "Only token totals change");
+        if (record.userPrompt?.text !== fixture.text) assert.deepEqual([usageCalls, usageGap], [priorCalls, priorGap], "Records outside the preview are untouched");
+        else { assert.equal(usageGap, null); assert.ok(usageCalls.every(c => c.source === "copilot-usage-index")); }
+    }
+    const counted = await read();
+    assert.equal(counted.usage?.total, 11400);
+    assert.equal(counted.usageBasis, "copilot-usage-index");
+    const stored = after.evidence.find(r => r.userPrompt?.text === fixture.text).usageCalls;
+
+    assert.deepEqual(await counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), receipt, "A repeated confirmation reads the original receipt");
+    assert.equal((await loadBoardState(app.context)).revision, after.revision, "and writes nothing");
+    assert.deepEqual(await counting.status("another-panel", { operationId: preview.operationId, receiptToken: preview.receiptToken }), receipt);
+    await assert.rejects(counting.status("another-panel", { operationId: preview.operationId }), { status: 403 });
+    assert.equal((await counting.status("panel", { operationId: randomUUID() })).phase, "not-started");
+    assert.equal((await counting.preview("panel")).counts.interactions, 0, "A counted interaction is not offered again");
+
+    await fixture.restart();
+    await fixture.collector().collectNow();
+    assert.equal((await read()).usage?.total, 11400, "Restart keeps the total");
+    await appendFile(fixture.file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: fixture.after(100) }) + "\n");
+    await fixture.collector().collectNow();
+    assert.equal((await read()).usage?.total, 11400, "The next append keeps the total");
+    assert.deepEqual((await loadBoardState(app.context)).evidence.find(r => r.userPrompt?.text === fixture.text).usageCalls, stored,
+        "Ordinary collection qualifies the same calls once it reads the chat again");
+    await fixture.collector().configure({ ...fixture.settings, usageRecords: false, expectedConfigVersion: (await fixture.collector().status()).configVersion });
+    await fixture.restart();
+    await appendFile(fixture.file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: fixture.after(200) }) + "\n");
+    await fixture.collector().collectNow();
+    assert.equal((await read()).usage?.total, 11400, "Turning records off keeps the counted total");
+});
+test("history compatibility: counting tokens in chats already read refuses before writing when the records, history, approval or preview change", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting } = fixture;
+    const refusedWith = async (code, change) => {
+        const preview = await counting.preview("panel");
+        assert.equal(preview.counts.interactions, 1);
+        const revision = (await loadBoardState(app.context)).revision;
+        await change();
+        await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }),
+            error => error.code === code && error.status === 409 && /^Nothing was saved\./.test(error.message));
+        const state = await loadBoardState(app.context);
+        assert.ok(state.revision === revision || code === "USAGE_COUNT_UNAVAILABLE", "Nothing was saved");
+        assert.equal(state.usageRecordCounts, undefined);
+        assert.equal((await fixture.read()).usage, null);
+        assert.equal((await counting.status("panel", { operationId: preview.operationId })).phase, "not-started");
+    };
+    let row;
+    await refusedWith("USAGE_COUNT_CHANGED", () => { row = fixture.index.prepare("UPDATE assistant_usage_events SET output_tokens = 101 WHERE output_tokens = 100").run(); });
+    fixture.index.prepare("UPDATE assistant_usage_events SET output_tokens = 100 WHERE output_tokens = 101").run();
+    assert.equal(row.changes, 1);
+    await refusedWith("USAGE_COUNT_CHANGED", () => utimes(fixture.file, new Date(), new Date(Date.now() + 5000)));
+    let clock = Date.now();
+    const expiring = createUsageRecordCountController(app.context, { now: () => clock });
+    const preview = await expiring.preview("panel");
+    clock += 121000;
+    await assert.rejects(expiring.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_EXPIRED" });
+    await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_EXPIRED" },
+        "Another controller's preview is never confirmed");
+    await refusedWith("USAGE_COUNT_UNAVAILABLE", async () => {
+        await fixture.collector().configure({ ...fixture.settings, usageRecords: false, expectedConfigVersion: (await fixture.collector().status()).configVersion });
+    });
+    await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" }, "Records off hides the operation");
+    await fixture.collector().configure({ ...fixture.settings, enabled: false, usageRecords: true, expectedConfigVersion: (await fixture.collector().status()).configVersion });
+    await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" }, "Pause blocks the operation");
 });
 test("history compatibility: a pasted image inside an exchange does not hide its exact receipts, but an unreadable entry still does", async t => {
     for (const [kind, total] of [["session.binary_asset", 4400], ["assistant.message", null]]) {
