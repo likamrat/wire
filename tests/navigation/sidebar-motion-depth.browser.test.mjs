@@ -546,15 +546,16 @@ test("trusted main-page scrolling revokes exit compensation for a reflow-sensiti
     const page = await setup(t, { nativeScrollbars: true });
     await controlDockedGlide(page);
     await revealAnalyzeRecords(page);
-    const wideTop = await page.locator(".request-card-open").first().evaluate(node => node.getBoundingClientRect().top + scrollY);
-    await page.locator(".request-card-open").first().click();
+    const origin = page.locator("#activityList .request-card-open").last();
+    const wideTop = await origin.evaluate(node => node.getBoundingClientRect().top + scrollY);
+    await origin.click();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-    const dockedTop = await page.locator(".request-card-open").first().evaluate(node => node.getBoundingClientRect().top + scrollY);
+    const dockedTop = await origin.evaluate(node => node.getBoundingClientRect().top + scrollY);
     assert.ok(Math.abs(dockedTop - wideTop) > 100, "The mounted anchor must actually change document position when the main column reflows");
-    await page.evaluate(() => {
+    await origin.evaluate(anchor => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
         window.exitScrollProof = { frames: [], programmaticScrolls: [], wheel: null, userY: null, finished: false, initialY: scrollY,
-            initialAnchorTop: document.querySelector(".request-card-open").getBoundingClientRect().top };
+            initialAnchorTop: anchor.getBoundingClientRect().top };
         const proof = window.exitScrollProof;
         const scrollBy = window.scrollBy;
         window.scrollBy = function (...args) {
@@ -565,7 +566,7 @@ test("trusted main-page scrolling revokes exit compensation for a reflow-sensiti
         const read = () => ({
             y: scrollY, open: panel.open, moving: panel.getAnimations().length > 0,
             mainWidth: main.getBoundingClientRect().width,
-            anchorTop: document.querySelector(".request-card-open").getBoundingClientRect().top,
+            anchorTop: anchor.getBoundingClientRect().top,
             focus: document.activeElement?.id,
         });
         window.addEventListener("wheel", event => {

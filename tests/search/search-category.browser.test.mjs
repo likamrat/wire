@@ -396,7 +396,8 @@ test("Search Calendar, People and Files reuse the same service glyphs as the rec
         if (theme === "light" && width === 1440) {
             const box = await glyph.boundingBox();
             await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-            await expect(page).toHaveURL(new RegExp("services=" + service + "(?:&|$)"));
+            await expect(page.locator("#serviceAssociationFilter")).toHaveValue(service);
+            assert.equal(new URL(page.url()).searchParams.has("services"), false);
             await page.goBack();
             await expect(row).toBeFocused();
             await expect(row.locator(".wire-search-title")).toHaveText(service);

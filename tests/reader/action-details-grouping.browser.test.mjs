@@ -167,7 +167,8 @@ test("repeated tools keep exact owning details, keyboard focus and expansion thr
     await page.goBack(); await expect(failed).toBeFocused();
     await pager.getByRole("button", { name: "Previous", exact: true }).press("Enter");
     await expect(pager).toContainText("1-8 of 9");
-    await page.goBack(); await expect(pager).toContainText("9-9 of 9");
+    await pager.getByRole("button", { name: "Next", exact: true }).press("Enter");
+    await expect(pager).toContainText("9-9 of 9");
     await failed.press("Enter"); await expect(second).toBeFocused();
     await expect(toggle(first)).toHaveAttribute("aria-expanded", "true");
     await expect(toggle(second)).toHaveAttribute("aria-expanded", "true");

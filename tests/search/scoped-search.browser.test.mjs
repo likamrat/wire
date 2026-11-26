@@ -164,7 +164,7 @@ test("Collection status destinations restore visible focus on legacy routes, rel
     await expect(page.locator("#issueSearch")).toHaveValue("unavailable");
     await page.reload(); await ready(page);
     await expect(page.locator("#message")).toContainText("This tab no longer has the private view.");
-    await page.goto(url + "collection-status?setting=issues"); await ready(page);
+    await page.getByRole("button", { name: "Open this view without the private selection", exact: true }).click(); await ready(page);
     await page.locator("#issueSearch").fill("unavailable");
     await page.locator("#issueSearch").focus(); await page.keyboard.press("Escape");
     await expect(page.locator("#issueSearch")).toHaveValue("");
