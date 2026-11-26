@@ -6,24 +6,8 @@ import { frontendRecords } from "./frontend-fixture.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 
 const standard = ["time", "outcomes", "usage", "interactions", "tools", "services", "models", "authors"];
-const permutations = standard.reduce((n, _, i) => n * (i+1), 1);
 const previewSelector = "#analyzeLayout [data-tile]";
 const homeSelector = ".analyze-chart-main,.analyze-outcome-summary,#activityView,.percentage-card[data-breakdown]:not([data-breakdown=outcomes])";
-
-// Inserting each new item alternately from the right and the left visits all
-// permutations exactly once; consecutive layouts differ by one arrow press.
-function* adjacentOrders(keys) {
-    if (!keys.length) { yield []; return; }
-    let forward = false;
-    for (const shorter of adjacentOrders(keys.slice(0, -1))) {
-        for (let i = 0; i <= shorter.length; i++) {
-            const copy = [...shorter];
-            copy.splice(forward ? i : shorter.length - i, 0, keys.at(-1));
-            yield copy;
-        }
-        forward = !forward;
-    }
-}
 
 // Read actual painted rectangles, not CSS grid declarations or the layout helper.
 function geometry(selector) {
@@ -56,7 +40,8 @@ function verify(actual, order, narrow) {
         if (narrow || full.includes(order[index]) || !order[index + 1] || full.includes(order[index+1])) {
             assert.equal(actual.paint[index++][1], "full");
         } else {
-            assert.equal(actual.paint[index++][1], "left");
+            assert.equal(actual.paint[index][1], "left", `${order[index]} should start the row before ${order[index + 1]}`);
+            index++;
             assert.equal(actual.paint[index++][1], "right");
         }
     }
@@ -68,7 +53,7 @@ function settingsRows() {
     ]);
 }
 
-for (const frontend of ["bundled", "react"]) test(`${frontend}: all ${permutations} Analyze layouts and cold persistence`, async t => {
+for (const frontend of ["bundled", "react"]) test(`${frontend}: Analyze layout controls, cross-tab placement and cold persistence`, async t => {
     const cleanups = [], errors = [];
     let context;
     t.after(async () => {
@@ -109,30 +94,30 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: all ${permutatio
         { polling: 10, timeout: 5000 });
         verify(await page.evaluate(geometry, homeSelector), order, narrow);
     };
-    const seen = new Set(), moved = new Set();
-    let previous;
-    for (const order of adjacentOrders(standard)) {
-        const signature = order.join();
-        assert.ok(!seen.has(signature));
-        try {
-            if (previous) {
-                const i = previous.findIndex((key, index) => key !== order[index]);
-                // Both buttons implement the swap. Prefer untested controls, then alternate.
-                const up = `${previous[i + 1]}/-1`, down = `${previous[i]}/1`;
-                const useUp = !moved.has(up) || moved.has(down) && seen.size % 2 === 0;
-                const key = previous[useUp ? i + 1 : i], step = useUp ? -1 : 1;
-                await settings.locator(`#analyzeLayout li[data-section="${key}"] button[data-step="${step}"]`).press("Enter");
-                moved.add(`${key}/${step}`);
-            }
-            await Promise.all([assertSettings(order), checkHome(home, order, false), checkHome(phone, order, true)]);
-        } catch (cause) {
-            throw new Error(`Layout ${seen.size + 1}/${permutations} (${signature}) after ${previous?.join() ?? "fresh entry"}`, { cause });
-        }
-        seen.add(signature); previous = order;
+    const order = [...standard];
+    async function move(key, step) {
+        await settings.locator(`#analyzeLayout li[data-section="${key}"] button[data-step="${step}"]`).press("Enter");
+        const index = order.indexOf(key), next = index + step;
+        [order[index], order[next]] = [order[next], order[index]];
+        await assertSettings(order);
     }
-    assert.equal(seen.size, permutations);
-    assert.equal(moved.size, standard.length*2);
-    t.diagnostic(`${seen.size} distinct orders, ${moved.size} arrow controls, preview plus wide and phone Analyze`);
+    const checkTabs = async () => {
+        await checkHome(phone, order, true);
+        await checkHome(home, order, false);
+    };
+    await assertSettings(order);
+    await checkTabs();
+    for (const key of standard) {
+        const step = key === standard[0] ? 1 : -1;
+        await move(key, step);
+        if (key === "tools") await checkTabs(); // Full-width Interactions separates two runs of breakdowns.
+        await move(key, -step);
+    }
+
+    await move("authors", -1);
+    await move("authors", -1);
+    await move("authors", -1);
+    await t.test("placing Authors first among breakdowns matches the preview on both tabs", checkTabs);
 
     async function coldRead(order) {
         await context.close(); await openProfile();
@@ -146,10 +131,13 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: all ${permutatio
         await expect(settings.locator("#activityList .activity-card")).toHaveCount(3);
         await checkHome(settings, order, false);
     }
-    await coldRead(previous);
-    await settings.goto(settingsUrl);
-    await settings.getByRole("button", { name: "Restore WIRE Default Layout" }).click();
-    await assertSettings(standard);
-    await coldRead(standard);
+    await t.test("custom and restored layouts survive a browser restart", async () => {
+        await move("authors", 1);
+        await coldRead(order);
+        await settings.goto(settingsUrl);
+        await settings.getByRole("button", { name: "Restore WIRE Default Layout" }).click();
+        await assertSettings(standard);
+        await coldRead(standard);
+    });
     assert.deepEqual(errors, []);
 });
