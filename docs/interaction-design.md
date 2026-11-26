@@ -275,7 +275,8 @@ private catalogs across source updates or access withdrawal.
 
 Under the Analyze title, the shared icon-and-label section strip offers
 **Results** and **Guide**. Keep Refresh and Filters with the accepted Results
-scope, not in the section strip or on a chart.
+scope, not in the section strip or on a chart. The commands can wrap when text
+is enlarged, but changing the applied filter count must not move either button.
 
 - Open the Topic reader directly on recorded outcomes. A preference under
   Settings > Analyze can resume the last topic read in this tab.

@@ -201,11 +201,13 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             <NativeHost node={ports.actions} /><NativeHost node={ports.selection} />
         </>, ports.heading)}
         {createPortal(<>
-            <button id="analyzeRefresh" className="quiet" type="button" aria-label="Refresh" onClick={event => refresh(event.currentTarget)}><span id="analyzeRefreshLabel">Refresh</span></button>
-            <button id="openAnalyzeFilters" className="quiet filter-entry" type="button" aria-label="Filters and view"
-                aria-haspopup="dialog" aria-expanded="false" aria-controls="analyzeFilterDialog">
-                <Icon name="filter" /><span className="analyze-entry-label filter-entry-label">Filters</span>
-            </button>
+            <div className="workspace-command-tools">
+                <button id="analyzeRefresh" className="quiet" type="button" aria-label="Refresh" onClick={event => refresh(event.currentTarget)}><span id="analyzeRefreshLabel">Refresh</span></button>
+                <button id="openAnalyzeFilters" className="quiet filter-entry" type="button" aria-label="Filters and view"
+                    aria-haspopup="dialog" aria-expanded="false" aria-controls="analyzeFilterDialog">
+                    <Icon name="filter" /><span className="analyze-entry-label filter-entry-label">Filters</span>
+                </button>
+            </div>
             <span id="analyzeRefreshStatus" className="visually-hidden" role="status" aria-live="polite" />
         </>, ports.toolbar)}
         {createPortal(<>

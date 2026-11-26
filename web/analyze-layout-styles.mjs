@@ -387,7 +387,7 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 :is(#analyzeRefresh,#analyzeToggleAll) {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;font-size:var(--type-control);line-height:var(--leading-control)}
 :is(#analyzeRefresh,#analyzeToggleAll)>.wire-icon {width:1rem;height:1rem;flex:none}
 #analyzeRefreshLabel {min-inline-size:7ch;text-align:start}
-.analyze-toolbar>.ux-disabled-help {flex:none}
+.analyze-toolbar .workspace-command-tools>.ux-disabled-help {flex:none}
 :is(#analyzeRefresh,#analyzeToggleAll):focus-visible {outline:none}
 :is(#analyzeRefresh,#analyzeToggleAll):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 :is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry):focus-visible {outline:none}
@@ -397,7 +397,6 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
 @media(max-width:550px) {
  #analyzeResultScope {order:1;flex-basis:100%}
- #analyzeResultCommands .filter-entry:not(.has-applied-filters) {inline-size:auto}
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}

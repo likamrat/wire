@@ -8,6 +8,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     }
     const $ = id => document.getElementById(id);
     const trigger = $("openAnalyzeFilters"), dialog = $("analyzeFilterDialog");
+    const resultActions = trigger.parentElement;
     const reference = $("meaning");
     const scope = $("analyzeScopeSummary"), actionHosts = new Map();
     const pairScope = document.createElement("p");
@@ -171,7 +172,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         $("analyzeResultCommands").hidden = !active || comparing;
         if (comparing) place($("pagePrimaryActions"), toolbar);
         else place(toolbarHost, toolbar);
-        place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
+        place(comparing ? $("comparisonOptionsSlot") : resultActions, trigger);
         for (const id of ["outcomeFilter", "promptAuthorFilter"]) $(id).dataset.selectCommit = comparing ? "immediate" : "draft";
         // Reparenting the existing entry must not discard Reset's real focus handoff.
         if (entryFocus && active && canPublish() && document.activeElement !== entryFocus) entryFocus.focus({ preventScroll: true });
