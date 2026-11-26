@@ -232,9 +232,20 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     const source = reader.getByRole("button", { name: "Source", exact: true });
     const style = b => b.evaluate(n => {
         const s = getComputedStyle(n), g = getComputedStyle(n.querySelector("svg"));
-        return [s.fontSize, s.minHeight, s.columnGap, s.textDecorationLine, g.width, g.height, n.getBoundingClientRect().y];
+        return [s.fontSize, s.minHeight, s.columnGap, s.textDecorationLine, g.width, g.height];
     });
     assert.deepEqual(await style(readerAction), await style(source));
+    const stripBox = () => reader.locator(".reader-section-jumps").boundingBox();
+    const dock = await stripBox(), wrapped = await readerAction.boundingBox(), previous = await source.boundingBox();
+    assert.ok(wrapped.y >= previous.y + previous.height - 1 && wrapped.y + wrapped.height <= dock.y + dock.height + 1);
+    assert.ok(wrapped.x >= dock.x - 1 && wrapped.x + wrapped.width <= dock.x + dock.width + 1);
+    await source.focus(); await page.keyboard.press("Tab"); await expect(readerAction).toBeFocused();
+    await page.getByRole("button", { name: "Maximize interaction" }).click();
+    await expect(reader).toHaveAttribute("data-mode", "expanded");
+    const wide = await readerAction.boundingBox(), peer = await source.boundingBox();
+    assert.ok(Math.abs(wide.y - peer.y) <= 1 && wide.x >= peer.x + peer.width - 1, "The wide toolbar keeps both actions on one row");
+    await page.getByRole("button", { name: "Restore reader width" }).click();
+    await expect(reader).toHaveAttribute("data-mode", "docked");
     const endPadding = control => control.evaluate(node => {
         const text = document.createRange(); text.selectNodeContents(node.lastChild);
         return node.getBoundingClientRect().right - text.getBoundingClientRect().right;
