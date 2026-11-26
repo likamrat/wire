@@ -1,0 +1,44 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { chromium, expect } from "@playwright/test";
+import { privateFixture, fixture } from "../support/helpers.mjs";
+import { startServer } from "../../lib/server.mjs";
+import { createExportController } from "../../lib/export.mjs";
+
+test("a narrow embedded reader keeps the prompt's edge target and keyboard focus after text reflow", async t => {
+    const original = "  Keep this indentation and the original wording.  \n".repeat(20);
+    const record = fixture("lantern");
+    record.userPrompt.text = original;
+    record.userPrompt.authorship = { actor: "user", basis: "source-user" };
+    const { context } = await privateFixture(t, [record]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    t.after(() => runtime.close());
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    const host = new URL("/fixture-host", runtime.url).href;
+    await page.route(host, route => route.fulfill({ contentType: "text/html",
+        body: '<iframe title="Embedded WIRE" src="/" style="width:375px;height:900px;border:0"></iframe>' }));
+    await page.goto(host);
+    const frame = page.frameLocator('iframe[title="Embedded WIRE"]');
+    const origin = frame.getByRole("link", { name: "1 tool call completed" });
+    await origin.click();
+    const reader = frame.getByRole("dialog", { name: "Interaction", exact: true });
+    await reader.getByRole("button", { name: "Prompt", exact: true }).click();
+    const disclosure = reader.getByRole("button", { name: "Human prompt", exact: true });
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    await disclosure.evaluate(node => { node.ownerDocument.documentElement.style.fontSize = "200%"; });
+    const size = await disclosure.boundingBox();
+    assert.ok(size.height >= 44 && size.width >= 44, "The enlarged heading remains a usable target");
+    await disclosure.click({ position: { x: 4, y: size.height / 2 } });
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await disclosure.press("Tab"); await page.keyboard.press("Shift+Tab");
+    await expect(disclosure).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    assert.equal(await reader.locator(".full-text-content").first().textContent(), original);
+    await expect(disclosure).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(reader).toBeHidden();
+    await expect(origin).toBeFocused();
+});

@@ -307,11 +307,11 @@ An unavailable source dependency is not an empty or GitHub-only all-source cohor
 
 ## Check an access change
 
-Use the tests for the affected boundary: [runtime access](../tests/runtime-access.test.mjs)
-and its [watch](../tests/runtime-access-watch.test.mjs), [collector access](../tests/collector-access.test.mjs),
-[client access](../tests/access-client.browser.test.mjs) or the [account gate](../tests/account-gate.browser.test.mjs).
+Use the tests for the affected boundary: [runtime access](../tests/accounts/runtime-access.test.mjs)
+and its [watch](../tests/accounts/runtime-access-watch.test.mjs), [collector access](../tests/collection/collector-access.test.mjs),
+[client access](../tests/accounts/access-client.browser.test.mjs) or the [account gate](../tests/accounts/account-gate.browser.test.mjs).
 For withdrawal, include the affected operation, such as a
-[pending write](../tests/mutation-withdrawal.browser.test.mjs). Check backend admission
+[pending write](../tests/accounts/mutation-withdrawal.browser.test.mjs). Check backend admission
 and client clearance together, including late responses and a second open panel.
 Use the enforced fixture when testing enforced access, not a substitute
 unbound descriptor.

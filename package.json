@@ -39,12 +39,12 @@
     "check": "node scripts/check.mjs",
     "release:prepare": "node scripts/prepare-release.mjs",
     "pretest": "npm run build",
-    "test": "node --test tests/*.test.mjs web/*.test.mjs web/frontend/*.test.ts",
-    "test:history-compatibility": "node --test --test-name-pattern=\"history compatibility:|a managed mapping published during a read|new managed identity does not reset consumed cursors|the reviewed subset and original receipts\" tests/dynamic-collection.test.mjs tests/recollection-verified-records.browser.test.mjs",
-    "test:frontend": "npm run typecheck && npm run build && node --test --test-concurrency=1 tests/browser-assets.test.mjs tests/browser-bundle.browser.test.mjs tests/frontend-evaluation.browser.test.mjs web/frontend/*.test.ts",
-    "test:packaging": "npm run build && node --test tests/production-packaging.qualification.mjs",
-    "test:update-runtime": "node --test tests/update-runtime.qualification.mjs",
-    "test:launcher-recovery": "node --test tests/launcher-recovery.qualification.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\" web/*.test.mjs web/frontend/*.test.ts",
+    "test:history-compatibility": "node --test --test-name-pattern=\"history compatibility:|a managed mapping published during a read|new managed identity does not reset consumed cursors|the reviewed subset and original receipts\" tests/collection/dynamic-collection.test.mjs tests/collection/recollection-verified-records.browser.test.mjs",
+    "test:frontend": "npm run typecheck && npm run build && node --test --test-concurrency=1 tests/release/browser-assets.test.mjs tests/release/browser-bundle.browser.test.mjs tests/release/frontend-evaluation.browser.test.mjs web/frontend/*.test.ts",
+    "test:packaging": "npm run build && node --test tests/release/production-packaging.qualification.mjs",
+    "test:update-runtime": "node --test tests/release/update-runtime.qualification.mjs",
+    "test:launcher-recovery": "node --test tests/release/launcher-recovery.qualification.mjs",
     "migrate": "node scripts/migrate.mjs",
     "install:canvas": "node scripts/install-canvas.mjs"
   }

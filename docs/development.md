@@ -405,7 +405,7 @@ disabled collection timers and invented source paths. Never point it at a normal
 store, existing browser profile or original history.
 
 Browser tests set up temporary stores through
-[`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources. Reuse
+[`tests/support/helpers.mjs`](../tests/support/helpers.mjs) and close their own resources. Reuse
 that pattern for tests and image capture. A different port alone doesn't create
 a separate store.
 
@@ -445,12 +445,13 @@ To check **a pushed branch** before merging:
 
 ## Check a change
 
-Run the syntax check and the tests for the behavior you changed. For example,
-a literal Search matching change can start with:
+Start in the `tests` folder for the feature you changed. Browser
+journeys, unit tests and feature fixtures live together; `tests/support` holds
+shared helpers. For example, to check literal Search matching:
 
 ```text
 npm run check
-node --test tests/search-text.test.mjs
+node --test tests/search/search-text.test.mjs
 ```
 
 - `check` validates JavaScript syntax. Runtime validators and focused tests
@@ -464,8 +465,8 @@ node --test tests/search-text.test.mjs
 | Change | Command | What it covers |
 | --- | --- | --- |
 | Production installation | `npm run test:packaging` | Builds the browser assets, then checks the packaged browser and local Search against the same disposable install. |
-| Analyze homepage ordering | `node --test tests/analyze-layout.qualification.mjs` (after building the browser assets) | Playwright exercises both arrows for each widget in both renderers. It checks full-width and paired widgets against the Settings preview on wide and narrow Analyze tabs, then restarts Chromium to verify the custom and restored layouts. Uses invented records. |
-| Native report selection, saving or recovery | `npm run build`, then `node --test tests/native-report-save.qualification.mjs` | A browser check with invented Microsoft activity and a disposable store. Needs no live Microsoft account or separate backend checkout. Runs separately from `npm test`. |
+| Analyze homepage ordering | `node --test tests/analyze/analyze-layout.qualification.mjs` (after building the browser assets) | Playwright exercises both arrows for each widget in both renderers. It checks full-width and paired widgets against the Settings preview on wide and narrow Analyze tabs, then restarts Chromium to verify the custom and restored layouts. Uses invented records. |
+| Native report selection, saving or recovery | `npm run build`, then `node --test tests/reports/native-report-save.qualification.mjs` | A browser check with invented Microsoft activity and a disposable store. Needs no live Microsoft account or separate backend checkout. Runs separately from `npm test`. |
 
 ### Checks that need an explicit environment
 
@@ -473,11 +474,11 @@ Use a fresh PowerShell session for each:
 
 - **Browser zoom:** With Chrome installed and the client built, set
   `$env:WIRE_CHART_NATIVE_ZOOM = '1'`. Run
-  `node --test --test-concurrency=1 --test-name-pattern="actual 200% browser zoom|complete filter qualifications until reset \(native zoom\)" tests/analyze-entry-layout.browser.test.mjs tests/chart-reference-integration.browser.test.mjs`.
+  `node --test --test-concurrency=1 --test-name-pattern="actual 200% browser zoom|complete filter qualifications until reset \(native zoom\)" tests/analyze/analyze-entry-layout.browser.test.mjs tests/trends/chart-reference-integration.browser.test.mjs`.
   These checks zoom the browser itself, not just the page font.
 - **Offline operator and transport:** On a clean Windows checkout, set
   `$env:WIRE_HISTORY_TEST_COMMIT = (git rev-parse HEAD)`. Run
-  `node --test --test-concurrency=1 --test-name-pattern="offline clean candidate:" tests/microsoft-engineering-admission.test.mjs tests/microsoft-native-transport.test.mjs`.
+  `node --test --test-concurrency=1 --test-name-pattern="offline clean candidate:" tests/native-sources/microsoft-engineering-admission.test.mjs tests/native-sources/microsoft-native-transport.test.mjs`.
   This exercises startup, cancellation and cleanup without launching a live provider.
 
 ### Changing a Copilot journal format
@@ -626,7 +627,7 @@ an inline fixture as proof of the packaged browser entry.
 1. Prepare this checkout and a separate trusted reference checkout for normal
    startup (`npm ci` and `npm run build --if-present` in each).
 2. Set `WIRE_COUNT_REFERENCE_ROOT` to the reference checkout's absolute path.
-3. Run `node --test tests/count-parity.qualification.mjs` here.
+3. Run `node --test tests/evidence/count-parity.qualification.mjs` here.
 
 It launches the reference normally and this checkout in contributor mode on
 ephemeral ports, approves the same invented source in two disposable stores,
@@ -636,7 +637,7 @@ personal history.
 
 #### WSL portability
 
-For source-reader changes, the opt-in `tests/wsl-portability.qualification.mjs`
+For source-reader changes, the opt-in `tests/collection/wsl-portability.qualification.mjs`
 suite runs from Windows against an owned WSL installation of the same revision.
 Set `WIRE_WSL_DISTRO`, `WIRE_WSL_NODE` and `WIRE_WSL_SOURCE` to its distribution
 name, absolute Linux Node executable and checkout path. It uses invented sources
@@ -686,7 +687,7 @@ Rules for documentation images:
 
 ### Capture documentation screenshots
 
-[`tests/documentation-screenshots.mjs`](../tests/documentation-screenshots.mjs)
+[`tests/documentation/documentation-screenshots.mjs`](../tests/documentation/documentation-screenshots.mjs)
 captures Analyze, Trends, Search, reporting, comparisons and Settings with
 invented activity and disposable saved reports.
 
@@ -696,7 +697,7 @@ invented activity and disposable saved reports.
 
    ```text
    npm run build
-   node --test tests/documentation-screenshots.mjs
+   node --test tests/documentation/documentation-screenshots.mjs
    ```
 
 3. Inspect the captures before copying the applicable PNGs into `docs/images`.
@@ -723,7 +724,7 @@ private evidence directory.
   entry and a separate failed call. Choose **Maximize interaction** and keep
   both calls and the recorded reason in view for `interaction-maximized.png`.
 - **First-use connection:** use the unconfigured fixture from
-  `tests/first-connection.browser.test.mjs`. Its `WIRE_FIRST_CONNECTION_PROOFS`
+  `tests/accounts/first-connection.browser.test.mjs`. Its `WIRE_FIRST_CONNECTION_PROOFS`
   captures show initial keyboard focus and the source review. For the guide,
   click the welcome heading with the pointer and capture the dialog itself.
   Leave focus styles intact. Don't approve a source for this image or publish
@@ -737,16 +738,16 @@ directory:
 
 | What changed | Browser test | Output variable |
 | --- | --- | --- |
-| Keyboard paging or file controls | `tests/appwide-controls.browser.test.mjs` | `WIRE_VISUAL_PROOFS` |
-| Settings search | `tests/settings-search.browser.test.mjs` | `WIRE_SETTINGS_SEARCH_PROOFS` |
-| Daily charts, sizing, dates or the return from a call | `tests/trends.browser.test.mjs` | `WIRE_TRENDS_PROOFS` |
-| Brand, navigation or avatar | `tests/branding.browser.test.mjs` | `WIRE_BRAND_PROOFS` |
+| Keyboard paging or file controls | `tests/navigation/appwide-controls.browser.test.mjs` | `WIRE_VISUAL_PROOFS` |
+| Settings search | `tests/settings/settings-search.browser.test.mjs` | `WIRE_SETTINGS_SEARCH_PROOFS` |
+| Daily charts, sizing, dates or the return from a call | `tests/trends/trends.browser.test.mjs` | `WIRE_TRENDS_PROOFS` |
+| Brand, navigation or avatar | `tests/appearance/branding.browser.test.mjs` | `WIRE_BRAND_PROOFS` |
 
 For sidebar motion on populated charts, run
-`node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
+`node --test --test-name-pattern="populated Trends sidebar motion" tests/trends/trends.browser.test.mjs`.
 Set `WIRE_TRENDS_PERFORMANCE` to a private JSON file for timings, or
 `WIRE_TRENDS_PROFILE` for the Chromium CPU profile. For an actual divider drag,
-build first and run `node --test tests/sidebar-resize.qualification.mjs`.
+build first and run `node --test tests/navigation/sidebar-resize.qualification.mjs`.
 
 ## Troubleshoot a local run
 

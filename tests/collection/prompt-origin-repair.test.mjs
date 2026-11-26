@@ -1,0 +1,1234 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createHmac, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
+import { readFile, writeFile, readdir, appendFile, rename } from "node:fs/promises";
+import { appendFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { directMessageReference, promptInstallation } from "../analyze/prompt-authorship-fixture.mjs";
+import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
+import { createExportController } from "../../lib/export.mjs";
+import { hash, atomicJson, TAIL_LIMITS } from "../../lib/collector-io.mjs";
+import { assessmentSource } from "../../lib/assessment-read-model.mjs";
+import { maintenanceStateGuard } from "../../lib/historical-maintenance.mjs";
+import { promptAuthorship } from "../../lib/prompt-authorship.mjs";
+import { createCollector } from "../../lib/collector.mjs";
+import { completionReferenceStore, referencedCheckpoint } from "../../lib/checkpoint-references.mjs";
+import { inspectPromptOriginRepair, inspectRetainedInitiatorLinks, runPromptOriginRepair, reviewPromptOriginClass } from "../../lib/prompt-origin-repair.mjs";
+import { eventIdentity } from "../../lib/deletion-identities.mjs";
+import { chromium, expect } from "@playwright/test";
+
+const digest = value => hash(JSON.stringify(value));
+async function manifest(root) {
+    const files = [];
+    async function visit(relative = "") {
+        for (const entry of (await readdir(path.join(root, relative), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+            if ([".git", "node_modules"].includes(entry.name)) continue;
+            const name = path.join(relative, entry.name);
+            if (entry.isDirectory()) await visit(name);
+            else files.push({ path: name, sha256: hash(await readFile(path.join(root, name))) });
+        }
+    }
+    await visit();
+    return { root, files, sourceIdentity: digest(files) };
+}
+async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1, originalFields } = {}) {
+    const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
+    const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair", senderPair = variant === "v12-sender-pair";
+    const legacyIdle = variant === "legacy-idle-reference", guardedFirst = variant === "guarded-first";
+    const systemContinuation = variant === "system-continuation";
+    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (systemContinuation ? "automatic" : guardedFirst ? "kickoff" : legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
+    const repairItems = [item];
+    if (senderPair) {
+        const marked = app.cases.find(row => row.name === "legacy");
+        repairItems.push(marked);
+        const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        events.find(event => event.id === item.promptId).data.agentMode = "shell";
+        events.find(event => event.id === marked.promptId).data.agentAuthored = true;
+        const lines = events.map(event => {
+            let line = JSON.stringify(event);
+            if (originalFields && event.id === marked.promptId) {
+                // Ordinary but noncanonical JSON beyond the completion projector's 16 KiB limit.
+                line = line.replace(',"data":', ", " + " ".repeat(18000) + '"data":');
+                if (originalFields === "selected") line = line.replace('"agentAuthored":true', '"agentAuthored":false,"agentAuthored":true');
+            }
+            return line;
+        });
+        if (originalFields) {
+            let line = JSON.stringify({ id: randomUUID(), type: "session.info", timestamp: events[0].timestamp,
+                data: { n: 1, message: "Invented payload, not an origin." } });
+            line = line.replace('"n":1', '"n":12345678901234567890123456,"n":1');
+            if (originalFields === "hidden id") line = line.replace('{"id":', `{"\\u0069d":"${marked.promptId}","id":`);
+            if (originalFields === "hidden type") line = line.replace('"type":', '"\\u0074ype":"user.message","type":');
+            if (originalFields.startsWith("oversized")) {
+                line = line.replace("Invented payload, not an origin.", "x".repeat(TAIL_LIMITS.maxLineBytes + 100));
+                if (originalFields === "oversized alias") line = line.replace(/^\{"id":"[^"]+"/, `{"id":"${marked.promptId}"`);
+                if (originalFields === "oversized hidden id") line = line.replace('{"id":', `{"\\u0069d":"${marked.promptId}","id":`);
+                if (originalFields === "oversized malformed") line = line.replace(/}$/, ",}");
+            }
+            lines.splice(originalFields === "oversized malformed" ? lines.length : 1, 0, line);
+        }
+        await writeFile(app.sourceFiles[1], lines.join("\n") + "\n");
+    }
+    if (variant === "mixed-review") repairItems.push(...app.cases.filter(row => ["enveloped-agent", "legacy", "conflict"].includes(row.name)));
+    if (variant === "paged-review") {
+        const agent = app.cases.find(row => row.name === "enveloped-agent");
+        repairItems.push(agent);
+        const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        const original = events.find(row => row.id === item.promptId);
+        events.splice(events.findIndex(row => row.id === agent.promptId), 0, ...Array.from({ length: 5 }, () => ({
+            id: randomUUID(), type: "session.info", timestamp: original.timestamp, data: { message: "x".repeat(900000) },
+        })));
+        events.push(original);
+        await writeFile(app.sourceFiles[1], events.map(event => JSON.stringify(event) + "\n").join(""));
+    }
+    let companion;
+    if (plan || mode || attachment || checkpointCompanion || linkedPair || legacyIdle || guardedFirst) {
+        const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        const original = events.find(event => event.id === item.promptId);
+        if (legacyIdle || guardedFirst) {
+            if (legacyIdle) delete original.data.messageId;
+            original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n`
+                + original.data.content + (legacyIdle ? directMessageReference() : "");
+        } else if (linkedPair) {
+            item.data.content = "  Invented request.\nKeep this original text.  ";
+            original.data.content = item.data.content;
+            original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n`
+                + "<copilot_working_context>Invented workspace.</copilot_working_context>\n\n"
+                + item.data.content + directMessageReference();
+            const i = events.indexOf(original) + 1, [start, end] = events.slice(i, i + 2);
+            start.data.turnId = "invented-bound-turn";
+            const request = toolCallId => ({ type: "assistant.message", id: "request-" + toolCallId, timestamp: original.timestamp,
+                data: { originatingMessageId: original.data.messageId, turnId: start.data.turnId, toolRequests: [{ toolCallId }] } });
+            const secondId = "invented-second-call";
+            events.splice(i, 2, request(item.callId), request(secondId), start,
+                { ...start, id: randomUUID(), data: { ...start.data, toolCallId: secondId } }, end,
+                { ...end, id: randomUUID(), data: { ...end.data, toolCallId: secondId } });
+        } else if (attachment) {
+            const file = { type: "file", displayName: "invented-notes.md", path: "C:\\invented\\invented-notes.md" };
+            item.data.content = `Read ${file.displayName} before planning.`;
+            original.data.content = item.data.content;
+            original.data.attachments = [file];
+            original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n`
+                + item.data.content.replace(file.displayName, `Attached file: ${file.displayName} (${file.path})`);
+        } else if (mode || plan) original.data.transformedContent = mode
+            ? original.data.transformedContent.replace("</current_datetime>\n\n",
+                "</current_datetime>\n\n<mode_changed_notice>Invented transition.<plan_mode>Invented mode context.</plan_mode></mode_changed_notice>\n\n[[PLAN]] ")
+            : original.data.transformedContent.replace("</current_datetime>\n\n", "</current_datetime>\n\n[[PLAN]] ");
+        if (checkpointCompanion) {
+            const at = Date.parse(events.at(-1).timestamp);
+            events.push({ id: randomUUID(), type: "user.message", timestamp: new Date(at + 100).toISOString(),
+                data: { content: "Invented separate following message.", source: "user" } });
+            const timestamp = new Date(at + 200).toISOString(), content = "Invented checkpoint-only plan.";
+            companion = { id: randomUUID(), type: "user.message", timestamp, data: { content,
+                messageId: randomUUID(), delivery: "idle",
+                transformedContent: `<current_datetime>${timestamp}</current_datetime>\n\n[[PLAN]] ${content}` } };
+            events.push(companion);
+            const completion = events.find(event => event.type === "tool.execution_complete");
+            completion.data.success = false;
+            completion.data.error = { code: "failure", message: "Owned preserved service error." };
+        }
+        await writeFile(app.sourceFiles[1], events.map(event => JSON.stringify(event) + "\n").join(""));
+    }
+    if (batchOrigins > 1) {
+        const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        let clock = Date.parse(events.at(-1).timestamp);
+        const next = (type, data) => ({ id: randomUUID(), type, timestamp: new Date(clock += 100).toISOString(), data });
+        for (let number = 1; number < batchOrigins; number++) {
+            const prompt = next("user.message", { content: `Invented batch request ${number}.`, source: "agent-invented-batch", messageId: randomUUID() });
+            const callId = `invented-batch-call-${number}`;
+            repairItems.push({ promptId: prompt.id, data: prompt.data });
+            events.push(prompt, next("tool.execution_start", { toolName: "workiq-ask", toolCallId: callId, arguments: { question: "Invented question." } }),
+                next("tool.execution_complete", { toolCallId: callId, success: true }));
+        }
+        await writeFile(app.sourceFiles[1], events.map(event => JSON.stringify(event) + "\n").join(""));
+    }
+    await app.runtime().collector.collectNow();
+    if (variant === "paged-review") await app.runtime().collector.collectNow();
+    if (variant === "archived-agent") {
+        const db = new DatabaseSync(app.config.appDbPath);
+        try { db.prepare("UPDATE workspaces SET archived_at=? WHERE session_id=?").run(new Date().toISOString(), app.child); }
+        finally { db.close(); }
+        await app.runtime().collector.collectNow();
+    }
+    const initial = await loadBoardState(app.context), record = initial.evidence.find(row => row.scenarioId === item.scenarioId);
+    const proposed = record.userPrompt.authorship, sourceBytes = await Promise.all(app.sourceFiles.map(file => readFile(file)));
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    const index = JSON.parse(await readFile(indexFile, "utf8"));
+    if (checkpointCompanion) {
+        Object.assign(index, { schemaVersion: 4, completionReferenceVersion: 1,
+            completionReferenceStore: completionReferenceStore(initial, app.context.dataDir), completionReferenceSources: [] });
+        await atomicJson(indexFile, index);
+    }
+    const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
+    let checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
+    const older = { actor: "unknown", basis: linkedPair ? "unsupported-source" : plan || systemContinuation ? "conflicting-source" : "invalid-source" };
+    const olderVersion = systemContinuation ? 4 : legacyIdle || guardedFirst ? 13 : senderPair ? 12 : linkedPair ? 10 : 6;
+    const beforeOrigin = id => senderPair && id !== item.promptId ? { actor: "unknown", basis: "missing-source" } : older;
+    const selectedIds = new Set(repairItems.map(item => item.promptId));
+    for (const event of checkpoint.events.filter(event => selectedIds.has(event.id))) {
+        if (legacy) { delete event.data.wirePromptAuthorship; delete event.data.wirePromptAuthorshipVersion; }
+        else Object.assign(event.data, { wirePromptAuthorship: beforeOrigin(event.id), wirePromptAuthorshipVersion: olderVersion });
+    }
+    if (companion) {
+        const event = checkpoint.events.find(event => event.id === companion.id);
+        assert.ok(event);
+        Object.assign(event.data, { wirePromptAuthorship: { actor: "unknown", basis: "unsupported-source" }, wirePromptAuthorshipVersion: 5 });
+    }
+    if (absentTargetEvent) checkpoint = { ...checkpoint, events: checkpoint.events.filter(event => event.id !== item.promptId) };
+    await atomicJson(checkpointFile, checkpoint);
+    const records = structuredClone(initial.evidence), aliases = new Map(repairItems.map(item => [item.promptId, []]));
+    if (companion) delete records.find(record => record.scenarioId === app.cases[0].scenarioId).userPrompt.authorshipVersion;
+    for (const record of records) {
+        for (const [field, index, prompt] of [["origin", null, record.userPrompt],
+            ...(record.followUpPrompts ?? []).map((prompt, index) => ["followup", index, prompt])]) {
+            if (record.sourceSessionId === app.child && selectedIds.has(prompt.sourceEventId)) {
+                if (legacy) { delete prompt.authorship; delete prompt.authorshipVersion; }
+                else Object.assign(prompt, { authorship: beforeOrigin(prompt.sourceEventId), authorshipVersion: olderVersion });
+                aliases.get(prompt.sourceEventId).push({ scenarioId: record.scenarioId, field, index });
+            }
+        }
+    }
+    await replaceEvidence(app.context, () => ({ records, importCoverage: initial.importCoverage }));
+    if (linkedPair) {
+        assert.deepEqual(proposed, { actor: "user", basis: "host-direct-input" }, "A newly collected original qualifies.");
+        await app.restart();
+        await app.runtime().collector.collectNow();
+        assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
+        assert.deepEqual((await loadBoardState(app.context)).evidence, records, "Installing a reader is not a historical repair.");
+    }
+    const reports = createExportController(app.context), prior = await loadBoardState(app.context);
+    const preview = await reports.preview("owned-repair", undefined, { promptMode: linkedPair ? "original" : "none", formats: ["json"] },
+        linkedPair ? { kind: "selected", scenarioIds: [item.scenarioId], revision: prior.revision } : { kind: "all", revision: prior.revision });
+    await reports.review("owned-repair", preview.previewId, true);
+    const saved = (await reports.confirm("owned-repair", preview.previewId, true)).bundle;
+    const state = await loadBoardState(app.context);
+    function pin(sourceIndex, eventId, sourceId) {
+        const lines = sourceBytes[sourceIndex].toString().split(/(?<=\n)/);
+        let offset = 0;
+        for (const line of lines) {
+            if (!line) continue;
+            if (JSON.parse(line).id === eventId) return {
+                sourceIdentity: index.sources[sourceId].cursor.identity, offset, bytes: Buffer.byteLength(line), sha256: hash(line),
+                startupBytes: Buffer.byteLength(lines[0]), startupSha256: hash(lines[0]),
+            };
+            offset += Buffer.byteLength(line);
+        }
+        assert.fail("Owned original event missing.");
+    }
+    const target = {
+        sourceSessionId: app.child,
+        prompt: { sourceEventId: item.promptId, sourceTimestamp: record.userPrompt.sourceTimestamp,
+            textSha256: hash(item.data.content), authorship: proposed, authorshipVersion: promptAuthorship.version },
+        sourceEvent: pin(1, item.promptId, app.child),
+        kickoff: null,
+        aliases: aliases.get(item.promptId).map(alias => ({ ...alias, recordSha256: digest(state.evidence.find(record => record.scenarioId === alias.scenarioId)) })),
+        checkpointContextSha256: digest(checkpoint), olderRetained: false,
+    };
+    const companionTarget = companion ? { sourceSessionId: app.child, checkpointOnly: true,
+        prompt: { sourceEventId: companion.id, sourceTimestamp: companion.timestamp, textSha256: hash(companion.data.content),
+            authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: promptAuthorship.version },
+        sourceEvent: pin(1, companion.id, app.child), kickoff: null, aliases: [],
+        checkpointContextSha256: digest(checkpoint), olderRetained: false } : null;
+    const exited = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+    const configBytes = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
+    const config = JSON.parse(configBytes);
+    const repairPlan = { schemaVersion: 1, operationId: randomUUID(),
+        attestation: { packetSha256: hash("owned source packet"), recheckSha256: hash("owned exact recheck"),
+            stoppedRuntimePid: exited.pid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true },
+        source: { configSha256: hash(configBytes),
+            indexSha256: hash(await readFile(indexFile)), ...assessmentSource(state, config), windowDays: config.windowDays },
+        stateGuardSha256: maintenanceStateGuard(state),
+        preservedFiles: await Promise.all(Object.values(saved.files).map(async file =>
+            ({ path: path.relative(app.context.dataDir, file), sha256: hash(await readFile(file)) }))),
+        targets: [target, ...(companionTarget ? [companionTarget] : [])] };
+    const planFile = path.join(app.root, "origin-plan.json"), sourceManifestFile = path.join(app.root, "source-manifest.json");
+    const source = await manifest(path.resolve(import.meta.dirname, "../.."));
+    await writeFile(planFile, JSON.stringify(repairPlan)); await writeFile(sourceManifestFile, JSON.stringify(source));
+    await app.stop();
+    return { app, state, plan: repairPlan, target, companionTarget, sourceBytes, indexFile, checkpointFile,
+        originFor: sourceEventId => ({ sourceSessionId: app.child, sourceEventId,
+            sourceEvent: pin(1, sourceEventId, app.child), olderRetained: false }),
+        origins: repairItems.map(item => ({ sourceSessionId: app.child, sourceEventId: item.promptId,
+            sourceEvent: pin(1, item.promptId, app.child), olderRetained: false })),
+        options: {
+        dataDir: app.context.dataDir, planFile, planSha256: digest(repairPlan), sourceManifestFile, sourceIdentity: source.sourceIdentity,
+        journalFile: path.join(app.root, "origin-journal.json"),
+    } };
+}
+
+test("a reviewed v10 prompt correction preserves both explicitly linked completions and the frozen report", async t => {
+    const f = await setup(t, "v10-linked-pair"), { app, origins, state } = f;
+    const original = state.evidence.find(r => r.userPrompt.sourceEventId === origins[0].sourceEventId);
+    const actor = { actor: "user", basis: "host-direct-input" };
+    assert.deepEqual(original.userPrompt.authorship, { actor: "unknown", basis: "unsupported-source" });
+    assert.equal(original.userPrompt.authorshipVersion, 10);
+    const item = app.cases.find(row => row.name === "human"), callIds = [item.callId, "invented-second-call"];
+    assert.deepEqual(original.toolCalls.map(call => [call.toolCallId, call.promptLink, call.reportedOutcome]), callIds.map(id => [
+        id, { version: 1, promptEventId: item.promptId, requestEventId: "request-" + id }, "succeeded",
+    ]));
+    async function readPair(label) {
+        const browser = await chromium.launch();
+        try {
+            const page = await browser.newPage();
+            await page.goto(app.runtime().url + "#request?request=" + encodeURIComponent(original.scenarioId));
+            const reader = page.locator("#contextSidebar"), group = `[data-context-group="${original.scenarioId}"]`;
+            const text = reader.getByRole("region", { name: label, exact: true }).getByLabel("Exact recorded prompt text");
+            await expect(text).toBeVisible();
+            assert.equal(await text.textContent(), item.data.content);
+            await expect(reader.locator(".reader-call-row" + group)).toHaveCount(2);
+            await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+            await expect(reader.locator(`${group} .reader-record-limits p`).first()).toHaveText("Copilot linked all 2 tool calls directly to the prompt.");
+        } finally { await browser.close(); }
+    }
+    await app.restart();
+    await readPair("Sender unclear");
+    await app.stop();
+    const inspection = await inspectPromptOriginRepair({ dataDir: app.context.dataDir, origins });
+    assert.equal(inspection.authorized, false);
+    assert.deepEqual(inspection.unresolved, []);
+    assert.equal(inspection.targets.length, 1);
+    assert.deepEqual(inspection.targets[0].prompt.authorship, actor);
+    assert.deepEqual(inspection.targets[0].aliases, f.target.aliases);
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    assert.deepEqual(await loadBoardState(app.context), state, "Neither inspection nor preparation publishes a correction.");
+    const apply = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    const result = await runPromptOriginRepair(apply);
+    assert.equal(result.alreadyCommitted, false);
+    const expected = structuredClone(state.evidence);
+    for (const alias of f.target.aliases) {
+        const record = expected.find(r => r.scenarioId === alias.scenarioId);
+        Object.assign(alias.field === "origin" ? record.userPrompt : record.followUpPrompts[alias.index],
+            { authorship: actor, authorshipVersion: promptAuthorship.version });
+    }
+    const after = await loadBoardState(app.context);
+    assert.equal(after.revision, state.revision + 1);
+    assert.deepEqual(after.evidence, expected);
+    assert.deepEqual(after.exports, state.exports);
+    assert.equal((await runPromptOriginRepair(apply)).alreadyCommitted, true);
+    assert.deepEqual(await loadBoardState(app.context), after);
+    const again = await inspectPromptOriginRepair({ dataDir: app.context.dataDir, origins });
+    assert.deepEqual(again.targets, []);
+    assert.deepEqual(again.unresolved.map(row => row.reason), ["known-origin-copy"]);
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence, expected);
+    await readPair("Human prompt");
+    for (const pin of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(app.context.dataDir, pin.path))), pin.sha256);
+    const frozen = JSON.parse(await readFile(after.exports[0].files["product-report.json"], "utf8"));
+    assert.equal(frozen.records.length, 1);
+    const frozenOrigin = frozen.records[0].prompts.find(prompt => prompt.kind === "origin");
+    assert.deepEqual(frozenOrigin.authorship, original.userPrompt.authorship);
+    assert.equal(frozenOrigin.text, item.data.content);
+    assert.deepEqual(await Promise.all(app.sourceFiles.map(file => readFile(file))), f.sourceBytes);
+});
+
+for (const variant of ["legacy-agent", "archived-agent"]) test(`original selectors derive a complete sealed repair without changing source eligibility (${variant})`, async t => {
+    const f = await setup(t, variant);
+    const original = { sourceSessionId: f.target.sourceSessionId, sourceEventId: f.target.prompt.sourceEventId,
+        sourceEvent: f.target.sourceEvent, olderRetained: false, ...(variant === "archived-agent" ? { includeArchived: true } : {}) };
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: [original] });
+    assert.equal(inspection.authorized, false);
+    assert.equal(inspection.targets.length, 1);
+    assert.deepEqual(inspection.targets[0].prompt.authorship, { actor: "agent", basis: "source-agent" });
+    assert.equal(inspection.targets[0].legacyUnqualified, true);
+    assert.deepEqual(inspection.targets[0].aliases, f.target.aliases);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    const repaired = await loadBoardState(f.app.context), expected = structuredClone(f.state.evidence);
+    for (const alias of f.target.aliases) {
+        const record = expected.find(record => record.scenarioId === alias.scenarioId);
+        Object.assign(alias.field === "origin" ? record.userPrompt : record.followUpPrompts[alias.index],
+            { authorship: { actor: "agent", basis: "source-agent" }, authorshipVersion: promptAuthorship.version });
+    }
+    assert.deepEqual(repaired.evidence, expected);
+    assert.deepEqual(repaired.importCoverage, f.state.importCoverage);
+    assert.deepEqual(repaired.exports, f.state.exports);
+    await f.app.restart();
+    await appendFile(f.app.sourceFiles[1], JSON.stringify({ id: randomUUID(), type: "session.info",
+        timestamp: new Date().toISOString(), data: { message: "Invented later append." } }) + "\n");
+    await f.app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, expected);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+});
+
+test("one original-selector review repairs eighteen origins and every matching copy as one sealed operation", async t => {
+    const f = await setup(t, "direct", { batchOrigins: 18 });
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    assert.equal(inspection.targets.length, 18);
+    assert.deepEqual(inspection.unresolved, []);
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    const expected = structuredClone(f.state.evidence);
+    for (const target of inspection.targets) for (const alias of target.aliases) {
+        const record = expected.find(record => record.scenarioId === alias.scenarioId);
+        Object.assign(alias.field === "origin" ? record.userPrompt : record.followUpPrompts[alias.index],
+            { authorship: target.prompt.authorship, authorshipVersion: promptAuthorship.version });
+    }
+    const after = await loadBoardState(f.app.context);
+    assert.equal(after.revision, f.state.revision + 1);
+    assert.deepEqual(after.evidence, expected);
+    assert.deepEqual(after.exports, f.state.exports);
+    await f.app.restart();
+    await f.app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, expected);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+});
+
+test("an origin review explicitly excludes known and unverified authors without fabricating targets", async t => {
+    const f = await setup(t);
+    const unresolved = f.originFor(f.app.cases.find(item => item.name === "legacy").promptId);
+    const known = f.originFor(f.app.cases.find(item => item.name === "agent").promptId);
+    const mixed = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: [...f.origins, unresolved, known] });
+    assert.equal(mixed.targets.length, 1);
+    assert.deepEqual(mixed.unresolved.map(row => row.reason).sort(), ["author-unverified", "known-origin-copy"]);
+    const unchanged = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: [unresolved, known] });
+    assert.equal(unchanged.status, "nothing-qualified");
+    assert.deepEqual(unchanged.targets, []);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("operators can discover and review a mixed historical author cohort without supplying original-event pins", async t => {
+    const f = await setup(t, "mixed-review");
+    const cli = (...args) => spawnSync(process.execPath, [path.resolve("scripts/maintain-prompt-origins.mjs"),
+        "--data-dir", f.app.context.dataDir, ...args], { encoding: "utf8" });
+    function run(...args) {
+        const reply = cli(...args);
+        assert.equal(reply.status, 0, reply.stderr);
+        return JSON.parse(reply.stdout);
+    }
+    const catalog = run("--mode", "list");
+    assert.equal(catalog.batches.length, 1);
+    assert.equal(catalog.batches[0].origins.length, 4);
+    const review = run("--mode", "review", "--batch", catalog.batches[0].batch);
+    assert.deepEqual(review.targets.map(t => t.prompt.authorship.basis).sort(), ["host-agent-envelope", "host-direct-input"]);
+    assert.deepEqual(review.unresolved.map(row => row.authorship.basis).sort(), ["conflicting-source", "missing-source"]);
+    for (const item of review.unresolved) {
+        assert.equal(item.observation.envelope, "not-recorded");
+        assert.equal(item.observation.source, item.authorship.basis === "missing-source" ? "not-recorded" : "user");
+        assert.match(item.sourceEvent.sourceStampSha256, /^[0-9a-f]{64}$/);
+    }
+    assert.equal(review.authorized, false);
+    assert.deepEqual(await loadBoardState(f.app.context), f.state);
+    for (const item of f.app.cases) assert.ok(!JSON.stringify([catalog, review]).includes(item.data.content));
+    f.plan.targets = review.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    await f.app.restart(); await f.app.runtime().collector.collectNow();
+    const expected = structuredClone(f.state.evidence);
+    for (const { aliases, prompt } of review.targets) for (const alias of aliases) {
+        const r = expected.find(record => record.scenarioId === alias.scenarioId);
+        Object.assign(alias.field === "origin" ? r.userPrompt : r.followUpPrompts[alias.index],
+            { authorship: prompt.authorship, authorshipVersion: promptAuthorship.version });
+    }
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, expected);
+    assert.deepEqual(run("--mode", "list").batches.map(batch => batch.origins.length), [2]);
+});
+
+test("reviewed v12 missing-sender and shell origins repair both actors, copies and checkpoints without changing the calls", async t => {
+    const f = await setup(t, "v12-sender-pair"), scope = { dataDir: f.app.context.dataDir };
+    const beforeCheckpoint = JSON.parse(await readFile(f.checkpointFile)), originalFiles = f.sourceBytes.map(hash);
+    // The aggregate does not need the original chat or its compact checkpoint.
+    await rename(f.app.sourceFiles[1], f.app.sourceFiles[1] + ".away");
+    await rename(f.checkpointFile, f.checkpointFile + ".away");
+    try {
+        const result = spawnSync(process.execPath, [path.resolve("scripts/maintain-prompt-origins.mjs"),
+            "--mode", "list", "--counts-only", "--include-older", "--data-dir", scope.dataDir], { encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+        const summary = JSON.parse(result.stdout);
+        assert.deepEqual([summary.interactions, summary.calls, summary.authors], [10, 10, { user: 1, agent: 4, unknown: 5 }]);
+        assert.deepEqual(summary.reviewability, { candidate: 2, "not-older-unqualified": 3 });
+        assert.equal(summary.unverifiedReasons.reduce((sum, entry) => sum + entry.count, 0), 5);
+        assert.equal(summary.revision, f.state.revision);
+        assert.equal(summary.classifierVersion, promptAuthorship.version);
+        for (const item of f.app.cases) {
+            assert.ok(!result.stdout.includes(item.promptId) && !result.stdout.includes(item.data.content));
+        }
+    } finally {
+        await rename(f.checkpointFile + ".away", f.checkpointFile);
+        await rename(f.app.sourceFiles[1] + ".away", f.app.sourceFiles[1]);
+    }
+    const catalog = await reviewPromptOriginClass(scope);
+    assert.equal(catalog.batches.length, 1);
+    assert.equal(catalog.batches[0].origins.length, 2);
+    const review = await reviewPromptOriginClass({ ...scope, batch: catalog.batches[0].batch });
+    assert.deepEqual(review.targets.map(row => row.prompt.authorship.basis).sort(), ["host-agent-authored", "host-direct-input"]);
+    assert.deepEqual(review.unresolved, []);
+    assert.equal(review.authorized, false);
+    f.plan.targets = review.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    const expected = structuredClone(f.state.evidence), expectedCheckpoint = structuredClone(beforeCheckpoint);
+    for (const { prompt, aliases } of review.targets) {
+        for (const alias of aliases) {
+            const r = expected.find(record => record.scenarioId === alias.scenarioId);
+            Object.assign(alias.field === "origin" ? r.userPrompt : r.followUpPrompts[alias.index],
+                { authorship: prompt.authorship, authorshipVersion: prompt.authorshipVersion });
+        }
+        Object.assign(expectedCheckpoint.events.find(e => e.id === prompt.sourceEventId).data,
+            { wirePromptAuthorship: prompt.authorship, wirePromptAuthorshipVersion: prompt.authorshipVersion });
+    }
+    assert.deepEqual(JSON.parse(await readFile(f.checkpointFile)), expectedCheckpoint);
+    assert.deepEqual(await Promise.all(f.app.sourceFiles.map(async file => hash(await readFile(file)))), originalFiles);
+    await f.app.restart();
+    await appendFile(f.app.sourceFiles[1], JSON.stringify({ id: randomUUID(), type: "session.info",
+        timestamp: new Date().toISOString(), data: { message: "Invented later append." } }) + "\n");
+    await f.app.runtime().collector.collectNow();
+    const after = await loadBoardState(f.app.context);
+    assert.deepEqual(after.evidence, expected);
+    assert.deepEqual(after.exports, f.state.exports);
+    const counts = await reviewPromptOriginClass({ ...scope, countsOnly: true });
+    assert.deepEqual([counts.interactions, counts.calls, counts.authors], [10, 10, { user: 2, agent: 5, unknown: 3 }]);
+    for (const pin of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(scope.dataDir, pin.path))), pin.sha256);
+});
+
+async function listedOrigin(dataDir, origin) {
+    const list = await reviewPromptOriginClass({ dataDir, originatingOnly: true });
+    const batch = list.batches.find(b => b.origins.includes(origin));
+    return list.cases.find(c => c.batch === batch.batch && batch.origins[c.position - 1] === origin);
+}
+
+test("retained links identify each canonical call without reading originals, changing senders or writing files", async t => {
+    const f = await setup(t, "v10-linked-pair"), dataDir = f.app.context.dataDir;
+    await rename(f.app.config.appDbPath, f.app.config.appDbPath + ".offline");
+    await rename(f.app.config.sessionRoot, f.app.config.sessionRoot + ".offline");
+    const origin = f.target.prompt.sourceEventId, select = () => listedOrigin(dataDir, origin);
+    const { linkCheck, caseRef } = await select(), inspect = () => inspectRetainedInitiatorLinks({ dataDir, linkCheck });
+    const before = await manifest(dataDir);
+    const cli = spawnSync(process.execPath, [path.resolve("scripts", "maintain-prompt-origins.mjs"), "--data-dir", dataDir,
+        "--mode", "links", "--link-check", linkCheck], { encoding: "utf8" });
+    assert.equal(cli.status, 0, cli.stderr);
+    const first = JSON.parse(cli.stdout), { links } = first;
+    assert.equal(first.caseRef, caseRef);
+    assert.deepEqual([first.prepared, first.authorized, first.revision], [false, false, f.state.revision]);
+    assert.deepEqual(links.map(({ callRef, ...rest }) => rest), Array(2).fill({ linkedOnBoard: true, checkpoint: "same-origin", checkpointOriginRef: caseRef,
+        retainedSender: { actor: "unknown", basis: "unsupported-source" } }));
+    assert.equal(new Set(links.map(l => l.callRef)).size, 2);
+    assert.ok(links.every(l => /^[a-f0-9]{64}$/.test(l.callRef)));
+    assert.doesNotMatch(cli.stdout, /Invented|request-invented|invented-second-call/);
+    assert.ok(!cli.stdout.includes(origin) && !cli.stdout.includes(f.app.child));
+    assert.deepEqual(await manifest(dataDir), before);
+
+    const checkpoint = JSON.parse(await readFile(f.checkpointFile)), other = f.app.cases.find(c => c.name === "kickoff");
+    const message = checkpoint.events.find(e => e.id === other.promptId);
+    const second = checkpoint.events.find(e => e.id === "request-invented-second-call");
+    second.data.originatingMessageId = message.data.messageId;
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.equal((await inspect()).links.find(l => l.checkpoint !== "same-origin").checkpoint, "board-checkpoint-disagreement");
+    const records = structuredClone(f.state.evidence), record = records.find(r => r.userPrompt.sourceEventId === origin);
+    for (const call of record.toolCalls) delete call.promptLink;
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    await assert.rejects(inspect(), /stale/);
+    const selected = await select(), check = () => inspectRetainedInitiatorLinks({ dataDir, linkCheck: selected.linkCheck });
+    assert.equal(selected.caseRef, caseRef);
+    const different = (await check()).links;
+    assert.deepEqual(different.map(l => l.callRef), links.map(l => l.callRef));
+    assert.equal(records.find(r => r.userPrompt.sourceEventId === other.promptId).userPrompt.authorship.actor, "agent");
+    const alternate = different.find(l => l.checkpoint === "different-origin");
+    assert.match(alternate.checkpointOriginRef, /^[a-f0-9]{64}$/);
+    assert.notEqual(alternate.checkpointOriginRef, caseRef);
+    assert.deepEqual(alternate.retainedSender,
+        { actor: "unknown", basis: "missing-source" }, "A different origin cannot borrow its board's later kickoff qualification.");
+    assert.ok(different.every(l => !l.linkedOnBoard));
+    const competing = { ...second, id: "other-claim", data: { ...second.data,
+        originatingMessageId: checkpoint.events.find(e => e.id === origin).data.messageId } };
+    checkpoint.events.push(competing);
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.ok((await check()).links.some(l => l.checkpoint === "competing-links" && !l.retainedSender));
+    checkpoint.events = checkpoint.events.filter(e => e !== second && e !== competing && !(e.type === "tool.execution_start"
+        && e.data.toolCallId !== "invented-second-call"));
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.deepEqual((await check()).links.map(l => l.checkpoint).sort(), ["no-explicit-request-link", "start-not-retained"]);
+    assert.deepEqual((await loadBoardState(f.app.context, { readOnly: true })).evidence, records);
+});
+
+test("retained linkage checks refuse stale cursors, foreign owners and deleted request context", async t => {
+    const f = await setup(t, "v10-linked-pair"), dataDir = f.app.context.dataDir;
+    const select = async () => (await listedOrigin(dataDir, f.target.prompt.sourceEventId)).linkCheck;
+    const check = linkCheck => inspectRetainedInitiatorLinks({ dataDir, linkCheck });
+    const first = await select(), bytes = await readFile(f.indexFile), index = JSON.parse(bytes);
+    index.sources[f.app.child].cursor.offset--;
+    await atomicJson(f.indexFile, index);
+    await assert.rejects(check(first), /stale/);
+    await assert.rejects(check(await select()), /checkpoint is not current/);
+    index.ownerHost.machine = "0".repeat(64);
+    await atomicJson(f.indexFile, index);
+    await assert.rejects(check(await select()), /another or unqualified host/);
+    const registered = JSON.parse(bytes);
+    Object.assign(registered, { schemaVersion: 4, completionReferenceVersion: 1,
+        completionReferenceStore: completionReferenceStore(f.state, dataDir),
+        completionReferenceSources: [{ fingerprint: registered.fingerprint, sourceSessionId: f.app.child }] });
+    await atomicJson(f.indexFile, registered);
+    const pinned = await select();
+    await assert.rejects(check(pinned), /checkpoint is unavailable/);
+    const checkpoint = referencedCheckpoint(JSON.parse(await readFile(f.checkpointFile)), registered, f.app.child);
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.ok((await check(pinned)).links.every(l => l.checkpoint === "same-origin"));
+    const file = path.join(dataDir, `${f.state.boardId}.state.json`), state = JSON.parse(await readFile(file));
+    state.deletion = { schemaVersion: 1, identities: [], contextCalls: [], events: [eventIdentity(f.app.child, "request-invented-second-call")] };
+    await atomicJson(file, state);
+    await assert.rejects(check(pinned), /stale/);
+    await assert.rejects(check(await select()), /deleted context/);
+});
+
+test("origin-case inventory joins all canonical unknowns to exact bounded review slots without unrelated follow-ups", async t => {
+    const f = await setup(t, "v12-sender-pair"), scope = { dataDir: f.app.context.dataDir, includeOlder: true };
+    const records = structuredClone(f.state.evidence), extra = randomUUID();
+    const unlinked = records.find(r => r.userPrompt.authorship?.basis === "missing-source");
+    unlinked.promptAssociationEvidence = { version: 1, method: "unavailable" };
+    records.find(r => r.sourceSessionId === f.app.child).followUpPrompts.push({
+        text: "Invented follow-up without a call", status: "full", sourceEventId: extra, sourceTimestamp: f.target.prompt.sourceTimestamp,
+        authorship: { actor: "unknown", basis: "missing-source" }, authorshipVersion: 12,
+    });
+
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    const ordinary = await reviewPromptOriginClass(scope), input = { ...scope, originatingOnly: true };
+    const inventory = await reviewPromptOriginClass(input);
+    assert.deepEqual([inventory.interactions, inventory.calls, inventory.cases.length, inventory.authors.unknown], [10, 10, 5, 5]);
+    assert.equal(new Set(inventory.cases.map(c => c.caseRef)).size, 5);
+    assert.ok(inventory.cases.some(c => c.qualifications.some(q => q.basis === "missing-source") && c.associations.includes("unavailable")));
+    assert.ok(inventory.cases.some(c => c.associations.includes("nearest-preceding")));
+    assert.deepEqual(ordinary.batches.flatMap(b => b.origins).length, 3);
+    assert.equal(inventory.batches.length, 1);
+    const [b] = inventory.batches;
+    assert.deepEqual(b.origins.toSorted(), f.origins.map(o => o.sourceEventId).toSorted());
+    assert.equal(b.consumedBytes, f.sourceBytes[1].length);
+    const candidates = inventory.cases.filter(c => c.batch);
+    assert.deepEqual(candidates.map(c => c.position).sort(), [1, 2]);
+    for (const c of candidates) {
+        assert.equal(c.batch, b.batch);
+        const id = b.origins[c.position - 1];
+        assert.equal(c.followUpCopies, records.flatMap(r => r.followUpPrompts).filter(p => p.sourceEventId === id).length);
+    }
+    assert.ok(inventory.cases.filter(c => !c.batch).every(c => c.blockedCopies?.length && c.position === undefined));
+    assert.ok(!JSON.stringify(inventory).includes(extra));
+    await assert.rejects(reviewPromptOriginClass({ ...scope, batch: b.batch }), /stale or unavailable/);
+    const reviewed = await reviewPromptOriginClass({ ...input, batch: b.batch });
+    assert.deepEqual(reviewed.targets.map(r => r.prompt.sourceEventId).toSorted(), b.origins.toSorted());
+    assert.ok(reviewed.targets.every(r => r.aliases.some(a => a.field === "origin")));
+    records[0].title = "Invented new cut";
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    const fresh = await reviewPromptOriginClass(input);
+    assert.notEqual(fresh.revision, inventory.revision);
+    assert.notEqual(fresh.batches[0].batch, b.batch);
+    assert.deepEqual(fresh.cases.map(c => c.caseRef), inventory.cases.map(c => c.caseRef));
+    await assert.rejects(reviewPromptOriginClass({ ...input, batch: b.batch }), /stale or unavailable/);
+});
+
+for (const originalFields of ["unrelated", "selected", "hidden id", "hidden type"]) test(`original review proves envelope identity separately from payload: ${originalFields}`, async t => {
+    const f = await setup(t, "v12-sender-pair", { originalFields }), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+    const review = reviewPromptOriginClass({ ...input, batch });
+    if (originalFields.startsWith("hidden")) await assert.rejects(review, /source event identity or startup fields are ambiguous/);
+    else {
+        const result = await review;
+        assert.deepEqual(result.targets.map(t => t.prompt.authorship.basis).sort(), originalFields === "selected"
+            ? ["host-direct-input"] : ["host-agent-authored", "host-direct-input"]);
+        assert.deepEqual(result.unresolved.map(r => r.reason), originalFields === "selected" ? ["unverified-original-fields"] : []);
+        assert.ok(result.targets.every(t => t.sourceEvent.bytes && t.sourceEvent.sha256 && t.sourceEvent.sourceStampSha256));
+    }
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const originalFields of ["oversized disjoint", "oversized alias", "oversized hidden id", "oversized malformed"]) {
+    test(`complete oversized lines can exclude, but never establish, an original: ${originalFields}`, async t => {
+        const f = await setup(t, "v12-sender-pair", { originalFields }), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+        const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+        const pending = reviewPromptOriginClass({ ...input, batch });
+        if (originalFields === "oversized hidden id" || originalFields === "oversized malformed") {
+            await assert.rejects(pending, /oversized source entry/);
+        } else {
+            const out = await pending;
+            assert.deepEqual(out.targets.map(t => t.prompt.authorship.basis).sort(), originalFields === "oversized alias"
+                ? ["host-direct-input"] : ["host-agent-authored", "host-direct-input"]);
+            assert.deepEqual(out.unresolved.map(r => r.reason), originalFields === "oversized alias" ? ["duplicate-original"] : []);
+            assert.ok(!JSON.stringify(out).includes("x".repeat(100)));
+        }
+        assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    });
+}
+
+test("later pages locate a candidate and disqualify a competing original; source drift invalidates the review", async t => {
+    const f = await setup(t, "paged-review"), dataDir = f.app.context.dataDir, file = f.app.sourceFiles[1];
+    await rename(file, file + ".absent");
+    const { batches: [{ batch }] } = await reviewPromptOriginClass({ dataDir });
+    await rename(file + ".absent", file);
+    const first = await reviewPromptOriginClass({ dataDir, batch });
+    assert.equal(first.status, "continue");
+    assert.equal(first.targets, undefined);
+    const changed = structuredClone(first.continuation);
+    changed.core.found = {};
+    await assert.rejects(reviewPromptOriginClass({ dataDir, batch, continuation: changed }), /continuation is stale or invalid/);
+    const retired = structuredClone(first.continuation);
+    retired.seal = createHmac("sha256", f.state.pseudonymKey).update(JSON.stringify(["wire-author-scan-v1", retired.core])).digest("hex");
+    await assert.rejects(reviewPromptOriginClass({ dataDir, batch, continuation: retired }), /continuation is stale or invalid/);
+    const previous = path.join(f.app.root, "previous.json");
+    await writeFile(previous, JSON.stringify(first));
+    const reply = spawnSync(process.execPath, [path.resolve("scripts/maintain-prompt-origins.mjs"),
+        "--mode", "review", "--batch", batch, "--previous", previous, "--data-dir", dataDir], { encoding: "utf8" });
+    assert.equal(reply.status, 0, reply.stderr);
+    const reviewed = JSON.parse(reply.stdout);
+    assert.deepEqual(reviewed.targets.map(target => target.prompt.authorship.basis), ["host-agent-envelope"]);
+    assert.deepEqual(reviewed.unresolved.map(row => row.reason), ["duplicate-original"]);
+    f.plan.targets = reviewed.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await appendFile(file, JSON.stringify({ type: "session.info", id: randomUUID(), timestamp: new Date().toISOString(), data: {} }) + "\n");
+    await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 }),
+        /source changed since the complete historical author review/);
+    assert.deepEqual(await loadBoardState(f.app.context), f.state);
+});
+
+test("origin-only continuation survives unrelated progress, not changed owner, selected cursor, checkpoint or retained cut", async t => {
+    const f = await setup(t, "paged-review"), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+    const page = await reviewPromptOriginClass({ ...input, batch });
+    assert.equal(page.status, "continue"); assert.equal(page.targets, undefined);
+    const indexBytes = await readFile(f.indexFile), checkpointBytes = await readFile(f.checkpointFile);
+    const resume = () => reviewPromptOriginClass({ ...input, batch, continuation: page.continuation });
+    for (const mutate of [
+        idx => { idx.sources[f.app.child].firstPromptEventId = "different"; },
+        idx => { idx.sources[f.app.child].cursor.anchor = "0".repeat(64); },
+        idx => { idx.ownerHost.machine = "1".repeat(64); },
+        idx => { idx.newAuthorityField = "unrecognized-and-must-stay-bound"; },
+        idx => { idx.metrics.newField = 1; },
+    ]) {
+        const index = JSON.parse(indexBytes); mutate(index);
+        await atomicJson(f.indexFile, index);
+        await assert.rejects(resume(), /stale or unavailable/);
+    }
+    await writeFile(f.indexFile, indexBytes);
+    await appendFile(f.checkpointFile, "\n");
+    await assert.rejects(resume(), /continuation is stale or invalid/);
+    await writeFile(f.checkpointFile, checkpointBytes);
+    const index = JSON.parse(indexBytes);
+    index.metrics.cycles++; index.sources[f.app.child].lastCheckedAt = new Date().toISOString();
+    const other = Object.keys(index.sources).find(id => id !== f.app.child && index.sources[id].cursor);
+    index.sources[other].cursor.offset++;
+    await atomicJson(f.indexFile, index);
+    const completed = await resume();
+    assert.equal(completed.status, "reviewed");
+    assert.deepEqual(completed.targets.map(t => t.prompt.authorship.basis), ["host-agent-envelope"]);
+    assert.deepEqual(completed.unresolved.map(r => r.reason), ["duplicate-original"]);
+    assert.equal(completed.source.indexSha256, hash(await readFile(f.indexFile)), "The proposal uses the fresh exact writer cut.");
+    assert.notEqual(completed.source.indexSha256, hash(indexBytes));
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    f.plan.targets = completed.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    await assert.rejects(runPromptOriginRepair({ ...f.options, planSha256: digest(f.plan), mode: "prepare" }), /Source configuration or index changed/);
+});
+
+for (const change of ["unrelated", "selected", "repeated", "review cut"]) test(`the named author review fences a concurrent metadata commit: ${change}`, async t => {
+    const f = await setup(t), scope = { dataDir: f.app.context.dataDir };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const writer = new DatabaseSync(f.app.config.appDbPath), prepare = DatabaseSync.prototype.prepare;
+    const before = await readFile(f.checkpointFile);
+    try {
+        writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE author_fixture_counter(n INTEGER); INSERT INTO author_fixture_counter VALUES(0)");
+        let checks = 0;
+        t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+            const statement = prepare.call(this, sql);
+            if (sql === "PRAGMA user_version") {
+                const get = statement.get.bind(statement);
+                statement.get = () => {
+                    const value = get(); checks++;
+                    if (checks === 1 && change === "selected") writer.prepare("UPDATE workspaces SET name=? WHERE session_id=?").run("Changed mapping", f.app.child);
+                    else if (checks === 1 || change === "repeated") {
+                        writer.exec("UPDATE author_fixture_counter SET n=n+1");
+                        if (change === "review cut") appendFileSync(path.join(scope.dataDir, "collector", "config.json"), "\n");
+                    }
+                    return value;
+                };
+            }
+            return statement;
+        });
+        const review = reviewPromptOriginClass({ ...scope, batch });
+        if (change === "unrelated" || change === "repeated") {
+            const result = await review;
+            assert.equal(result.authorized, false);
+            assert.deepEqual(result.targets.map(t => t.prompt.authorship.basis), ["host-direct-input"]);
+            assert.match(result.targets[0].sourceMapping.metadataSha256, /^[0-9a-f]{64}$/);
+            assert.ok(checks >= 2);
+        } else if (change === "review cut") {
+            await assert.rejects(review, /author review changed/);
+            assert.equal(checks, 1, "The stale selection must not consume its fresh transaction.");
+        } else {
+            await assert.rejects(review, { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "membership" });
+            assert.equal(checks, 2);
+        }
+        assert.deepEqual(await readFile(f.checkpointFile), before);
+        assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    } finally { writer.close(); }
+});
+
+test("read-only pages finish under unrelated metadata churn but their proposal cannot bypass strict Prepare", async t => {
+    const f = await setup(t, "paged-review"), scope = { dataDir: f.app.context.dataDir };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const checkpoint = await readFile(f.checkpointFile), writer = new DatabaseSync(f.app.config.appDbPath);
+    const prepare = DatabaseSync.prototype.prepare;
+    try {
+        writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE unrelated_activity(n INTEGER); INSERT INTO unrelated_activity VALUES(0)");
+        const mock = t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+            const statement = prepare.call(this, sql);
+            if (sql === "PRAGMA user_version") {
+                const get = statement.get.bind(statement);
+                statement.get = () => {
+                    const value = get();
+                    writer.exec("UPDATE unrelated_activity SET n=n+1");
+                    return value;
+                };
+            }
+            return statement;
+        });
+        const first = await reviewPromptOriginClass({ ...scope, batch });
+        assert.equal(first.status, "continue");
+        assert.equal(first.targets, undefined);
+        const result = await reviewPromptOriginClass({ ...scope, batch, continuation: first.continuation });
+        assert.equal(result.authorized, false);
+        assert.equal(result.prepared, false);
+        assert.deepEqual(result.targets.map(target => target.prompt.authorship.basis), ["host-agent-envelope"]);
+        assert.deepEqual(result.unresolved.map(row => row.reason), ["duplicate-original"]);
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        f.plan.targets = result.targets;
+        await writeFile(f.options.planFile, JSON.stringify(f.plan));
+        f.options.planSha256 = digest(f.plan);
+        await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "prepare" }), { code: "COLLECTION_SOURCE_CHANGED" });
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        mock.mock.restore();
+        const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+        assert.equal(prepared.status, "prepared");
+    } finally { writer.close(); }
+});
+
+test("an active index write refuses an author page while a stable store tolerates ongoing producer metadata commits", async t => {
+    const f = await setup(t, "paged-review"), scope = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const originalIndex = JSON.parse(await readFile(f.indexFile)), checkpoint = await readFile(f.checkpointFile);
+    const source = await readFile(f.app.sourceFiles[1]), writer = new DatabaseSync(f.app.config.appDbPath);
+    const prepare = DatabaseSync.prototype.prepare;
+    let indexWriterActive = true, indexWrites = 0;
+    try {
+        writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE producer_activity(n INTEGER); INSERT INTO producer_activity VALUES(0)");
+        t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+            const statement = prepare.call(this, sql);
+            if (sql === "PRAGMA user_version") {
+                const get = statement.get.bind(statement);
+                statement.get = () => {
+                    const value = get();
+                    writer.exec("UPDATE producer_activity SET n=n+1");
+                    if (indexWriterActive) {
+                        indexWrites++;
+                        writeFileSync(f.indexFile, JSON.stringify({ ...originalIndex,
+                            metrics: { ...originalIndex.metrics, cycles: originalIndex.metrics.cycles + indexWrites } }));
+                    }
+                    return value;
+                };
+            }
+            return statement;
+        });
+        const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+        await assert.rejects(reviewPromptOriginClass({ ...scope, batch }),
+            /The author review changed\. List the current retained candidates again\./);
+        assert.equal(indexWrites, 1);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await readFile(f.app.sourceFiles[1]), source);
+        indexWriterActive = false;
+        const freshIndex = await readFile(f.indexFile);
+        const fresh = await reviewPromptOriginClass(scope);
+        const first = await reviewPromptOriginClass({ ...scope, batch: fresh.batches[0].batch });
+        assert.equal(first.status, "continue");
+        const final = await reviewPromptOriginClass({ ...scope, batch: fresh.batches[0].batch, continuation: first.continuation });
+        assert.equal(final.status, "reviewed");
+        assert.deepEqual(final.targets.map(target => target.prompt.authorship.basis), ["host-agent-envelope"]);
+        assert.deepEqual(final.unresolved.map(row => row.reason), ["duplicate-original"]);
+        assert.equal(final.source.indexSha256, hash(freshIndex));
+        assert.deepEqual(await readFile(f.indexFile), freshIndex);
+        assert.deepEqual(await loadBoardState(f.app.context), f.state);
+        assert.deepEqual(await readFile(f.checkpointFile), checkpoint);
+        assert.deepEqual(await readFile(f.app.sourceFiles[1]), source);
+    } finally { writer.close(); }
+});
+
+test("a named proposal cannot prepare after a selected mapping changes outside its older source-binding fields", async t => {
+    const f = await setup(t), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+    const review = await reviewPromptOriginClass({ ...input, batch });
+    f.plan.targets = review.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE workspaces SET name=? WHERE session_id=?").run("Invented changed selected workspace", f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "prepare" }), /reviewed author database or selected chat mapping changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("archived history requires explicit inclusion and fresh local provenance, not an archive flag alone", async t => {
+    const f = await setup(t, "archived-agent"), origin = { ...f.origins[0], includeArchived: true };
+    const scope = { dataDir: f.app.context.dataDir, includeArchived: true };
+    assert.deepEqual((await reviewPromptOriginClass({ dataDir: scope.dataDir })).batches, []);
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    assert.equal((await reviewPromptOriginClass({ ...scope, batch })).targets[0].sourceMapping.archived, true);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins }), /explicitly included archived-local/);
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE sessions SET execution_location='cloud' WHERE id=?").run(f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(reviewPromptOriginClass({ ...scope, batch }), /no longer eligible/);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: [origin] }), /explicitly included archived-local/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("reviewing an older retained window needs its own choice at listing and original lookup", async t => {
+    const f = await setup(t), dataDir = f.app.context.dataDir;
+    t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 31 * 86400000 });
+    const current = await reviewPromptOriginClass({ dataDir });
+    assert.deepEqual(current.batches, []);
+    assert.equal(current.excluded["outside-current-window"], 1);
+    const { batches: [{ batch }] } = await reviewPromptOriginClass({ dataDir, includeOlder: true });
+    await assert.rejects(reviewPromptOriginClass({ dataDir, batch }), /stale or unavailable/);
+    const review = await reviewPromptOriginClass({ dataDir, batch, includeOlder: true });
+    assert.deepEqual(review.targets.map(t => [t.prompt.authorship.actor, t.olderRetained]), [["user", true]]);
+});
+
+test("a legacy exception cannot overwrite a known checkpoint author whose version is absent", async t => {
+    const f = await setup(t, "legacy-agent");
+    const checkpoint = JSON.parse(await readFile(f.checkpointFile, "utf8"));
+    const event = checkpoint.events.find(event => event.id === f.target.prompt.sourceEventId);
+    event.data.wirePromptAuthorship = { actor: "user", basis: "source-user" };
+    delete event.data.wirePromptAuthorshipVersion;
+    await atomicJson(f.checkpointFile, checkpoint);
+    const scope = { dataDir: f.app.context.dataDir };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const reviewed = await reviewPromptOriginClass({ ...scope, batch });
+    assert.deepEqual(reviewed.targets, []);
+    assert.deepEqual(reviewed.unresolved.map(row => row.reason), ["incompatible-checkpoint-copy"]);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins }), /not the reviewed older unqualified origin/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const variant of ["legacy-agent", "explicit-agent", "direct"]) test(`repair authority cannot fall back to cached mappings (${variant})`, async t => {
+    const f = await setup(t, variant);
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    const targets = structuredClone(inspection.targets);
+    delete targets[0].sourceMapping;
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE sessions SET execution_location='cloud' WHERE id=?").run(f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets }), /source mapping guard|local source disposition changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("the older host-target format remains usable only with the same freshly verified source identity", async t => {
+    const f = await setup(t);
+    const coverage = structuredClone(f.state.importCoverage);
+    for (const row of coverage.roster) delete row.localSourceVerified;
+    await replaceEvidence(f.app.context, () => ({ records: f.state.evidence, importCoverage: coverage }));
+    const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: [f.target] });
+    assert.equal(inspected.targets.length, 1);
+    assert.deepEqual(inspected.targets[0].prompt.authorship, f.target.prompt.authorship);
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE workspaces SET project_id=? WHERE session_id=?").run(randomUUID(), f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: [f.target] }), /compatible target's source mapping changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("both inspection entries reserve all original revalidation passes before reading", async t => {
+    const f = await setup(t);
+    const ids = Array.from({ length: 6 }, () => randomUUID());
+    const origins = ids.map(sourceEventId => ({ ...f.origins[0], sourceEventId,
+        sourceEvent: { ...f.origins[0].sourceEvent, bytes: TAIL_LIMITS.maxLineBytes } }));
+    const targets = ids.map(sourceEventId => ({ ...f.target, prompt: { ...f.target.prompt, sourceEventId },
+        sourceEvent: { ...f.target.sourceEvent, bytes: TAIL_LIMITS.maxLineBytes } }));
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins }), /reads exceed the existing cycle budget/);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets }), /reads exceed the existing cycle budget/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const boundary of ["applying", "snapshot-staged"]) test(`pinned original drift blocks effects and preserves same-journal recovery (${boundary})`, async t => {
+    const f = await setup(t, "legacy-agent");
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    await assert.rejects(runPromptOriginRepair(options, { async onStep(phase) {
+        if (phase !== boundary) return;
+        const events = (await readFile(f.app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        const changed = events.find(event => event.id === f.origins[0].sourceEventId);
+        const padding = " ".repeat(changed.data.source.length - "system".length);
+        changed.data.source = "system";
+        const text = events.map(event => {
+            const line = JSON.stringify(event);
+            return (event === changed ? line.replace('"source":"system"', `"source":${padding}"system"`) : line) + "\n";
+        }).join("");
+        assert.equal(Buffer.byteLength(text), f.sourceBytes[1].length, "Provenance drift must be caught even when file size is unchanged.");
+        await writeFile(f.app.sourceFiles[1], text);
+    } }), /Original prompt region changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    if (boundary === "snapshot-staged") {
+        await assert.rejects(createCollector(f.app.context, { timers: false }), error => error.code === "RETAINED_REPAIR_PENDING");
+    } else assert.equal(JSON.parse(await readFile(f.indexFile, "utf8")).completionReferenceMaintenance, undefined);
+    await writeFile(f.app.sourceFiles[1], f.sourceBytes[1]);
+    await runPromptOriginRepair(options);
+    assert.equal((await loadBoardState(f.app.context)).revision, f.state.revision + 1);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+});
+
+test("a committed bound legacy repair finalizes without replaying unavailable original sources", async t => {
+    const f = await setup(t, "legacy-agent");
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    await assert.rejects(runPromptOriginRepair(options, { onStep(phase) {
+        if (phase === "board-saved") throw new Error("Invented interruption after committed board.");
+    } }), /Invented interruption/);
+    const committed = await loadBoardState(f.app.context);
+    await rename(f.app.sourceFiles[1], f.app.sourceFiles[1] + ".moved");
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE sessions SET execution_location='cloud' WHERE id=?").run(f.app.child); }
+    finally { db.close(); }
+    const resumed = await runPromptOriginRepair(options);
+    assert.equal(resumed.alreadyCommitted, true);
+    assert.deepEqual(await loadBoardState(f.app.context), committed);
+    assert.equal(JSON.parse(await readFile(f.indexFile, "utf8")).completionReferenceMaintenance, undefined);
+});
+
+test("source mapping drift after preparation refuses the write and the same journal resumes only with its original scope", async t => {
+    const f = await setup(t, "archived-agent");
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: [{ ...f.origins[0], includeArchived: true }] });
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    const move = location => {
+        const db = new DatabaseSync(f.app.config.appDbPath);
+        try { db.prepare("UPDATE sessions SET execution_location=? WHERE id=?").run(location, f.app.child); }
+        finally { db.close(); }
+    };
+    await assert.rejects(runPromptOriginRepair(options, { onStep(phase) {
+        if (phase === "snapshot-staged") move("cloud");
+    } }), /source disposition changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    await assert.rejects(createCollector(f.app.context, { timers: false }), error => error.code === "RETAINED_REPAIR_PENDING");
+    move("local");
+    await runPromptOriginRepair(options);
+    assert.equal((await loadBoardState(f.app.context)).revision, f.state.revision + 1);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+});
+
+test("a complete named scan can disprove a false kickoff guard without marking a real first message Human", async t => {
+    const f = await setup(t, "guarded-first"), scope = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const index = JSON.parse(await readFile(f.indexFile));
+    delete index.sources[f.app.child].firstPromptEventId;
+    index.sources[f.app.child].promptStartObserved = false;
+    await atomicJson(f.indexFile, index);
+    // Two direct-looking messages in one agent-created chat, first-event checkpoint absent.
+    const human = f.app.cases.find(r => r.name === "human"), records = structuredClone(f.state.evidence);
+    const earlier = { actor: "unknown", basis: "missing-source" };
+    for (const r of records) for (const p of [r.userPrompt, ...(r.followUpPrompts ?? [])]) if (p.sourceEventId === human.promptId) {
+        p.authorship = earlier; p.authorshipVersion = 10;
+    }
+    const ck = JSON.parse(await readFile(f.checkpointFile));
+    Object.assign(ck.events.find(e => e.id === human.promptId).data, { wirePromptAuthorship: earlier, wirePromptAuthorshipVersion: 10 });
+    await atomicJson(f.checkpointFile, ck);
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const result = await reviewPromptOriginClass({ ...scope, batch });
+    assert.deepEqual(result.targets.map(t => [t.prompt.sourceEventId, t.prompt.authorship]), [[human.promptId, { actor: "user", basis: "host-direct-input" }]]);
+    assert.deepEqual(result.unresolved.map(u => [u.sourceEventId, u.observation.firstPromptGuard]), [[f.target.prompt.sourceEventId, true]]);
+    const [target] = result.targets, origin = { sourceSessionId: target.sourceSessionId, sourceEventId: human.promptId,
+        sourceEvent: target.sourceEvent, olderRetained: false };
+    const proof = target.sourceEvent.earlierOriginal;
+    assert.ok(proof && proof.firstRef !== hash(human.promptId));
+    const forged = { ...origin, sourceEvent: { ...origin.sourceEvent, earlierOriginal: { ...proof, seal: "0".repeat(64) } } };
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: scope.dataDir, origins: [forged] }), /earlier-original proof/);
+    const noProof = structuredClone(origin); delete noProof.sourceEvent.earlierOriginal;
+    assert.deepEqual((await inspectPromptOriginRepair({ dataDir: scope.dataDir, origins: [noProof] })).targets, []);
+    const verified = await inspectPromptOriginRepair({ dataDir: scope.dataDir, origins: [origin] });
+    assert.deepEqual(verified.targets[0].prompt.authorship, target.prompt.authorship);
+    Object.assign(f.plan, { targets: result.targets, source: result.source, stateGuardSha256: result.stateGuardSha256 });
+    await writeFile(f.options.planFile, JSON.stringify(f.plan)); f.options.planSha256 = digest(f.plan);
+    const prep = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prep.reviewSha256 });
+    const newIndex = JSON.parse(await readFile(f.indexFile));
+    assert.deepEqual(newIndex.sources, index.sources, "A sealed not-first witness does not rewrite collector progress.");
+    await f.app.restart(); await f.app.runtime().collector.collectNow();
+    const after = await loadBoardState(f.app.context), actual = after.evidence.find(r => r.userPrompt.sourceEventId === human.promptId);
+    assert.deepEqual(actual.userPrompt.authorship, target.prompt.authorship);
+    assert.deepEqual(actual.toolCalls, records.find(r => r.scenarioId === actual.scenarioId).toolCalls);
+    for (const frozen of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(scope.dataDir, frozen.path))), frozen.sha256);
+});
+
+test("a direct-looking first original can inspect an already retained creator match without opening the parent journal or proposing an author", async t => {
+    const f = await setup(t, "guarded-first");
+    await rename(f.app.sourceFiles[0], f.app.sourceFiles[0] + ".away");
+    const result = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    assert.deepEqual(result.targets, []);
+    assert.deepEqual(result.unresolved.map(u => [u.authorship.basis, u.creatorEvidence.status]),
+        [["missing-source", "retained-kickoff-without-child-receipt"]]);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const variant of ["direct", "plan-agent", "mode-user", "attachment-user", "legacy-idle-reference", "system-continuation"]) test(`sealed origin repair preserves all facts and survives restart (${variant})`, async t => {
+    const f = await setup(t, variant);
+    if (variant === "system-continuation") {
+        const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+        assert.deepEqual(inspected.targets.map(t => t.prompt.authorship), [{ actor: "agent", basis: "autopilot" }]);
+        f.plan.targets = inspected.targets;
+        await writeFile(f.options.planFile, JSON.stringify(f.plan));
+        f.options.planSha256 = digest(f.plan);
+    }
+    const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: f.plan.targets });
+    assert.equal(inspected.authorized, false);
+    assert.equal(inspected.indexAfterSchema, 4);
+    assert.equal(inspected.pendingFence, "completionReferenceMaintenance");
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: "0".repeat(64) }), /journal mismatch/);
+    const saved = await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    const after = await loadBoardState(f.app.context);
+    const finalIndex = JSON.parse(await readFile(f.indexFile, "utf8"));
+    assert.equal(finalIndex.schemaVersion, 4);
+    assert.equal(finalIndex.completionReferenceMaintenance, undefined);
+    assert.equal(after.revision, f.state.revision + 1);
+    const expected = structuredClone(f.state.evidence);
+    for (const alias of f.target.aliases) {
+        const record = expected.find(record => record.scenarioId === alias.scenarioId);
+        Object.assign(alias.field === "origin" ? record.userPrompt : record.followUpPrompts[alias.index],
+            { authorship: f.target.prompt.authorship, authorshipVersion: promptAuthorship.version });
+    }
+    assert.deepEqual(after.evidence, expected);
+    assert.deepEqual(after.exports, f.state.exports);
+    assert.equal(inspected.proposedEvidenceFile, saved.evidenceFile);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+    assert.deepEqual(await Promise.all(f.app.sourceFiles.map(file => readFile(file))), f.sourceBytes);
+    await f.app.restart();
+    await f.app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, expected);
+    await appendFile(f.app.sourceFiles[1], JSON.stringify({ id: randomUUID(), type: "session.info",
+        timestamp: new Date().toISOString(), data: { message: "Owned later append." } }) + "\n");
+    await f.app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, expected);
+});
+
+for (const drift of ["origin", "creator", "alias", "checkpoint"]) test(`read-only origin repair refuses ${drift} drift`, async t => {
+    const f = await setup(t, "plan-agent");
+    if (drift === "origin") f.target.sourceEvent.sha256 = "0".repeat(64);
+    if (drift === "creator") f.target.kickoff = {};
+    if (drift === "alias") f.target.aliases[0].scenarioId = "not-the-bound-record";
+    if (drift === "checkpoint") f.target.checkpointContextSha256 = "0".repeat(64);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: [f.target] }), {
+        origin: /Original prompt region changed/,
+        creator: /without a creator-history lookup/,
+        alias: /origin-copy population changed/,
+        checkpoint: /checkpoint preimage changed/,
+    }[drift]);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const interruption of ["checkpoint-1", "board-saved"]) test(
+    `an interrupted prompt repair blocks normal startup and resumes the same operation (${interruption})`, async t => {
+    const f = await setup(t, "plan-agent");
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    await assert.rejects(runPromptOriginRepair(options, { onStep(phase) {
+        if (phase === interruption) throw new Error("Owned interruption at sealed boundary.");
+    } }), /Owned interruption/);
+    const interrupted = await loadBoardState(f.app.context);
+    assert.equal(interrupted.revision, f.state.revision + Number(interruption === "board-saved"));
+    await assert.rejects(createCollector(f.app.context, { timers: false }), error => error.code === "RETAINED_REPAIR_PENDING");
+    assert.deepEqual(await loadBoardState(f.app.context), interrupted, "Refused startup cannot reconcile a half-applied state.");
+    if (interruption === "board-saved") await rename(f.app.sourceFiles[1], f.app.sourceFiles[1] + ".moved");
+    const resumed = await runPromptOriginRepair(options);
+    assert.equal(resumed.alreadyCommitted, interruption === "board-saved");
+    assert.equal((await loadBoardState(f.app.context)).revision, f.state.revision + 1);
+    if (interruption === "board-saved") assert.deepEqual(await loadBoardState(f.app.context), interrupted);
+    assert.equal(JSON.parse(await readFile(f.indexFile, "utf8")).completionReferenceMaintenance, undefined);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+});
+
+test("installing the supported plan parser does not reclassify already-retained v6 origins", async t => {
+    const f = await setup(t, "plan-agent");
+    await f.app.restart();
+    await f.app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    assert.equal((await loadBoardState(f.app.context)).evidence.find(record => record.scenarioId === f.target.aliases.find(alias =>
+        alias.field === "origin").scenarioId).userPrompt.authorship.actor, "unknown");
+});
+
+test("a named checkpoint-only companion preserves known origins, repaired carriers and prior receipts without creating records", async t => {
+    const f = await setup(t, "plan-agent", { checkpointCompanion: true, absentTargetEvent: true });
+    const before = JSON.parse(await readFile(f.checkpointFile, "utf8"));
+    const known = f.state.evidence.find(record => record.scenarioId === f.app.cases[0].scenarioId);
+    assert.deepEqual(known.userPrompt.authorship, { actor: "agent", basis: "parent-kickoff" });
+    assert.equal(Object.hasOwn(known.userPrompt, "authorshipVersion"), false);
+    const carriers = before.events.filter(event => event.type === "tool.execution_complete");
+    assert.ok(carriers.some(event => event.data.wireFailureEvidence));
+    const receipts = ["operation", "plan", "journal"].map(name => path.join(f.app.root, `prior-completed-${name}.json`));
+    for (const file of receipts) await writeFile(file, JSON.stringify({ phase: "complete", checkpointSha256: digest(before), invented: true }));
+    const receiptBytes = await Promise.all(receipts.map(file => readFile(file)));
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: f.plan.targets });
+    const companion = inspection.origins.find(origin => origin.checkpointOnly);
+    assert.equal(companion.copies, 0);
+    assert.deepEqual(companion.before, []);
+    assert.equal(inspection.checkpoints[0].prompts.find(prompt => prompt.sourceEventId === f.target.prompt.sourceEventId).retained, false);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    const after = await loadBoardState(f.app.context), checkpoint = JSON.parse(await readFile(f.checkpointFile, "utf8"));
+    assert.equal(hash(await readFile(f.indexFile)), f.plan.source.indexSha256, "Existing completed schema-4 registry and binding stay unchanged.");
+    assert.equal(after.evidence.length, f.state.evidence.length);
+    assert.equal(after.evidence.some(record => record.userPrompt.sourceEventId === f.companionTarget.prompt.sourceEventId), false);
+    assert.deepEqual(after.evidence.find(record => record.scenarioId === known.scenarioId), known);
+    assert.deepEqual(checkpoint.events.filter(event => event.type === "tool.execution_complete"), carriers);
+    assert.equal(checkpoint.events.some(event => event.id === f.target.prompt.sourceEventId), false, "Absent context stays absent.");
+    const changed = checkpoint.events.find(event => event.id === f.companionTarget.prompt.sourceEventId);
+    assert.deepEqual(changed.data.wirePromptAuthorship, { actor: "user", basis: "host-direct-input" });
+    const expected = structuredClone(before);
+    Object.assign(expected.events.find(event => event.id === changed.id).data,
+        { wirePromptAuthorship: changed.data.wirePromptAuthorship, wirePromptAuthorshipVersion: promptAuthorship.version });
+    assert.deepEqual(checkpoint, expected, "Only the named checkpoint author fields may change.");
+    assert.notEqual(digest(checkpoint), digest(before));
+    assert.deepEqual(await Promise.all(receipts.map(file => readFile(file))), receiptBytes);
+    assert.deepEqual(after.exports, f.state.exports);
+    await f.app.restart();
+    await f.app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, after.evidence);
+});
+
+test("a known contradictory checkpoint-only author refuses restoration", async t => {
+    const f = await setup(t, "plan-agent", { checkpointCompanion: true });
+    const checkpoint = JSON.parse(await readFile(f.checkpointFile, "utf8"));
+    checkpoint.events.find(event => event.id === f.companionTarget.prompt.sourceEventId).data.wirePromptAuthorship =
+        { actor: "agent", basis: "source-agent" };
+    await atomicJson(f.checkpointFile, checkpoint);
+    for (const target of f.plan.targets) target.checkpointContextSha256 = digest(checkpoint);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: f.plan.targets }),
+        /not the reviewed older unqualified origin/);
+    assert.deepEqual(JSON.parse(await readFile(f.checkpointFile, "utf8")), checkpoint);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});

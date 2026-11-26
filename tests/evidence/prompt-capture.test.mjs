@@ -1,0 +1,548 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, rm, open } from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { createCollector } from "../../lib/collector.mjs";
+import { TAIL_LIMITS, hash } from "../../lib/collector-io.mjs";
+import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
+import { buildAssessmentModel } from "../../lib/assessment-read-model.mjs";
+import { createPercentageCharts } from "../../lib/percentage-charts.mjs";
+import { promptAuthorship, promptRecord } from "../../lib/prompt-authorship.mjs";
+import { inspectRetainedInitiatorLinks, reviewPromptOriginClass } from "../../lib/prompt-origin-repair.mjs";
+import { buildSanitizedRecord, buildSanitizedBundle } from "../../lib/export.mjs";
+import { eventIdentity, filterDeletedRecords } from "../../lib/deletion-identities.mjs";
+import { createDeletionController } from "../../lib/deletion.mjs";
+
+const sessionId = "10000000-0000-4000-8000-000000000001";
+const now = Date.parse("2026-10-20T04:10:00Z");
+const event = (id, type, data, offset = 0) => ({
+    id, type, timestamp: new Date(now - 60000 + offset).toISOString(), data,
+});
+const prompt = (content, extra = {}, id = "prompt", offset = 0) =>
+    event(id, "user.message", { content, source: "user", ...extra }, offset);
+const start = (id = "call", offset = 1000) => event(`start-${id}`, "tool.execution_start", {
+    toolCallId: id, toolName: "workiq-retrieve", mcpServerName: "workiq", mcpToolName: "retrieve",
+    arguments: { query: "Synthetic fixture query" }, turnId: "turn-one",
+}, offset);
+const startup = event("startup", "session.start", { sessionId, version: 1 }, -1000);
+const lines = events => events.map(value => JSON.stringify(value) + "\n").join("");
+
+async function installation(t, events) {
+    t.mock.timers.enable({ apis: ["Date"], now });
+    const root = await mkdtemp(path.join(os.tmpdir(), "wire-prompt-capture-"));
+    const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state") };
+    const file = path.join(config.sessionRoot, sessionId, "events.jsonl");
+    await mkdir(path.dirname(file), { recursive: true });
+    const db = new DatabaseSync(config.appDbPath);
+    db.exec(`PRAGMA user_version=156;
+        CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
+        CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
+        CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);`);
+    db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(sessionId, "Synthetic capture request", "chat", null, "local");
+    await writeFile(file, lines([startup, ...events]));
+    const context = { dataDir: path.join(root, "retained") };
+    let collector = await createCollector(context, { timers: false });
+    t.after(async () => { await collector.close(); db.close(); await rm(root, { recursive: true, force: true }); });
+    await collector.configure({ ...config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const fingerprint = hash(JSON.stringify([config.appDbPath, config.sessionRoot, 30]));
+    return {
+        file, context,
+        collect: async () => { await collector.collectNow(); return loadBoardState(context, { readOnly: true }); },
+        append: events => appendFile(file, lines(events)),
+        checkpoint: async () => JSON.parse(await readFile(path.join(context.dataDir, "collector", fingerprint, sessionId + ".json"), "utf8")),
+        restart: async () => { await collector.close(); collector = await createCollector(context, { timers: false }); },
+    };
+}
+
+test("automatic continuations record absence of an original separately from uncollected host context", async t => {
+    const app = await installation(t, [
+        prompt("", { source: "autopilot", isAutopilotContinuation: true, transformedContent: "PRIVATE_HOST_CONTROL" }),
+        start(),
+        prompt("", { source: "system", isAutopilotContinuation: true, transformedContent: "PRIVATE_HOST_CONTROL" }, "system", 2000),
+        start("system", 3000),
+    ]);
+    const state = await app.collect();
+    for (const record of state.evidence) {
+        assert.equal(record.userPrompt.text, "");
+        assert.deepEqual(record.userPrompt.capture, {
+            version: 1, kind: "automatic-continuation", original: "empty", hostContext: "not-collected", reason: null,
+        });
+
+    }
+    assert.equal(state.evidence[0].userPrompt.authorship.actor, "agent");
+    assert.deepEqual(state.evidence[1].userPrompt.authorship, { actor: "agent", basis: "autopilot" });
+    assert.doesNotMatch(JSON.stringify(state.evidence), /PRIVATE_HOST_CONTROL|transformedContent/);
+    assert.doesNotMatch(JSON.stringify(await app.checkpoint()), /PRIVATE_HOST_CONTROL|transformedContent/);
+    assert.equal(state.personalEvaluation, undefined);
+    const before = state.evidence;
+    await app.restart();
+    assert.deepEqual((await app.collect()).evidence, before);
+});
+
+test("unreadable history entries stop earlier-prompt borrowing and retain a specific gap across restart", async t => {
+    const app = await installation(t, [prompt("Synthetic earlier original")]);
+    await appendFile(app.file, '{"type":"user.message",not-json}\n');
+    await app.collect();
+    await app.restart();
+    await app.append([start()]);
+    const state = await app.collect(), record = state.evidence[0];
+    assert.equal(record.userPrompt.text, null);
+    assert.equal(record.userPrompt.sourceEventId, undefined);
+    assert.equal(record.userPrompt.capture.reason, "malformed-line");
+    assert.equal((await app.checkpoint()).cursor.malformedLines, 1);
+    await app.append([prompt("Synthetic fresh original", {}, "fresh", 2000), start("fresh", 3000)]);
+    assert.equal((await app.collect()).evidence.find(value => value.userPrompt.sourceEventId === "fresh").userPrompt.text,
+        "Synthetic fresh original");
+});
+
+test("one accepted pending original survives context pressure, restart and a later first call", async t => {
+    const text = "x".repeat(TAIL_LIMITS.maxContextBytes + 1);
+    const app = await installation(t, [prompt(text)]);
+    await app.collect();
+    await app.restart();
+    await app.append([start()]);
+    const state = await app.collect();
+    assert.equal(state.evidence[0].userPrompt.text?.length, text.length);
+    assert.equal(state.evidence[0].userPrompt.text, text);
+    assert.ok(Buffer.byteLength(JSON.stringify((await app.checkpoint()).events))
+        <= TAIL_LIMITS.maxContextBytes + TAIL_LIMITS.maxPendingPromptBytes);
+    assert.equal((await app.checkpoint()).cursor.oversizedLines, 0);
+});
+
+test("a late original is attached only through its exact assistant tool request, without a second interaction", async t => {
+    const app = await installation(t, [start()]);
+    const first = await app.collect(), scenarioId = first.evidence[0].scenarioId;
+    await app.append([
+        event("response", "assistant.message", { originatingMessageId: "message-one", turnId: "turn-one",
+            content: "PRIVATE_REPLY", toolRequests: [{ toolCallId: "call", arguments: { query: "PRIVATE_ARGUMENT" } }] }, 900),
+        prompt("Synthetic late original", { messageId: "message-one" }),
+    ]);
+    const state = await app.collect();
+    assert.equal(state.evidence.length, 1);
+    assert.equal(state.evidence[0].scenarioId, scenarioId);
+    assert.equal(state.evidence[0].userPrompt.text, "Synthetic late original");
+    assert.equal(state.evidence[0].promptAssociationEvidence.method, "explicit-message");
+    assert.equal(state.evidence[0].followUpPrompts.length, 0);
+    assert.doesNotMatch(JSON.stringify(await app.checkpoint()), /PRIVATE_REPLY|PRIVATE_ARGUMENT/);
+    await app.restart();
+    assert.deepEqual((await app.collect()).evidence, state.evidence);
+});
+
+test("same-ID source changes qualify text conflict without replacing the immutable original", async t => {
+    const app = await installation(t, [prompt("Synthetic first original"), start()]);
+    const before = (await app.collect()).evidence[0].userPrompt;
+    await app.append([prompt("Synthetic replacement original")]);
+    const after = (await app.collect()).evidence[0].userPrompt;
+    assert.equal(after.text, before.text);
+    assert.equal(after.sourceTimestamp, before.sourceTimestamp);
+    assert.equal(after.authorship.basis, "conflicting-source");
+    assert.equal(after.capture.conflict, true);
+});
+
+for (const envelope of ["canonical", "ignored-host-context", "multiple-chunks"]) {
+    test(`oversized ${envelope} entries retain a gap, not an earlier original or a partial payload`, async t => {
+        const app = await installation(t, [prompt("Synthetic earlier original")]);
+        const size = envelope === "multiple-chunks" ? TAIL_LIMITS.chunkBytes + 1024 : TAIL_LIMITS.maxLineBytes + 1;
+        await app.append([prompt(envelope === "canonical" ? "x".repeat(size) : "Synthetic short original",
+            envelope === "canonical" ? {} : { transformedContent: "x".repeat(size) }, "oversized"), start()]);
+        await app.collect();
+        await app.restart();
+        let state = await app.collect();
+        if (envelope === "multiple-chunks") {
+            // The first read included the preceding prompt. Only the next full
+            // chunk establishes that this entry cannot be projected.
+            const { cursor } = await app.checkpoint();
+            assert.equal(cursor.skipping, true);
+            assert.equal(cursor.skipReason, "oversized-line");
+            assert.ok(cursor.backlogBytes > 0);
+            assert.deepEqual(state.evidence, []);
+            await app.restart();
+            state = await app.collect();
+        }
+        const record = state.evidence[0];
+        assert.equal(record.userPrompt.text, null);
+        assert.equal(record.userPrompt.sourceEventId, undefined);
+        assert.equal(record.userPrompt.capture.reason, "oversized-line");
+        assert.match(record.userPrompt.gapId, /^wire-gap-/);
+        const checkpoint = await app.checkpoint();
+        assert.equal(checkpoint.cursor.oversizedLines, 1);
+        assert.doesNotMatch(JSON.stringify(checkpoint), /Synthetic short original|xxxxxx/);
+    });
+}
+
+test("turn coincidence alone never links a late message", async t => {
+    const app = await installation(t, [start()]);
+    await app.collect();
+    await app.append([prompt("Synthetic unrelated late message", { messageId: "message-one", turnId: "turn-one" })]);
+    const state = await app.collect();
+    assert.equal(state.evidence.length, 1);
+    assert.equal(state.evidence[0].userPrompt.text, null);
+    assert.equal(state.evidence[0].userPrompt.capture.reason, "unlinked");
+});
+
+test("only a newly consumed original request can link an already completed call on its existing prompt", async t => {
+    const app = await installation(t, [prompt("Synthetic system input.", { source: "system", messageId: "logical" }), start(),
+        event("done", "tool.execution_complete", { toolCallId: "call", success: true }, 1100)]);
+    const before = (await app.collect()).evidence[0], [call] = before.toolCalls;
+    assert.equal(call.promptLink, undefined);
+    await app.restart();
+    await app.append([event("late-request", "assistant.message", { originatingMessageId: "logical",
+        turnId: "turn-one", toolRequests: [{ toolCallId: "call" }] }, 900)]);
+    const after = (await app.collect()).evidence[0];
+    assert.deepEqual(after.toolCalls, [{ ...call, promptLink: { version: 1, promptEventId: "prompt", requestEventId: "late-request" } }]);
+    assert.deepEqual(after.userPrompt, before.userPrompt);
+    assert.equal(promptAuthorship.requestLink(after).association, "explicit-source-link");
+    await replaceEvidence(app.context, (_, importCoverage) => ({ records: [before], importCoverage }));
+    await app.append([event("unrelated", "assistant.message", {}, 1500)]);
+    assert.equal((await app.collect()).evidence[0].toolCalls[0].promptLink, undefined);
+});
+
+test("an assistant request replayed in the new tail is not a new original link", async t => {
+    const app = await installation(t, [prompt("Synthetic prompt", { messageId: "logical" }), start(),
+        event("done", "tool.execution_complete", { toolCallId: "call", success: true }, 1100)]);
+    const before = (await app.collect()).evidence[0];
+    await app.append([{ ...event("replay", "assistant.message", { originatingMessageId: "logical",
+        turnId: "turn-one", toolRequests: [{ toolCallId: "call" }] }, 900), checkpoint: true }]);
+    const after = (await app.collect()).evidence[0];
+    assert.deepEqual(after.toolCalls, before.toolCalls);
+    assert.deepEqual(after.userPrompt, before.userPrompt);
+});
+
+for (const [source, expected] of [["user", "user"], ["agent-invented", "agent"]]) {
+    test(`a pending tool request still links to its ${expected} prompt across intervening skill input and restart`, async t => {
+        const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "original",
+            turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
+        const app = await installation(t, [
+            prompt("Invented initiating request", { source, messageId: "original" }),
+            request("first-request", "first", 1), start("first", 2),
+            prompt("Invented host instructions", { source: "skill-workiq", messageId: "instructions" }, "skill", 3),
+            request("second-request", "second", 4),
+            ...Array.from({ length: 305 }, (_, i) => event("other-" + i, "assistant.message", {}, 10 + i)),
+        ]);
+        await app.collect();
+        await app.restart();
+        await app.append([start("second", 1000)]);
+        const state = await app.collect();
+        assert.deepEqual(state.evidence.map(r => [r.userPrompt.sourceEventId, r.toolCalls.map(c => c.toolCallId)]),
+            [["prompt", ["first", "second"]]], "An app-inserted message must not become an additional request when the call names its actual origin.");
+        const chart = createPercentageCharts({ authorship: promptAuthorship }).authorUsage(state.evidence);
+        assert.equal(chart.total, 1);
+        assert.equal(chart.rows.find(row => row.id === expected).count, 1);
+        const detail = [...buildAssessmentModel(state).details.values()][0];
+        assert.equal(detail.interaction.message.association, "explicit-source-link");
+        const record = state.evidence[0];
+        const snapshot = buildSanitizedRecord(record, "a".repeat(64));
+        assert.equal(snapshot.promptAssociation, "Copilot linked all 2 tool calls directly to the prompt.");
+        assert.doesNotMatch(JSON.stringify(snapshot), /first-request|second-request/);
+        const [pruned] = filterDeletedRecords([record], { events: [eventIdentity(sessionId, "first-request")] });
+        assert.equal(pruned.toolCalls[0].promptLink, undefined);
+        assert.match(promptAuthorship.requestLink(pruned).note, /linked 1 of 2 tool calls/);
+        await app.append([event("end-second", "tool.execution_complete", { toolCallId: "second", success: true }, 1010)]);
+        const refreshed = await app.collect();
+        assert.equal(refreshed.evidence.length, 1);
+        assert.equal(refreshed.evidence[0].toolCalls[1].completionEventId, "end-second");
+        assert.deepEqual(refreshed.evidence[0].toolCalls[1].promptLink, record.toolCalls[1].promptLink);
+    });
+}
+
+test("the recent-event cutoff cannot discard a competing request and manufacture a direct link", async t => {
+    const response = (id, messageId, at) => event(id, "assistant.message", { originatingMessageId: messageId,
+        turnId: "turn-one", toolRequests: [{ toolCallId: "competing" }] }, at);
+    const app = await installation(t, [
+        prompt("First invented request", { messageId: "one" }),
+        response("older-claim", "one", 1),
+        ...Array.from({ length: 305 }, (_, i) => event("filler-" + i, "assistant.message", {}, 10 + i)),
+        prompt("Second invented request", { messageId: "two" }, "other", 400), response("recent-claim", "two", 410),
+    ]);
+    await app.collect(); await app.restart(); await app.append([start("competing", 1000)]);
+    const { evidence: [record] } = await app.collect();
+    assert.equal(record.toolCalls.length, 1);
+    assert.equal(record.userPrompt.capture.reason, "ambiguous-link");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
+});
+
+test("two recorded starts for one invocation cannot establish a unique initiating request", async t => {
+    const call = start(), competing = { ...call, id: "other-start", data: { ...call.data, turnId: "other-turn" } };
+    const app = await installation(t, [
+        prompt("Invented request", { messageId: "one" }),
+        event("request", "assistant.message", { originatingMessageId: "one", turnId: "turn-one",
+            toolRequests: [{ toolCallId: "call" }] }, 1),
+        call, competing,
+    ]);
+    await app.collect();
+    await app.restart();
+    const state = await app.collect(), [record] = state.evidence;
+    assert.equal(record.toolCalls.length, 1);
+    assert.equal(record.userPrompt.capture.reason, "ambiguous-link");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
+    assert.equal([...buildAssessmentModel(state).details.values()][0].interaction.message.association, "unverified");
+});
+
+test("evicting a competing start cannot promote the survivor on restart or historical inspection", async t => {
+    const call = start("shared", 66000), other = event("competing-start", "tool.execution_start",
+        { toolCallId: "shared", toolName: "powershell", arguments: { command: "Get-Date" } }, 1);
+    const app = await installation(t, [
+        prompt("Invented unclassified original", { source: undefined, messageId: "one" }),
+        other, ...Array.from({ length: 305 }, (_, i) => event(`filler-${i}`, "assistant.message", {}, 10 + i)),
+        event("request", "assistant.message", { originatingMessageId: "one", turnId: "turn-one",
+            toolRequests: [{ toolCallId: "shared" }] }, 65000),
+        call, event("completion", "tool.execution_complete", { toolCallId: "shared", success: true }, 67000),
+    ]);
+    assert.deepEqual((await app.collect()).evidence, [], "The Work IQ start is not yet inside this cut's time window.");
+    const compact = await app.checkpoint();
+    assert.deepEqual(compact.events.filter(e => e.type === "tool.execution_start").map(e => e.id), [call.id]);
+    assert.ok(compact.events.some(e => e.id === "request"));
+    await app.restart();
+    t.mock.timers.tick(8000);
+    await app.append([call, event("next", "assistant.message", {}, 68000)]);
+    const state = await app.collect(), [record] = state.evidence;
+    assert.equal(state.evidence.length, 1);
+    assert.equal(record.toolCalls[0].startEventId, call.id);
+    const prospective = [record.userPrompt.sourceEventId ?? null, record.toolCalls[0].promptLink ?? null];
+
+    // The historical board already names a message. Only the checkpoint came from the new collector.
+    const original = promptRecord(compact.events.find(e => e.id === "prompt"));
+    const { promptLink, ...olderCall } = record.toolCalls[0];
+    await replaceEvidence(app.context, () => ({ records: [{ ...record, userPrompt: { ...original, authorshipVersion: 6 },
+        toolCalls: [olderCall] }], importCoverage: state.importCoverage }));
+    const { dataDir } = app.context, { cases: [selected] } = await reviewPromptOriginClass({ dataDir, originatingOnly: true });
+    const { links: [observation], fullSourceUniquenessChecked } = await inspectRetainedInitiatorLinks({ dataDir, linkCheck: selected.linkCheck });
+    assert.equal(fullSourceUniquenessChecked, false);
+    assert.deepEqual({ prospective, observation: observation.checkpoint, sender: observation.retainedSender },
+        { prospective: [null, null], observation: "competing-links", sender: undefined });
+});
+
+test("same event, time and text cannot erase a conflicting sender before the first call", async t => {
+    const human = prompt("Invented request", { messageId: "one" });
+    const agent = { ...human, data: { ...human.data, source: "agent-invented" } };
+    const app = await installation(t, [human, agent]);
+    await app.collect();
+    await app.restart();
+    await app.append([human, start()]);
+    const state = await app.collect(), [record] = state.evidence;
+    assert.deepEqual(record.userPrompt.authorship, { actor: "unknown", basis: "conflicting-source" });
+    assert.deepEqual((await app.checkpoint()).events.find(e => e.id === human.id).data.wirePromptAuthorship,
+        record.userPrompt.authorship);
+    assert.equal(createPercentageCharts({ authorship: promptAuthorship }).authorUsage(state.evidence)
+        .rows.find(row => row.id === "unknown").count, 1);
+});
+
+test("hard checkpoint bounds leave a pruned competing request unlinked", async t => {
+    const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "origin",
+        turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
+    const app = await installation(t, [
+        prompt("A pending original", { messageId: "origin" }),
+        request("old", "shared", 1),
+        ...Array.from({ length: TAIL_LIMITS.maxContextEvents }, (_, i) => request(`filler-${i}`, `other-${i}`, 10 + i)),
+        request("recent", "shared", 4000),
+    ]);
+    await app.collect();
+    const checkpoint = await app.checkpoint();
+    assert.ok(checkpoint.events.length <= TAIL_LIMITS.maxContextEvents);
+    assert.ok(Buffer.byteLength(JSON.stringify(checkpoint.events.filter(e => e.id !== "prompt"))) <= TAIL_LIMITS.maxContextBytes);
+    await app.restart(); await app.append([start("shared", 5000)]);
+    const { evidence: [record] } = await app.collect();
+    assert.equal(record.userPrompt.capture.reason, "unlinked");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
+});
+
+for (const flaw of ["duplicate-message", "different-turn", "subagent"]) {
+    test(`explicit linkage rejects ${flaw} evidence instead of borrowing an earlier message`, async t => {
+        const response = event("response", "assistant.message", {
+            originatingMessageId: "message-one", turnId: flaw === "different-turn" ? "wrong-turn" : "turn-one",
+            toolRequests: [{ toolCallId: "call" }],
+        }, 900);
+        if (flaw === "subagent") response.agentId = "child-agent";
+        const messages = [prompt("Synthetic first original", { messageId: "message-one" })];
+        if (flaw === "duplicate-message") messages.push(prompt("Synthetic competing original", { messageId: "message-one" }, "competing", 1));
+        const app = await installation(t, [...messages, response, start()]);
+        const record = (await app.collect()).evidence[0];
+        assert.equal(record.userPrompt.text, null);
+        assert.equal(record.userPrompt.capture.reason, flaw === "subagent" ? "unlinked" : "ambiguous-link");
+    });
+}
+
+test("evicting old correlation context never duplicates or reassigns its already saved calls", async t => {
+    const oldText = "x".repeat(TAIL_LIMITS.maxContextBytes + 1);
+    const app = await installation(t, [prompt(oldText), start()]);
+    await app.collect();
+    await app.append([prompt("Synthetic new original", {}, "new", 2000), start("new", 3000)]);
+    const before = await app.collect();
+    assert.equal(before.evidence.length, 2);
+    await app.append([event("unrelated", "session.info", {}, 4000)]);
+    const after = await app.collect();
+    assert.equal(after.evidence.length, 2);
+    assert.equal(after.evidence.find(record => record.userPrompt.sourceEventId === "prompt").userPrompt.text, oldText);
+    assert.deepEqual(after.evidence.map(record => record.toolCalls.map(call => call.toolCallId)),
+        before.evidence.map(record => record.toolCalls.map(call => call.toolCallId)));
+});
+
+test("legacy originals do not acquire newly inferred capture facts or get text replaced", async t => {
+    const app = await installation(t, [prompt("Synthetic historical original"), start()]);
+    await app.collect();
+    await replaceEvidence(app.context, (records, importCoverage) => ({
+        records: records.map(record => {
+            const { capture, ...userPrompt } = record.userPrompt;
+            const { promptAssociationEvidence, ...legacy } = record;
+            return { ...legacy, userPrompt };
+        }), importCoverage,
+    }));
+    const before = (await loadBoardState(app.context)).evidence[0];
+    await app.append([prompt("Synthetic replacement original")]);
+    const after = (await app.collect()).evidence[0];
+    assert.equal(after.userPrompt.text, before.userPrompt.text);
+    assert.equal(after.userPrompt.capture, undefined);
+    assert.equal(after.promptAssociationEvidence, undefined);
+});
+
+test("new explicit evidence conflicting with a saved origin qualifies the link without replacing original text", async t => {
+    const app = await installation(t, [prompt("Synthetic first association", { messageId: "first-message" }), start()]);
+    await app.collect();
+    await app.append([
+        prompt("Synthetic actual linked original", { messageId: "second-message" }, "second-prompt", 10),
+        event("response", "assistant.message", { originatingMessageId: "second-message", turnId: "turn-one",
+            toolRequests: [{ toolCallId: "call" }] }, 900),
+    ]);
+    const state = await app.collect();
+    assert.equal(state.evidence.length, 1);
+    assert.equal(state.evidence[0].userPrompt.text, "Synthetic first association");
+    assert.equal(state.evidence[0].userPrompt.capture.reason, "ambiguous-link");
+});
+
+test("a later claim naming a different origin withdraws direct linkage from the reader and a new report", async t => {
+    const request = (id, msg, call, at) => event(id, "assistant.message", {
+        originatingMessageId: msg, turnId: "turn-one", toolRequests: [{ toolCallId: call }],
+    }, at);
+    const app = await installation(t, [
+        prompt("Invented first request", { messageId: "one" }),
+        request("first-claim", "one", "first", 1), start("first", 2),
+        prompt("Invented second request", { messageId: "two" }, "other", 3),
+        request("second-claim", "two", "second", 4), start("second", 5),
+    ]);
+    const before = await app.collect();
+    assert.deepEqual([...buildAssessmentModel(before).details.values()].map(v => v.interaction.message.association),
+        ["explicit-source-link", "explicit-source-link"]);
+    await app.restart();
+    await app.append([
+        request("competes-first", "two", "first", 1), request("competes-second", "missing-original", "second", 4),
+        event("first-end", "tool.execution_complete", { toolCallId: "first", success: true }, 10),
+        event("second-end", "tool.execution_complete", { toolCallId: "second", success: true }, 11),
+    ]);
+    const after = await app.collect();
+    const expected = "The saved links disagree about which request started this activity.";
+    const bundle = await buildSanitizedBundle(after.evidence, "a".repeat(64), { formats: ["json"] });
+    assert.deepEqual(JSON.parse(bundle.files["product-report.json"]).records.map(r => r.promptAssociation), [expected, expected]);
+    assert.deepEqual([...buildAssessmentModel(after).details.values()].map(v => v.interaction.message.association), ["unverified", "unverified"]);
+    const { searchFixture } = await import("../search/live-search-fixture.mjs");
+    const { chromium, expect } = await import("@playwright/test");
+    const { runtime } = await searchFixture(t, { records: after.evidence, reply: false });
+    const browser = await chromium.launch();
+    try {
+        const page = await browser.newPage();
+        await page.goto(runtime.url);
+        for (const record of after.evidence) {
+            await page.locator(`[data-view-key="request:${record.scenarioId}"] .request-card-open`).click();
+            const reader = page.locator("#contextSidebar");
+            await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+            await expect(reader.locator(`[data-context-group="${record.scenarioId}"] .reader-record-limits p`).first()).toHaveText(expected);
+            await page.locator("#closeContextSidebar").click();
+        }
+    } finally { await browser.close(); }
+});
+
+test("a complete prompt exactly at the initial byte-window boundary is not discarded as a partial line", async t => {
+    const app = await installation(t, []);
+    const boundary = (await readFile(app.file)).length;
+    const handle = await open(app.file, "r+");
+    try {
+        await handle.truncate(boundary + TAIL_LIMITS.initialFileBytes);
+        await handle.write(Buffer.from(lines([prompt("Synthetic boundary original"), start()])), 0, undefined, boundary);
+    } finally { await handle.close(); }
+    const state = await app.collect();
+    assert.equal(state.evidence[0].userPrompt.text, "Synthetic boundary original");
+});
+
+test("conflicting same-ID deliveries in one batch are disclosed on the first saved copy", async t => {
+    const app = await installation(t, [prompt("Synthetic earlier delivery"), prompt("Synthetic latest delivery"), start()]);
+    const record = (await app.collect()).evidence[0];
+    assert.equal(record.userPrompt.text, "Synthetic latest delivery");
+    assert.equal(record.userPrompt.capture.conflict, true);
+    assert.equal(record.userPrompt.authorship.basis, "conflicting-source");
+});
+
+test("older assistant records without origin-link metadata do not erase an ordinary recorded-order prompt", async t => {
+    const app = await installation(t, [
+        prompt("Synthetic ordinary original"),
+        event("response", "assistant.message", { turnId: "turn-one", toolRequests: [{ toolCallId: "call" }] }, 900),
+        start(),
+    ]);
+    assert.equal((await app.collect()).evidence[0].userPrompt.text, "Synthetic ordinary original");
+});
+
+test("range deletion removes new tool-request linkage identifiers from retained checkpoint copies", async t => {
+    const app = await installation(t, [
+        prompt("Synthetic deletable original"),
+        event("response", "assistant.message", { turnId: "turn-one",
+            toolRequests: [{ toolCallId: "call" }, { toolCallId: "not-selected" }] }, 900), start(),
+    ]);
+    await app.collect();
+    const controller = createDeletionController(app.context);
+    const preview = await controller.preview("synthetic-delete", { scope: "range", from: "2026-10-20", to: "2026-10-20",
+        timeContext: { timeZone: "UTC", locale: "en-US" } });
+    await controller.confirm("synthetic-delete", { operationId: preview.operationId, confirmed: true });
+    assert.deepEqual((await app.checkpoint()).events.find(value => value.id === "response").data.wireToolRequestIds, ["not-selected"]);
+    await app.restart();
+    await app.collect();
+    assert.deepEqual((await app.checkpoint()).events.find(value => value.id === "response").data.wireToolRequestIds, ["not-selected"]);
+});
+
+test("ordinary human and agent originals survive reply-saving OFF, host augmentation and sign-in failure", async t => {
+    const app = await installation(t, [
+        prompt("Synthetic human original", { agentMode: "autopilot", transformedContent: "PRIVATE_AUGMENTATION" }),
+        start(),
+        event("failed", "tool.execution_complete", { toolCallId: "call", success: false, error: {
+            code: "failure", message: "Re-authentication required for MCP server 'workiq'. Run /mcp auth workiq.",
+        } }, 1300),
+        prompt("Synthetic agent original", { source: "agent-synthetic", transformedContent: "PRIVATE_AUGMENTATION" }, "agent", 2000),
+        start("agent", 3000),
+    ]);
+    const state = await app.collect();
+    assert.deepEqual(state.evidence.map(record => record.userPrompt.text), ["Synthetic human original", "Synthetic agent original"]);
+    assert.deepEqual(state.evidence.map(record => record.userPrompt.authorship.actor), ["user", "agent"]);
+    assert.ok(state.evidence.every(record => record.userPrompt.capture.kind === "message" && record.userPrompt.capture.original === "recorded"));
+    assert.equal(state.evidence[0].toolCalls[0].failureEvidence.messageSignal, "workiq-sign-in-required");
+    assert.equal(state.personalEvaluation, undefined);
+    assert.doesNotMatch(JSON.stringify(await app.checkpoint()), /PRIVATE_AUGMENTATION/);
+});
+
+test("privacy exclusions and unsupported message formats retain boundaries with distinct reasons", async t => {
+    const app = await installation(t, [
+        prompt("Synthetic preceding original", {}, "preceding", -1000),
+        prompt('{"password":"invented-fixture-only"}'), start(),
+        prompt([{ type: "text", text: "Synthetic unsupported content" }], {}, "unsupported", 2000), start("unsupported", 3000),
+    ]);
+    const state = await app.collect(), checkpoint = await app.checkpoint();
+    assert.deepEqual(state.evidence.map(record => record.userPrompt.text), [null, null]);
+    assert.deepEqual(state.evidence.map(record => record.userPrompt.capture.reason), ["credential-excluded", "unsupported-content"]);
+    assert.equal(checkpoint.diagnostics.credentialExclusions, 1);
+    assert.equal(checkpoint.diagnostics.unsupportedPromptContents, 1);
+    assert.doesNotMatch(JSON.stringify(checkpoint), /invented-fixture-only|Synthetic unsupported content/);
+});
+
+test("a uniquely linked pending interaction owns new calls from the same recovered origin without a duplicate group", async t => {
+    const app = await installation(t, [start()]);
+    const first = await app.collect();
+    await app.append([
+        prompt("Synthetic linked original", { messageId: "message-one" }),
+        event("response", "assistant.message", { originatingMessageId: "message-one", turnId: "turn-one",
+            toolRequests: [{ toolCallId: "call" }, { toolCallId: "new-call" }] }, 900),
+        start("new-call", 2000),
+    ]);
+    const state = await app.collect();
+    assert.equal(state.evidence.length, 1);
+    assert.equal(state.evidence[0].scenarioId, first.evidence[0].scenarioId);
+    assert.deepEqual(state.evidence[0].toolCalls.map(call => call.toolCallId), ["call", "new-call"]);
+    assert.equal(state.evidence[0].userPrompt.text, "Synthetic linked original");
+});

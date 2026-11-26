@@ -1,0 +1,70 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fontDataUrl, fontFaceStyles, uiFontStack } from "../../lib/typeface.mjs";
+import { typographyTokens, tokens, screenTokens, screenFontStack } from "../../web/tokens.mjs";
+import { renderHtmlShell } from "../../lib/render.mjs";
+import { renderPdf } from "../../lib/pdf.mjs";
+import { dimensionalColumnStyles } from "../../web/dimensional-charts-styles.mjs";
+
+test("the retained Asta asset stays licensed and the report font stack is preserved", () => {
+    const font = readFileSync(new URL("../../assets/fonts/asta-sans-latin-variable.woff2", import.meta.url));
+    const license = readFileSync(new URL("../../assets/fonts/OFL.txt", import.meta.url), "utf8");
+    assert.equal(createHash("sha256").update(font).digest("hex"), "ad3079a2c2cef53a0ba3598f7c5a4ae9289982c8b8a426872395846e9fa08e25");
+    assert.equal(font.subarray(0, 4).toString(), "wOF2");
+    assert.equal(fontDataUrl, `data:font/woff2;base64,${font.toString("base64")}`);
+    assert.ok(fontFaceStyles.includes(license));
+    assert.match(license, /Copyright 2024 The Asta Sans Project Authors/);
+    assert.match(license, /SIL OPEN FONT LICENSE Version 1\.1/);
+    assert.match(fontFaceStyles, /font-weight:300 800/);
+    assert.match(fontFaceStyles, /unicode-range:U\+0000-00FF/);
+    assert.equal(uiFontStack, 'Arial,"Helvetica Neue","Segoe UI",sans-serif');
+    assert.match(uiFontStack, /sans-serif$/);
+    for (const [asset, digest] of [
+        [tokens, "bc1c376cd50c984b828eb834fb239fcaee543fdcee860faddfd3753921e27900"],
+        [typographyTokens, "0647f3f7c10ec869b55c08c783ab7e2b5a9585f219218564f4002386d3c1edfc"],
+        [fontFaceStyles, "0ab1b95c57a5e174e0f445aa734e50d5d4654056d0c451bb69312ababcb99beb"],
+        [dimensionalColumnStyles, "35ca34cf435141877bac1e6d295abca78481cd47f6016ed7cf124a07ff71548d"],
+    ]) assert.equal(createHash("sha256").update(asset).digest("hex"), digest, "Historical report style bytes");
+});
+
+test("the shell uses the exact retained IQOS Asta asset without changing report typography or loading a remote font", () => {
+    const html = renderHtmlShell("a".repeat(64), "fluent-font");
+    assert.equal(html.split(fontFaceStyles).length - 1, 1);
+    assert.ok(tokens.includes(typographyTokens));
+    assert.ok(html.includes(screenTokens));
+    assert.ok(html.includes(`--font:${screenFontStack}`));
+    assert.equal(screenFontStack, '"Asta Sans","Segoe UI","Segoe UI Web (West European)",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",sans-serif');
+    assert.match(typographyTokens, /--mono:"Cascadia Mono"/);
+    for (const role of ["caption", "small", "body", "reading", "control", "title", "section", "dialog", "data-value", "score"]) {
+        assert.ok(typographyTokens.includes(`--type-${role}:`), `${role} is a shared role`);
+    }
+    const head = html.slice(0, html.indexOf("</head>"));
+    const css = [...head.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(match => match[1]).join("\n");
+    assert.ok(css.includes(fontFaceStyles));
+    assert.doesNotMatch(css, /(?:url\(\s*|@import\s+)["']?(?:https?:)?\/\//i);
+    assert.doesNotMatch(head, /<link\b[^>]*\bhref=["'](?:https?:)?\/\//i);
+});
+
+test("reference typography embeds PDF subsets without reader system-font fallback", async () => {
+    const { getDocument, OPS } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const html = `<!doctype html><style>:root{${typographyTokens}}body{font-family:var(--font)}h1{font-weight:var(--weight-strong)}</style>
+        <h1>WIRE typography</h1><p>Invented retained calls: 12 calls, 3 failed.</p>`;
+    const bytes = await renderPdf(html);
+    const loading = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false, disableFontFace: true, fontExtraProperties: true });
+    try {
+        const document = await loading.promise, fonts = new Map();
+        for (let number = 1; number <= document.numPages; number++) {
+            const page = await document.getPage(number), operators = await page.getOperatorList();
+            for (const id of new Set(operators.fnArray.flatMap((op, i) => op === OPS.setFont ? [operators.argsArray[i][0]] : []))) {
+                fonts.set(id, page.commonObjs.get(id));
+            }
+        }
+        assert.ok(fonts.size >= 2, "Body and strong heading font programs are present");
+        for (const font of fonts.values()) {
+            assert.equal(font.missingFile, false, font.name);
+            assert.ok(font.data?.byteLength > 0, `${font.name} embeds its font program`);
+        }
+    } finally { await loading.destroy(); }
+});

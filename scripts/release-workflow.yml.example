@@ -35,7 +35,7 @@ jobs:
           node-version: 24
       - run: npm ci && npm run check && npm run typecheck && npm run build
       - run: npx playwright install --with-deps chromium
-      - run: node --test tests/update-source.test.mjs tests/update-admission.test.mjs tests/documentation.test.mjs tests/documentation.browser.test.mjs tests/app-update.browser.test.mjs
+      - run: node --test tests/release/update-source.test.mjs tests/release/update-admission.test.mjs tests/documentation/documentation.test.mjs tests/documentation/documentation.browser.test.mjs tests/release/app-update.browser.test.mjs
   draft:
     needs: qualify
     concurrency:

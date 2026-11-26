@@ -1,0 +1,38 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { chromium, expect } from "@playwright/test";
+import { fixture, privateFixture, openAnalyzeFilters } from "../support/helpers.mjs";
+import { startServer } from "../../lib/server.mjs";
+import { createExportController } from "../../lib/export.mjs";
+
+test("an outcome's icon still identifies its result when its selection check changes", async t => {
+    const failed = fixture("cedar-failed");
+    Object.assign(failed.toolCalls[0], { toolSucceeded: false, reportedOutcome: "failed", apiResults: [] });
+    const { context } = await privateFixture(t, [failed, fixture("cedar-completed")]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    t.after(() => runtime.close());
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 375, height: 900 }, hasTouch: true, forcedColors: "active", reducedMotion: "reduce" });
+    await page.goto(runtime.url);
+    await expect(page.locator("#activityCount")).toHaveText("2");
+    await openAnalyzeFilters(page);
+    const chooser = page.getByRole("combobox", { name: "Outcome", exact: true });
+    await chooser.tap();
+    const rows = page.getByRole("listbox").getByRole("option");
+    const failedRow = rows.filter({ hasText: /Tool failed/i }), completedRow = rows.filter({ hasText: /completed|worked/i });
+    await expect(failedRow).toHaveCount(1);
+    await expect(completedRow).toHaveCount(1);
+    const glyph = row => row.locator("svg[data-lucide-icon]").first().getAttribute("data-lucide-icon");
+    const id = await glyph(completedRow);
+    assert.notEqual(id, await glyph(failedRow));
+    await completedRow.tap();
+    await expect(completedRow).toHaveAttribute("aria-selected", "false");
+    await expect(failedRow).toHaveAttribute("aria-selected", "true");
+    assert.equal(await glyph(completedRow), id, "A result's identity is not the selected marker");
+    await expect(page.locator("#activityCount")).toHaveText("2");
+    await page.getByRole("button", { name: "Apply", exact: true }).tap();
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await expect(page.locator("#activityList article")).toHaveCount(1);
+    await expect(page.locator("#activityList article")).toContainText("1 tool call failed");
+});
