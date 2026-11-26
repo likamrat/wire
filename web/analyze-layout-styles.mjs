@@ -371,10 +371,10 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 .workspace-command-context{margin-inline-end:auto;min-width:0;color:var(--muted);font-size:var(--type-control)}
 .workspace-command-tools{margin-inline-start:auto}
 #workspace>#analyzeReferenceEntry {max-width:none;margin-bottom:var(--space-md)}
-#workspace>#analyzeResultCommands {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-xs) var(--space-md);max-width:none;margin-bottom:var(--space-md)}
+#workspace>#analyzeResultCommands {display:flex;flex-wrap:wrap-reverse;align-items:center;gap:var(--space-xs) var(--space-md);max-width:none;margin-bottom:var(--space-md)}
 #workspace>#analyzeResultCommands[hidden] {display:none}
 #analyzeResultScope {min-width:0;flex:1 1 16em;align-self:center}
-#analyzeResultCommands .analyze-toolbar {margin-inline-start:auto}
+#analyzeResultCommands .analyze-toolbar {margin-inline-start:auto;align-self:start}
 #analyzeResultScope .analyze-scope-summary {margin:0;padding:0;border:0}
 #analyzeResultScope .analyze-scope-caption {margin:0}
 #analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
@@ -396,7 +396,7 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 .filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
 @media(max-width:550px) {
- #analyzeResultScope {order:1;flex-basis:100%}
+ #analyzeResultScope {flex-basis:100%}
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}

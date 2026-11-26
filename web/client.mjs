@@ -1547,6 +1547,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const requestAnchor = workspaceState.route.view === "request" ? sidebarAnchor() : active?.closest(".activity-card");
         const anchor = activeReader?.querySelector(".full-text-body pre")?.checkVisibility() ? activeReader
             : requestAnchor?.checkVisibility() ? requestAnchor
+            : $("analyzeFilterDialog").contains(active) ? null
             : [...$("workspace").querySelectorAll("[data-view-key]")].find(node => node.checkVisibility() && node.getBoundingClientRect().top >= 100 && node.getBoundingClientRect().top < innerHeight);
         const selection = window.getSelection(), selectedText = selection?.anchorNode;
         const reader = selectedText?.parentElement?.closest(".full-text-body pre");
