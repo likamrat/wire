@@ -583,7 +583,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(page.locator("[data-reader-section=usage] h2")).toBeFocused();
     await expect(page.locator("[data-reader-section=usage]")).toContainText("No token counts matched this prompt's model calls.");
     const tokenReader=page.locator("[data-reader-section=usage]");
-    await expect(tokenReader.locator(".usage-timeline li").filter({hasText:"Call #1"})).toContainText("~257 tokens of returned text");
+    await expect(tokenReader.locator(".usage-timeline li").filter({hasText:"Call #1"})).toContainText("1,028 bytes (~257 tokens) of returned text");
     async function callDetails(ordinal) {
         const call=page.locator("[data-reader-section=activity] .reader-call-row").filter({has:page.locator(".reader-entry-label",{hasText:`Call #${ordinal}`})});
         const toggle=call.locator(".reader-call-toggle");
@@ -593,7 +593,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     const failedCall=await callDetails(2);
     await expect(failedCall).toContainText("11 input");
     await expect(failedCall).toContainText("output not recorded");
-    await expect(failedCall).toContainText("Size not recorded");
+    await expect(failedCall).toContainText("Size unavailable");
     await page.keyboard.press("Escape"); await expect(missing.locator(".request-card-open").first()).toBeFocused();
     await expect(page.locator("#activityUsageSort")).toHaveValue("recent");
     await page.reload(); await expect(cards.first()).toContainText("Draft next steps");
@@ -613,7 +613,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await page.keyboard.press("Escape");
     await expect(usageLink).toBeFocused();
     const direct = cards.filter({hasText:"Find review owners"}).locator(".request-card-open").first();
-    await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("~8,500 tokens of returned text");
+    await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("34,000 bytes (~8,500 tokens) of returned text");
     await expect(reader.locator(".usage-context")).toHaveCount(0);
     await page.keyboard.press("Escape"); await expect(direct).toBeFocused();
     const launchOpen=cards.filter({hasText:"Launch notes"}).locator(".request-card-open").first();
@@ -727,11 +727,23 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await receiptLink.click();
     await expect(page.locator('.usage-timeline [data-recorded-model="gpt-6.2-sol"]')).toHaveText("GPT-6.2 Sol");
     await page.keyboard.press("Escape");await expect(receiptLink).toBeFocused();
+    const unsized=cards.filter({hasText:"Read project brief"}).locator(".request-card-open").first();
+    await unsized.click();
+    await expect(page.locator("[data-reader-section=activity]")).toContainText("2 returned entries");
+    const usage=page.locator("[data-reader-section=usage]");
+    await expect(usage).toContainText("12,000 tokens");
+    await expect(usage).toContainText("No returned-text size is available for this interaction.");
+    await page.keyboard.press("Escape");await expect(unsized).toBeFocused();
+    const partial=cards.filter({hasText:"Search for notes"}).locator(".request-card-open").first();
+    await partial.click();
+    await expect(usage).toContainText("1,028 bytes (~257 tokens) of text across 1 of 2 calls measured");
+    await expect(page.locator("[data-reader-section=activity]")).toContainText("1004: Work IQ took too long to respond");
+    await page.keyboard.press("Escape");await expect(partial).toBeFocused();
     await expect(page.locator("[data-percentage-card=models]").getByRole("list",{name:"Model token counts from 7 of 8 matching interactions"})).toBeVisible();
     const launch=cards.filter({hasText:"Launch notes"}), open=launch.locator(".request-card-open").first();
     await open.click();const reading=page.locator("[data-reader-section=usage]");
     await expect(reading).toContainText("30,000 tokens · 2 model calls");
-    await expect(reading).toContainText("Work IQ returned ~12,000 tokens");
+    await expect(reading).toContainText("Work IQ returned 48,000 bytes (~12,000 tokens) of text");
     await expect(reading.locator(".usage-timeline li")).toHaveCount(5);
     await chooseTheme(page, "dark");
     await expect(reading.getByRole("row",{name:"Generated output 2,000"})).toBeVisible();

@@ -23,7 +23,7 @@ export async function usagePreview(t, frontend = "react", {offline = false, pagi
         ["Meeting outline",19,null,["ask"],"preview-model",[[7000,21000,1000,1500]],[6000]],
         ["Search for notes",19,"user",["retrieve","retrieve"],"claude-sonnet-5-5",[],[257,null]],
         ["Draft next steps",20,"agent",["fetch","ask"],"claude-opus-5-5",[[12000,72000,4000,4500]],[12500,6200]],
-        ["Read project brief",20,"user",["fetch"],"gpt-6.2-sol",[[4000,7000,0,1000]],[2500]],
+        ["Read project brief",20,"user",["fetch"],"gpt-6.2-sol",[[4000,7000,0,1000]],[null]],
     ];
     if (paginated) examples.push(["Earlier planning",16,"user",["fetch"],"gpt-6.2-sol",[[90000,9000,0,1000]],[1000]]);
     if (sparse) examples.splice(0,examples.length,
@@ -50,7 +50,9 @@ export async function usagePreview(t, frontend = "react", {offline = false, pagi
                 const toolUsage = index === 0 && i === 1 ? {requestId:randomUUID(),model:"tool-service",inputTokens:0,outputTokens:27,totalTokens:27}
                     : index === 5 && i === 1 ? {requestId:randomUUID(),model:"tool-service",inputTokens:11} : null;
                 event("tool.execution_complete",{toolCallId:toolIds[i],success:!(index === 5 && i === 1),
-                    ...(toolUsage ? {toolUsage} : {}), ...(sizes[i]!==null?{result:{content:"a".repeat(sizes[i]*4)}}:{})});
+                    ...(toolUsage ? {toolUsage} : {}), ...(sizes[i]!==null?{result:{content:"a".repeat(sizes[i]*4)}}
+                        : index === 7 ? {result:{structuredContent:{results:[{statusCode:200},{statusCode:200}]}}}
+                        : {error:{message:"MCP error 1004: Work IQ took too long to respond"}})});
             });
             const finalId=calls.length>1?randomUUID():apiCallId;
             if(calls.length>1) receipts.push(finalId);

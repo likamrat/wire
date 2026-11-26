@@ -31,7 +31,8 @@ function questionControls(doc, prefix, change, { filters = false } = {}) {
 function textSize(bytes) {
     if (bytes === 0) return "0 bytes";
     const estimate = Math.round(bytes / 4);
-    return estimate === 0 ? "<1 token" : `~${number(estimate)} ${estimate === 1 ? "token" : "tokens"}`;
+    const tokens = estimate === 0 ? "<1 token" : `~${number(estimate)} ${estimate === 1 ? "token" : "tokens"}`;
+    return `${number(bytes)} ${bytes === 1 ? "byte" : "bytes"} (${tokens})`;
 }
 function toolTokenFields(call) {
     const u = call.toolTokens;
@@ -39,8 +40,8 @@ function toolTokenFields(call) {
         u.output === null ? "output not recorded" : `${number(u.output)} output`].join(", ");
     const usage = !u ? "No verified count for this call. Model counts cover the model request."
         : u.total === null ? split : `${number(u.total)} tokens (${split})`;
-    return [["Tool operation tokens",usage], ["Returned text (estimate)", Number.isSafeInteger(call.returnedTextBytes) && call.returnedTextBytes >= 0
-        ? textSize(call.returnedTextBytes) : "Size not recorded"]];
+    return [["Tool operation tokens",usage], ["Returned text", Number.isSafeInteger(call.returnedTextBytes) && call.returnedTextBytes >= 0
+        ? textSize(call.returnedTextBytes) : "Size unavailable"]];
 }
 function usageReading(el, host, scenario, formatTime, callLabel) {
     const u = scenario?.usage;
@@ -60,7 +61,6 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
             "index-unreadable":"Copilot's token records couldn't be read. WIRE tries again on the next collection.",
         };
         host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts have been verified for this interaction."));
-        if (!sized.length) return;
     } else {
         renderModelCounts(el, host, u);
         if (scenario.usageBasis === "copilot-usage-index") host.append(el("p", "usage-context",
@@ -69,11 +69,12 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
         if (scenario.usageUnfinished) host.append(el("p", "usage-context", "This exchange stopped before a final answer. The count covers every model call it recorded."));
     }
     host.classList.add("usage-reading");
-    if (sized.length !== 1 || tools.length !== 1) {
-        host.append(el("p", "usage-context", sized.length ? `Work IQ returned ${textSize(sized.reduce((n,c) => n + c.returnedTextBytes,0))}${sized.length < tools.length ? ` (${sized.length} of ${tools.length} calls measured)` : ""}.`
-            : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
-            : "Work IQ return size was not recorded."));
+    if (tools.length && (sized.length !== 1 || tools.length !== 1)) {
+        host.append(el("p", "usage-context", sized.length ? `Work IQ returned ${textSize(sized.reduce((n,c) => n + c.returnedTextBytes,0))} of text${sized.length < tools.length ? ` across ${sized.length} of ${tools.length} calls measured` : ""}.`
+            : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0) ? "Returned-text sizes are available in Call details, but could not be linked to this prompt."
+            : "No returned-text size is available for this interaction."));
     }
+    if (!u && !sized.length) return;
     const steps = [...(u?.steps ?? []).map(s => ({ at: s.at, label: s.model, model: true, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out` })),
         ...sized.map(c => ({ at: c.completedAt, label: `${callLabel(c)} · ${c.tool}`, detail: `${textSize(c.returnedTextBytes)} of returned text` }))];
     const timeline = el("ol", "usage-timeline");

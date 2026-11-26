@@ -445,7 +445,9 @@ WIRE still shows no total until it verifies the complete exchange.
 #### Returned text size
 
 A matched Work IQ completion may keep its returned text byte count (roughly four
-UTF-8 bytes per token), not its body.
+UTF-8 bytes per token), not its body. The same qualification applies when the
+recorder reads an earlier portion of a journal. Structured entries alone do
+not establish a text byte count.
 
 When there's no message-level prompt link, an explicitly owned model request in
 the verified run can link its tool ID to one exact start. WIRE can then include

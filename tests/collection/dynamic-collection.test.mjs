@@ -1139,7 +1139,7 @@ test("backfill resumes its own context after restart and deletion never restores
     const file = await logFor(app, id, [prompt, call("prefix-resume"),
         ...Array.from({ length: 6 }, () => event("assistant.message", { content: "x".repeat(900000) })),
         event("tool.execution_complete", { toolCallId: "prefix-resume", success: true,
-            result: { structuredContent: { results: [{ statusCode: 403 }] } } }),
+            result: { content: [{ type: "text", text: "résumé" }], structuredContent: { results: [{ statusCode: 403 }] } } }),
     ]);
     const padding = await open(file, "a");
     try {
@@ -1168,6 +1168,7 @@ test("backfill resumes its own context after restart and deletion never restores
     assert.equal(second.check.changes.updated, 1);
     assert.equal(state.evidence[0].userPrompt.text, prompt.data.content);
     assert.deepEqual(state.evidence[0].toolCalls[0].apiResults.map(result => result.statusCode), [403]);
+    assert.equal(state.evidence[0].toolCalls[0].returnedTextBytes, 8, "Prefix collection measures the original UTF-8 text across restart");
     assert.equal(JSON.parse(await readFile(prefixFile)).backfill.activeSource, null);
     assert.equal(JSON.parse(await readFile(mainFile)).events.some(event => event.id === prompt.id), false);
     const deletion = createDeletionController(app.context, { validateBackfillCheckpoint });

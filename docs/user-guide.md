@@ -426,7 +426,9 @@ To inspect one invocation, open **Call details** for its numbered row:
 
 - **Tool operation tokens** shows what the tool service reported for that call,
   when available.
-- **Returned text (estimate)** describes the size of its response.
+- **Returned text** shows the recorded byte count and a rough token estimate.
+  A returned entry or a timeout is not a size measurement. A missing size
+  stays unavailable, even when the response model's token count is known.
 
 Neither figure is a share of the model's token total.
 
