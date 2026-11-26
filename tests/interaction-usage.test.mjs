@@ -6,7 +6,8 @@ import { createUsageReading } from "../web/usage-reading.mjs";
 import { modelRequestKey, retainedReceiptContext, retainedUsage, retainToolTokens, retainUsageReceipt, toolTokenReadings, usageMatcherEvents } from "../lib/usage-receipts.mjs";
 import { retainInteractionModelMetadata } from "../lib/interaction-model.mjs";
 import { qualifiedResultPaths } from "../lib/history.mjs";
-import { continuingUsageContext, retainEvent } from "../lib/collector.mjs";
+import { indexedUsage, indexedTurnUnchanged, readUsageIndex } from "../lib/copilot-usage-index.mjs";
+import { continuingUsageContext, extendsExchange, retainEvent } from "../lib/collector.mjs";
 
 test("Analyze attributes a multi-day interaction once but keeps its later calls inside View by day",()=>{
     const {usageCalendar} = createUsageReading({firstUsageDays});
@@ -238,6 +239,45 @@ test("a steering message continues its interaction, so every model call after it
     }
 });
 
+test("the app's per-call index meters a prompt only when its rows match the journal's own model rounds", () => {
+    const {events,record} = steeredRun();
+    const journal = events.filter(e => e.type !== "session.usage_record");
+    const at = id => new Date(Date.parse(journal.find(e=>e.id===id).timestamp) + 3).toISOString();
+    const index = {sessionId:"source",turns:[{turn:0,text:"Find the notes",complete:true}],
+        rows:[1,2,3].map(n => ({id:n,turn:0,agent:null,model:"example",input:100*n,output:n,cacheRead:90*n,cacheWrite:0,at:at(`reply-${n}`)}))};
+    const calls = indexedUsage(journal,record,index);
+    assert.equal(calls.length,3); assert.equal(recordedUsage(calls).total,606);
+    assert.ok(calls.every(c => c.source === "copilot-usage-index" && c.tokens.freshInput === c.tokens.output * 10));
+    const refusal = mutate => { const copy = structuredClone(index); mutate(copy); let why; indexedUsage(journal,record,copy,r=>{why=r;return null;}); return why; };
+    assert.equal(refusal(i => i.rows.pop()),"index-incomplete","A journal round without an indexed call is not a complete total");
+    assert.equal(refusal(i => { i.rows[0].at = journal[0].timestamp; }),"index-incomplete","A row outside the prompt's rounds is not this prompt's");
+    assert.equal(refusal(i => i.turns.push({turn:1,text:"Find the notes",complete:true})),"index-prompt-unbound","Repeated prompt text must match occurrence for occurrence");
+    const open = structuredClone(index); open.turns[0].complete = false;
+    assert.equal(refusal(i => { i.turns[0].complete = false; }),"index-turn-open","An unanswered last turn may still be running");
+    const bounded = [...journal, { id:"next", type:"user.message", timestamp:new Date(1800000000000).toISOString(), data:{ content:"Next", wireDelivery:"idle" } }];
+    assert.ok(indexedUsage(bounded,record,open).every(c => c.unfinished),"Once the next prompt begins, its recorded calls count and say it stopped early");
+    assert.equal(refusal(i => { i.rows[1].cacheRead = 500; }),"index-invalid-row");
+    assert.equal(refusal(i => i.turns.push({turn:1,text:"Unseen later prompt",complete:true})),"index-boundary","An unbounded exchange is not counted");
+});
+
+test("the index reader tells an absent index from one it cannot read", async t => {
+    const {DatabaseSync} = await import("node:sqlite"), {mkdtemp,rm} = await import("node:fs/promises"), path = await import("node:path"), os = await import("node:os");
+    const dir = await mkdtemp(path.join(os.tmpdir(),"wire-usage-index-")); t.after(() => rm(dir,{recursive:true,force:true}));
+    const file = path.join(dir,"session-store.db"), db = new DatabaseSync(file);
+    db.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT, input_tokens INTEGER,
+            output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);
+        INSERT INTO turns VALUES ('s',0,'Hello','Done'); INSERT INTO assistant_usage_events VALUES (1,'s',0,NULL,'m',10,2,4,1,'2026-01-01T00:00:00Z');`);
+    db.close();
+    const index = readUsageIndex(file,"s");
+    assert.deepEqual(index.turns,[{turn:0,text:"Hello",complete:true}]);
+    assert.equal(index.rows[0].input,10);
+    assert.equal(readUsageIndex(path.join(dir,"absent.db"),"s"),null,"No file means no records");
+    assert.throws(() => readUsageIndex(file,"s",{ open(){ throw Object.assign(new Error("locked"),{ code:"ERR_SQLITE_ERROR" }); } }),
+        e => e.code === "usage_index_unreadable" && e.reason === "open");
+    const old = new DatabaseSync(file); old.exec("DROP TABLE assistant_usage_events"); old.close();
+    assert.throws(() => readUsageIndex(file,"s"), e => e.code === "usage_index_unreadable" && e.reason === "schema","An unknown shape is a failed read, not an empty index");
+});
 test("a skipped or withheld entry only blocks a total when it falls between the prompt and the next prompt", () => {
     const gap = id => ({ id, type: "wire.history_gap", data: { reason: "oversized-line", offset: 1 } });
     const before = steeredRun(); before.events.unshift(gap("wire-gap-before"));
@@ -270,6 +310,24 @@ test("compacting a long open exchange never leaves a smaller exact total", () =>
     assert.equal(recordedUsage(calls).total, 1111, "The open exchange keeps every round it needs");
 });
 
+test("an indexed total stays only while the app records the same closed turn, and index model names are screened", () => {
+    const row = id => ({ id, turn: 0, agent: null, model: "m", input: 10, output: 2, cacheRead: 4, cacheWrite: 1, at: "2026-01-01T00:00:0" + id + "Z" });
+    const index = { sessionId: "s", turns: [{ turn: 0, text: "x", complete: true }], rows: [row(1), row(2)] };
+    const key = id => `wire-usage-index-${createHash("sha256").update(`usage-index:s:${id}`).digest("hex")}`;
+    const calls = index.rows.map(r => ({ receiptId: key(r.id), apiCallId: `!${key(r.id).slice(17)}`, origin: null, at: new Date(r.at).toISOString(), model: "m",
+        tokens: { freshInput: 5, cacheRead: 4, cacheWrite: 1, output: 2 }, source: "copilot-usage-index" }));
+    assert.equal(indexedTurnUnchanged(index, calls), true);
+    assert.equal(indexedTurnUnchanged({ ...index, rows: [row(1), { ...row(2), output: 3 }] }, calls), false, "A corrected amount on the same row makes the total stale");
+    assert.equal(indexedTurnUnchanged({ ...index, rows: [row(1), { ...row(2), model: "n" }] }, calls), false);
+    assert.equal(indexedTurnUnchanged({ ...index, rows: [...index.rows, row(3)] }, calls), false, "A later call in the same turn makes the total stale");
+    assert.equal(indexedTurnUnchanged({ ...index, turns: [{ turn: 0, text: "x", complete: false }] }, calls), false);
+    const { events, record } = steeredRun(), journal = events.filter(x => x.type !== "session.usage_record");
+    const at = id => new Date(Date.parse(journal.find(x => x.id === id).timestamp) + 3).toISOString();
+    let why; indexedUsage(journal, record, { sessionId: "source", turns: [{ turn: 0, text: "Find the notes", complete: true }],
+        rows: [1, 2, 3].map(i => ({ id: i, turn: 0, agent: null, model: i === 2 ? "ghp_" + "z".repeat(36) : "m", input: 9, output: 1, cacheRead: 0, cacheWrite: 0, at: at(`reply-${i}`) })) },
+        r => { why = r; return null; });
+    assert.equal(why, "index-invalid-row");
+});
 test("an assistant message the producer writes after a background notification is not a rival reply", () => {
     const run = () => { const r = steeredRun(), diag = { credentialExclusions:0 }, ctx = { metering:true, sourceSessionId:"source" }, at = r.events.findIndex(e => e.id === "start-2") + 1;
         const notice = retainEvent({ id:"notice", type:"system.notification", timestamp:r.events[at].timestamp, data:{ kind:{ type:"shell_completed" }, content:"done" } },diag,ctx);
@@ -401,6 +459,24 @@ test("a late last receipt after compaction reports missing history, not a smalle
         value => { reason = value; return null; });
     assert.equal(calls, null, `Incorrect exact total: ${calls && recordedUsage(calls).total}`);
     assert.equal(reason, "history-gap");
+});
+
+test("an identical redelivery after compaction does not retire a verified indexed total", () => {
+    const { event: e, prompt, record } = reviewFixture(true), journal = [prompt], rows = [];
+    for (let n = 0; n < 800; n++) {
+        const start = e(`s${n}`, "assistant.turn_start", { turnId: `t${n}` });
+        const reply = e(`r${n}`, "assistant.message", { turnId: `t${n}`, wireUsageOrigin: "run", originatingMessageId: "root",
+            wireOriginalModel: { apiCallId: `api${n}`, model: "example" }, hasToolRequests: n !== 799, finalAnswer: n === 799, ...(n === 0 ? { wireToolRequestIds: ["tool"] } : {}) });
+        journal.push(start, reply, ...(n === 0 ? [e("tool", "tool.execution_start", { toolCallId: "tool" }), e("done", "tool.execution_complete", { toolCallId: "tool", success: true })] : []),
+            e(`z${n}`, "assistant.turn_end", { turnId: `t${n}` }));
+        rows.push({ id: n + 1, turn: 0, agent: null, model: "example", input: 10, output: 1, cacheRead: 0, cacheWrite: 0, at: reply.timestamp });
+    }
+    const index = { sessionId: "s", turns: [{ turn: 0, text: prompt.data.content, complete: true }], rows };
+    record.usageCalls = indexedUsage(journal, record, index);
+    assert.equal(recordedUsage(record.usageCalls).total, 8800);
+    const context = continuingUsageContext(journal, [record], "s", { contextEvictions: 0 });
+    const incoming = [journal.find(x => x.id === "r799")], events = usageMatcherEvents([...context, ...incoming]);
+    assert.equal(extendsExchange(events, incoming, record, new Set(context.map(x => x.id))) || !indexedTurnUnchanged(index, record.usageCalls), false);
 });
 
 function nestingRun(kind) {

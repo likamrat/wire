@@ -57,11 +57,15 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
             "conflicting-receipt":"Token counts disagree for the same model call.",
             "partial-receipts":"Some model calls have no token counts.",
             "no-linked-receipt":"No token counts matched this prompt's model calls.",
+            "index-unreadable":"Copilot's token records couldn't be read. WIRE tries again on the next collection.",
         };
         host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts have been verified for this interaction."));
         if (!sized.length) return;
     } else {
         renderModelCounts(el, host, u);
+        if (scenario.usageBasis === "copilot-usage-index") host.append(el("p", "usage-context",
+            `Counted from the Copilot app's own per-call usage records for this prompt${scenario.usageSubagentCalls
+                ? `, including ${number(scenario.usageSubagentCalls)} sub-agent ${scenario.usageSubagentCalls === 1 ? "call" : "calls"}` : ""}.`));
         if (scenario.usageUnfinished) host.append(el("p", "usage-context", "This exchange stopped before a final answer. The count covers every model call it recorded."));
     }
     host.classList.add("usage-reading");

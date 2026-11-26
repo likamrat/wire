@@ -306,7 +306,7 @@ test("source presentation has one path pair with equal field geometry through fo
     }
     async function measure() {
         await page.evaluate(() => document.fonts.ready);
-        return page.locator("#sourceEditor input").evaluateAll(nodes => nodes.map(node => {
+        return page.locator("#sourcePathFields input").evaluateAll(nodes => nodes.map(node => {
             const rect = node.getBoundingClientRect(), css = getComputedStyle(node);
             return { id: node.id, left: rect.left, right: rect.right, height: rect.height,
                 padding: css.padding, radius: css.borderRadius, border: css.borderWidth,

@@ -361,12 +361,45 @@ putting the raw opaque ID in new retained model metadata or in reports.
   identity, so it can still contest ownership.
 - A gap is missing evidence. It never clears a total that was already verified.
 
-#### Older journals without receipts
+#### The Copilot app's usage index
 
-Older Copilot journals have no per-call receipts, so their exchanges stay
-unmeasured. The Copilot app also keeps per-call accounting in `session-store.db`
-beside the approved chat database. WIRE doesn't read it: that file isn't part
-of the approved source, and using it needs its own approval.
+Older Copilot journals have no per-call receipts. The Copilot app also keeps
+its own per-call accounting in `session-store.db` beside the approved chat
+database (`turns` and `assistant_usage_events`). Source approval doesn't
+cover it. **Read Copilot's token records** in the source review shows that exact
+path and records a separate approval (`usageRecords`), off by default and for
+existing approvals. With it on, when the journal can't establish a total, WIRE
+reads that index read-only for the same approved chat.
+
+- WIRE reads only the turn's prompt text (to match it, never retained) and each
+  call's model, token counts, sub-agent marker and time.
+- A missing file means no records. A file WIRE can't open or whose tables don't
+  match is a failed read: the reader says so and an existing total stays.
+- Approval applies when collection next reads a chat. Chats WIRE already read
+  in full aren't recounted until they change.
+- Turning it off stops every read of the file. Totals already counted stay
+  until the journal extends that exchange.
+- A stored indexed total is retired when the app changes that turn's calls,
+  including a corrected amount, model or time on the same row.
+
+- A prompt's indexed turn counts only when the exact prompt text and occurrence
+  match.
+- Each of the journal's main-agent model rounds for that exchange must hold at
+  least one indexed call, and every indexed call must fall inside one of those
+  rounds.
+- The exchange ends at the journal prompt that owns the next indexed turn, so
+  steering stays with its root. Indexed sub-agent calls are included and
+  disclosed in the reader.
+- Journal receipts always take precedence. The index isn't copied, and no
+  prompt text is retained from it. WSL collection of a Windows-owned index isn't
+  yet supported.
+
+These optional fields use the existing evidence snapshot; no store conversion
+is needed.
+
+When a response explicitly identifies a retained Work IQ run, its request-only
+receipt can survive a collection restart before the final boundary arrives.
+WIRE still shows no total until it verifies the complete exchange.
 
 #### Returned text size
 

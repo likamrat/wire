@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, appendFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -11,7 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
-import { privateFixture, navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
+import { privateFixture, navigateMain, navigateSettings, chooseTheme, openSourceEditor } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
@@ -77,7 +77,7 @@ async function setup(t, { activity = true, records = [], storageBlocked = false,
             return get.call(this, key);
         };
     });
-    return { page, context, runtime, mutations, access };
+    return { page, context, runtime, mutations, access, home, sessionId: id, sessionRoot };
 }
 
 async function capture(page, name, fullPage = false) {
@@ -429,4 +429,91 @@ test("an interrupted first approval stays in Settings for read-current recovery 
     await page.locator("#reloadSettings").click();
     await expect(page.locator("#settingsMessage")).toContainText("earlier change unconfirmed");
     assert.equal(mutations.filter(row => row.path === "/api/collection/configure").length, 1);
+});
+
+test("Copilot's token records stay unread until turned on in source review; turning them off stops the reads and keeps counted totals", { timeout: 90000 }, async t => {
+    const text = "Summarize the invented launch notes.", base = Date.now() - 120000;
+    const activityEvents = [
+        { type: "user.message", data: { content: text, delivery: "idle" } },
+        { type: "assistant.turn_start", data: { turnId: "a" } },
+        { type: "assistant.message", data: { turnId: "a", toolRequests: [{ toolCallId: "indexed-fetch" }] } },
+        { type: "tool.execution_start", data: { toolCallId: "indexed-fetch", toolName: "workiq-fetch", arguments: { entityUrls: ["/me/messages"] } } },
+        { type: "tool.execution_complete", data: { toolCallId: "indexed-fetch", success: true, result: { content: "INVENTED" } } },
+        { type: "assistant.turn_end", data: { turnId: "a" } },
+        { type: "assistant.turn_start", data: { turnId: "b" } },
+        { type: "assistant.message", data: { turnId: "b", content: "Invented answer", toolRequests: [] } },
+        { type: "assistant.turn_end", data: { turnId: "b" } },
+    ].map((event, n) => ({ ...event, timestamp: new Date(base + n * 1000).toISOString() }));
+    const { page, runtime, mutations, home, sessionId, sessionRoot } = await setup(t, { frontend: "react", activityEvents });
+    const indexed = write => { const index = new DatabaseSync(path.join(home, "session-store.db")); try { write(index); } finally { index.close(); } };
+    const reply = turn => new Date(Date.parse(activityEvents.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString();
+    const usage = (index, ...row) => index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',?,?,?,?,?)").run(sessionId, ...row);
+    indexed(index => {
+        index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+            CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+                input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+        index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(sessionId, text, "Invented answer");
+        usage(index, 5000, 100, 4000, 500, reply("a"));
+        usage(index, 6000, 300, 5500, 400, reply("b"));
+    });
+    const later = async ms => appendFile(path.join(sessionRoot, sessionId, "events.jsonl"), JSON.stringify({ id: randomUUID(),
+        timestamp: new Date(base + ms).toISOString(), type: "session.info", data: { infoType: "note", message: "invented" } }) + "\n");
+    const swtch = page.getByRole("switch", { name: "Read Copilot's token records" }), configures = () => mutations.filter(m => m.path === "/api/collection/configure");
+    const tokens = async card => {
+        await navigateMain(page, "analyze"); await ready(page);
+        const collected = page.waitForResponse(r => new URL(r.url()).pathname === "/api/collection/now");
+        await page.locator("#analyzeRefresh").click(); await collected; await ready(page);
+        const field = page.locator("#activityList").getByRole("link", { name: /^Model tokens:/ });
+        await expect(field).toHaveText(card);
+        await field.click();
+        const reading = page.getByRole("dialog", { name: "Interaction" }).getByRole("region", { name: "Token usage" });
+        await expect(reading).toBeVisible();
+        const shown = (await reading.innerText()).replace(/\s+/g, " ");
+        await page.locator("#closeContextSidebar").click();
+        return shown;
+    };
+    await page.goto(runtime.url); await ready(page);
+    await page.locator("#welcomeReviewSource").click();
+    await expect(swtch).not.toBeChecked();
+    await expect(page.locator("#approvalScope")).not.toContainText("token records");
+    for (const theme of ["light", "dark"]) { await chooseTheme(page, theme); await page.locator("#sourceUsageRecordsRow").scrollIntoViewIfNeeded(); await capture(page, `token-records-off-${theme}`); }
+    await page.locator("#connectCollection").click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
+    assert.equal(Object.hasOwn(configures()[0].body, "usageRecords"), false, "First approval leaves token records out");
+    const unread = await tokens("Unavailable");
+    assert.doesNotMatch(unread, /11,400|Counted from/);
+
+    await navigateMain(page, "settings"); await openSourceEditor(page);
+    await swtch.focus(); await page.keyboard.press("Space");
+    await expect(swtch).toBeChecked();
+    await expect(page.locator("#approvalScope")).toContainText("including Copilot's token records");
+    await expect(page.locator("#connectCollection")).toHaveText("Approve token records");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme); await page.locator("#sourceSessions").focus(); await page.keyboard.press("Tab");
+        await expect(swtch).toBeFocused();
+        assert.equal(await page.locator("#sourceUsageRecordsRow .switch-track").evaluate(n => getComputedStyle(n).outlineStyle), "solid", "Keyboard focus paints the switch ring");
+        await capture(page, `token-records-on-focus-${theme}`);
+    }
+    await page.locator("#connectCollection").click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Token records approved.");
+    assert.equal(configures().at(-1).body.usageRecords, true);
+    await expect(page.locator("#approvedUsageRecords")).toHaveText("session-store.db, next to data.db");
+    assert.equal(await tokens("Unavailable"), unread, "A chat WIRE already read is not recounted until it changes");
+
+    await later(20000);
+    const counted = await tokens(/11,400/);
+    assert.match(counted, /11,400/);
+    assert.match(counted, /Counted from the Copilot app's own per-call usage records/);
+
+    await navigateMain(page, "settings"); await openSourceEditor(page);
+    await swtch.click(); await expect(swtch).not.toBeChecked();
+    await expect(page.locator("#connectCollection")).toHaveText("Stop reading token records");
+    await page.locator("#connectCollection").click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Token records turned off.");
+    assert.equal(configures().at(-1).body.usageRecords, false);
+    await expect(page.locator("#approvedUsageRecords")).toHaveText("Not read");
+    indexed(index => usage(index, 7000, 50, 6000, 0, reply("b")));
+    await later(30000);
+    const kept = await tokens(/11,400/);
+    assert.match(kept, /11,400/, "Turning records off neither rereads the changed file nor removes the counted total");
 });

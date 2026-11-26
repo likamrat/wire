@@ -116,7 +116,7 @@ export const settingsMarkup = `
       </div>
       <div id="approvedSourceDetails" class="source-paths-read" hidden>
         <h4 id="approvedSourceTitle" tabindex="-1">Approved source paths</h4>
-        <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd></dl>
+        <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd><dt>Token records</dt><dd id="approvedUsageRecords"></dd></dl>
       </div>
       <div id="sourceEditAction" class="settings-actions" hidden><button id="editSource" type="button">Review source</button></div>
       <div id="sourceEditor" class="source-editor" hidden>
@@ -127,6 +127,10 @@ export const settingsMarkup = `
         <div id="sourcePathFields">
         <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
+        </div>
+        <div class="settings-task-row" id="sourceUsageRecordsRow"><div class="settings-row-copy"><h3><label for="sourceUsageRecords">Read Copilot's token records</label></h3>
+          <p id="sourceUsageRecordsHelp" class="settings-help">Counts tokens for older chats from session-store.db, next to data.db. WIRE reads each call's model and token counts and doesn't save the app's prompt text. Chats already read count when they next change. Turning this off stops the reads; counted totals stay.</p></div>
+          <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
         </div>
         <div id="sourcePreferenceSlot"></div>
         <p id="approvalScope"></p>
@@ -298,7 +302,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         throw new TypeError("Collection Settings requires the shared publication interface.");
     }
     const $ = id => document.getElementById(id);
-    const fields = ["sourceDatabase", "sourceSessions", "collectionWindow", "collectionCadence"];
+    const fields = ["sourceDatabase", "sourceSessions", "sourceUsageRecords", "collectionWindow", "collectionCadence"];
     const nativeConfiguration = typeof createNativeConfigurationState === "function" ? createNativeConfigurationState() : null;
     const nativeView = () => nativeConfiguration?.view(api.accessState?.().state);
     const sourceView = () => sourceCollection?.controlsActive ? sourceCollection.view(api.accessState()) : null;
@@ -327,11 +331,13 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function version(status) { return native(status)?.revision ?? status?.configVersion ?? JSON.stringify(status?.config ?? null); }
     function values() {
         return { appDbPath: $("sourceDatabase").value.trim(), sessionRoot: $("sourceSessions").value.trim(),
+            usageRecords: $("sourceUsageRecords").checked,
             windowDays: Number($("collectionWindow").value), pollSeconds: Number($("collectionCadence").value) };
     }
     function sourceValues(status) {
         const source = status?.config || status?.suggestedSource;
         return { appDbPath: source?.appDbPath || "", sessionRoot: source?.sessionRoot || "",
+            usageRecords: status?.config?.usageRecords === true,
             windowDays: source?.windowDays ?? 30, pollSeconds: source?.pollSeconds ?? 5 };
     }
     function dirty() { return initialized && (native() ? Boolean(nativeView()?.dirty)
@@ -393,6 +399,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         windowOptions(false);
         const next = sourceValues(latest);
         for (const [id, key] of [["sourceDatabase", "appDbPath"], ["sourceSessions", "sessionRoot"], ["collectionWindow", "windowDays"], ["collectionCadence", "pollSeconds"]]) $(id).value = String(next[key]);
+        $("sourceUsageRecords").checked = next.usageRecords;
         $("sourceDatabase").classList.remove("settings-target");
         initialized = true; editing = false; stale = false;
     }
@@ -411,7 +418,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("approvedConnection").hidden = false;
         $("pauseCollection").hidden = false;
         for (const id of fields.concat(["collectNow", "editSource", "reviewSource", "connectCollection", "saveCollection", "cancelPreferences", "cancelSource"])) $(id).disabled = true;
-        for (const id of ["approvedDatabase", "approvedSessions", "sourceChangeImpact",
+        for (const id of ["approvedDatabase", "approvedSessions", "approvedUsageRecords", "sourceChangeImpact",
             "sourceSuggestion", "approvalScope", "settingsDraftStatus"]) setText(id, "");
         setText("connectionSourceTitle", "Microsoft 365 activity");
         $("connectionSource").hidden = true;
@@ -523,7 +530,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("connectionSourceHelp", "");
         $("connectionSourceHelp").hidden = true;
         const inspectingSource = visibleSection === "source-access";
-        const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot]) !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot]);
+        const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot, values().usageRecords])
+            !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot, baseline?.config?.usageRecords === true]);
+        const recordsOnly = approved && sourceChanged && values().appDbPath === baseline?.config?.appDbPath && values().sessionRoot === baseline?.config?.sessionRoot;
         $("approvedConnection").hidden = !approved;
         $("unapprovedConnection").hidden = approved || editing;
         $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
@@ -557,6 +566,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("settingsConnectionError").hidden = !readError || !inConfiguration();
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
+        setText("approvedUsageRecords", latest?.config?.approved !== true ? "" : latest.config.usageRecords === true ? "session-store.db, next to data.db" : "Not read");
         setText("sourceEditorTitle", approved ? "Change source paths" : guidedReview ? "Review local history" : "Review this source");
         $("sourceEditorTitle").classList.toggle("visually-hidden", !guidedReview);
         setText("sourceChangeImpact", approved
@@ -569,9 +579,10 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("sourceSuggestion", !approved && latest?.suggestedSource?.error ? latest.suggestedSource.error : "");
         $("sourceSuggestion").hidden = !$("sourceSuggestion").textContent;
         setText("approvalScope", approved && !sourceChanged ? ""
-            : "Read these paths and save original prompts on this device." + (!approved ? " Copilot replies stay off." : "") + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
+            : "Read these paths" + (values().usageRecords ? ", including Copilot's token records," : "") + " and save original prompts on this device." + (!approved ? " Copilot replies stay off." : "") + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
         $("approvalScope").hidden = !$("approvalScope").textContent;
-        setText("connectCollection", approved ? sourceChanged ? "Approve and switch source" : "Save preferences" : "Approve source and start collection");
+        setText("connectCollection", approved ? sourceChanged ? recordsOnly ? values().usageRecords ? "Approve token records" : "Stop reading token records"
+            : "Approve and switch source" : "Save preferences" : "Approve source and start collection");
         $("connectCollection").dataset.intent = approved && !sourceChanged ? "save-preferences" : "approve-source";
         setText("pauseCollection", latest?.config?.enabled ? "Pause collection" : "Resume collection");
         for (const id of fields) $(id).disabled = working || !initialized;
@@ -757,16 +768,22 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             return;
         }
         const next = values();
-        const sourceApproval = reviewingSource && (baseline?.config?.approved !== true
-            || next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot);
-        if (!sourceApproval && (next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot)) {
+        const sourceDiffers = next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot
+            || next.usageRecords !== (baseline?.config?.usageRecords === true);
+        const sourceApproval = reviewingSource && (baseline?.config?.approved !== true || sourceDiffers);
+        if (!sourceApproval && sourceDiffers) {
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
         }
         const firstApproval = baseline.config?.approved !== true;
-        act("/api/collection/configure", { ...next, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
+        const recordsOnly = !firstApproval && next.appDbPath === baseline.config.appDbPath && next.sessionRoot === baseline.config.sessionRoot;
+        // Token records stay out of the request until someone turns them on, so existing approvals don't change.
+        const { usageRecords, ...paths } = next;
+        const records = usageRecords || baseline.config?.usageRecords !== undefined ? { usageRecords } : {};
+        act("/api/collection/configure", { ...paths, ...records, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
             firstApprovalConfirmed = firstApproval;
             reviewReturn = null;
-            return sourceApproval ? "Source approved." : "Preferences saved.";
+            return !sourceApproval ? "Preferences saved." : !recordsOnly ? "Source approved."
+                : usageRecords ? "Token records approved." : "Token records turned off.";
         });
     }
     $("collectionForm").addEventListener("submit", event => event.preventDefault());

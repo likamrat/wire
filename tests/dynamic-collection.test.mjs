@@ -201,7 +201,7 @@ test("history compatibility: shared run receipts stay with their exact messages 
     assert.deepEqual((await read()).map(r=>r.usage),[null,null]);
 });
 
-test("history compatibility: an older journal without receipts stays unmeasured; the app's per-call index is not read", async t => {
+test("history compatibility: with its own approval, an older journal without receipts is metered from the app's per-call index and keeps it after later appends", async t => {
     const app = await installation(t), id = app.session(), start = call("indexed-fetch");
     const index = new DatabaseSync(path.join(app.root, "session-store.db"));
     app.cleanup.push(() => index.close());
@@ -226,11 +226,37 @@ test("history compatibility: an older journal without receipts stays unmeasured;
     await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
     await collector.collectNow();
     const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
-    const record = await read();
-    assert.equal(record.usage, null, "The app's per-call index beside the approved database is not read without its own approval");
-    assert.equal(record.usageBasis, undefined);
+    assert.equal((await read()).usage, null, "Source approval alone does not read the app's token records");
+    const config = (await collector.status()).config;
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5, usageRecords: true,
+        expectedConfigVersion: (await collector.status()).configVersion });
+    assert.equal((await collector.status()).config.usageRecords, true); assert.notEqual(config.usageRecords, true);
+    // Approval applies when collection next reads the chat.
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }),
+        timestamp: new Date(Date.parse(batch.at(-1).timestamp) + 100).toISOString() }) + "\n");
+    await collector.collectNow();
+    let record = await read();
+    assert.equal(record.usage?.total, 11400);
+    assert.deepEqual(record.usage.tokens, { freshInput: 600, cacheRead: 9500, cacheWrite: 900, output: 400 });
+    assert.equal(record.usageBasis, "copilot-usage-index");
+    const later = (type, data, ms) => ({ ...event(type, data), timestamp: new Date(Date.parse(batch.at(-1).timestamp) + ms).toISOString() });
+    const extension = [later("assistant.turn_start", { turnId: "c" }, 500), later("assistant.message", { turnId: "c", content: "More work" }, 700)];
+    await appendFile(file, extension.map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    assert.equal((await read()).usage, null, "Journal activity that continues the exchange retires its earlier indexed total");
+    index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',7000,50,6000,0,?)")
+        .run(id, new Date(Date.parse(extension[1].timestamp) + 4).toISOString());
+    await appendFile(file, JSON.stringify(later("assistant.turn_end", { turnId: "c" }, 900)) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage?.total, 18450, "The closed, extended exchange is counted again with its new call");
+    await appendFile(file, JSON.stringify(later("user.message", { content: "Unrelated later question.", delivery: "idle" }, 2000)) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage?.total, 18450, "A later prompt neither removes nor changes the indexed total");
+    index.exec("DROP TABLE assistant_usage_events");
+    await appendFile(file, JSON.stringify(later("session.info", { infoType: "note", message: "invented" }, 3000)) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage?.total, 18450, "An index WIRE cannot read never clears a total it already verified");
 });
-
 test("history compatibility: a pasted image inside an exchange does not hide its exact receipts, but an unreadable entry still does", async t => {
     for (const [kind, total] of [["session.binary_asset", 4400], ["assistant.message", null]]) {
         const app = await installation(t), id = app.session(), start = call("image-fetch");

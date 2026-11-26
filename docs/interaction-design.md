@@ -1229,6 +1229,7 @@ The expanded desktop rail resizes from its right edge.
 | --- | --- |
 | Same-source paths/preferences draft | Save preferences |
 | Changed source paths | Approve and switch source |
+| Read Copilot's token records, same paths | Approve token records (on) or Stop reading token records (off) |
 | Cancel source review | Discard the draft |
 | Display preference | Apply immediately, separately from permission |
 | Recorded replies | Its own draft and confirmation |
