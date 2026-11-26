@@ -1,4 +1,3 @@
-// Screen copy only: file names, format values and saved report bytes are unchanged.
 export const reportFileChoices = {
     html: { name: "HTML", purpose: "Web page" },
     pdf: { name: "PDF", purpose: "Print document" },

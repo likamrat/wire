@@ -1,6 +1,5 @@
 import { createGuideSourcePicker } from "./documentation-source-picker.mjs";
 
-// Documentation page: guides from the repository's docs, read in WIRE with a guide tree and an outline.
 // Repository HTML is parsed in an inert template and only allow-listed elements and attributes survive.
 const ELEMENTS = new Set(["a", "abbr", "b", "blockquote", "br", "code", "dd", "del", "details", "div", "dl", "dt", "em",
     "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "input", "kbd", "li", "ol", "p", "picture", "pre", "q", "s",

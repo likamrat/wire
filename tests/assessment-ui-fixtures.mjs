@@ -1,14 +1,7 @@
 import * as contract from "../lib/assessment-contract.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { fixture, selectActivityOption } from "./helpers.mjs";
+import { fixture } from "./helpers.mjs";
 export { contract };
-export async function openPersonalFeedback(page, check = "semantic-answer-correctness") {
-    const reviews = page.locator('[data-reader-section="reviews"]');
-    await reviews.getByRole("button", { name: "Personal feedback", exact: true }).click();
-    const select = reviews.locator("select[data-feedback-dimension]");
-    await selectActivityOption(page, await select.getAttribute("id"), check);
-    return reviews.locator(".assessment-feedback-dialog");
-}
 const at = "2026-10-06T12:00:00.000Z";
 const id = (kind, n = 1) => `${kind}-${n.toString(16).padStart(32, "0")}`;
 const basis = () => ({ sourceRevision: 7, membershipRevision: 2, consentRevision: 0, overrideRevision: 0, deletionEpoch: 1 });

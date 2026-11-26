@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -9,8 +7,6 @@ import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, selectActivityOption, closeAnalyzeFilters, chooseTheme } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 
-const proof = process.env.WIRE_METADATA_PROOFS;
-const baseline = process.env.WIRE_METADATA_BASELINE === "1";
 const project = "Invented project \u00b7 original identity punctuation; long cross-team investigation and evidence review";
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 async function setup(t) {
@@ -43,24 +39,12 @@ async function setup(t) {
     await page.goto(server.url + "#analyze"); await ready(page);
     return { page, server };
 }
-async function capture(page, name) {
-    if (!proof) return;
-    await mkdir(proof, { recursive: true });
-    await page.evaluate(async () => {
-        await document.fonts.ready;
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    });
-    await page.screenshot({ path: path.join(proof, name + "-viewport.png") });
-    await page.screenshot({ path: path.join(proof, name + "-full.png"), fullPage: true });
-}
-
 test("native accepted scope presents complete peer facts without parsing retained names", { timeout: 60000 }, async t => {
-    const { page } = await setup(t), states = [];
+    const { page } = await setup(t);
     const caption = page.locator("#analyzeScopeCaption");
     await expect(caption).toBeEmpty();
     await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
-    await capture(page, "ordinary-default");
-    if (!baseline) await expect(caption.locator(".analyze-scope-part")).toHaveCount(0);
+    await expect(caption.locator(".analyze-scope-part")).toHaveCount(0);
     for (const [id, value] of [["serviceAssociationFilter", "Files"], ["outcomeFilter", ["failure"]],
         ["projectFilter", "hierarchy-project"]]) { await selectActivityOption(page, id, value); await ready(page); }
     await closeAnalyzeFilters(page);
@@ -89,14 +73,10 @@ test("native accepted scope presents complete peer facts without parsing retaine
         });
         assert.equal(geometry.homeFindings, 0, "The inventoried retired host is not present in the live shell");
         assert.ok(geometry.overflow <= 1);
-        if (!baseline) {
-            assert.equal(geometry.parts.length, 4);
-            assert.equal(geometry.parts.at(-1).text, `Project: ${project}`);
-            for (const part of geometry.parts) assert.ok(part.lines.every(line => line.x >= geometry.box.x - 1
-                && line.right <= geometry.box.right + 1 && line.y >= geometry.box.y - 1 && line.bottom <= geometry.box.bottom + 1));
-        }
-        states.push({ theme, width, scale, ...geometry });
-        await capture(page, `ordinary-restricted-${theme}-${width}-${scale}`);
+        assert.equal(geometry.parts.length, 4);
+        assert.equal(geometry.parts.at(-1).text, `Project: ${project}`);
+        for (const part of geometry.parts) assert.ok(part.lines.every(line => line.x >= geometry.box.x - 1
+            && line.right <= geometry.box.right + 1 && line.y >= geometry.box.y - 1 && line.bottom <= geometry.box.bottom + 1));
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
@@ -106,9 +86,7 @@ test("native accepted scope presents complete peer facts without parsing retaine
     await page.locator("#chartReferenceSource > summary").click();
     await expect(page.locator("#periodHint")).toBeVisible();
     await page.locator("#periodHint").scrollIntoViewIfNeeded();
-    if (!baseline) await expect(page.locator("#periodHint .analyze-scope-part")).toHaveText(["2 interactions; ", "2 Copilot chats"]);
-    await capture(page, "guide-current-scope-counts");
-    states.push({ periodHint: await page.locator("#periodHint").textContent() });
+    await expect(page.locator("#periodHint .analyze-scope-part")).toHaveText(["2 interactions; ", "2 Copilot chats"]);
     await page.locator("#meaning").press("Escape");
     await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
     await page.locator("#meaning").press("Escape");
@@ -117,5 +95,4 @@ test("native accepted scope presents complete peer facts without parsing retaine
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#openChartReference")).toBeHidden();
     assert.equal((await (await compared).json()).options.filters.projectIds, undefined);
-    if (proof) await writeFile(path.join(proof, "native-reachability.json"), JSON.stringify(states, null, 2));
 });

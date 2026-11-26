@@ -1,19 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium } from "@playwright/test";
 import { createInlineMetadata } from "../web/metadata.mjs";
 import { metadataStyles } from "../web/metadata-styles.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { styles } from "../web/styles.mjs";
-import { renderHtmlShell } from "../lib/render.mjs";
-import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture as sourceFixture, exportCatalogFor, chooseTheme, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
-
-const proofDir = process.env.WORKIQ_METADATA_PROOFS;
 const labels = [
     "Service not identified, Mail",
     "Mail",
@@ -22,16 +14,7 @@ const labels = [
 ];
 const requestHelp = "Synthetic request description.";
 const serviceHelp = "Synthetic service definition. This control does not select the request.";
-const records = [sourceFixture("metadata-synthetic")];
-records[0].toolCalls[0].tool = "workiq-ask";
-records[0].toolCalls[0].toolCallId = "metadata-0-unknown";
-records[0].toolCalls[0].requestArgs = { question: "Synthetic fixture" };
-delete records[0].toolCalls[0].requestedApiPath;
-records[0].toolCalls.push({
-    ...structuredClone(sourceFixture("metadata-mail").toolCalls[0]),
-    toolCallId: "metadata-1-mail",
-    requestedApiPath: "/me/messages", requestArgs: { entityUrls: ["/me/messages"] },
-});
+const url = "http://metadata.test/component";
 
 function componentShell() {
     return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -41,7 +24,7 @@ function componentShell() {
     </style></head><body><div id="metadata-fixture"></div><script nonce="metadata-fixture">
     const ux = (${createEvidenceUX.toString()})(${JSON.stringify(uxIcons)});
     const metadata = (${createInlineMetadata.toString()})(ux);
-    window.metadataSideEffects = {clicks:0,keys:0,copies:0};
+    window.metadataSideEffects = {clicks:0,keys:0};
     for (const label of ${JSON.stringify(labels)}) {
         const card = document.createElement("article");
         const row = metadata.row([
@@ -61,54 +44,32 @@ function componentShell() {
     </script></body></html>`;
 }
 
-async function fixture(run, contextOptions = {}) {
-    const requests = [], errors = [], original = JSON.stringify(records);
-    const server = createServer(async (req, res) => {
-        if (req.method === "GET") {
-            res.setHeader("Content-Type", "text/html");
-            res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-metadata-fixture'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'");
-            return res.end(req.url === "/component" ? componentShell() : renderHtmlShell("a".repeat(64), "metadata-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
-        }
-        requests.push(req.url);
-        res.setHeader("Content-Type", "application/json");
-        if (req.url !== "/api/snapshot") {
-            res.statusCode = 403;
-            return res.end('{"error":"Metadata proof permits synthetic snapshot reads only."}');
-        }
-        let text = ""; for await (const chunk of req) text += chunk;
-        const input = JSON.parse(text);
-        res.end(JSON.stringify({
-            revision: 1, scenarios: records, exports: [], coverage: { notes: [] },
-            exportCatalog: exportCatalogFor(records),
-            analytics: { ...buildActivityAnalytics(records, input), revision: 1 },
-        }));
-    });
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+async function fixture(t, options) {
+    const errors = [], requests = [];
     const browser = await chromium.launch();
-    const context = await browser.newContext(contextOptions);
-    context.setDefaultTimeout(5000);
-    await context.addInitScript(() => {
+    t.after(async () => {
+        await browser.close();
+        assert.deepEqual(errors, []);
+        assert.deepEqual(requests, [], "Metadata help must not read or write evidence");
+    });
+    const page = await browser.newPage(options);
+    page.setDefaultTimeout(5000);
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => {
+        if (route.request().url() === url && route.request().method() === "GET") return route.fulfill({
+            contentType: "text/html", body: componentShell(),
+            headers: { "Content-Security-Policy": "default-src 'none'; script-src 'nonce-metadata-fixture'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'" },
+        });
+        requests.push(route.request().url());
+        return route.abort();
+    });
+    await page.addInitScript(() => {
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
             writeText: () => { throw new Error("Metadata proof cannot write the clipboard."); },
             readText: () => { throw new Error("Metadata proof cannot read the clipboard."); },
         } });
     });
-    context.on("page", (page) => page.on("pageerror", (error) => errors.push(error.message)));
-    try {
-        if (proofDir) await mkdir(proofDir, { recursive: true });
-        await run({ context, url: `http://127.0.0.1:${server.address().port}`, requests });
-        assert.deepEqual(errors, []);
-        assert.ok(requests.every((url) => url === "/api/snapshot"), "Help cannot mutate or preview/export data");
-        assert.equal(JSON.stringify(records), original, "Source fixture remains immutable");
-    } finally {
-        await browser.close();
-        await new Promise((resolve) => server.close(resolve));
-    }
-}
-
-async function ready(page) {
-    await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
-    await openActivitySessions(page);
+    return page;
 }
 
 async function geometry(row) {
@@ -144,7 +105,7 @@ async function geometry(row) {
     });
 }
 
-function assertGeometry(measure, { scale = 1, coarse = false } = {}) {
+function assertGeometry(measure, scale = 1) {
     const center = (box) => box.y + box.height / 2;
     const overlaps = (a, b) => a.x < b.right - .1 && a.right > b.x + .1 && a.y < b.bottom - .1 && a.bottom > b.y + .1;
     assert.ok(measure.overflow <= 1, `Row overflow: ${measure.overflow}`);
@@ -174,32 +135,30 @@ function assertGeometry(measure, { scale = 1, coarse = false } = {}) {
     }
 }
 
-test("metadata component centers text, official icons and separators through wrapping and 200% text", { timeout: 45000 }, async () => fixture(async ({ context, url }) => {
-    const page = await context.newPage(), measurements = [];
+test("metadata component centers text, official icons and separators through wrapping and 200% text", { timeout: 45000 }, async t => {
+    const page = await fixture(t);
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1200 });
         await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-        await page.goto(url + "/component");
+        await page.goto(url);
         await page.evaluate((scale) => document.documentElement.style.fontSize = `${scale * 16}px`, scale);
         const rows = page.locator(".inline-metadata");
         assert.equal(await rows.count(), labels.length);
         for (let index = 0; index < labels.length; index++) {
             const measure = await geometry(rows.nth(index));
             assert.equal(measure.items[1].label, labels[index], "Labels and category combinations are unchanged");
-            assertGeometry(measure, { scale });
-            measurements.push({ theme, width, scale, index, ...measure });
+            assertGeometry(measure, scale);
         }
         assert.equal(await page.locator(".metadata-separator:not([aria-hidden=true])").count(), 0);
         assert.equal(await page.locator("button button, a button, label button").count(), 0);
         const copy = await page.locator(".ux-copy").boundingBox();
         assert.ok(copy.width >= (width <= 600 ? 44 : 40), "Metadata styles cannot shrink copy controls");
     }
-    if (proofDir) await writeFile(path.join(proofDir, "metadata-component-geometry.json"), JSON.stringify(measurements, null, 2));
-}));
+});
 
-test("metadata component help supports hover keyboard and focus without selecting its card", { timeout: 20000 }, async () => fixture(async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url + "/component");
+test("metadata component help supports hover keyboard and focus without selecting its card", { timeout: 20000 }, async t => {
+    const page = await fixture(t);
+    await page.goto(url);
     const row = page.locator(".inline-metadata").first(), help = row.getByRole("button", { name: "About recorded services", exact: true });
     const before = await geometry(row), beforeUrl = page.url();
     await help.hover();
@@ -222,24 +181,24 @@ test("metadata component help supports hover keyboard and focus without selectin
         await page.getByRole("tooltip").waitFor({ state: "visible" });
     }
     await help.click();
-    assert.deepEqual(await page.evaluate(() => window.metadataSideEffects), { clicks: 0, keys: 0, copies: 0 });
+    assert.deepEqual(await page.evaluate(() => window.metadataSideEffects), { clicks: 0, keys: 0 });
     assert.equal(page.url(), beforeUrl);
     await page.keyboard.press("Escape");
     assert.equal(await help.getAttribute("aria-describedby"), null);
-}));
+});
 
-test("metadata component touch targets stay distinct and dismiss without navigation", { timeout: 20000 }, async () => fixture(async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url + "/component");
+test("metadata component touch targets stay distinct and dismiss without navigation", { timeout: 20000 }, async t => {
+    const page = await fixture(t, { viewport: { width: 375, height: 1200 }, hasTouch: true, isMobile: true });
+    await page.goto(url);
     const row = page.locator(".inline-metadata").first(), beforeUrl = page.url();
-    assertGeometry(await geometry(row), { coarse: true });
+    assertGeometry(await geometry(row));
     const help = row.getByRole("button", { name: "About recorded services", exact: true });
     await help.tap();
     await page.getByRole("tooltip").waitFor({ state: "visible" });
     assert.equal(await page.getByRole("tooltip").textContent(), serviceHelp);
     await page.touchscreen.tap(8, 8);
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
-    assert.deepEqual(await page.evaluate(() => window.metadataSideEffects), { clicks: 0, keys: 0, copies: 0 });
+    assert.deepEqual(await page.evaluate(() => window.metadataSideEffects), { clicks: 0, keys: 0 });
     assert.equal(page.url(), beforeUrl);
     assert.ok((await page.locator(".ux-copy").boundingBox()).width >= 44);
-}, { viewport: { width: 375, height: 1200 }, hasTouch: true, isMobile: true }));
+});

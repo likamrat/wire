@@ -322,8 +322,6 @@ test("source presentation has one path pair with equal field geometry through fo
         await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
         await page.evaluate(() => document.fonts.ready);
-        // Capture the old screenshot's expanded state as well as the new plain values.
-        await page.locator("#approvedSourceDetails").evaluate(node => { if (node.tagName === "DETAILS") node.open = true; });
         await page.locator("#approvedSourceDetails").scrollIntoViewIfNeeded();
         await page.evaluate(() => document.activeElement.blur());
         await page.keyboard.press("Escape");

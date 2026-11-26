@@ -91,31 +91,3 @@ export async function chooseReportScope(page, value) {
     else if (await page.locator("#reportsView").getAttribute("data-report-step") !== "1") await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await page.locator(`[name=reportScope][value=${value}]`).check();
 }
-
-export async function inspectReportCopies(page) {
-    await page.getByRole("tab", { name: /^Text \(/ }).click();
-}
-
-export async function findReportCopy(page, text) {
-    await inspectReportCopies(page);
-    const previous = page.getByRole("button", { name: "Previous report copies", exact: true });
-    while (await previous.count() && await previous.isEnabled()) await previous.click();
-    const copy = page.locator(".prompt-comparison").filter({ hasText: text });
-    const next = page.getByRole("button", { name: "Next report copies", exact: true });
-    while (!await copy.count() && await next.count() && await next.isEnabled()) await next.click();
-    await copy.waitFor();
-    return copy;
-}
-
-export async function cancelReportPreview(page) {
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
-}
-
-export async function scanReport(page) {
-    await reportContents(page);
-    const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
-    const preview = await (await response).json();
-    await page.locator("#reportsView[data-report-phase=ready]").waitFor();
-    return preview;
-}
