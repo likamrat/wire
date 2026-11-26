@@ -11877,6 +11877,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sourceCollection,
         createNativeConfigurationState: assessmentFactories.createNativeConfigurationState,
         write: writeCollection,
+        onCommitted: () => load({ background: true }),
         read: async () => {
             const publication = api.publicationToken();
             const status = await readCollectionStatus();

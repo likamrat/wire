@@ -1,4 +1,10 @@
 export const settingsStyles = `
+#usageCountDialog #usageCountBoundary{color:var(--muted);margin:0 0 16px}
+#usageCountPreviewResult{margin:0;padding:4px 0 4px 16px;border-left:3px solid var(--accent)}
+#usageCountPreviewResult h3{margin:0;font-size:var(--type-reading);line-height:var(--leading-reading)}
+#usageCountPreviewResult p{margin:8px 0}
+#usageCountReasons{margin:0;padding-left:20px}
+#usageCountReasons li+li{margin-top:4px}
 .release-reader>header,.release-meta{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
 .release-reader>header{margin:16px 0 8px}
 .release-meta{color:var(--muted);font-size:var(--type-small);border-bottom:1px solid var(--surface-divider);padding-bottom:16px}

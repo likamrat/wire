@@ -462,7 +462,7 @@ test("history compatibility: Copilot's token records never replace a total the j
 });
 // Two invented chats read in full before token records were approved: one the app's records can count, one they can't.
 async function readChatsWithoutTotals(t) {
-    const app = await installation(t), id = app.session(), other = app.session();
+    const app = await installation(t, { profile: true }), id = app.session(), other = app.session();
     const index = new DatabaseSync(path.join(app.root, "session-store.db"));
     app.cleanup.push(() => index.close());
     index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
@@ -570,6 +570,8 @@ test("history compatibility: counting tokens in chats already read refuses befor
     await assert.rejects(expiring.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_EXPIRED" });
     await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_EXPIRED" },
         "Another controller's preview is never confirmed");
+    await refusedWith("USAGE_COUNT_UNAVAILABLE", () => { app.db.prepare("UPDATE projects SET github_account_id='default'").run(); });
+    app.db.prepare("UPDATE projects SET github_account_id='workspace'").run();
     await refusedWith("USAGE_COUNT_UNAVAILABLE", async () => {
         await fixture.collector().configure({ ...fixture.settings, usageRecords: false, expectedConfigVersion: (await fixture.collector().status()).configVersion });
     });
