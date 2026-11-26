@@ -596,9 +596,10 @@ ${reportJourneyStyles}
 #activityList .card-reading-actions>.card-hide-action{flex:none}
 @container(max-width:13rem){#activityList .card-reading-actions:has(.card-hide-action){flex-wrap:wrap}}
 .card-visibility-actions,.hidden-card-row{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-sm)}
-.card-visibility-actions{justify-self:end;grid-row:1;grid-column:2}
-#activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr) auto;align-items:center}
-@media(max-width:760px){#activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr)}.card-visibility-actions{grid-column:1;grid-row:auto;justify-self:start}}
+#activityView>#activityListContext:has(>.card-visibility-actions:not([hidden])){display:flex;flex-flow:row wrap;align-items:center}
+#activityListContext:has(>.card-visibility-actions:not([hidden]))>#activityListSummary{flex:1 1 16rem}
+#activityListContext:has(>.card-visibility-actions:not([hidden]))>.activity-list-scope{order:1;flex-basis:100%}
+#activityListContext:has(>.card-visibility-actions:not([hidden]))>.analyze-widget-toggle{margin-inline-start:auto}
 .hidden-cards-dialog{width:min(30rem,calc(100% - 24px))}
 .hidden-cards-dialog .dialog-body{padding-block:var(--space-sm)}
 .hidden-card-list{list-style:none;margin:0;padding:0}

@@ -6173,7 +6173,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (workspaceState.route.page) navigate(routeFor(underlyingRoute().view, { widget: underlyingRoute().widget, page: undefined }), true);
                 else renderActivity();
             });
-            label.append(select); $("activityListContext").append(label);
+            const heading = $("activityListContext");
+            label.append(select); heading.insertBefore(label, heading.querySelector(".analyze-widget-toggle"));
         }
         host.replaceChildren();
         activityPage = roster.index;
