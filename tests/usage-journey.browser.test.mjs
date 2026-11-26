@@ -722,6 +722,11 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await expect(cards.filter({hasText:"Find review owners"}).getByRole("link",{name:"Model tokens: 33,000. Show token details"})).toHaveText("33,000");
     await page.getByRole("button",{name:"Token share",exact:true}).click();
     await expect(page.locator(".usage-model").first()).toBeVisible();
+    await expect(page.locator('.usage-model [data-recorded-model="gpt-6.2-sol"]')).toHaveText("GPT-6.2 Sol");
+    const receiptLink=cards.filter({hasText:"Find review owners"}).getByRole("link",{name:/^Model tokens:/});
+    await receiptLink.click();
+    await expect(page.locator('.usage-timeline [data-recorded-model="gpt-6.2-sol"]')).toHaveText("GPT-6.2 Sol");
+    await page.keyboard.press("Escape");await expect(receiptLink).toBeFocused();
     await expect(page.locator("[data-percentage-card=models]").getByRole("list",{name:"Model token counts from 7 of 8 matching interactions"})).toBeVisible();
     const launch=cards.filter({hasText:"Launch notes"}), open=launch.locator(".request-card-open").first();
     await open.click();const reading=page.locator("[data-reader-section=usage]");

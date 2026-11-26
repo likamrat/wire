@@ -18,14 +18,14 @@ export async function usagePreview(t, frontend = "react", {offline = false, pagi
     const examples = [
         ["Launch notes",17,"user",["retrieve","fetch","fetch"],"claude-sonnet-5-5",[[5000,8000,1000,1000],[3000,10000,1000,1000]],[7000,4000,1000]],
         ["Follow-up summary",17,"agent",["fetch"],"claude-opus-5-5",[[13000,45000,1500,2500]],[10000]],
-        ["Find review owners",18,"user",["retrieve"],"gpt-4.1",[[10000,20000,0,3000]],[8500]],
+        ["Find review owners",18,"user",["retrieve"],"gpt-6.2-sol",[[10000,20000,0,3000]],[8500]],
         ["Consolidate changes",18,"agent",["retrieve","ask"],"claude-sonnet-5-5",[[18000,53000,7000,4000]],[9000,4000]],
         ["Meeting outline",19,null,["ask"],"preview-model",[[7000,21000,1000,1500]],[6000]],
         ["Search for notes",19,"user",["retrieve","retrieve"],"claude-sonnet-5-5",[],[257,null]],
         ["Draft next steps",20,"agent",["fetch","ask"],"claude-opus-5-5",[[12000,72000,4000,4500]],[12500,6200]],
-        ["Read project brief",20,"user",["fetch"],"gpt-4.1",[[4000,7000,0,1000]],[2500]],
+        ["Read project brief",20,"user",["fetch"],"gpt-6.2-sol",[[4000,7000,0,1000]],[2500]],
     ];
-    if (paginated) examples.push(["Earlier planning",16,"user",["fetch"],"gpt-4.1",[[90000,9000,0,1000]],[1000]]);
+    if (paginated) examples.push(["Earlier planning",16,"user",["fetch"],"gpt-6.2-sol",[[90000,9000,0,1000]],[1000]]);
     if (sparse) examples.splice(0,examples.length,
         ["Review calendar",1,"user",["fetch","ask"],"gpt-4.1",[[1500,160000,38000,500]],[300,40]],
         ["Recent question",20,"user",["ask"],null,[],[80]]);

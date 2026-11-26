@@ -653,7 +653,7 @@ largest bar.
 - Response models use all matching interactions, including missing model names.
   Models and services can overlap.
 - Model rows show a display name formatted only from a fully recognized recorded
-  ID (for example GPT-5.1 or Claude Sonnet 4.5). An unrecognized ID is shown
+  ID (for example GPT-6.2 Sol or Claude Sonnet 4.5). An unrecognized ID is shown
   exactly and never merged or renamed; Analyze labels it Unrecognized model, and
   its reading says WIRE has no display name. The recorded ID appears on hover and
   keyboard focus; filters, saved reports and attribution keep it unchanged.
