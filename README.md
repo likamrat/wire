@@ -21,7 +21,7 @@ Use those records to find patterns in your own work. If you're building an
 agent, a failed call or an unexpected follow-up can give you a concrete case
 to test that a synthetic evaluation might have missed.
 
-[![Analyze with outcome, activity and token charts, and an open reader showing a prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
+[![Analyze with activity, outcome and token charts beside an open interaction whose first call timed out, with the recorded reason and WIRE's interpretation.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
@@ -84,7 +84,8 @@ For other installations, see [Updating WIRE](docs/development.md#updating-wire).
 ### Connect your history
 
 Choose **Review and connect**, check the local paths and history window, then
-approve collection. **Not now** leaves the prompt in Analyze.
+approve collection. The **Token records** switch starts on; reading those
+records uses no tokens and costs nothing. **Not now** leaves the prompt in Analyze.
 See [Connect local history](docs/user-guide.md#connect-local-history) to connect later.
 
 ### Your data
@@ -122,7 +123,7 @@ Follow changes in daily tool use, errors or timing. Select a day to inspect
 the calls behind it, or compare two measures over the same dates.
 See [Trends](docs/user-guide.md#trends) for the eight measures and what each counts.
 
-[![Trends shows a day with one interaction and no recorded errors.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+[![Trends shows a day with two interactions and no recorded errors.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
 ## Reports
 
@@ -134,7 +135,7 @@ before saving a local copy.
 
 [![Report choices, including Errors & failures and Custom report, beside drafts and recent reports.](docs/images/report-choices.png)](docs/reporting.md)
 
-[![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
+[![An Errors & failures preview with its finding, text masking and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
 <a id="comparisons"></a>
 
@@ -144,7 +145,7 @@ Compare a selected period with a baseline, including call results and token
 usage. Open either period's count to see the calls it includes. See
 [Compare two periods](docs/reporting.md#compare).
 
-[![Compare with call results for each period: 1 of 4 baseline calls failed, versus 5 of 19 selected calls.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+[![Compare with call results for each period: 0 of 4 baseline calls failed, versus 4 of 16 selected calls.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
 ## Guides
 

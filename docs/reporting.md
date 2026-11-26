@@ -109,7 +109,7 @@ exact calls and returned results.
    draft** in the confirmation. Nothing is prepared or saved, and unfinished
    work in another tab stays there.
 
-![Report drafts with Workshop follow-up entered as the draft name, ready for Create draft and add.](images/report-draft.png)
+<img src="images/report-draft.png" alt="Report drafts with Launch follow-up entered as the draft name, ready for Create draft and add." width="336">
 
 To remove an interaction from one draft, reopen the picker and choose that
 draft's **Remove** row. Other drafts and the recorded interaction are unchanged.
@@ -204,7 +204,7 @@ say, for example, that 4 of 12 interactions contained a recorded error. Only
 those 4 cases contribute prompt or diagnostic copies. The other interactions
 supply the frozen reference count, not more disclosed text.
 
-![An error report with its frozen frequency, section links and separate file selection and viewing controls.](images/report-preview.png)
+![An Errors & failures preview: 4 of 12 interactions had recorded errors, with its patterns, one recorded example, text masking and Save report.](images/report-preview.png)
 
 - Use the section links to jump to patterns, interactions, timing, token
   breakdown or coverage.
@@ -260,7 +260,7 @@ The interaction stays open so you can check the changed copy where you were
 reading. Notes are the report author's context; they don't change recorded
 outcomes or metrics.
 
-![An interaction's optional note and editable prompt copy, with separate update controls.](images/report-example.png)
+<img src="images/report-example.png" alt="An interaction's optional note and editable prompt copy, with separate update controls." width="782">
 
 **Change what's included** holds author, service and outcome choices and
 optional linked context. **Authors in report** keeps your choices as a draft
@@ -376,7 +376,7 @@ and sensitive information that may be included:
 If WIRE reconnects while the warning is open, it closes without saving. Prepare
 a fresh preview before confirming.
 
-![The save warning lets you mask details, keep original chat wording, or go back.](images/report-save-warning.png)
+<img src="images/report-save-warning.png" alt="The save warning lets you mask details, keep original chat wording, or go back." width="513">
 
 The save receipt records your choice to save locally, not a claim that you
 reviewed every copy. Older reports keep the review confirmation recorded when
@@ -456,11 +456,12 @@ Baseline covers the seven days before that. A fresh comparison uses all
 eligible retained activity. Change its starting period in **Settings >
 Compare**.
 
-![Compare shows 1 of 4 calls failed in Baseline and 5 of 19 in Selected.](images/compare-periods.png)
+![Compare shows 0 of 4 calls failed in Baseline and 4 of 16 in Selected.](images/compare-periods.png)
 
-In this example, the failure count rose from 1 to 5, but there were also more
-calls. Read each count against its own period: 25% of baseline calls failed
-versus 26.32% of selected calls, a rise of 1.32 percentage points.
+In this example, no baseline calls failed and 4 of 16 selected calls did: 0%
+versus 25%, a rise of 25 percentage points. Read each share against its own
+period's calls. **What changed** counts interactions instead: 4 of 12 selected
+interactions had an error or failure.
 
 ### Choose the periods
 

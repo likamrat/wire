@@ -55,28 +55,33 @@ Choose **Review and connect** to check the source before WIRE reads your history
 If you choose **Not now**, nothing connects. You can start later from Analyze
 or **Settings > Sources**.
 
-![Connect your Copilot history, with Review and connect and Not now.](images/first-connection.png)
+<img src="images/first-connection.png" alt="Connect your Copilot history, with Review and connect and Not now." width="561">
 
 1. Under **GitHub Copilot app**, check that **Metadata database** and **Chat
    history folder** point to the Copilot app you want to read. Edit a path if
-   the suggestion is wrong. **Token records** starts on, so WIRE will also read
-   the file shown there. Turn it off if you'd rather it didn't.
-2. Under **Schedule**, set **History to include** and **Check frequency**.
+   the suggestion is wrong.
+2. Leave **Token records** on if you want token counts for older chats. WIRE
+   reads the counts Copilot already recorded in the file shown there. Reading
+   them uses no tokens and costs nothing. Turn it off if you'd rather WIRE
+   didn't read that file.
+3. Under **Schedule**, set **History to include** and **Check frequency**.
    **What approving allows** lists what WIRE will read. When it's right, choose
    **Approve source and start collection**.
-3. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
+4. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
    read can take a few minutes.
+
+<img src="images/sources-new-connection.png" alt="Sources for a new connection: the suggested Copilot paths, Token records on with its no-cost notice, the schedule and What approving allows." width="744">
 
 Approval covers this instance and these local files. WIRE doesn't rerun prompts,
 make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
 Copilot replies is off by default and has its own control under **Settings >
 Privacy & saved data > Recorded replies**.
 
-If older chats have no token counts in their logs, WIRE can use counts Copilot
-already recorded. Reading them doesn't run a model or add to your bill.
-Approval applies the next time collection reads a changed
-chat. For chats already read, [check which totals WIRE can count](collection.md#count-tokens-in-chats-already-read)
-before deciding whether to save them.
+Token records apply the next time collection reads a changed chat. For chats
+already read, [check which totals WIRE can count](collection.md#count-tokens-in-chats-already-read)
+before deciding whether to save them. If WIRE can't identify the Copilot
+account, the source still connects and token records stay off. To change them
+later, see [Token records for a connected source](#token-records-for-a-connected-source).
 
 If something looks wrong:
 
@@ -101,7 +106,7 @@ list follows the same filters.
 Open **Filters** to narrow the view by Dates, Tool, Service involved, Outcome or
 Prompt author. **More filters** holds the additional choices.
 
-![Analyze shows 23 tool calls over nine days: 16 completed, 6 failed and 1 had no recorded result. The reading for Tool failed shows 26.1% (6 of 23 tool calls).](images/analyze.png)
+![Analyze shows 20 tool calls over 11 days: 15 completed, 4 failed and 1 had no recorded result. The reading for Tool failed shows 20% (4 of 20 tool calls).](images/analyze.png)
 
 ### Read the charts
 
@@ -109,11 +114,11 @@ When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
 
 Read the number above a daily column for that day's calls. In the example,
-November 19 had four. The ring and strip under **Tool call results** cover
-all nine days.
+November 22 had three, and November 19 had none. The ring and strip under
+**Tool call results** cover all 11 days.
 
 Hover over **Tool failed**, or focus the label with the keyboard. Its reading
-shows **6 of 23 tool calls**. The blue segment counts completed calls; the
+shows **4 of 20 tool calls**. The blue segment counts completed calls; the
 coral segment counts failures. The striped segment means **No result
 recorded**. Even when a segment is tiny, its label gives the exact count.
 
@@ -348,9 +353,11 @@ warning stays beside the affected activity.
 
 Select the outcome below a prompt to open the matching calls in the reader on
 the right. Hover over its arrow or focus the link for **View call details**.
-In this example, the calendar fetch completed, but `workiq-ask` timed out.
+In this example, the first mail fetch timed out and the second call completed.
+The card shows the recorded reason under **Problem**; the reader adds WIRE's
+interpretation of the timeout.
 
-![An interaction card showing 6,000 model tokens and the timeout for call 2. The reader lists the completed fetch and the failed Ask Copilot call.](images/interaction.png)
+![An interaction card with 15,000 model tokens and the timeout for call 1. The reader shows the recorded reason, WIRE's interpretation and the completed call 2.](images/interaction.png)
 
 ### Calls and results
 
@@ -469,7 +476,7 @@ details** on that row to inspect its evidence.
 **Restore reader width** keeps your place. **Close interaction** returns to the
 previous view.
 
-![Maximized reader with a completed calendar fetch, a separate Ask Copilot timeout and Call details on each row.](images/interaction-maximized.png)
+![Maximized reader with the full prompt, the timed-out mail fetch with its recorded reason, and Call details on each row.](images/interaction-maximized.png)
 
 ### Add to a report
 
@@ -489,7 +496,7 @@ back:
 - Later: open **Hidden cards** and choose **Restore** beside a card.
 - All at once: choose **Restore all** below the list.
 
-![Hidden cards lists each card by number and the time you hid it, without showing its prompt.](images/hidden-cards.png)
+<img src="images/hidden-cards.png" alt="Hidden cards lists each card by number and the time you hid it, without showing its prompt." width="481">
 
 Cards stay hidden until you restore them. For a shorter time, go to
 **Settings > Analyze > Keep hidden cards out of view** and choose **Only in
@@ -512,11 +519,11 @@ Choose **Trends** in the sidebar. **Overview** opens first and shows how many
 interactions had a recorded error or failure each day.
 
 Hover or focus a day on the line. A dashed guide lines it up with the date.
-In the example, November 23 shows **0 of 1 interaction**: there was activity,
-but no recorded error. A cross at zero on November 25 means there were no
+In the example, November 21 shows **0 of 2 interactions**: there was activity,
+but no recorded error. A cross at zero on today's date means there were no
 matching dated calls.
 
-![Trends reading for November 23: one interaction, no failed tool calls and no calls with API errors.](images/trends-overview.png)
+![Trends reading for November 21: two interactions, no failed tool calls and no calls with API errors.](images/trends-overview.png)
 
 **Charts** lists eight measures. **Chart guide** explains their units.
 
@@ -751,7 +758,7 @@ Submit step.
 - A phrase matches that exact sequence, not scattered words, inferred intent or
   synonyms.
 
-![Search for POWER finds PowerPoint in two saved workshop prompts.](images/literal-search.png)
+<img src="images/literal-search.png" alt="Search for POWER finds PowerPoint in two prompts and a saved report." width="477">
 
 Choose where to search:
 
@@ -790,10 +797,10 @@ and a preview with its colors.
 
 Type in **Search settings**. Matching destinations appear under their
 categories. Search includes setting descriptions and keywords: `record` finds
-reply saving, deletion, rereading history and the network diagnostic; `city`
-finds Time zone.
+reply saving, token records, deletion, rereading history and the network
+diagnostic; `city` finds Time zone.
 
-![Settings results for record include saved replies, source permissions and the network diagnostic.](images/settings-search.png)
+<img src="images/settings-search.png" alt="Settings results for record include saved replies, token records and the network diagnostic." width="248">
 
 Select a result, or use Tab and Enter, to reveal and focus the setting. Its
 help and consequences stay beside the control.
@@ -863,7 +870,7 @@ separately in **Regional**.
 If storage is unavailable, the choice applies to this panel only. Changing
 appearance doesn't rewrite saved reports or their original time zone.
 
-![Themes with five compact palette previews. Petrol & coral is active in Light mode.](images/settings-display.png)
+<img src="images/settings-display.png" alt="Themes with five compact palette previews. Petrol & coral is active in Light mode." width="744">
 
 ### WIRE defaults
 
@@ -892,6 +899,21 @@ short, or use **Collapse all** / **Expand all** on the **Local sources** heading
 Edit anything and **What changes** lists the effect. Its button names what
 saving does, such as **Approve token records** or **Save preferences**, and
 **Cancel** puts everything back.
+
+<a id="token-records-for-a-connected-source"></a>
+
+An existing connection keeps its saved **Token records** choice; the switch
+starts on only for a new source. To change it:
+
+1. Open **Settings > Sources**. Under **GitHub Copilot app**, **Token records**
+   shows **On** or **Off**.
+2. Turn the switch on or off. **What changes** marks the change **Reads more**
+   or **Reads less**.
+3. Choose **Approve token records** or **Stop reading token records**.
+
+Reading token records uses no tokens and costs nothing. Turning them off keeps
+the totals WIRE already counted. Changing the source's paths turns the switch
+off until you approve it again.
 
 - **Refresh** checks approved local history.
 - **Read stored activity** only rereads WIRE's retained view.

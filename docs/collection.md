@@ -375,8 +375,11 @@ resolved file and records a separate approval (`usageRecords`). The switch start
 for a source that isn't approved yet, so first approval lists it under **What
 approving allows**; nothing is read until that confirmation. Existing approvals
 keep their saved setting. The approval names that file and the Copilot account the
-app reports; WIRE refuses it when it can't identify that account, and the refusal
-says to turn the switch off to continue without it. Only turning the
+app reports. If WIRE can't identify that account at first approval, it connects
+the source with token records off and says so. A later request to turn them on
+is refused until the account can be identified; the refusal says to turn the
+switch off to continue without them. Reading the file uses no tokens and costs
+nothing. Only turning the
 switch on or off changes the approval; saving other preferences keeps it as
 granted. Changing an approved source's path turns the switch off; if the account or file
 later differs, including between a read and its commit, WIRE stops reading it and

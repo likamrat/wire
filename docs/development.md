@@ -712,12 +712,23 @@ Rules for documentation images:
 - Application screenshots in Markdown use Light theme and the browser's light
   color scheme. Theme-aware diagrams and brand assets keep their light and dark
   variants.
+- Capture at device scale 2 and frame the part of the screen the text
+  describes. Never enlarge a smaller capture.
+- An image narrower than about 880 CSS pixels uses an HTML `img` element whose
+  `width` is half its pixel width, so GitHub and the embedded Guide show it at
+  its natural size. Wider images use ordinary Markdown and scale to the column.
+- Optimize PNGs losslessly before committing. The installed Guide reads at most
+  16 MiB per image and 32 MiB of images per guide.
 
 ### Capture documentation screenshots
 
 [`tests/documentation/documentation-screenshots.mjs`](../tests/documentation/documentation-screenshots.mjs)
-captures Analyze, Trends, Search, reporting, comparisons and Settings with
-invented activity and disposable saved reports.
+captures Analyze, the reader, Trends, Search, reporting, comparisons, Settings
+and the embedded Guide with invented activity and disposable saved reports. A
+second test captures the first-connection welcome and the new-source review in
+**Settings > Sources** from an invented, unapproved Copilot app. It never
+approves the source, and it shows an ordinary Copilot home in place of the
+temporary fixture paths.
 
 1. Set `WIRE_DOC_OUTPUT` to an owned image directory and `WIRE_DOC_PROOF` to a
    separate private evidence directory.
@@ -735,28 +746,17 @@ To capture a subset, set `WIRE_DOC_CAPTURE`:
 
 | Value | Captures |
 | --- | --- |
-| `widgets` | Count/share widgets and the compact prompt reader only: Analyze, the README overview, the reader, Search over Analyze and live period comparison, without unrelated report journeys or screen captures. One synthetic saved report supplies the Search example. |
+| `widgets` | Count/share widgets and the prompt reader only: Analyze, the README overview, the reader and its maximized view, Search over Analyze and live period comparison, without unrelated report journeys or screen captures. One synthetic saved report supplies the Search example. |
 | `reports` | Report choices, reading, copy inspection, file views and Save/Open, without recapturing Analyze, comparisons or Settings. |
 | `analyze` | Analyze, the outcome link and reader, and the README overview, without creating saved-report fixtures or visiting unrelated destinations. |
-| `cards` | The `analyze` views plus the draft picker, Search, and the **Hidden cards** list with its restore actions. |
+| `cards` | The `analyze` views plus the maximized reader, the draft picker, Search, and the **Hidden cards** list with its restore actions. |
 
 The capture uses the feature checkout's compiled React renderer and needs
 committed product source. It uses an available loopback port with collection
-timers disabled, and closes its browser, runtime and temporary store. It records
-source and fixture hashes, image hashes and inspected file formats in the
-private evidence directory.
-
-#### Images captured separately
-
-- **Maximized reader:** in Analyze, open an invented interaction with a returned
-  entry and a separate failed call. Choose **Maximize interaction** and keep
-  both calls and the recorded reason in view for `interaction-maximized.png`.
-- **First-use connection:** use the unconfigured fixture from
-  `tests/accounts/first-connection.browser.test.mjs`. Its `WIRE_FIRST_CONNECTION_PROOFS`
-  captures show initial keyboard focus and the source review. For the guide,
-  click the welcome heading with the pointer and capture the dialog itself.
-  Leave focus styles intact. Don't approve a source for this image or publish
-  the review screen, which includes local paths.
+timers disabled, and closes its browsers, runtimes and temporary stores. It
+records source and fixture hashes, image hashes and sizes, and inspected file
+formats in the private evidence directory. Use `--test-name-pattern="first
+connection"` to run only the connection captures.
 
 #### Individual controls
 

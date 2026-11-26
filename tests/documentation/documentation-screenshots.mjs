@@ -5,10 +5,14 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { fixture, chooseTheme, navigateSettings, selectActivityOption } from "../support/helpers.mjs";
+import { fixture, chooseTheme, navigateSettings, selectActivityOption, privateFixture } from "../support/helpers.mjs";
 import { viewAllSavedReports } from "../reports/report-journey-helpers.mjs";
 import { searchFixture } from "../search/live-search-fixture.mjs";
+import { createProfileSource, profilePNG } from "../collection/source-profile-fixture.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
+import { createCopilotRuntimeAccess } from "../../lib/runtime-access.mjs";
+import { startServer } from "../../lib/server.mjs";
+import { createExportController } from "../../lib/export.mjs";
 
 const output = process.env.WIRE_DOC_OUTPUT;
 const proof = process.env.WIRE_DOC_PROOF;
@@ -16,6 +20,8 @@ const widgetsOnly = process.env.WIRE_DOC_CAPTURE === "widgets";
 const reportsOnly = process.env.WIRE_DOC_CAPTURE === "reports";
 const analyzeOnly = process.env.WIRE_DOC_CAPTURE === "analyze";
 const cardsOnly = process.env.WIRE_DOC_CAPTURE === "cards";
+// Guide images are captured at twice their CSS size so they stay sharp on high-density screens.
+const scale = 2;
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 const day = new Date().toISOString().slice(0, 10);
@@ -68,7 +74,9 @@ function documentationRecords() {
             const unknown = index === 11;
             const discovery = index === 8;
             const apiPath = ["/me/messages", "/me/drive/root", "/me/calendarView"][(index + call) % 3];
-            const durationMs = failed ? 1800 + index * 240 : 240 + index * 60;
+            // The first failure keeps a recorded reason, so the guides can show WIRE explaining why a call failed.
+            const timedOut = failed && index === 0;
+            const durationMs = timedOut ? 30000 : failed ? 1800 + index * 240 : 240 + index * 60;
             return {
                 ...row.toolCalls[0],
                 tool: discovery ? "workiq-get_schema" : "workiq-fetch",
@@ -81,7 +89,10 @@ function documentationRecords() {
                 requestedApiPath: apiPath,
                 toolSucceeded: unknown ? null : !failed,
                 reportedOutcome: unknown ? "unknown" : failed ? "failed" : "succeeded",
-                apiResults: unknown || discovery ? [] : [{ index: 0, path: apiPath,
+                ...(timedOut ? { failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded",
+                    diagnostic: { version: 1, source: "completion-error", status: "recorded", code: "failure",
+                        message: "MCP server 'workiq': MCP error -32001: Request timed out" } } } : {}),
+                apiResults: unknown || discovery || timedOut ? [] : [{ index: 0, path: apiPath,
                     statusCode: failed ? [403, 404, 429, 503][index] : 200,
                     evidenceLevel: "intermediary-reported" }],
             };
@@ -123,7 +134,9 @@ test("capture documentation through the normal renderer with isolated light-them
             await writeFile(path.join(proof, "capture-receipt.json"), JSON.stringify(receipt, null, 2));
         }
     });
-    app = await searchFixture({ after: cleanup => cleanups.push(cleanup) }, { records, reply: false, frontend: "react", copilotAccess: true });
+    app = await searchFixture({ after: cleanup => cleanups.push(cleanup) }, { records, reply: false, frontend: "react", copilotAccess: true,
+        // The guides of this checkout, without checking GitHub for newer ones.
+        documentation: { sourceOptions: { fixtureRemote: null } } });
     receipt = {
         sourceCommit: git("rev-parse", "HEAD"), sourceTree: git("rev-parse", "HEAD^{tree}"),
         sourceChanges: git("diff", "HEAD", "--name-only", "--", "lib", "web", "assets", "package.json", "package-lock.json"),
@@ -131,6 +144,7 @@ test("capture documentation through the normal renderer with isolated light-them
         fixtureFileSha256: sha256(await readFile(new URL(import.meta.url))),
         fixtureHelpers: {},
         renderer: "react", access: "copilot-only", theme: "light", colorScheme: "light", timeZone: "UTC", collectionTimers: false,
+        deviceScaleFactor: scale,
         profile: "Invented source-profile fixture; no remote avatar.",
         images: [], files: [], completed: false,
     };
@@ -157,7 +171,7 @@ test("capture documentation through the normal renderer with isolated light-them
         for (const file of Object.values(bundle.files)) originals.set(file, await readFile(file));
     }
     browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 },
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: scale,
         colorScheme: "light", timezoneId: "UTC", locale: "en-US" });
     page.setDefaultTimeout(15000);
     const errors = [], outside = [], mutations = [];
@@ -175,7 +189,9 @@ test("capture documentation through the normal renderer with isolated light-them
         return route.continue();
     });
     const ready = () => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false, hover } = {}) {
+    const drawerFrame = () => ({ region: [page.locator("#reportPreviewDrawer")], pad: 0 });
+    const compareFrame = () => ({ region: [page.locator("#pageTitle"), page.locator("#periodComparisonResults .comparison-chart")], pad: 16 });
+    async function capture(name, { locator, region, pad = 16, height, privateOnly = false, top = false, hover } = {}) {
         if (reportsOnly && !name.startsWith("report-") && name !== "saved-report") return;
         await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", "light");
         assert.equal(await page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches), true);
@@ -187,12 +203,36 @@ test("capture documentation through the normal renderer with isolated light-them
             await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
         }
         if (hover) {
-            await hover.hover(); await expect(page.getByRole("tooltip")).toHaveText("View call details");
+            await hover.target.hover(); await expect(page.getByRole("tooltip").filter({ visible: true }).first()).toContainText(hover.tooltip);
         } else await page.mouse.move(10, 70);
+        // Let hover readings and tooltips finish fading in.
+        await page.waitForFunction(() => document.getAnimations().every(animation =>
+            animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity));
         const file = path.join(privateOnly ? proof : output, name + ".png");
-        const bytes = await locator.screenshot({ path: file, ...(locator === page ? { fullPage } : {}) });
-        receipt.images.push({ name, privateOnly, sha256: sha256(bytes), bytes: bytes.length,
-            width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), viewport: page.viewportSize() });
+        let clip;
+        if (region) {
+            // Frame the named elements, or the whole page beside the sidebar and below the header.
+            const view = page.viewportSize(), boxes = [];
+            if (region === "viewport") boxes.push(await page.evaluate(() => ({ x: 0, y: 0, width: document.documentElement.clientWidth, height: innerHeight })));
+            else if (region === "workspace") boxes.push(await page.evaluate(() => {
+                const main = document.querySelector("#main").getBoundingClientRect();
+                const header = document.querySelector(".app-header").getBoundingClientRect();
+                return { x: main.x, y: header.bottom, width: document.documentElement.clientWidth - main.x, height: innerHeight - header.bottom };
+            }));
+            else for (const item of region) boxes.push(await item.boundingBox());
+            if (hover) boxes.push(await page.getByRole("tooltip").filter({ visible: true }).first().boundingBox());
+            assert.ok(boxes.every(Boolean), name + ": every framed element is on screen");
+            const x = Math.max(0, Math.floor(Math.min(...boxes.map(b => b.x)) - pad));
+            const y = Math.max(0, Math.floor(Math.min(...boxes.map(b => b.y)) - pad));
+            const right = Math.min(view.width, Math.ceil(Math.max(...boxes.map(b => b.x + b.width)) + pad));
+            const bottom = Math.min(view.height, y + (height ?? Infinity), Math.ceil(Math.max(...boxes.map(b => b.y + b.height)) + pad));
+            clip = { x, y, width: right - x, height: bottom - y };
+        }
+        const bytes = locator ? await locator.screenshot({ path: file }) : await page.screenshot({ path: file, ...(clip ? { clip } : {}) });
+        const width = bytes.readUInt32BE(16), pixels = bytes.readUInt32BE(20);
+        if (clip) assert.deepEqual([width, pixels], [clip.width * scale, clip.height * scale], name + " is captured natively, not resampled");
+        receipt.images.push({ name, privateOnly, sha256: sha256(bytes), bytes: bytes.length, width, height: pixels,
+            cssWidth: width / scale, cssHeight: pixels / scale, deviceScaleFactor: scale, viewport: page.viewportSize() });
     }
     async function preparedChange(action) {
         const response = page.waitForResponse(item => item.url().endsWith("/api/preview"));
@@ -219,28 +259,36 @@ test("capture documentation through the normal renderer with isolated light-them
     if (!reportsOnly) {
         await expect(page.locator("#activityListSummary")).toContainText("16 interactions · 20 matching tool calls");
         await expect(page.locator("#activityList .report-draft-trigger").first()).toBeVisible();
-        await capture("analyze");
-        await page.setViewportSize({ width: 2100, height: 1250 });
+        const failedLabel = page.locator("#outcomeChart").getByText("Tool failed", { exact: true });
+        await capture("analyze", { region: [page.locator(".analyze-chart-grid")], pad: 12,
+            hover: { target: failedLabel, tooltip: "4 of 20 tool calls" } });
+        await page.setViewportSize({ width: 1600, height: 1000 });
         const card = page.locator("#activityList article").filter({ hasText: "jordan@example.invalid" });
         const outcome = card.getByRole("link", { name: "1 tool call failed", exact: true });
         await outcome.click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
-        await expect(page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle')).toBeVisible();
+        await expect(page.locator("#contextSidebar")).toContainText("Request timed out");
+        const expanded = page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle[aria-expanded=true]');
+        if (await expanded.count()) await expanded.click();
         await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
-        await capture("wire-overview", { top: true });
-        await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle[aria-expanded=true]').click();
+        await capture("wire-overview", { top: true, region: "viewport", pad: 0 });
+        await page.setViewportSize({ width: 1440, height: 1000 });
         await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
         await card.evaluate(n => scrollBy(0, n.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom - 64));
-        await capture("interaction", { hover: outcome.locator('[data-icon-role="forward"]') });
+        await capture("interaction", { region: "workspace", pad: 0,
+            hover: { target: outcome.locator('[data-icon-role="forward"]'), tooltip: "View call details" } });
         if (analyzeOnly) { await finish(); return; }
+        await page.getByRole("button", { name: "Maximize interaction", exact: true }).click();
+        await expect(page.getByRole("button", { name: "Restore reader width", exact: true })).toBeVisible();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
+        await capture("interaction-maximized", { region: [page.locator("#contextSidebar")], pad: 0, height: 700 });
+        await page.getByRole("button", { name: "Restore reader width", exact: true }).click();
         if (!widgetsOnly) {
             await page.locator("#contextSidebar .report-draft-trigger").click();
             const picker = page.getByRole("dialog", { name: "Report drafts" });
             await picker.getByRole("button", { name: "New draft", exact: true }).click();
             await picker.getByLabel("Draft name").fill("Launch follow-up");
-            await capture("report-draft");
+            await capture("report-draft", { locator: picker });
             await picker.getByRole("button", { name: "Create draft and add" }).click();
             await expect(page.locator("#contextSidebar .report-draft-trigger")).toContainText("Launch follow-up");
             await page.getByRole("button", { name: "Dismiss confirmation" }).click();
@@ -252,10 +300,10 @@ test("capture documentation through the normal renderer with isolated light-them
         await page.locator("#wireSearch").fill("POWER");
         await expect(page.locator(".wire-search-hit")).toHaveCount(3);
         await expect(page.locator(".wire-search-hit").first()).toBeVisible();
-        await capture("literal-search");
+        await capture("literal-search", { region: [page.locator("#wireSearch"), page.locator("#wireSearchPanel")], pad: 8 });
         await page.locator("#wireSearchClear").click();
-        if (cardsOnly) {
-            await page.locator("#wireSearch").press("Escape");
+        await page.locator("#wireSearch").press("Escape");
+        if (!widgetsOnly) {
             const hide = page.locator("#activityList").getByRole("button", { name: "Hide", exact: true });
             await hide.first().click(); await hide.first().click();
             await page.getByRole("button", { name: "Hidden cards (2)" }).click();
@@ -265,15 +313,16 @@ test("capture documentation through the normal renderer with isolated light-them
             await capture("hidden-cards", { locator: dialog });
             await dialog.getByRole("button", { name: "Restore all (2)" }).click();
             await expect(card).toBeVisible();
-            await finish();
-            return;
+            // Start the next pages without the restore notice.
+            await page.reload(); await ready();
         }
+        if (cardsOnly) { await finish(); return; }
         if (widgetsOnly) {
             await page.locator("#comparePeriods").click();
             await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-            await capture("compare-periods");
+            await capture("compare-periods", compareFrame());
             await page.getByRole("button", { name: "By tool", exact: true }).click();
-            await capture("compare-by-tool", { privateOnly: true });
+            await capture("compare-by-tool", { privateOnly: true, ...compareFrame() });
             await finish();
             return;
         }
@@ -291,35 +340,36 @@ test("capture documentation through the normal renderer with isolated light-them
     }
     await page.locator('nav [data-nav=reports]').click();
     await ready();
-    await capture("report-choices", { fullPage: true });
+    await capture("report-choices", { region: "workspace", pad: 0, top: true });
     let prepared = await preparedChange(() => page.locator("#reportPreset-errors").click());
     assert.equal(prepared.snapshot.reportPopulation.reference.length, 12);
     assert.equal(prepared.records.length, 4);
     const report = page.frameLocator(".report-contained-frame");
     await expect(report.locator("h1")).toHaveText("Errors & failures");
     await expect(report.locator("body")).toContainText("4 of 12 interactions had recorded errors.");
-    await capture("report-preview");
+    await capture("report-preview", drawerFrame());
     await expect(report.locator("body")).toContainText("Avery Chen");
     await page.locator("#reportPrivacyChoice").click();
     await page.locator("#additionalMasking summary").click();
     prepared = await preparedChange(() => page.locator("#manualTerms").fill("Avery Chen"));
     await expect(report.locator("body")).not.toContainText("Avery Chen");
-    await capture("report-privacy");
+    await capture("report-privacy", drawerFrame());
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     await selectActivityOption(page, "preparedReportView", "text");
     await expect(page.locator("#reportTextInspection .prompt-report")).toBeVisible();
-    await capture("report-text");
+    await capture("report-text", drawerFrame());
     await selectActivityOption(page, "preparedReportView", "report");
     await report.locator(".wire-reading-interaction>summary").first().click();
     await report.locator('.report-nav a[href$="#examples"]').click();
-    await capture("report-expanded");
+    await capture("report-expanded", drawerFrame());
     await report.locator(".wire-example-editor>summary").first().click();
     await report.getByLabel("Your note", { exact: true }).first()
-        .fill("Expected a list of review messages. Check how the mailbox access error was explained.");
+        .fill("Expected a list of review messages. Check how the mailbox timeout was explained.");
     prepared = await preparedChange(() => report.getByRole("button", { name: "Update note", exact: true }).first().click());
     await expect(report.locator(".wire-reading-interaction").first()).toHaveAttribute("open", "");
     await expect(report.locator(".wire-example-editor").first()).toHaveAttribute("open", "");
-    await capture("report-example", { locator: report.locator(".wire-example-editor").first() });
+    await report.locator(".wire-example-editor").first().evaluate(node => { document.activeElement?.blur(); node.scrollIntoView({ block: "center", behavior: "instant" }); });
+    await capture("report-example", { region: [report.locator(".wire-example-editor").first()], pad: 16 });
     await page.getByRole("button", { name: "Expand sections", exact: true }).click();
     await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
     await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
@@ -340,14 +390,14 @@ test("capture documentation through the normal renderer with isolated light-them
                 .getByRole("button", { name: format === "json" ? "Tree" : "Preview", exact: true }).click();
         }
         await capture(format === "html" ? "report-file-preview" : "report-file-" + format,
-            { privateOnly: format !== "html", top: true });
+            { privateOnly: format !== "html", top: true, ...drawerFrame() });
     }
     await selectActivityOption(page, "preparedReportView", "coverage-and-redaction-manifest.json");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
     assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(),
         prepared.files["coverage-and-redaction-manifest.json"]);
     await page.locator("#reportFileInspection").getByRole("button", { name: "Tree", exact: true }).click();
-    await capture("report-manifest", { privateOnly: true });
+    await capture("report-manifest", { privateOnly: true, ...drawerFrame() });
     await selectActivityOption(page, "preparedReportView", "report");
     await page.locator("#reportPrivacyChoice").click();
     prepared = await preparedChange(() => page.locator('[name=promptMode][value=original]').check());
@@ -371,7 +421,7 @@ test("capture documentation through the normal renderer with isolated light-them
     const brief = page.getByRole("article", { name: "Report brief" });
     await expect(brief).toContainText("4 of 12 interactions had recorded errors.");
     await expect(brief.getByRole("button", { name: /^Report call / })).toBeVisible();
-    await capture("saved-report");
+    await capture("saved-report", { region: "workspace", pad: 0 });
     if (reportsOnly) { await finish(); return; }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await viewAllSavedReports(page);
@@ -379,20 +429,20 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.getByRole("button", { name: "View report: Launch review", exact: true }).click();
     await expect(page.locator("#savedReportReader h1")).toHaveText("Launch review");
     await expect(brief).toBeVisible();
-    await capture("saved-json-only", { privateOnly: true });
+    await capture("saved-json-only", { privateOnly: true, region: "workspace", pad: 0 });
 
     await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    await capture("compare-periods");
+    await capture("compare-periods", compareFrame());
     for (const name of ["Timeline", "By tool", "Timing"]) {
         await page.getByRole("button", { name, exact: true }).click();
-        await capture("compare-" + name.toLowerCase().replaceAll(" ", "-"), { privateOnly: true });
+        await capture("compare-" + name.toLowerCase().replaceAll(" ", "-"), { privateOnly: true, ...compareFrame() });
     }
     const paired = await preparedChange(() => page.getByRole("button", { name: "Create report", exact: true }).click());
     assert.ok(paired.snapshot.periodComparison);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
-    await capture("period-report", { privateOnly: true, top: true });
+    await capture("period-report", { privateOnly: true, top: true, region: "workspace", pad: 0 });
     await page.locator("#reportLibraryLink").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
 
@@ -401,23 +451,127 @@ test("capture documentation through the normal renderer with isolated light-them
     const sections = page.getByRole("navigation", { name: "Trends sections" });
     await sections.getByRole("button", { name: "Overview" }).click();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
-    await capture("trends-overview", { top: true });
+    // A day with activity and no recorded error: the reading shows 0 of its interactions.
+    const quiet = page.locator("#trendsOverviewPlot [data-trend-mark]").nth(1);
+    await expect(quiet).not.toHaveAttribute("aria-label", /no matching dated calls/);
+    await capture("trends-overview", { top: true, pad: 12,
+        region: [page.getByRole("navigation", { name: "Trends sections" }), page.locator("#trendsView .trends-landing"),
+            page.locator("#trendsView .trends-start:not(.trends-explore)")],
+        hover: { target: quiet, tooltip: "0 of 2 interactions" } });
     await sections.getByRole("button", { name: "Charts" }).click();
     await page.getByRole("button", { name: "Show or hide charts", exact: true }).click();
     await page.getByRole("dialog", { name: "Show or hide charts" }).getByRole("button", { name: "Open all charts" }).click();
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
-    await capture("trends-collapsed", { top: true });
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await capture("trends-collapsed", { top: true, region: [page.locator("#pageTitle"), page.locator(".trends-panel:visible").last()], pad: 24 });
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     await page.locator('nav [data-nav=settings]').click();
     await expect(page.locator("#settingsSearch")).toBeVisible();
     await navigateSettings(page, "display");
-    await page.setViewportSize({ width: 1440, height: 760 });
-    await capture("settings-display");
+    await capture("settings-display", { region: [page.locator("[data-settings-section=themes]")], pad: 16 });
     await page.locator("#settingsSearch").fill("record");
     await expect(page.locator("#settingsSearchResults")).toBeVisible();
     await expect(page.locator("#settingsSearchResults")).toContainText("Privacy & saved data");
     await expect(page.locator("#settingsSearchResults")).toContainText("Collection status");
-    await capture("settings-search");
+    await capture("settings-search", { region: [page.locator("#settingsSearch"), page.locator("#settingsSearchResults")], pad: 12 });
+
+    await page.locator("nav [data-nav=documentation]").click();
+    const guides = page.locator("#documentationView");
+    await guides.locator("nav.docs-tree").getByRole("link", { name: "Architecture", exact: true }).click();
+    await expect(guides.locator("article.docs-article h1")).toHaveText("Architecture");
+    await capture("documentation-guide-tree", { top: true, region: [guides], pad: 0, height: 460 });
     await finish();
+});
+
+test("capture first connection and the new-source review with an invented, unapproved Copilot app", {
+    skip: !output || !proof,
+    timeout: 120000,
+}, async t => {
+    await mkdir(output, { recursive: true });
+    await mkdir(proof, { recursive: true });
+    const cleanups = [], external = [], errors = [], writes = [];
+    const { root, context } = await privateFixture({ after: fn => cleanups.push(fn) }, []);
+    const home = path.join(root, "invented-copilot"), id = "00000000-0000-4000-8000-0000000000d0";
+    const { db } = await createProfileSource(home);
+    db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Launch preparation", "general_chat");
+    db.close();
+    await mkdir(path.join(home, "session-state", id), { recursive: true });
+    await writeFile(path.join(home, "session-state", id, "events.jsonl"),
+        JSON.stringify({ id: "documentation-start", timestamp: new Date().toISOString(), type: "session.start", data: { sessionId: id, version: 1 } }) + "\n");
+    await writeFile(path.join(home, "session-store.db"), "");
+    const previousHome = process.env.COPILOT_HOME;
+    process.env.COPILOT_HOME = home;
+    let access, runtime, browser;
+    t.after(async () => {
+        await browser?.close(); await runtime?.close(); await access?.close();
+        if (previousHome === undefined) delete process.env.COPILOT_HOME;
+        else process.env.COPILOT_HOME = previousHome;
+        for (const fn of cleanups.reverse()) await fn();
+    });
+    access = await createCopilotRuntimeAccess(context);
+    runtime = await startServer(context, createExportController(context), { port: 0, access, frontend: "react", collector: { timers: false },
+        githubProfile: { fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }) },
+        documentation: { sourceOptions: { fixtureRemote: null } } });
+    browser = await chromium.launch();
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1400 }, deviceScaleFactor: scale,
+        colorScheme: "light", timezoneId: "UTC", locale: "en-US" });
+    page.setDefaultTimeout(15000);
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => { if (request.method() === "POST" && /collection\/(configure|enabled|now)/.test(request.url())) writes.push(request.url()); });
+    const origin = new URL(runtime.url).origin;
+    await page.route(url => url.origin !== origin && !["blob:", "data:"].includes(url.protocol), route => { external.push(route.request().url()); return route.abort(); });
+    const images = [];
+    async function capture(name, options) {
+        await page.evaluate(() => document.fonts.ready);
+        await page.mouse.move(10, 70);
+        await page.waitForFunction(() => document.getAnimations().every(animation =>
+            animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity));
+        const file = path.join(output, name + ".png");
+        const bytes = options.locator ? await options.locator.screenshot({ path: file }) : await page.screenshot({ path: file, clip: options.clip });
+        const width = bytes.readUInt32BE(16), height = bytes.readUInt32BE(20);
+        if (options.clip) assert.deepEqual([width, height], [options.clip.width * scale, options.clip.height * scale], name + " is captured natively");
+        images.push({ name, sha256: sha256(bytes), bytes: bytes.length, width, height, cssWidth: width / scale, cssHeight: height / scale });
+    }
+
+    await page.goto(runtime.url);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await chooseTheme(page, "light");
+    const welcome = page.getByRole("dialog").filter({ has: page.locator("#welcomeReviewSource") });
+    await expect(welcome).toBeVisible();
+    await page.evaluate(() => document.activeElement?.blur());
+    await capture("first-connection", { locator: welcome });
+
+    await page.locator("#welcomeReviewSource").click();
+    const records = page.getByRole("switch", { name: "Token records", exact: true });
+    await expect(records).toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsHelp")).toContainText("Reading token records uses no tokens and costs nothing.");
+    await expect(page.locator("#approvalScope")).toContainText("Read token records");
+    // The disposable source lives in a temporary folder; show an ordinary Copilot home instead of this machine's path.
+    const shown = process.platform === "win32" ? "C:\\Users\\you\\.copilot" : "/home/you/.copilot";
+    await page.evaluate(([from, to]) => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) if (node.nodeValue.includes(from)) node.nodeValue = node.nodeValue.replaceAll(from, to);
+        for (const input of document.querySelectorAll("input")) if (input.value.includes(from)) input.value = input.value.replaceAll(from, to);
+    }, [home, shown]);
+    assert.equal(await page.evaluate(from => document.body.innerText.includes(from)
+        || [...document.querySelectorAll("input")].some(input => input.value.includes(from)), root), false, "No fixture path is visible");
+    const block = page.locator("#connectionSource"), commit = page.locator("#sourceCommit");
+    await block.evaluate(node => node.scrollIntoView({ block: "start", behavior: "instant" }));
+    await page.evaluate(() => scrollBy(0, -120));
+    const boxes = [await block.boundingBox(), await commit.boundingBox()], pad = 16;
+    const x = Math.floor(Math.min(...boxes.map(b => b.x)) - pad), y = Math.floor(Math.min(...boxes.map(b => b.y)));
+    const clip = { x, y, width: Math.ceil(Math.max(...boxes.map(b => b.x + b.width)) + pad) - x,
+        height: Math.ceil(Math.max(...boxes.map(b => b.y + b.height)) + pad) - y };
+    assert.ok(clip.y + clip.height <= page.viewportSize().height, "The source and its approval summary fit on screen");
+    await capture("sources-new-connection", { clip });
+
+    assert.deepEqual(writes, [], "Reviewing a source never approves it");
+    assert.deepEqual(errors, []);
+    assert.deepEqual(external, []);
+    await writeFile(path.join(proof, "connection-receipt.json"), JSON.stringify({
+        sourceCommit: git("rev-parse", "HEAD"), fixture: "tests/documentation/documentation-screenshots.mjs",
+        deviceScaleFactor: scale, theme: "light", profile: "Invented source-profile fixture; displayed paths replaced with an ordinary Copilot home.",
+        images, browserVersion: browser.version(), nodeVersion: process.version }, null, 2));
 });
