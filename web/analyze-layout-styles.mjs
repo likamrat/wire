@@ -192,13 +192,13 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
 .analyze-widget[data-collapsed=true] :is(.chart-panel,#outcomeChart>.percentage-card),
 .analyze-widget[data-collapsed=true]:is(.percentage-card) {padding-bottom:var(--widget-heading-inset)}
 .analyze-widget[data-collapsed=true] .analyze-widget-heading {margin-bottom:0!important}
-#activityListContext.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) auto 44px}
+#activityView>#activityListContext:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) auto 44px}
 #activityListContext.analyze-widget-heading>.usage-sort {grid-column:2;grid-row:1}
 @container (max-width:30rem) {
  .analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
  .analyze-widget-heading>.analyze-widget-toggle {grid-area:1/2}
  .analyze-widget-heading>.analyze-trend-link:not([hidden]) {grid-area:2/1;justify-self:start}
- #activityListContext.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
+ #activityView>#activityListContext:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
  #activityListContext.analyze-widget-heading>.usage-sort {grid-column:1/-1;grid-row:3;justify-self:start}
 }
 #homeView #chart>.empty-state {padding:8px 0 12px;background:none;border:0;border-radius:0;text-align:start}
@@ -277,7 +277,7 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
 #meaning #chartReadingNotes dt {font-weight:var(--weight-strong);margin-top:12px}
 #meaning #chartReadingNotes dd {margin:2px 0 0}
 #meaning>section+section {margin-top:16px}
-#activityView {margin-top:24px}
+#activityView {margin-top:24px;container-type:inline-size}
 .reader-response-timing {min-width:0;margin:var(--space-sm) 0 var(--space-md);font-size:var(--type-body);line-height:var(--leading-ui);overflow-wrap:anywhere}
 .reader-response-timing>.response-timing {display:grid;gap:4px;min-width:0}
 .reader-response-timing dt {font-weight:var(--weight-strong)}
