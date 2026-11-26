@@ -49,8 +49,8 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (!canInspect() || !nodes.some(node => node.dataset.series === id)) id = null;
         if (scene) scene.emphasized = id;
         for (const node of nodes) {
+            // Reading recedes the other series; the read line keeps its exact width.
             node.style.opacity = id && node.dataset.series !== id ? ".22" : "1";
-            if (node.hasAttribute("data-trend-line")) node.style.strokeWidth = id && node.dataset.series === id ? "3.25" : "2.5";
         }
     }
     function outline(point, stroke, weight) {
@@ -156,11 +156,23 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const top = doc.querySelector(".app-header").getBoundingClientRect().bottom + 8;
         tooltip.style.maxWidth = `${Math.min(330 * scale, innerWidth - left - 12)}px`;
         tooltip.style.maxHeight = `${Math.max(80, innerHeight - top - 12)}px`; tooltip.hidden = false;
-        const box = tooltip.getBoundingClientRect();
-        const x = at.x + 12 + box.width < innerWidth ? at.x + 12 : at.x - box.width - 12;
-        const y = at.y - box.height - 12 >= top ? at.y - box.height - 12 : at.y + 12;
-        tooltip.style.left = `${Math.max(left, Math.min(innerWidth - box.width - 10, x))}px`;
-        tooltip.style.top = `${Math.max(top, Math.min(innerHeight - box.height - 10, y))}px`;
+        const box = tooltip.getBoundingClientRect(), gap = 12;
+        // The reading never covers its own point or another control, such as View chart.
+        const controls = [...doc.querySelectorAll("a[href],button,select,input,summary,[role=button]")]
+            .filter(node => !root.contains(node) && !tooltip.contains(node) && node.checkVisibility())
+            .map(node => node.getBoundingClientRect()).filter(rect => rect.width && rect.bottom > top && rect.top < innerHeight);
+        const self = { left: at.x - gap, right: at.x + gap, top: at.y - gap, bottom: at.y + gap };
+        const area = (p, rect) => Math.max(0, Math.min(p.left + box.width, rect.right) - Math.max(p.left, rect.left))
+            * Math.max(0, Math.min(p.top + box.height, rect.bottom) - Math.max(p.top, rect.top));
+        const clamp = p => ({ left: Math.max(left, Math.min(innerWidth - box.width - 10, p.left)), top: Math.max(top, Math.min(innerHeight - box.height - 10, p.top)) });
+        const above = at.y - box.height - gap, below = at.y + gap, right = at.x + gap, before = at.x - box.width - gap;
+        const placed = [{ left: right, top: above }, { left: before, top: above }, { left: right, top: below }, { left: before, top: below },
+            { left: at.x - box.width / 2, top: above }, { left: at.x - box.width / 2, top: below },
+            { left: right, top: at.y - box.height / 2 }, { left: before, top: at.y - box.height / 2 }].map(clamp)
+            .map((p, index) => ({ ...p, index, own: area(p, self), covered: controls.reduce((sum, rect) => sum + area(p, rect), 0) }))
+            .sort((a, b) => a.own - b.own || a.covered - b.covered || a.index - b.index)[0];
+        tooltip.style.left = `${placed.left}px`;
+        tooltip.style.top = `${placed.top}px`;
         tooltip.classList.add("open");
     }
     function hit(clientX, clientY, activate = false) {
