@@ -443,6 +443,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-defaults [data-prompt-mode=original]{color:var(--disclosure-risk)}
 .report-preset-list{border-top:1px solid var(--surface-divider)}
 .report-preset-list .report-tile-open{display:grid;grid-template-columns:1.125rem minmax(0,1fr) auto;gap:.75rem;min-height:3.5rem;padding:.6rem .5rem;border:0;border-radius:var(--radius-small);font-weight:var(--weight-regular)}
+@media screen and (forced-colors:none){.report-preset-list [data-report-preset=completed]:not(:disabled)>.wire-icon{color:var(--tool-positive)}}
 .report-preset-copy{display:grid;grid-template-columns:minmax(8.5rem,.75fr) minmax(0,1.5fr);gap:.75rem;align-items:baseline;min-width:0}
 .report-preset-name{font-size:var(--type-reading);font-weight:var(--weight-regular);line-height:1.5;overflow-wrap:anywhere}
 .report-preset-description{font-size:var(--type-control);color:var(--muted);line-height:1.5;overflow-wrap:anywhere}

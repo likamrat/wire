@@ -61,8 +61,16 @@ test("Reports opens visible preset actions, keeps Custom last and resumes the sa
     await expect(list.locator("li").last()).toContainText("Set up");
     await expect(page.locator("#reportDraftsPanel")).toContainText("Drafts");
     await expect(page.locator(".report-desk")).toBeHidden();
+    const completedIcon = page.locator("#reportPreset-completed > [data-icon-role=result-success]");
     for (const [theme, width] of [["light",1366],["dark",390]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 900 });
+        await navigateMain(page, "compare");
+        await page.locator("#comparisonQuickChoice-control").click();
+        const peer = page.getByRole("option", { name: "Completed calls", exact: true }).locator("[data-icon-role=result-success]");
+        const successInk = await peer.evaluate(icon => getComputedStyle(icon).color);
+        await page.keyboard.press("Escape");
+        await navigateMain(page, "reports");
+        await expect(completedIcon).toHaveCSS("color", successInk);
         const before = await errorPreset.boundingBox();
         await errorPreset.hover(); await errorPreset.focus(); await errorPreset.press("Tab"); await page.keyboard.press("Shift+Tab");
         await expect(errorPreset).toBeFocused();
@@ -72,6 +80,9 @@ test("Reports opens visible preset actions, keeps Custom last and resumes the sa
         assert.deepEqual(await errorPreset.boundingBox(), before);
         await captureReport(page, `report-entry-${theme}-${width}`);
     }
+    await page.emulateMedia({ forcedColors: "active" });
+    await expect(completedIcon).toHaveCSS("color", await errorPreset.evaluate(button => getComputedStyle(button).color));
+    await page.emulateMedia({ forcedColors: "none" });
     assert.equal(requests.filter(r => r.path === "/api/preview").length, 0);
     const response = page.waitForResponse(r => r.url().endsWith("/api/preview"));
     await errorPreset.press("Enter");
