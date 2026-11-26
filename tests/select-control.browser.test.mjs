@@ -167,6 +167,10 @@ async function setup(run, options = {}) {
                 : shell);
         }
         if (req.method === "GET" && req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && req.url === "/assets/marked.mjs") {
+            res.setHeader("Content-Type", "text/javascript");
+            return res.end(await readFile(new URL("../node_modules/marked/lib/marked.esm.js", import.meta.url)));
+        }
         res.setHeader("Content-Type", "application/json");
         if (req.method === "POST" && req.url === "/api/evaluation/automatic/summary") return res.end(JSON.stringify(automaticScoreOffSummary()));
         if (req.method !== "POST" || req.url !== "/api/snapshot") {
