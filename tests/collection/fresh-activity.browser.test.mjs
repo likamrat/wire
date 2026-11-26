@@ -79,6 +79,8 @@ test("Analyze Refresh shares the guarded history check and read-only recovery be
     await page.keyboard.press("Tab");
     await expect(page.locator("#analyzeResultScope a:focus")).toContainText("1 Work IQ tool call");
     await page.keyboard.press("Tab");
+    await expect(page.locator("#analyzeToggleAll")).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(refresh).toBeFocused();
     await page.keyboard.press("Tab"); await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
     await appendFile(source.file, jsonl([call("two"), complete("two")]));
@@ -326,7 +328,7 @@ test("collection deferral describes the current hold without inventing a report 
     await page.locator("#cancelSource").click();
     await apply(settingsRevision);
     await navigateMain(page, "reports");
-    await page.getByRole("button", { name: "Prepare preview", exact: true }).click();
+    await prepareLandingReport(page, "all");
     await expect(page.locator("#reportReviewBody iframe")).toBeVisible();
     const frame = page.locator("#reportReviewBody iframe"), originalFrame = await frame.elementHandle();
     const preview = await frame.getAttribute("srcdoc"), reviewReads = snapshots.length;
@@ -652,14 +654,15 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     assert.equal(noChange.checkedWindow.until, noChange.lastCheckedAt);
     const callsWithinSelectedInstants = inputCalls.filter(row => Date.parse(row.stamp) >= Date.parse(range.from) && Date.parse(row.stamp) < Date.parse(range.to));
     assert.equal(callsWithinSelectedInstants.length, 4, "Independent source timestamp membership agrees with every chart denominator");
-    const url = new URL(page.url());
+    assert.equal(new URL(page.url()).search, "");
     await page.reload(); await ready(page);
     await verify("reload-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await navigateMain(page, "trends"); await ready(page);
     await page.goBack(); await ready(page);
     await verify("back-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await app.restart();
-    await page.goto(new URL(url.pathname + url.search, app.runtime().url).href); await ready(page);
+    await page.goto(app.runtime().url); await ready(page);
+    await dates(date, next);
     await verify("restart-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await dates(time.addDays(date, -60), next);
     await openAnalyzeFilters(page);
@@ -813,7 +816,7 @@ test("first Analyze entry can approve one source, select a newly collected reque
     await expect(page.locator("#requestContent")).toContainText(selected.userPrompt.text);
     await page.locator("#closeContextSidebar").click();
     await chooseReportInteraction(page, selected.scenarioId);
-    await page.locator(".report-before-prepare input[value=none]").check();
+    await omitReportText(page);
     await page.getByRole("button", { name: /^Formats:/ }).click();
     await page.locator("#formatOptions input[value=json]").check(); await page.keyboard.press("Escape");
     const preview = await previewSelectedReport(page, selected.scenarioId);
@@ -1602,6 +1605,10 @@ async function chooseReportInteraction(page, id) {
     await picker.locator(`input[data-report-request="${id}"]`).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
 }
+async function omitReportText(page) {
+    await page.locator("#reportCustomSetup").click();
+    await page.locator(".report-before-prepare input[value=none]").check();
+}
 async function previewSelectedReport(page, id) {
     const [response] = await Promise.all([
         page.waitForResponse(r => r.url().endsWith("/api/preview")), prepareLandingReport(page, "all"),
@@ -1619,7 +1626,7 @@ test("manual Refresh preserves selected report activity and pre-prepare choices"
     const [selected] = (await loadBoardState(app.context)).evidence;
     await page.goto(app.runtime().url); await ready(page);
     await chooseReportInteraction(page, selected.scenarioId);
-    await page.locator(".report-before-prepare input[value=none]").check();
+    await omitReportText(page);
     await page.getByRole("button", { name: /^Formats:/ }).click();
     await page.locator("#formatOptions input[value=json]").check();
     await page.keyboard.press("Escape");

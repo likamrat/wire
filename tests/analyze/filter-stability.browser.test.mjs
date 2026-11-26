@@ -343,7 +343,7 @@ test("Reset and private-link reload preserve theme and named report membership w
     await closeAnalyzeFilters(page);
     await expect(saved).toHaveCount(0);
     const url = page.url();
-    assert.ok(url.includes("privateView=required") && !url.includes("project-a"));
+    assert.equal(new URL(url).search, "");
     await page.reload();
     await expect(page.locator("#message")).toContainText("This tab no longer has the private view");
     await page.getByRole("button", { name: "Open this view without the private selection", exact: true }).click();

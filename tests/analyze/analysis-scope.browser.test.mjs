@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
 import { navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "../support/helpers.mjs";
-import { prepareReportPreview } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
 import { searchFixture } from "../search/live-search-fixture.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 
@@ -67,10 +67,7 @@ test("Current Analyze view prepares the complete parents of calls matching priva
     await expect(page.locator('[data-view-key="request:parity-request-9"]')).toBeVisible();
     await search(page, privateQuery); await cohort(page, [0, 6], 3);
     await page.locator("#wireSearch").press("Escape");
-    await openAnalyzeFilters(page);
-    await page.getByRole("button", { name: "Reset filters", exact: true }).click(); await ready(page);
-    await expect(page.locator("#wireSearch")).toHaveValue("");
-    await closeAnalyzeFilters(page);
+    await navigateMain(page, "reports"); await ready(page);
     await page.goBack(); await ready(page);
     await cohort(page, [0, 6], 3);
     await navigateMain(page, "reports"); await page.locator("#reportDeskActivity").click();
@@ -78,7 +75,7 @@ test("Current Analyze view prepares the complete parents of calls matching priva
     await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
     const preparing = page.waitForResponse(r => r.url().endsWith("/api/preview"));
-    await prepareReportPreview(page);
+    await prepareLandingReport(page, "all");
     const response = await preparing, result = await response.json(), input = response.request().postDataJSON();
     assert.equal(response.status(), 200, result.error);
     assert.equal(input.selection.revision, revision);
@@ -88,6 +85,10 @@ test("Current Analyze view prepares the complete parents of calls matching priva
         .sort((a, b) => a[0] - b[0])).sort((a, b) => a[0][0] - b[0][0]);
     assert.deepEqual(calls, [[[100, false], [300, false], [900, true]], [[6000, false]]]);
     assert.doesNotMatch(JSON.stringify(result.snapshot.records), /parity-call-/);
+    await navigateMain(page, "analyze"); await ready(page);
+    await openAnalyzeFilters(page);
+    await page.getByRole("button", { name: "Reset filters", exact: true }).click(); await ready(page);
+    await expect(page.locator("#wireSearch")).toHaveValue("");
 });
 
 test("late Search and snapshot reads cannot replace a newer private cohort", { timeout: 30000 }, async t => {

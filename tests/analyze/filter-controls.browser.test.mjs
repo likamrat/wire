@@ -69,7 +69,8 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     assert.match(await page.locator("#serviceFocusScope").innerText(), /Files \+ calls with missing service details\. 4 known matches; 3 context-only/);
     await page.getByRole("button", { name: "Remove missing-service context", exact: true }).click(); await ready(page);
     exact("Strict Files", ["otherAgent", "multiFiles", "failedFiles", "partialFiles"]);
-    assert.match(page.url(), /includeMissingService=false/);
+    assert.equal(new URL(page.url()).search, "");
+    assert.equal(requests.at(-1).filters.includeMissingService, false);
     assert.equal(await page.evaluate(() => document.activeElement.id), "serviceAssociationFilter-control");
     await choose("serviceFilter", "Mail");
     exact("Service associations AND exclusive category stay independent", []);
@@ -78,7 +79,8 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     await page.locator("#moreFilters > summary").click();
     await page.locator("#addServiceContext").click(); await ready(page);
     exact("Explicitly add missing-service context again", ["otherAgent", "multiFiles", "failedFiles", "partialFiles", "missingUser", "missingAgent", "assistance"]);
-    await page.getByRole("button", { name: "Remove missing-service context", exact: true }).click(); await ready(page);
+    await closeAnalyzeFilters(page);
+    await navigateMain(page, "reports"); await ready(page);
     await page.goBack(); await ready(page);
     exact("Back restores context", ["otherAgent", "multiFiles", "failedFiles", "partialFiles", "missingUser", "missingAgent", "assistance"]);
     await choose("toolFilter", "workiq-fetch");
@@ -130,6 +132,8 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
         ["multiFiles", "partialFiles", "missingUser"].map(key => "request:" + app.cases[key].scenarioId).sort());
     assert.match(await page.locator("#analyzeScopeCaption").textContent(), /2 known matches; 1 context-only/);
     assert.equal(await page.locator('[data-analyze-mode="calls"]').count(), 0);
+    await closeAnalyzeFilters(page);
+    await navigateMain(page, "reports"); await ready(page);
     await page.goBack(); await ready(page);
     exact("Back returns equivalent analytical scope", ["multiFiles", "partialFiles", "missingUser"]);
     await openAnalyzeFilters(page);

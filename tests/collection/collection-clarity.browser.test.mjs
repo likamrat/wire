@@ -193,7 +193,7 @@ test("collection page has measured compact controls, responsive states and local
     await page.getByRole("link", { name: "Open chat activity", exact: true }).click();
     await expect(page.locator("#pageTitle")).toHaveText("Analyze");
     await expect(page.locator("#chatFilter")).toHaveValue("clarity-chat-18");
-    assert.equal(new URL(page.url()).searchParams.get("privateView"), "required");
+    assert.equal(new URL(page.url()).search, "");
     assert.doesNotMatch(page.url(), /clarity-chat-18/);
     await expect(page.locator("#contextBack")).toHaveText("Back to history gaps");
     await page.goBack();
