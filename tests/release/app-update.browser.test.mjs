@@ -540,24 +540,29 @@ test("a clean managed tab retains its capability for bfcache and releases only i
     await expect.poll(() => releases).toEqual([capability]);
 });
 
-test("a lost opening update reply rejoins the peer watch in the original document", async t => {
+async function managedWorkspace(t) {
     const cleanup = new AsyncDisposableStack();
     t.after(() => cleanup.disposeAsync());
     const { context } = await privateFixture({ after: close => cleanup.defer(close) });
     const channel = Object.assign(new EventEmitter(), { connected: true, env: { WIRE_UPDATE_LAUNCHER: "1", WIRE_UPDATE_BUILD: old } });
-    const actions = [];
+    const actions = [], state = { supported: true, automatic: false, installed: old, candidate: null, dismissed: null,
+        lastChecked: null, phase: "current", message: "Up to date." };
     channel.send = ({ id, request }) => {
         actions.push(request.action);
-        channel.emit("message", { type: "wire-update-response", id, value: {
-            supported: true, automatic: false, installed: old, candidate: null, dismissed: null,
-            lastChecked: null, phase: "current", message: "Up to date.",
-        } });
+        if (request.action === "check") Object.assign(state, { candidate: next, phase: "available", message: "Update available." });
+        if (request.action === "dismiss") state.dismissed = request.candidate;
+        channel.emit("message", { type: "wire-update-response", id, value: { ...state } });
     };
     const runtime = await startServer(context, createExportController(context), {
         port: 0, collector: { timers: false }, frontend: "react", updateChannel: channel,
     });
     cleanup.defer(() => runtime.close());
     const browser = await chromium.launch(); cleanup.defer(() => browser.close());
+    return { runtime, browser, actions };
+}
+
+test("a lost opening update reply rejoins the peer watch in the original document", async t => {
+    const { runtime, browser, actions } = await managedWorkspace(t);
     const page = await browser.newPage(), requests = [], documents = [];
     page.on("request", r => {
         if (r.isNavigationRequest() && r.frame() === page.mainFrame()) documents.push(r.url());
@@ -577,6 +582,35 @@ test("a lost opening update reply rejoins the peer watch in the original documen
     assert.equal(new Set(requests.map(([, cap]) => cap)).size, 1);
     assert.deepEqual(documents, [runtime.url + "settings"]);
     await expect(page.locator("#appUpdateCheck")).toBeEnabled();
+});
+
+test("a check publishes its offer to another open view and dismissal keeps the update available", async t => {
+    const { runtime, browser, actions } = await managedWorkspace(t);
+    const [caller, peer] = await Promise.all([browser.newPage(), browser.newPage()]);
+    const watch = "**/api/app-update/watch";
+    await Promise.all([caller.waitForRequest(watch), peer.waitForRequest(watch),
+        caller.goto(runtime.url + "settings"), peer.goto(runtime.url + "settings")]);
+    await expect(peer.locator("#appUpdateNotice")).toBeHidden();
+    async function peerChange(action, click) {
+        const [own, shared] = await Promise.all([
+            caller.waitForResponse(r => r.url().endsWith("/api/app-update") && r.request().postDataJSON().action === action),
+            peer.waitForResponse(watch, { timeout: 5000 }), click(),
+        ]);
+        assert.equal(own.status(), 200); assert.equal(shared.status(), 200);
+        const status = await own.json();
+        assert.deepEqual(await shared.json(), { status });
+        assert.ok(status.statusRevision > shared.request().postDataJSON().statusRevision);
+        assert.equal(status.candidate, next);
+        return status;
+    }
+    const offer = await peerChange("check", () => caller.locator("#appUpdateCheck").click());
+    assert.equal(offer.dismissed, null);
+    await expect(peer.locator("#appUpdateNotice")).toBeVisible();
+    const dismissed = await peerChange("dismiss", () => caller.locator("#appUpdateDismiss").click());
+    assert.equal(dismissed.dismissed, next);
+    await expect(peer.locator("#appUpdateNotice")).toBeHidden();
+    await expect(peer.locator("#settingsAppUpdate")).toBeEnabled();
+    assert.deepEqual(actions, ["status", "status", "check", "dismiss"]);
 });
 
 test("an opening status refusal or unreadable reply does not retry or release the document", async t => {
