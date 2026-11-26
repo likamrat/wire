@@ -782,9 +782,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         }
         const firstApproval = baseline.config?.approved !== true;
         const recordsOnly = !firstApproval && next.appDbPath === baseline.config.appDbPath && next.sessionRoot === baseline.config.sessionRoot;
-        // Token records stay out of the request until someone turns them on, so existing approvals don't change.
+        // Token records are sent only when someone changes the switch: an ordinary save leaves their approval to the collector.
         const { usageRecords, ...paths } = next;
-        const records = usageRecords || baseline.config?.usageRecords !== undefined ? { usageRecords } : {};
+        const records = usageRecords !== grantedRecords(baseline) ? { usageRecords } : {};
         act("/api/collection/configure", { ...paths, ...records, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
             firstApprovalConfirmed = firstApproval;
             reviewReturn = null;

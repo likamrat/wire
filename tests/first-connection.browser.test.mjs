@@ -11,19 +11,20 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
+import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { privateFixture, navigateMain, navigateSettings, chooseTheme, openSourceEditor } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
-async function setup(t, { activity = true, records = [], storageBlocked = false, frontend, activityEvents } = {}) {
+async function setup(t, { activity = true, records = [], storageBlocked = false, frontend, activityEvents, profile = false } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
     const home = path.join(root, "invented-copilot"), sessionRoot = path.join(home, "session-state");
     const id = randomUUID(), at = new Date().toISOString();
     await mkdir(path.join(sessionRoot, id), { recursive: true });
-    const db = new DatabaseSync(path.join(home, "data.db"));
-    db.exec(metadata174Schema);
+    const db = profile ? (await createProfileSource(home)).db : new DatabaseSync(path.join(home, "data.db"));
+    if (!profile) db.exec(metadata174Schema);
     db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Cedar planning notes", "general_chat");
     const events = [
         { type: "session.start", data: { sessionId: id, version: 1 } },
@@ -58,7 +59,8 @@ async function setup(t, { activity = true, records = [], storageBlocked = false,
             evaluatorFactory: async () => { blocked.push("provider"); throw new Error("Providers are excluded from onboarding proof."); },
             readSource: async () => { blocked.push("evaluation source"); throw new Error("Evaluation source reads are excluded."); },
         },
-        githubProfile: { fetch: async () => { blocked.push("profile network"); throw new Error("Profile network is excluded."); } },
+        githubProfile: { fetch: async () => { if (profile) return new Response(profilePNG, { headers: { "content-type": "image/png" } });
+            blocked.push("profile network"); throw new Error("Profile network is excluded."); } },
     });
     browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
@@ -444,7 +446,7 @@ test("Copilot's token records stay unread until turned on in source review; turn
         { type: "assistant.message", data: { turnId: "b", content: "Invented answer", toolRequests: [] } },
         { type: "assistant.turn_end", data: { turnId: "b" } },
     ].map((event, n) => ({ ...event, timestamp: new Date(base + n * 1000).toISOString() }));
-    const { page, runtime, mutations, home, sessionId, sessionRoot } = await setup(t, { frontend: "react", activityEvents });
+    const { page, runtime, mutations, home, sessionId, sessionRoot } = await setup(t, { frontend: "react", activityEvents, profile: true });
     const indexed = write => { const index = new DatabaseSync(path.join(home, "session-store.db")); try { write(index); } finally { index.close(); } };
     const reply = turn => new Date(Date.parse(activityEvents.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString();
     const usage = (index, ...row) => index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',?,?,?,?,?)").run(sessionId, ...row);

@@ -369,8 +369,11 @@ database (`turns` and `assistant_usage_events`). Source approval doesn't
 cover it. **Read Copilot's token records** in the source review shows the exact
 resolved file and records a separate approval (`usageRecords`), off by default and
 for existing approvals. The approval names that file and the Copilot account the
-app reports. Changing a path in review turns the switch off; if the account or
-file later differs, WIRE stops reading it and Settings asks for a new approval.
+app reports; WIRE refuses it when it can't identify that account. Only turning the
+switch on or off changes the approval; saving other preferences keeps it as
+granted. Changing a path in review turns the switch off; if the account or file
+later differs, including between a read and its commit, WIRE stops reading it and
+Settings asks for a new approval.
 With it on, when the journal can't establish a total, WIRE reads that index
 read-only for the same approved chat.
 

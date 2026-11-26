@@ -40,12 +40,12 @@ test("source path rejection is explicit for nonstrings, relative paths and wrong
     }
 });
 
-async function installation(t, { metadata174 = false } = {}) {
+async function installation(t, { metadata174 = false, profile = false } = {}) {
     const root = await mkdtemp(path.join(os.tmpdir(), "workiq-dynamic-synthetic-"));
     const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state") };
     await mkdir(config.sessionRoot);
-    const db = new DatabaseSync(config.appDbPath);
-    db.exec(metadata174 ? metadata174Schema : `PRAGMA user_version=156;
+    const db = profile ? (await createProfileSource(root)).db : new DatabaseSync(config.appDbPath);
+    if (!profile) db.exec(metadata174 ? metadata174Schema : `PRAGMA user_version=156;
         CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
         CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
         CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);`);
@@ -203,7 +203,7 @@ test("history compatibility: shared run receipts stay with their exact messages 
 });
 
 test("history compatibility: with its own approval, an older journal without receipts is metered from the app's per-call index and keeps it after later appends", async t => {
-    const app = await installation(t), id = app.session(), start = call("indexed-fetch");
+    const app = await installation(t, { profile: true }), id = app.session(), start = call("indexed-fetch");
     const index = new DatabaseSync(path.join(app.root, "session-store.db"));
     app.cleanup.push(() => index.close());
     index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
@@ -302,14 +302,76 @@ test("history compatibility: token-record approval names one Copilot account; a 
     assert.equal((await read(second[0].data.content)).usage, null, "A different Copilot account does not inherit the approval");
     assert.equal((await read(first[0].data.content)).usage?.total, 10200, "Totals counted before the change stay");
     assert.equal((await collector.status()).usageRecords, "approval-changed");
+    const granted = (await collector.status()).config.usageRecordsGrant;
+    await collector.configure({ ...config, pollSeconds: 15, expectedConfigVersion: (await collector.status()).configVersion });
+    assert.deepEqual((await collector.status()).config.usageRecordsGrant, granted, "A cadence-only save keeps the original grant and never re-binds it");
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: at(39) }) + "\n");
+    await collector.collectNow();
+    assert.equal((await read(second[0].data.content)).usage, null, "Saving preferences does not approve the new account");
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
     await collector.configure({ ...config, usageRecords: true, expectedConfigVersion: (await collector.status()).configVersion });
     await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: at(40) }) + "\n");
     await collector.collectNow();
     assert.equal((await read(second[0].data.content)).usage?.total, 10200, "A fresh approval for the current account reads again");
     assert.equal((await collector.status()).usageRecords, "on");
+
+    // An account change between the index read and the commit refuses that commit.
+    const third = exchange("Name the invented reviewers.", 50, "e", "f");
+    indexed(third, 2);
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync;
+    let switched = false;
+    fsSync.statSync = (target, ...rest) => {
+        if (!switched && String(target).endsWith("session-store.db")) { switched = true; db.prepare("UPDATE projects SET github_account_id='workspace'").run(); }
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await appendFile(file, third.map(e => JSON.stringify(e) + "\n").join(""));
+    await assert.rejects(collector.collectNow(), e => [e.code, e.cause?.code].includes("COLLECTION_SOURCE_CHANGED"));
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.ok(switched);
+    assert.equal((await read(third[0].data.content))?.usage ?? null, null, "Nothing read under the replaced account is committed");
+    await collector.collectNow().catch(() => {});
+    assert.equal((await read(third[0].data.content))?.usage ?? null, null);
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+});
+test("history compatibility: token records need a positively identified account; an unknown or legacy grant never reads", async t => {
+    const app = await installation(t), id = app.session();
+    const base = Date.now() - 60000, text = "Summarize the invented launch notes.";
+    const batch = [event("user.message", { content: text, delivery: "idle" }), event("assistant.turn_start", { turnId: "a" }),
+        event("assistant.message", { turnId: "a", toolRequests: [{ toolCallId: "u-fetch" }] }), call("u-fetch"),
+        event("tool.execution_complete", { toolCallId: "u-fetch", success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: "a" })];
+    batch.forEach((e, n) => { e.timestamp = new Date(base + n * 1000).toISOString(); });
+    const file = await logFor(app, id, batch);
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Done");
+    index.prepare(`INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at)
+        VALUES (?,0,NULL,'gpt-4.1',5000,100,4000,500,?)`).run(id, new Date(Date.parse(batch[2].timestamp) + 4).toISOString());
+    index.close();
+    const config = { ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await assert.rejects(collector.configure({ ...config, usageRecords: true }), e => e.status === 422 && /can't identify the Copilot account/.test(e.message));
+    await collector.configure(config);
+    assert.equal((await collector.status()).usageRecords, "off");
+    await collector.close();
+    const stored = path.join(app.context.dataDir, "collector", "config.json");
+    const legacy = JSON.parse(await readFile(stored, "utf8"));
+    await writeFile(stored, JSON.stringify({ ...legacy, usageRecords: true, usageRecordsGrant: { file: path.join(app.root, "session-store.db"), account: null } }));
+    collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    assert.equal((await collector.status()).usageRecords, "approval-changed", "An unknown account never looks approved");
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: new Date(base + 9000).toISOString() }) + "\n");
+    await collector.collectNow();
+    const record = (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    assert.equal(record.usage, null, "Unknown never equals unknown");
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
 });
 test("history compatibility: Copilot's token records never replace a total the journal verified", async t => {
-    const app = await installation(t), id = app.session(), start = call("journal-fetch"), model = "gpt-4.1";
+    const app = await installation(t, { profile: true }), id = app.session(), start = call("journal-fetch"), model = "gpt-4.1";
     const text = "Compare the invented launch notes.", later = "Now list the invented owners.";
     const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId: "run-a", inputTokens: 2000, outputTokens: 200 } });
     start.data.turnId = "a1";
