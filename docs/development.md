@@ -212,26 +212,44 @@ npm start -- --recover-launch "<absolute path to reviewed custody JSON>" --port 
 
 Use the original clean standalone `main` clone, OS user and data directory.
 
+If the interrupted writer was running from an **active update slot**, don't
+pull the original clone or edit the slot. From a separately reviewed copy of
+WIRE that supports active-slot recovery, run its launcher on the same host:
+
+```text
+node scripts/launch.mjs --recover-active-slot "<absolute original installation>" "<absolute custody JSON>" --port <original port>
+```
+
+Keep the original OS user, data directory and update channel. The reviewed
+launcher stays running and serves the **original slot**, not its own build.
+Use this route only for a settled slot whose child supports reviewed crash
+recovery. An interrupted update or a change of build needs separate handling.
+
 #### The custody record
 
 The private JSON record has these fields:
 
 | Field | Value |
 | --- | --- |
-| `version` | `1` |
+| `version` | `1` for the base checkout; `2` for an active slot |
 | `installation` | The canonical installation path |
 | `interruptedBuild`, `targetBuild` | Full commits; `targetBuild` is the separately qualified, approved commit |
 | `store` | The original launcher store fingerprint |
 | `port` | Numeric |
 | `launcherPid`, `writerPid` | From the original custody evidence |
 
+For version `2`, also include `baseBuild` (the unchanged original checkout's
+full commit) and `slot` (the active slot ID in the installation journal).
+Both `interruptedBuild` and `targetBuild` must equal the slot's full commit.
+Recovery does not select a new slot or change the fallback checkout.
+
 Keep the record private. No historical child nonce, lease token or assertion
 that all browser views were clear is required.
 
 #### Before recovery
 
-- Recovery needs an unchanged base activation with no staged slot or update in
-  progress.
+- Base-checkout recovery requires a base activation with no staged slot. Both
+  paths require no update in progress.
 - If changing code, separately authorize a compatible fast-forward in that clone
   and build it before invoking recovery.
 - The target must contain the recovery launcher **and** child; older builds
