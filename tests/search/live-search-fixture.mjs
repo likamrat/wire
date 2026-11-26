@@ -30,8 +30,10 @@ export function searchRecords(count = 3) {
     });
 }
 export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs, frontend, copilotAccess = false, documentation } = {}) {
-    const cleanups = [];
-    const { context, root } = await privateFixture({ after: fn => cleanups.push(fn) }, records);
+    await using setup = new AsyncDisposableStack();
+    let providerCalls = 0;
+    setup.defer(() => assert.equal(providerCalls, 0));
+    const { context, root } = await privateFixture({ after: fn => setup.defer(fn) }, records);
     const sessionRoot = path.join(root, "session-state");
     await mkdir(sessionRoot);
     await mkdir(path.join(context.dataDir, "collector"), { recursive: true });
@@ -48,8 +50,8 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
     }
     await writeFile(path.join(context.dataDir, "collector", "config.json"), JSON.stringify(config));
     const exports = createExportController(context);
-    let providerCalls = 0;
     const access = copilotAccess ? await createCopilotRuntimeAccess(context) : undefined;
+    if (access) setup.defer(() => access.close());
     const runtime = await startServer(context, exports, { port: 0, frontend, access, collector: { timers: false },
         ...(copilotAccess ? { githubProfile: { fetch() { providerCalls++; throw Error("No profile network in the documentation fixture."); } } } : {}),
         search: typeof search === "function" ? search(root) : search, sessionTtlMs, documentation,
@@ -57,10 +59,7 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
             evaluatorFactory: async () => { providerCalls++; throw new Error("Provider work forbidden in search proof."); },
             readSource: async () => { providerCalls++; throw new Error("Assessment source reads forbidden in search proof."); },
         } });
-    t.after(async () => {
-        await runtime.close(); await access?.close(); for (const cleanup of cleanups) await cleanup();
-        assert.equal(providerCalls, 0);
-    });
+    setup.defer(() => runtime.close());
     if (reply) await seedRetainedReply(context, runtime.collector.assessmentSource(await loadBoardState(context)),
         "The lab results show a steady recovery.");
     const bundles = [];
@@ -72,6 +71,8 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
         await exports.review("live-proof", preview.previewId, true);
         bundles.push((await exports.confirm("live-proof", preview.previewId, true)).bundle);
     }
+    const owned = setup.move();
+    t.after(() => owned.disposeAsync());
     return { runtime, context, root, exports, bundles, config };
 }
 export async function streamPanel(runtime, { purpose = "navigation" } = {}) {
