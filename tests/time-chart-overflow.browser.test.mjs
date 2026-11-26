@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -48,11 +48,6 @@ async function setup(t, records = chartRecords(), options = {}) {
     const browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER, ignoreDefaultArgs: ["--hide-scrollbars"] });
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, timezoneId: options.timeZone ?? "UTC",
         locale: "en-US", reducedMotion: "reduce" });
-    const proof = options.trace && process.env.WIRE_OVERFLOW_PROOFS;
-    if (proof) {
-        await mkdir(proof, { recursive: true });
-        await page.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
-    }
     page.setDefaultTimeout(5000);
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
@@ -68,17 +63,8 @@ async function setup(t, records = chartRecords(), options = {}) {
     });
     t.after(async () => {
         try {
-            if (proof) await page.context().tracing.stop({ path: path.join(proof, options.trace + ".zip") });
             await browser.close(); await runtime.close();
             const after = await loadBoardState(context);
-            if (proof) {
-                const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-                await writeFile(path.join(proof, options.trace + "-receipt.json"), JSON.stringify({
-                    test: t.name, browser: browser.version(), frontend: options.frontend, url: runtime.url,
-                    fixture: hash(records), storedBefore: hash(stored), storedAfter: hash(after), errors, denied, stopped: true,
-                    build: JSON.parse(await readFile(new URL("../dist/client/wire-build.json", import.meta.url), "utf8")),
-                }, null, 2));
-            }
             for (const key of ["evidence", "cards", "exports", "personalEvaluation"]) assert.deepEqual(after[key], stored[key], key);
             assert.deepEqual(records, original); assert.deepEqual(errors, []); assert.deepEqual(denied, []);
         } finally { await access?.close(); for (const fn of cleanup) await fn(); }
@@ -92,10 +78,10 @@ async function setup(t, records = chartRecords(), options = {}) {
 test("normal Analyze shows seven daily populations totaling 244 rather than two implicit weekly sums", { timeout: 60000 }, async t => {
     const reads = [], snapshots = [], expected = [35, 35, 34, 34, 34, 34, 38];
     const page = await setup(t, reviewRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react",
-        route: "#analyze", reads, snapshots, trace: "daily-normal-path" });
+        route: "#analyze", reads, snapshots });
     await chooseTheme(page, "light"); await page.setViewportSize({ width: 1440, height: 1000 }); await ready(page);
     const initial = await measure(page);
-    await capture(page, process.env.WIRE_DAILY_BASELINE ? "daily-before" : "daily-after-desktop", initial);
+    await capture(page, "daily-desktop", initial);
     assert.equal(reads[0].bucket, "day");
     assert.deepEqual(initial.counts.map(row => parseInt(row.text.replaceAll(",", ""), 10)), expected);
     assert.equal(initial.marks.reduce((sum, row) => sum + row.total, 0), 244);
@@ -126,7 +112,7 @@ test("normal Analyze shows seven daily populations totaling 244 rather than two 
             });
             assert.ok(visible, "Keyboard focus reveals each dated action");
         }
-        await capture(page, `daily-after-${width}-text${scale}-${theme}`, await measure(page));
+        await capture(page, `daily-${width}-text${scale}-${theme}`);
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; }); await ready(page);
@@ -175,7 +161,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     await expect(page.locator(".time-zero").first()).toHaveAttribute("aria-label", /No qualifying records/);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator(".time-column").last().focus();
-    await capture(page, "daily-long-gap", await measure(page));
+    await capture(page, "daily-long-gap");
     await page.getByRole("button", { name: "First dates", exact: true }).click(); await ready(page);
     await expect(page.locator(".dimensional-time-labels > a").first()).toHaveText("Jan 1");
     await expect(page.locator("#activityCount")).toHaveText("3");
@@ -215,7 +201,7 @@ function anchorRecords() {
 test("removing missing-service context retires the old window without broadening Mail", { timeout: 30000 }, async t => {
     const reads = [], snapshots = [];
     const page = await setup(t, anchorRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react",
-        route: "#analyze?services=Mail&includeMissingService=true", reads, snapshots, trace: "anchor-refinement" });
+        route: "#analyze?services=Mail&includeMissingService=true", reads, snapshots });
     await chooseTheme(page, "light");
     await page.getByRole("button", { name: "First dates", exact: true }).click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("2");
@@ -225,7 +211,7 @@ test("removing missing-service context retires the old window without broadening
     await page.getByRole("button", { name: "Remove missing-service context", exact: true }).click(); await ready(page);
     const narrowed = await (await narrowedResponse).json();
     await closeAnalyzeFilters(page);
-    await capture(page, process.env.WIRE_DAILY_BASELINE ? "anchor-before" : "anchor-mail-light", { request: reads.at(-1) });
+    await capture(page, "anchor-mail-light", { request: reads.at(-1) });
     assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), null);
     assert.deepEqual(reads.at(-1).filters.services, ["Mail"]);
     assert.equal(reads.at(-1).filters.includeMissingService, false);
@@ -241,7 +227,7 @@ test("removing missing-service context retires the old window without broadening
     await expect(page.locator(".dimensional-time-labels > a")).toHaveText(["Nov 16"]);
     await page.setViewportSize({ width: 390, height: 844 }); await chooseTheme(page, "dark"); await ready(page);
     await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
-    await capture(page, "anchor-mail-narrow-dark", await measure(page));
+    await capture(page, "anchor-mail-narrow-dark");
     await page.locator("#openAnalyzeFilters").click();
     await page.locator("#addServiceContext").click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("2");
@@ -253,7 +239,7 @@ test("removing missing-service context retires the old window without broadening
 });
 
 test("out-of-range short and long timeline links retain keyboard recovery and Back", { timeout: 45000 }, async t => {
-    const page = await setup(t, anchorRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react", route: "#analyze", trace: "anchor-deep-links" });
+    const page = await setup(t, anchorRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react", route: "#analyze" });
     const origin = new URL(page.url()).origin;
     for (const short of [true, false]) for (const timelineFrom of ["1900-01-01", "2030-01-01"]) {
         const bucket = short && timelineFrom === "2030-01-01" ? "month" : null;
@@ -282,7 +268,7 @@ test("out-of-range short and long timeline links retain keyboard recovery and Ba
         await expect(page.locator(".time-column")).toHaveCount(1);
         await expect(page.locator("#timeline-first")).toBeFocused();
         await expect(page.locator("#activityCount")).toHaveText(short ? "1" : "2");
-        if (short && timelineFrom === "1900-01-01") await capture(page, "anchor-short-recovered", await measure(page));
+        if (short && timelineFrom === "1900-01-01") await capture(page, "anchor-short-recovered");
         await page.goBack(); await ready(page);
         assert.equal(new URL(page.url()).searchParams.has("timelineFrom"), false);
         await expect(page.locator("#chart")).toContainText("No dated records in this window");
@@ -419,6 +405,8 @@ async function measure(page) {
                 rootFont: getComputedStyle(document.documentElement).fontSize,
                 pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth },
             panel: rect(scroll.closest(".chart-panel")), scroll: rect(scroll), plot: rect(plot),
+            laneWidth: rect(plot.querySelector(".time-slot")).width,
+            plotExtent: parseFloat(getComputedStyle(plot).getPropertyValue("--time-height")),
             clientWidth: scroll.clientWidth, scrollWidth: scroll.scrollWidth, scrollLeft: scroll.scrollLeft,
             overflowX: style.overflowX, scrollbarHeight: scroll.offsetHeight - scroll.clientHeight,
             minimum: getComputedStyle(plot).minWidth, overflowing: scroll.dataset.overflow,
@@ -443,6 +431,7 @@ async function measure(page) {
 async function capture(page, name, geometry) {
     if (!process.env.WIRE_OVERFLOW_PROOFS) return;
     const directory = process.env.WIRE_OVERFLOW_PROOFS;
+    geometry ??= await measure(page);
     await mkdir(directory, { recursive: true });
     await page.locator(".analyze-chart-main").screenshot({ path: path.join(directory, `${name}-widget.png`) });
     await page.screenshot({ path: path.join(directory, `${name}-context.png`), fullPage: true });
@@ -459,8 +448,84 @@ async function captureFocus(page, name, bounds) {
     await writeFile(path.join(directory, name + ".json"), JSON.stringify({ bounds, chart, afterCapture: await measure(page) }, null, 2));
 }
 
+for (const frontend of ["bundled", "react"]) test(`${frontend}: daily columns scale to the visible dates without changing their counts or drill`, async t => {
+    const daily = [9, 13, 3, 4, 0, 0, 0, 8, ...Array(16).fill(0), 73];
+    const records = daily.flatMap((n, i) => {
+        if (!n) return [];
+        const record = fixture(`harbor-inventory-${i}`), stamp = new Date(Date.UTC(2026, 9, 1 + i, 12)).toISOString();
+        record.capturedAt = record.userPrompt.sourceTimestamp = stamp;
+        record.toolCalls = Array.from({ length: n }, (_, c) => ({ ...record.toolCalls[0], startedAt: stamp,
+            toolCallId: `field-${i}-${c}`, startEventId: `field-start-${i}-${c}`, toolSucceeded: c !== 0, reportedOutcome: c ? "succeeded" : "failed" }));
+        return [record];
+    });
+    const page = await setup(t, records, { frontend, route: "#analyze" });
+    await chooseTheme(page, "light");
+    const scroll = page.locator(".flat-time-scroll"), slots = scroll.locator(".time-slot"), tip = page.locator("#evidence-tooltip");
+    const total = slots.nth(2).locator(".time-column"), segment = slots.nth(1).locator('[data-segment=failure].time-segment-link');
+    const ticks = page.locator(".activity-count-axis span");
+    const origin = page.url();
+    await expect(page.getByRole("button", { name:/eight-day detail|return to period scale/i })).toHaveCount(0);
+    await expect(page.locator("#chart")).not.toContainText(/period peak/i);
+    await expect(ticks).toHaveText(["0", "5", "10", "15"]);
+    for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 }); await ready(page);
+        await scroll.evaluate(node => { node.scrollLeft = 0; });
+        await total.scrollIntoViewIfNeeded();
+        await expect(ticks).toHaveText(["0", "5", "10", "15"]);
+        const g = await measure(page);
+        assert.ok(g.marks.at(-1).x > g.scroll.right, "73-call peak is off-screen on entry");
+        const mark = g.marks.find(m => m.total === 3);
+        const geometry = { frontend, width, height: mark.height, mixedHeight: g.marks.find(m => m.total === 13).height,
+            axis: await ticks.allTextContents(), plotExtent: g.plotExtent, cardHeight:g.panel.height, barWidth: mark.width };
+        assert.ok(Math.abs(mark.height - 3/15*g.plotExtent) < .04);
+        assert.ok(Math.abs(geometry.mixedHeight - 13/15*g.plotExtent) < .04);
+        assert.ok(geometry.mixedHeight >= 70 && geometry.cardHeight < 400, "The largest visible day uses the compact plot");
+        const centers = await ticks.evaluateAll(nodes => nodes.map(n => {
+            const b = n.getBoundingClientRect(); return b.top + b.height / 2;
+        }));
+        assert.ok(Math.abs(centers[0] - mark.bottom) <= 1);
+        assert.ok(Math.abs(centers[0] - centers.at(-1) - g.plotExtent) <= 1);
+        if (process.env.WIRE_OVERFLOW_PROOFS) {
+            await mkdir(process.env.WIRE_OVERFLOW_PROOFS, { recursive: true });
+            await writeFile(path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.json`), JSON.stringify(geometry));
+            await page.mouse.move(0, 0);
+            await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-chart.png`) });
+        }
+        // A pointer a few pixels above a shallow column is still over its day,
+        // but not over the count label or a particular outcome.
+        await page.mouse.move(0, 0);
+        await page.mouse.move(mark.x + mark.width / 2, mark.y - 4);
+        if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.png`) });
+        await expect(tip).toContainText("3 Work IQ tool calls", { timeout: 1200 });
+        await expect(tip).toBeVisible();
+        await expect(total.locator(".time-stack")).toHaveCSS("opacity", "1");
+        await expect(total.locator(".time-stack")).toHaveCSS("outline-style", "none");
+        await expect.poll(() => slots.locator(".time-stack").evaluateAll(nodes => nodes.filter(node => +getComputedStyle(node).opacity < .5).length)).toBeGreaterThan(0);
+        await segment.scrollIntoViewIfNeeded(); await ready(page);
+        const painted = await segment.boundingBox();
+        await page.mouse.move(1, 1);
+        await page.mouse.move(painted.x + painted.width / 2, painted.y + painted.height / 2);
+        await expect(tip).toContainText("Tool failed: 1 of 13");
+        if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-mixed.png`) });
+        await page.keyboard.press("Escape"); await expect(tip).toBeHidden();
+        await scroll.evaluate(n => { n.scrollLeft = n.scrollWidth; });
+        await expect(ticks.last()).toHaveText("100");
+        const peak = await slots.last().locator("svg").boundingBox();
+        assert.ok(Math.abs(peak.height - 73/100*g.plotExtent) < .04);
+        await expect(page.locator("#activityCount")).toHaveText("110");
+    }
+    await segment.press("Tab"); await page.keyboard.press("Shift+Tab");
+    await expect(segment).toBeFocused(); await expect(tip).toContainText("Tool failed: 1 of 13");
+    await segment.press("Enter"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await page.goBack(); await ready(page); await expect(page).toHaveURL(origin); await expect(segment).toBeFocused();
+    await slots.nth(4).locator(".time-zero").focus();
+    await expect(tip).toContainText("No matching records"); await expect(slots.nth(4).locator(".flat-time-column")).toHaveCount(0);
+});
+
 test("a fitted seven-bucket Analyze chart has no horizontal scrollbar and keeps every label and column", async t => {
     const page = await setup(t);
+    await page.setViewportSize({width:2048,height:1080}); await ready(page);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
     const { root } = await cdp.send("DOM.getDocument");
@@ -490,18 +555,18 @@ function assertChart(geometry, expected) {
     assert.equal(geometry.marks.length, expected.length);
     assert.equal(geometry.dates.length, expected.length);
     assert.equal(geometry.viewport.pageOverflow, 0);
-    assert.deepEqual(geometry.axis.map(row => row.text), [String(Math.max(...expected)), "0"]);
+    assert.deepEqual(geometry.axis, [], "exact counts belong on the columns, not on a disconnected scale");
     for (const item of [...geometry.counts, ...geometry.dates]) {
         assert.ok(item.ink.x >= item.x && item.ink.right <= item.right, "Labels stay inside their own lane");
         assert.ok(item.ink.x >= geometry.plot.x && item.ink.right <= geometry.plot.right, "All label ink stays inside the plot");
         assert.ok(item.ink.y >= geometry.plot.y && item.ink.bottom <= geometry.plot.bottom, "No clipped label headroom");
     }
-    for (const item of geometry.axis) assert.ok(item.x >= geometry.plot.x && item.right <= geometry.plot.right);
     for (const [index, mark] of geometry.marks.entries()) {
         assert.equal(mark.total, expected[index]);
-        assert.equal(mark.encodedHeight, expected[index] / Math.max(...expected) * 200);
-        assert.ok(Math.abs(mark.height - mark.encodedHeight) < 1 / 32, "Actual paint remains linear within layout rounding");
-        assert.equal(mark.width, 84);
+        assert.equal(mark.encodedHeight, expected[index] / Math.max(...expected) * mark.extent);
+        assert.ok(Math.abs(mark.height - mark.total / Math.max(...expected) * geometry.plotExtent) < 1 / 32,
+            "Actual paint remains linear within layout rounding");
+        assert.equal(mark.width, 40, "Each painted column sits inside its unchanged 84px lane");
         assert.ok(mark.x >= geometry.plot.x && mark.right <= geometry.plot.right);
         assert.ok(Math.abs(mark.bottom - geometry.marks[0].bottom) < 1 / 32, "Columns share the zero baseline");
     }
@@ -523,6 +588,7 @@ test("native overflow appears only when needed and resize keeps all date targets
         assert.equal(geometry.overflowing, String(overflow));
         assert.equal(geometry.scrollbarHeight > 0, overflow, "Real native scrolling, not hidden/clipped overflow");
         assert.equal(Boolean(geometry.description), overflow);
+        await expect(page.locator("#chartFooter")).not.toContainText(/Chart dates|Scroll horizontally/i);
         assert.deepEqual(await links(), original);
         await expect(page.locator("#activityCount")).toHaveText(String(total));
         for (let index = 0; index < counts.length; index++) {
@@ -537,7 +603,7 @@ test("native overflow appears only when needed and resize keeps all date targets
             assert.ok(mark.x >= scroll.x && mark.x + mark.width <= scroll.x + scroll.width);
             assert.equal(await action.locator(".dimensional-count").evaluate(node => parseFloat(getComputedStyle(node).fontSize)), 16 * scale);
         }
-        if (width === 390 || width === 1440) await capture(page, `narrow-${theme}-${width}-text${scale}`, await measure(page));
+        if (width === 390 || width === 1440) await capture(page, `narrow-${theme}-${width}-text${scale}`);
     }
     const last = page.locator(".time-column").last();
     await last.focus(); await page.keyboard.press("Enter"); await ready(page);
@@ -557,12 +623,11 @@ test("native overflow appears only when needed and resize keeps all date targets
         await expect(page.locator("#activityCount")).toHaveText(String(total));
         await expect(page.locator("#periodResult")).toContainText("All dates");
     }
-    const identity = row => {
-        const [view, query] = row.href.split("?");
-        const parameters = new URLSearchParams(query); parameters.sort();
-        return { ...row, href: view + "?" + parameters };
-    };
-    assert.deepEqual((await links()).map(identity), original.map(row => identity({ ...row, href: row.href + "&chart=time" })));
+    assert.deepEqual(await links(), original);
+    await closeAnalyzeFilters(page);
+    await page.locator(".time-column").first().press("Enter"); await ready(page);
+    await expect(page.locator("#periodResult")).toHaveText("12 Work IQ tool calls (Feb 2–8, 2026)");
+    assert.equal(new URL(page.url()).search, "");
 });
 
 test("genuinely dense time bins keep a native scroller and the final column at wide and enlarged narrow widths", async t => {
@@ -575,6 +640,8 @@ test("genuinely dense time bins keep a native scroller and the final column at w
         await ready(page);
         const geometry = await measure(page);
         assertChart(geometry, expected);
+        assert.ok(geometry.plotExtent <= geometry.laneWidth && geometry.plotExtent <= 110,
+            `A scrollable timeline must not reserve a tall fixed plot (${geometry.plotExtent}px for ${geometry.laneWidth}px date lanes)`);
         assert.ok(geometry.scrollWidth > geometry.clientWidth);
         assert.equal(geometry.overflowX, "auto");
         assert.ok(geometry.scrollbarHeight > 0);
@@ -589,8 +656,8 @@ test("genuinely dense time bins keep a native scroller and the final column at w
 
 test("sidebar animation crosses the fit boundary without a false scrollbar or replaced columns", async t => {
     const page = await setup(t);
-    // The side-by-side outcome column moves the same chart fit boundary 192px wider.
-    await page.setViewportSize({ width: 1632, height: 1080 });
+    // The full-width timeline crosses its seven-bin minimum as the rail expands.
+    await page.setViewportSize({ width: 1040, height: 1080 });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await ready(page);
     const first = await page.locator(".time-column").first().elementHandle();

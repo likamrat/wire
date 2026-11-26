@@ -266,7 +266,7 @@ test("Analyze chart, controls and grouped interactions share the available works
                 const s = getComputedStyle(node);
                 return [s.borderTopLeftRadius, s.borderTopWidth, s.borderTopColor, s.backgroundColor, s.boxShadow];
             };
-            const chart = el(".analyze-chart-grid"), list = el("#activityList"), rows = [...list.querySelectorAll(".activity-card")];
+            const chart = el(".analyze-chart-main"), list = el("#activityList"), rows = [...list.querySelectorAll(".activity-card")];
             const prompt = rows[0].querySelector(".card-request-context");
             return {
                 frame: edges(el("#workspace")), chart: edges(chart), heading: edges(el("#workspace > .page-heading")),
@@ -289,7 +289,8 @@ test("Analyze chart, controls and grouped interactions share the available works
         if (value.stacked) check(Math.abs(value.toolbar[0] - value.commands[0]) <= 1, "wrapped toolbar starts at the widget edge");
         else check(Math.abs(value.filters[1] - value.chart[1]) <= 1, "Filters ends the inline command row at the widget edge");
         check(value.rows.every(row => row.every((x, i) => Math.abs(x - value.frame[i]) <= 1)), "row edges");
-        check(value.listSurface.every((x, i) => x === value.chartSurface[i]), "group corner, edge and surface");
+        check(value.chartSurface[0]===value.listSurface[0] && value.chartSurface[1]===value.listSurface[1]
+            && value.chartSurface[4]===value.listSurface[4], "chart and list share corner, edge width and elevation");
         check(value.borders[0][0] === 0 && value.borders.at(-1)[1] === 0
             && value.borders.slice(1).every(([top], i) => value.borders[i][1] + top === 1), "only inter-row dividers");
         check(value.rowShadows.every(x => x === "none") && value.overflow <= 0, "flat rows, no page overflow");

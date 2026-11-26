@@ -84,6 +84,7 @@ test("each UI and service glyph is the selected React Icons component with its s
         "navigation-create-report": "file-text",
         "navigation-collapse": "panel-left",
         "navigation-expand": "panel-left",
+        "navigation-documentation": "book-open-text",
     });
 });
 

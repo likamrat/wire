@@ -95,13 +95,16 @@ export function createEvidenceUX(icons, operations) {
         if (!target.isConnected || !target.checkVisibility()) { hideTooltip(); return; }
         const options = tooltipOptions.get(target) || {}, anchor = options.anchor || target;
         if (!anchor.isConnected || !anchor.checkVisibility()) { hideTooltip(); return; }
-        const box = visibleTooltipBox(anchor), tip = bubble.getBoundingClientRect();
-        if (!box) { hideTooltip(); return; }
-        const width = document.documentElement.clientWidth, height = window.innerHeight;
+        const visibleBox = visibleTooltipBox(anchor), tip = bubble.getBoundingClientRect();
+        if (!visibleBox) { hideTooltip(); return; }
+        const followsPointer = options.followPointer && pointer && target.contains(document.elementFromPoint(pointer.x, pointer.y));
+        const box = followsPointer ? { left:pointer.x-2, right:pointer.x+2, top:pointer.y-2, bottom:pointer.y+2 } : visibleBox;
+        const width = options.followPointer ? Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width)
+            : document.documentElement.clientWidth, height = window.innerHeight;
         const gap = parseFloat(getComputedStyle(bubble).getPropertyValue("--tooltip-gap"));
         const owner = options.owner || target;
         const group = (owner.closest(".ux-disabled-help") || owner).parentElement;
-        const neighbors = [...(group?.querySelectorAll("button,a[href],input,select,textarea,summary,[role=button],[role=combobox]") || [])]
+        const neighbors = followsPointer ? [] : [...(group?.querySelectorAll("button,a[href],input,select,textarea,summary,[role=button],[role=combobox]") || [])]
             .filter(node => node !== owner && !node.contains(owner) && !owner.contains(node));
         const avoid = typeof options.avoid === "function" ? options.avoid() : options.avoid;
         if (active !== target || tooltipOptions.get(target) !== options) return;
@@ -136,14 +139,16 @@ export function createEvidenceUX(icons, operations) {
         if (bubble.style.left !== position.left + "px") bubble.style.left = position.left + "px";
         if (bubble.style.top !== position.top + "px") bubble.style.top = position.top + "px";
     }
-    function clearTooltip() {
+    function clearTooltip(keepOpening = false) {
         hoverPoint?.disconnect(); hoverPoint = null;
         tooltipResize.disconnect();
-        clearTimeout(openTimer);
+        if (!keepOpening) {
+            clearTimeout(openTimer);
+            openTimer = null;
+            opening = null;
+        }
         clearTimeout(closeTimer);
-        openTimer = null;
         closeTimer = null;
-        opening = null;
         if (active) {
             const ids = (active.getAttribute("aria-describedby") || "").split(/\s+/).filter((id) => id && id !== bubble.id);
             if (ids.length) active.setAttribute("aria-describedby", ids.join(" "));
@@ -190,11 +195,13 @@ export function createEvidenceUX(icons, operations) {
             // The root's painted width excludes the stable scrollbar gutter even when clientWidth does not.
             const width = Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width);
             panel.style.maxWidth = Math.max(0, width - pad * 2) + "px";
-            const availableBelow = innerHeight - box.bottom - gap - pad, availableAbove = box.top - gap - pad;
-            const above = availableBelow < Math.min(panel.scrollHeight, 260) && availableAbove > availableBelow;
+            const availableBelow = Math.min(innerHeight-pad*2, innerHeight - box.bottom - gap - pad);
+            const availableAbove = Math.min(innerHeight-pad*2, box.top - gap - pad);
+            const above = availableBelow < panel.scrollHeight && availableAbove > availableBelow;
             panel.style.maxHeight = Math.max(64, above ? availableAbove : availableBelow) + "px";
             panel.style.left = Math.max(pad, Math.min(box.left, width - panel.offsetWidth - pad)) + "px";
-            panel.style.top = Math.max(pad, above ? box.top - gap - panel.offsetHeight : box.bottom + gap) + "px";
+            panel.style.top = Math.max(pad, Math.min(innerHeight - pad - panel.offsetHeight,
+                above ? box.top - gap - panel.offsetHeight : box.bottom + gap)) + "px";
         }
         panel.addEventListener("beforetoggle", event => {
             listeners?.abort();
@@ -407,7 +414,8 @@ export function createEvidenceUX(icons, operations) {
             const keyboardVisit = owner && owner === liveOwner(focused) && focusSource === "focus";
             const sameOwnerHover = owner && owner === liveOwner(hovered);
             const overTip = bubble.matches(":hover") && pointer && bubble.contains(document.elementFromPoint(pointer.x, pointer.y));
-            if (!overTip && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip();
+            // The departing owner's grace timer must not cancel a newer pointer visit.
+            if (!overTip && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip(Boolean(opening && opening !== active));
         }, 120);
     }
     function cancelClose() {
@@ -425,7 +433,10 @@ export function createEvidenceUX(icons, operations) {
         restoredPage = false;
         if (bubble.contains(event.target)) { cancelClose(); return; }
         const node = trigger(event.target);
-        if (node && node === active) cancelClose();
+        if (node && node === active) {
+            cancelClose();
+            if (tooltipOptions.get(node)?.followPointer) positionTooltip();
+        }
         if (node && node === hovered) return;
         const key = identity(node);
         if (key !== suppressedPointer) suppressedPointer = null;

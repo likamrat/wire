@@ -297,8 +297,7 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     await page.setViewportSize({ width: 1280, height: 880 }); await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     for (const [i, draftName] of ["Release review", handoff].entries()) {
         await navigateMain(page, "reports");
-        await page.getByRole("combobox", { name: "Report draft", exact: true }).click();
-        await page.getByRole("option", { name: draftName, exact: true }).click();
+        await page.locator("#reportDraftsPanel").getByText(draftName, { exact: true }).click();
         await page.getByRole("button", { name: /^Formats:/ }).click();
         await page.locator("#formatOptions input[value=json]").check();
         await page.keyboard.press("Escape");
@@ -349,8 +348,7 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     const remove = page.getByRole("button", { name: "Delete draft", exact: true });
     async function reviewDeletion(name) {
         await navigateMain(page, "reports");
-        await page.getByRole("combobox", { name: "Report draft", exact: true }).click();
-        await page.getByRole("option", { name, exact: true }).click();
+        await page.locator("#reportDraftsPanel").getByText(name, { exact: true }).click();
         await remove.click();
         return page.getByRole("dialog", { name: `Delete “${name}”?`, exact: true });
     }

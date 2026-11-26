@@ -64,7 +64,7 @@ export async function startServer({dataDir}, controller, options) {
     }};
 }`;
 
-async function fixture(t, host) {
+async function fixture(t, host, releaseFeed = false) {
     const base = await mkdtemp(path.join(tmpdir(), "wire-lch-"));
     const origin = path.join(base, "origin"), root = path.join(base, "user clone"), store = path.join(base, "store");
     const children = new Set();
@@ -82,7 +82,7 @@ async function fixture(t, host) {
     const git = (cwd, ...args) => execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
         "-c", "commit.gpgSign=false", ...args], { env, cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     for (const file of ["scripts/start.mjs", "scripts/launch.mjs", "lib/update-launch.mjs", "lib/update-launch-artifact.mjs",
-        "lib/update-launch-child.mjs", "lib/update-launch-state.mjs", "lib/update-source.mjs", "lib/update-compatibility.json",
+        "lib/update-launch-child.mjs", "lib/update-launch-state.mjs", "lib/update-source.mjs", "lib/wire-release.mjs", "lib/update-compatibility.json",
         "lib/update-bridge.mjs", "lib/paths.mjs", "lib/search-model-assets.mjs", "lib/search-linguistics-assets.mjs", "lib/runtime-endpoint.mjs"]) {
         await copyFile(path.join(project, file), path.join(origin, file));
     }
@@ -108,9 +108,14 @@ async function fixture(t, host) {
     const sourceURL = pathToFileURL(path.join(root, "lib", "update-source.mjs")).href;
     const stageLog = path.join(base, "stage-operations");
     const source = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
-        import {appendFile} from "node:fs/promises";
-        const implementation=createUpdateSource({fixtureRemote:${JSON.stringify(origin)}});
-        export const {checkMain,inspectInstallation}=implementation;
+        import {appendFile,readFile} from "node:fs/promises";
+        const implementation=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:"main"});
+        export const {inspectInstallation}=implementation;
+        export const channel=${JSON.stringify(releaseFeed ? "release" : "main")};
+        export const checkMain=${releaseFeed ? `async (root, running) => {
+            const release=JSON.parse(await readFile(${JSON.stringify(path.join(base,"offer.json"))},"utf8"));
+            return {installed:running,candidate:running===release.commit?null:release.commit,release,channel,fingerprint:"1".repeat(64)};
+        }` : "implementation.checkMain"};
         export async function stageMain(...args) {
             const record=event=>appendFile(${JSON.stringify(stageLog)},event+"\\n");
             await record("stageMain: fetching, verifying, installing and building");
@@ -159,7 +164,8 @@ async function fixture(t, host) {
         return git(origin, "rev-parse", "HEAD");
     }
     const events = async () => (await readFile(path.join(store, "events"), "utf8")).trim().split("\n").map(JSON.parse);
-    return { original, root, store, origin, commit, launch, events, git, stageLog };
+    return { original, root, store, origin, commit, launch, events, git, stageLog,
+        offer: (commit,tag) => writeFile(path.join(base,"offer.json"),JSON.stringify({ commit,tag,notes:"Test baseline.",url:`https://github.com/likamrat/wire/releases/tag/${tag}` })) };
 }
 async function request(url, action, args) {
     // Status polling can abandon one read. A real check/apply may be waiting on
@@ -191,6 +197,28 @@ async function assertRefused(app, reason) {
     assert.match(app.stderr, reason);
 }
 
+activationTest("first public identity uses the checked commit, then a lower or reused public version cannot replace it", async t => {
+    const f = await fixture(t, undefined, true), app = f.launch(), url = await app.ready();
+    await f.offer(f.original, "v0.1.0");
+    const first = await request(url, "check");
+    assert.equal(first.candidate, null);
+    assert.equal(first.installedRelease.tag, "v0.1.0");
+    const next = await f.commit("newer-source");
+    for (const tag of ["v0.0.9", "v0.1.0"]) {
+        await f.offer(next, tag);
+        const check = await request(url, "check");
+        assert.equal(check.phase, "error"); assert.match(check.message, /not newer than.*v0\.1\.0/);
+        assert.equal(check.installedRelease.commit, f.original);
+        assert.ok((await request(url, "apply", {candidate:next})).error);
+    }
+    await f.offer(next, "v0.1.2");
+    const forward = await request(url, "check");
+    assert.equal(forward.candidate, next);
+    assert.equal(forward.availableRelease.tag, "v0.1.2");
+    assert.equal((await f.events()).length, 1, "no restart");
+    await stop(app);
+});
+
 activationTest("special modes cannot bypass an active slot or an unresolved original child", { timeout: 90000 }, async t => {
     const args = ["--verified-record-recovery"];
     for (const transition of ["crash", "update"]) {
@@ -216,7 +244,7 @@ activationTest("owned replacement retains a single writer, port, settings and or
     const competing = f.launch();
     assert.equal((await competing.done).code, 1);
     assert.match(competing.stderr, /already has a launcher/);
-    const candidate = await f.commit("next");
+    let candidate = await f.commit("next");
     const [a,b] = await Promise.all([request(url, "auto-check"), request(url, "auto-check")]);
     assert.equal(a.candidate, candidate); assert.equal(b.lastChecked, a.lastChecked);
     assert.equal((await request(url, "dismiss", { candidate })).dismissed, candidate);
@@ -226,13 +254,18 @@ activationTest("owned replacement retains a single writer, port, settings and or
     assert.match((await phase(url, "error")).message, /busy/);
     assert.equal((await f.events()).length, 1);
     await rm(path.join(f.store, "busy"));
-    const rechecked = await request(url, "check");
+    let rechecked = await request(url, "check");
     assert.equal(rechecked.candidate, candidate);
     // With protocol v0, the old SHA is no longer advertised after this docs-only advance.
     f.git(f.root, "config", "--global", "protocol.version", "0");
     await writeFile(path.join(f.origin, "README.md"), "Revised instructions.");
     f.git(f.origin, "add", "README.md"); f.git(f.origin, "commit", "-qm", "Docs after the offer");
     assert.equal((await request(url, "apply", { candidate })).phase, "preparing");
+    assert.match((await phase(url,"error")).message,/update changed/);
+    rechecked = await request(url,"check");
+    candidate = f.git(f.origin,"rev-parse","HEAD");
+    assert.equal(rechecked.candidate,candidate);
+    assert.equal((await request(url,"apply",{candidate})).phase,"preparing");
     const status = await phase(url, "current");
     assert.equal(status.installed, candidate);
     assert.equal(status.automatic, false);

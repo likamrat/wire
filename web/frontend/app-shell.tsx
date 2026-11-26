@@ -82,6 +82,10 @@ function Analyze() {
             </section>
             <section className="analyze-outcome-summary" aria-label="Recorded outcomes"><div id="outcomeChart" /><div id="diagnosticPackageAction" hidden /></section>
         </div>
+        <section id="analyzeUsage" className="percentage-card analyze-usage" data-breakdown="usage" aria-labelledby="analyzeUsageTitle">
+            <div className="percentage-card-heading"><h3 id="analyzeUsageTitle">Token usage</h3></div>
+            <div id="analyzeUsageContent" />
+        </section>
     </div>;
 }
 function Activity() {
@@ -180,7 +184,9 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             <section id="analyzeTools" className="analyze-tools" aria-label="Analyze tools" hidden>
                 <h2 className="navigation-group-label">Analyze tools</h2><div id="analyzeReturnActions" /><div id="analyzeToolActions" />
             </section>
-            <div className="navigation-bottom"><div id="navigationFooter" className="navigation-footer">
+            <div className="navigation-bottom">
+                <nav className="primary-navigation documentation-navigation" aria-label="Documentation">{nav("documentation", "Documentation")}</nav>
+                <div id="navigationFooter" className="navigation-footer">
                 <div id="wireAccountEntry" hidden />
                 <nav className="footer-utilities" aria-label="Utility navigation">
                     <a id="openEvidenceHelp" href="/help" aria-label="Help" />

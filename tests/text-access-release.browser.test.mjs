@@ -5,6 +5,7 @@ import { createTextAccess } from "../web/text-access.mjs";
 import { createDisclosureState } from "../web/disclosure-state.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
+import { createMessageMarkdown } from "../web/message-markdown.mjs";
 
 async function setup(t) {
     const browser = await chromium.launch(), page = await browser.newPage(), errors = [];
@@ -15,6 +16,7 @@ async function setup(t) {
         window.makeTextAccess = ${createTextAccess.toString()};
         window.makeDisclosure = ${createDisclosureState.toString()};
         window.makeUX = ${createEvidenceUX.toString()};
+        window.makeMessageText = ${createMessageMarkdown.toString()};
     ` });
     await page.evaluate(icons => {
         window.copies = [];
@@ -196,4 +198,51 @@ test("detached toggles cannot change reading state and a failed release remains 
     });
     assert.deepEqual(result, { detachedOpened: false, authorizedText: "PRIVATE_DETACHED_TEXT",
         error: "Expected cleanup failure", retryText: "" });
+});
+
+test("formatted message text, links and a delayed parser cannot outlive release or withdrawal", async t => {
+    const page = await setup(t);
+    await page.addScriptTag({ path: new URL("../node_modules/marked/lib/marked.umd.js", import.meta.url).pathname.replace(/^\/(\w:)/u, "$1") });
+    const result = await page.evaluate(async () => {
+        const markdown = "PRIVATE **reply** with [PRIVATE link](https://example.invalid/PRIVATE_PATH)";
+        const home = document.getElementById("home"), copies = [];
+        // Parser already loaded: a released reader leaves no text or URL in retained nodes and Attrs.
+        const loaded = window.makeMessageText({ marked: window.marked });
+        const access = window.makeTextAccess(window.ux, window.makeDisclosure(), undefined, undefined, loaded);
+        const root = access.render({ status: "full", text: markdown }, { key: "formatted", mode: "complete", subject: "response", initialOpen: true });
+        home.append(root);
+        const anchor = root.querySelector("a[href]"), href = anchor.getAttributeNode("href"), body = root.querySelector(".message-markdown");
+        const formatted = body.dataset.messageFormat;
+        access.release(root);
+        home.append(anchor, body);
+        copies.push(anchor.getAttribute("href"), href.value, anchor.textContent, body.textContent, home.textContent);
+        // Parser still loading: released, cleared and withdrawn targets are never formatted or refilled afterwards.
+        let resolve;
+        const delayed = window.makeMessageText(() => new Promise(done => resolve = done));
+        const lateAccess = window.makeTextAccess(window.ux, window.makeDisclosure(), undefined, undefined, delayed);
+        const released = lateAccess.render({ status: "full", text: markdown }, { key: "released", mode: "complete", subject: "response", initialOpen: true });
+        const withdrawn = lateAccess.render({ status: "full", text: markdown + " again" }, { key: "withdrawn", mode: "complete", subject: "response", initialOpen: true });
+        home.append(released, withdrawn);
+        const heldReleased = released.querySelector(".message-markdown"), heldWithdrawn = withdrawn.querySelector(".message-markdown");
+        const pendingBefore = [heldReleased.dataset.messageFormat, heldWithdrawn.dataset.messageFormat];
+        lateAccess.release(released);
+        home.append(heldReleased);
+        delayed.clear();
+        const plain = document.createElement("p");
+        plain.textContent = "Ordinary words only";
+        delayed.preview(plain, plain.textContent);
+        await new Promise(done => setTimeout(done));
+        resolve({ marked: window.marked });
+        await new Promise(done => setTimeout(done, 20));
+        return { formatted, copies, pendingBefore,
+            released: [heldReleased.textContent, heldReleased.dataset.messageFormat, heldReleased.isConnected],
+            withdrawn: [heldWithdrawn.isConnected, heldWithdrawn.dataset.messageFormat, withdrawn.querySelectorAll("a,strong").length],
+            plain: plain.textContent };
+    });
+    assert.equal(result.formatted, "markdown");
+    assert.deepEqual(result.copies, [null, "", "", "", ""]);
+    assert.deepEqual(result.pendingBefore, ["pending", "pending"]);
+    assert.deepEqual(result.released, ["", "pending", true], "A released target is not formatted when the parser arrives");
+    assert.deepEqual(result.withdrawn, [true, "pending", 0], "Withdrawal drops deferred targets even while loading");
+    assert.equal(result.plain, "Ordinary words only");
 });

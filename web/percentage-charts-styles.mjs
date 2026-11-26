@@ -13,14 +13,13 @@ export const percentageChartStyles = `
 .percentage-face {stroke:none;pointer-events:visibleFill}
 .percentage-ring a {cursor:pointer}
 .percentage-ring a:focus:not(:focus-visible) {outline:none}
-.percentage-face.percentage-active {fill-opacity:1}
-@media(forced-colors:none) {
- .percentage-face.percentage-active {filter:brightness(.9)}
- :root[data-evidence-theme=dark] .percentage-face.percentage-active {fill:var(--column-label);filter:none}
-}
-@media(prefers-color-scheme:dark) and (forced-colors:none) {
- :root:not([data-evidence-theme]) .percentage-face.percentage-active {fill:var(--column-label);filter:none}
-}
+.percentage-face {transition:opacity .12s ease-out}
+/* Emphasis never changes a mark's geometry: the others recede and the read mark keeps its exact edge. */
+.percentage-ring:has(.percentage-active) .percentage-face:not(.percentage-active) {opacity:.32}
+.percentage-separator {stroke:var(--paper);stroke-width:1.5px;vector-effect:non-scaling-stroke;pointer-events:none}
+.percentage-hatch-base {fill:var(--chart-mark-high)}
+.percentage-hatch-line {fill:color-mix(in srgb,var(--chart-mark-high) 50%,var(--paper))}
+@media(prefers-reduced-motion:reduce) {.percentage-face {transition:none}}
 .percentage-legend {list-style:none;margin:0;padding:0;min-width:0;display:grid;gap:8px}
 /* Preserve the existing label/count/bar positions around the larger service glyph. */
 .percentage-card[data-breakdown=services] {--percentage-icon-size:24px;--percentage-icon-gap:4px}
@@ -40,11 +39,17 @@ export const percentageChartStyles = `
 .percentage-value strong {font-weight:var(--weight-strong)}
 .percentage-bar-track {grid-column:2/-1;height:8px;background:color-mix(in srgb,var(--accent) 8%,var(--track-base));box-shadow:inset 0 0 0 1px var(--surface-edge);border-radius:var(--radius-pill);overflow:hidden}
 .percentage-tool-list .percentage-bar-track {grid-column:1/-1}
-.percentage-bar {display:block;height:100%;background:var(--column-label,var(--accent));background-image:linear-gradient(90deg,var(--chart-mark-low),var(--chart-mark-high));border-radius:var(--radius-pill);min-width:0}
+.percentage-bar {display:block;height:100%;background:var(--outcome-quantity,var(--accent));border-radius:var(--radius-pill);min-width:0;transition:opacity .12s ease-out}
+.percentage-legend:has(>.percentage-legend-row:is(:hover,:focus-within)) >.percentage-legend-row:not(:hover,:focus-within) .percentage-bar {opacity:.32}
+@media(prefers-reduced-motion:reduce) {.percentage-bar {transition:none}}
 .percentage-legend-row:has(a) .percentage-bar-track {cursor:pointer}
 .percentage-note,.percentage-service-scope,.percentage-coverage {color:var(--muted);font-size:var(--type-small);line-height:1.5;max-width:none}
 .percentage-service-scope {margin:0 0 8px}
 .percentage-basis {display:block;font-size:var(--type-caption);color:var(--muted);font-weight:var(--weight-regular)}
+.model-id {font-family:var(--mono);font-size:var(--type-caption);color:var(--muted);font-weight:var(--weight-regular);overflow-wrap:anywhere}
+.percentage-model-id {font-family:var(--mono)}
+.model-name[tabindex="0"] {border-radius:var(--radius-small)}
+.model-name[tabindex="0"]:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
 .percentage-coverage {margin-top:16px}
 .percentage-coverage p {margin:8px 0;max-width:none}
 .percentage-gap-list {margin:8px 0}
@@ -92,8 +97,10 @@ export const percentageChartStyles = `
 @media(forced-colors:active) {
  .percentage-face {fill:CanvasText}
  .percentage-face.percentage-active {fill:Highlight;fill-opacity:1}
+ .percentage-ring:has(.percentage-active) .percentage-face:not(.percentage-active) {opacity:1}
+ .percentage-separator {stroke:Canvas}
  .percentage-cue,.percentage-value span {color:CanvasText}
- .percentage-bar {background:CanvasText}
+ .percentage-bar {background:CanvasText;opacity:1 !important}
  .percentage-label:focus-visible,.percentage-exact>summary:focus-visible {outline-color:Highlight}
 }
 `;

@@ -28,7 +28,8 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
             { id: "automatic-updates", section: "general", title: "Automatically check for updates", context: "Check on opening WIRE and daily while it stays open. You choose when to install.", synonyms: "automatic update checks preferences enable disable scheduled", target: "appUpdateAuto" },
         ] : []),
         { id: "analyze-range", section: "analyze", title: "Default date range", context: "Choose All dates, Last 7 days, Last 14 days or Last 30 days for a fresh Analyze view.", synonyms: "date range when opening Analyze starting period filter", target: "defaultAnalyzeRange" },
-        { id: "analyze-layout", section: "analyze", title: "Homepage layout", context: "Reorder Analyze widgets and Interactions or restore the original layout.", synonyms: "position placement move arrange cards charts first last", target: "analyzeLayout" },
+        { id: "analyze-layout", section: "analyze", title: "Homepage layout", context: "Reorder Analyze widgets and Interactions or restore the original layout.", synonyms: "position placement move arrange cards charts tokens usage first last", target: "analyzeLayout" },
+        { id: "analyze-sort", section: "analyze", title: "Default interaction sort", context: "Start with the most recent interactions or those with the most tokens.", synonyms: "usage order sort", target: "defaultAnalyzeSort" },
         { id: "guide-start", section: "analyze", title: "Open Guide to", context: "Start with recorded outcomes or the last topic read in this tab.", synonyms: "chart guide topic reader starting topic", target: "defaultGuideStart" },
         { id: "hidden-cards", section: "analyze", title: "Keep hidden cards out of view", context: "Choose how long future cards stay hidden.", synonyms: "hide restore tab privacy duration", target: "defaultCardHideDuration" },
         { id: "trend-chart", section: "trends", title: "Default trend chart", context: "Choose the first chart on opening Trends. Direct chart links keep their measure.", synonyms: "homepage errors failures tool calls usage services call duration prompt authors response models", target: "defaultTrendChart" },
@@ -41,7 +42,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "theme", section: "themes", title: "Appearance mode", context: "Choose Light or Dark for this browser. No collection or report content changes.", synonyms: "display theme color light dark contrast", target: "settingsThemePreference" },
         { id: "palette", section: "themes", title: "Color palette", context: "Change screen and widget colors for this browser. Saved reports are unchanged.", synonyms: "display appearance theme colour petrol coral linen graphite blueprint field notes midnight", target: "palette-petrol" },
         { id: "time-zone", section: "regional", title: "Time zone", context: "Choose a city or Device default. Saved reports keep their original time zone.", synonyms: "display timezone local date clock browser reset", target: "displayTimeZone" },
-        { id: "source", section: "source-access", title: "Review local source & permission", context: "Review GitHub Copilot app metadata and chat log paths before deliberately approving a source.", synonyms: "connect change switch approval database data.db session-state privacy", target: "reviewSource" },
+        { id: "source", section: "source-access", title: "Review local source & permission", context: "Review GitHub Copilot app metadata and chat log paths before deliberately approving a source.", synonyms: "connect change switch approval database data.db session-state privacy token records session-store.db usage", target: "reviewSource" },
         { id: "microsoft-connection", section: "connection", title: "Microsoft 365 connection", context: "Optional Chat and Cowork connection. Opening this setting does not sign in or change collection.", synonyms: "Microsoft 365 Chat Cowork connect cancel reconnect sign in expiry expired Edge work account", target: "wireMicrosoftConnection" },
         { id: "microsoft-collection", section: "connection", title: "Microsoft collection", context: "Choose Chat, Cowork and history, then explicitly enable collection or save preferences.", synonyms: "Microsoft enable save Chat Cowork sources history collection", target: "nativeCollectionSurfaces" },
         { id: "microsoft-collection-state", section: "connection", title: "Pause or resume Microsoft reads", context: "Change Microsoft reads without changing GitHub preferences or global policy.", synonyms: "Microsoft Chat Cowork stop start pause resume", target: "pauseMicrosoftCollection" },
@@ -60,6 +61,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
     ];
     function resolve(route) {
         let section = route.section || categories[0].id, setting = route.setting, warning = "";
+        if (updates && section === "release-notes") return { view:"settings", section, warning };
         if (route.issues === "1") setting = "issues";
         else if (Object.hasOwn(sectionAliases, section)) {
             setting ||= sectionAliases[section].setting;

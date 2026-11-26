@@ -44,7 +44,7 @@ async function measure(page) {
         dateRange.selectNodeContents(date);
         const left = Math.min(...faces.map(face => face.x)), right = Math.max(...faces.map(face => face.right));
         return {
-            total: Number(svg?.dataset.total || 0), extent: Number(svg?.dataset.plotHeight || 280), value: box(slot.querySelector(".dimensional-count")),
+            total: Number(svg?.dataset.total || 0), extent: parseFloat(getComputedStyle(slot).getPropertyValue("--time-height")), value: box(slot.querySelector(".dimensional-count")),
             date: box(date), dateText: box(dateRange),
             text: date.textContent,
             paintCenter: svg ? (left + right) / 2 : null, faces,
@@ -153,9 +153,9 @@ test("9/28/9/121/50 retains exact linear values and one count/date axis", { time
                 assert.ok(Math.abs(row.base - rows[0].base) < .02, "All front bases share one ground line");
                 assert.ok(row.value.bottom <= Math.min(...row.faces.map(face => face.y)) - 4, "Value does not occlude data");
             }
-            assert.ok(Math.abs(rows[0].edgeHeight / rows[3].edgeHeight - 9 / 121) < .0001);
-            assert.ok(Math.abs(rows[1].edgeHeight / rows[3].edgeHeight - 28 / 121) < .0001);
-            assert.ok(Math.abs(rows[0].edgeHeight - rows[2].edgeHeight) < .00001);
+            for (const i of [0,1]) assert.ok(Math.abs(rows[i].edgeHeight - rows[3].edgeHeight * rows[i].total / 121) < .02,
+                "Shorter bars preserve their share of the peak within CSS subpixel rounding");
+            assert.ok(Math.abs(rows[0].edgeHeight - rows[2].edgeHeight) < .001, "Equal totals paint equally tall across different segment mixes");
         }
         assert.deepEqual(failures, []);
     } finally { await browser.close(); }
@@ -172,9 +172,8 @@ test("zero, subpixel, unit, equal, mixed, dense and single timelines keep one pr
             await mount(page, points, width, theme);
             const rows = await measure(page);
             for (const row of rows) {
-                const extent = 200;
-                const expected = row.total / maximum * extent;
-                if (row.total) assert.equal(row.extent, extent);
+                const expected = row.total / maximum * row.extent;
+                assert.equal(row.extent, rows[0].extent);
                 assert.ok(Math.abs(row.edgeHeight - expected) < .03);
                 assert.equal(row.decorations, 0);
                 assert.ok(row.faces.every(face => face.area > 0));

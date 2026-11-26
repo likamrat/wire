@@ -428,8 +428,9 @@ test("mixed Analyze preserves separate source populations and native time/outcom
         await expect(page.locator("#activityList .activity-card")).toHaveCount(3);
         await expect(page.locator("#activityList [data-source-id^='microsoft-365-']")).toHaveCount(2);
         await expect(page.locator("#outcomeChart .percentage-ring")).toHaveCount(2);
-        const nativeColumn = page.locator("#chart .time-column[href*='source=microsoft']");
+        const nativeColumn = page.locator("#chart .time-column[aria-label^='Microsoft 365:']");
         await expect(nativeColumn).toHaveCount(1);
+        await expect(nativeColumn).toHaveAttribute("href", "/");
         await expect(nativeColumn).toHaveText("2");
         await expect(page.locator("#chartFooter")).toContainText("1 undated record.");
         // The pointer targets inside the column select individual outcomes; the column link selects the day.
@@ -454,7 +455,7 @@ test("GitHub exact-table drilldown in mixed Analyze retains its original source 
         await page.locator('#chartReferenceTopics button[data-reference-topic="time"]').click();
         await page.locator("#chartReferenceShowData").click();
         const action = page.locator("#chartReferenceData .chart-data-action").first();
-        await expect(action).toHaveAttribute("href", /source=github-copilot/);
+        await expect(action).toHaveAttribute("href", "/");
         await action.click();
         await expect(page.locator("#sourceFilter")).toHaveValue("github-copilot");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(1);

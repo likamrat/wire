@@ -581,6 +581,17 @@ test("explicit system context explains unverified author without guessing from h
     assert.match(promptAuthorship.reason({ authorship: { actor: "unknown", basis: "invalid-source" } }), /host message format/);
 });
 
+test("a system-injected continuation identifies the agent loop, not an idle delivery or a human-looking body", () => {
+    const data = { source: "system", delivery: "idle", isAutopilotContinuation: true, content: "Invented ordinary words.", transformedContent: null };
+    const read = extra => extract({ ...data, ...extra }).userPrompt.authorship;
+    assert.deepEqual(read({}), { actor: "agent", basis: "autopilot" });
+    assert.deepEqual(read({ isAutopilotContinuation: false }), { actor: "unknown", basis: "system-source" });
+    for (const extra of [{ source: "user" }, { agentAuthored: true }, { causalDependencies: [randomUUID()] }, { messageId: randomUUID(),
+        transformedContent: "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n" + data.content }]) {
+        assert.deepEqual(read(extra), { actor: "unknown", basis: "conflicting-source" });
+    }
+});
+
 test("kickoff qualification preserves an uninterpretable envelope instead of inventing a source contradiction", () => {
     for (const basis of ["invalid-source", "unsupported-source"]) {
         const authorship = { actor: "unknown", basis };

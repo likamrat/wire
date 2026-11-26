@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { frontendRecords } from "./frontend-fixture.mjs";
-import { chooseTheme, fulfillFixtureUpdateStatus } from "./helpers.mjs";
+import { chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 
 const proof = process.env.WIRE_ANALYZE_HOMEPAGE_PROOFS;
@@ -93,15 +93,58 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const settingsOrder = () => field.locator("li").evaluateAll(nodes => nodes.map(node => node.dataset.section));
     const preview = field.locator("figure");
     const previewColumns = new Map();
+    async function steadyMove(stage, control, action) {
+        await page.evaluate(() => document.fonts.ready);
+        await field.evaluate(field => {
+            function frame() {
+                const boxes = {};
+                for (const selector of ["#analyzeSettingsTitle",".settings-rail",".analyze-layout-editor",
+                    "#analyzeLayout ol",".layout-preview","[data-restore]",".analyze-layout-actions a","#analyzeLayout + .page-default-field"]) {
+                    const {x,y,width,height} = document.querySelector(selector).getBoundingClientRect();
+                    boxes[selector] = [x,y,width,height];
+                }
+                return { boxes, scrollY, focus: document.activeElement.getAttribute("aria-label") || document.activeElement.id };
+            }
+            const frames = window.moveFrames = [];
+            field.addEventListener("click", () => {
+                frames.push(frame());
+                requestAnimationFrame(() => {
+                    frames.push(frame());
+                    requestAnimationFrame(() => frames.push(frame()));
+                });
+            }, { capture:true, once:true });
+        });
+        await action(control);
+        await page.waitForFunction(() => window.moveFrames.length === 3);
+        const frames = await page.evaluate(() => window.moveFrames);
+        if (proof) await writeFile(path.join(proof,`${frontend}-${width}-${stage}-frames.json`),JSON.stringify(frames,null,2));
+        for (const after of frames.slice(1)) {
+            assert.deepEqual(after.boxes,frames[0].boxes,"reordering must leave the Settings editor and defaults in place");
+            assert.equal(after.scrollY,frames[0].scrollY);
+        }
+    }
     async function samplePreview(stage) {
         await expect(preview).toBeVisible();
+        const rows = field.locator("li"), middle = rows.nth(1).getByRole("button");
+        const glyphs = await middle.locator("svg path").evaluateAll(paths => paths.map(path => {
+            const {width,height,y} = path.getBoundingClientRect();
+            return [width,height,y];
+        }));
+        assert.equal(glyphs.length,2);
+        assert.deepEqual(glyphs[0],glyphs[1],`${stage}: up and down glyphs match in size and vertical alignment`);
+        for (const [row,direction,column] of [[rows.first(),"down",1],[rows.last(),"up",0]]) {
+            const available = row.getByRole("button");
+            await expect(available).toHaveCount(1);
+            await expect(available).toHaveAccessibleName(new RegExp(` ${direction}$`));
+            assert.equal((await available.boundingBox()).x,(await middle.nth(column).boundingBox()).x);
+        }
         const tiles = await preview.locator("[data-tile]").evaluateAll(nodes => nodes.map(node => {
             const { x, y, width, height } = node.getBoundingClientRect();
             return { key:node.dataset.tile,x,y,width,height };
         }).sort((a,b)=>a.y-b.y || a.x-b.x));
         assert.deepEqual(tiles.map(tile=>tile.key),await settingsOrder(),`${stage}: preview updates in place`);
         const left = Math.min(...tiles.map(tile=>tile.x)), right = Math.max(...tiles.map(tile=>tile.x+tile.width));
-        for (const tile of tiles.filter(tile=>width===390 || tile.key==="interactions")) {
+        for (const tile of tiles.filter(tile=>width===390 || ["time","outcomes","usage","interactions"].includes(tile.key))) {
             assert.equal(tile.x,left); assert.ok(Math.abs(tile.x+tile.width-right)<=1,`${stage}: full-width ${tile.key}`);
         }
         previewColumns.set(stage,tiles.map(tile=>[tile.key,tile.x > left+1,tile.width >= right-left-1]));
@@ -135,25 +178,66 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const standard = await settingsOrder();
     await samplePreview("standard");
     const reads = snapshots.length;
-    await up("Interactions").focus(); await page.keyboard.press("Enter"); await expect(up("Interactions")).toBeFocused();
+    const down = field.getByRole("button",{name:"Move Tool call results down",exact:true});
+    await steadyMove("move-to-first",up("Tool call results"), control => control.press("Enter"));
+    await expect(down).toBeFocused();
     const intermediate = await samplePreview("one-move");
-    if (width===1440) assert.equal(intermediate[0].width,intermediate[1].width,"a chart alone before Interactions spans the preview");
-    await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
+    await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","outcomes");
     assert.equal(snapshots.length,reads,"moving a section does not read evidence");
     await field.getByRole("link",{name:"View Analyze"}).tap();
     await observe("one-move");
-    await page.goto(settings); await up("Interactions").press("Enter");
-    for (let i=0; i<5; i++) await up("Prompt authors").tap();
+    await page.goto(settings);
+    if (width===390) await page.evaluate(() => {document.documentElement.style.fontSize = "200%";});
+    await steadyMove("past-time",down,control=>control.press("Enter"));
+    await expect(down).toBeFocused();
+    if (width===390) {
+        assert.ok(await field.evaluate(node => [...node.querySelectorAll("button,a,[data-tile]")].every(item => {
+            const rect = item.getBoundingClientRect();
+            return rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth && item.scrollWidth <= item.clientWidth + 1;
+        })),"enlarged labels, tiles and actions must fit");
+        await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
+    }
+    await steadyMove("past-usage",down,control=>control.tap());
+    await down.tap(); await down.tap();
     const chosen = await settingsOrder();
-    assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
+    assert.deepEqual(chosen.slice(0,6),["time","usage","interactions","tools","outcomes","services"]);
     await samplePreview("chosen");
     if (width===1440) await chooseTheme(page,"dark");
     await page.reload(); await samplePreview("persisted");
     await field.getByRole("link",{name:"View Analyze"}).tap();
-    await observe("chosen"); await page.reload(); await observe("reloaded");
+    await observe("chosen");
+    const failure=page.locator("#outcomeChart [data-category=failure] .percentage-label");
+    await expect(page.locator("#outcomeChart .outcome-share-strip")).toBeVisible();
+    await expect(failure).toHaveAccessibleName(/Tool failed: 2 of 12/);
+    await failure.press("Enter"); await expect(page.locator("#activityCount")).toHaveText("2");
+    await page.goBack(); await expect(failure).toBeFocused();
+    await page.reload(); await observe("reloaded");
     await page.goto(settings);
-    await field.getByRole("button",{name:"Restore WIRE layout"}).tap();
+    await selectActivityOption(page,"defaultGuideStart","last");
+    const restore = field.getByRole("button",{name:"Restore WIRE Default Layout",exact:true}), tip = page.getByRole("tooltip");
+    if (width===1440) {
+        // This pane crosses the breakpoint where the standard and custom previews
+        // no longer use the same column count.
+        await page.setViewportSize({width:frontend==="react" ? 1120 : 1240,height:960});
+        await restore.scrollIntoViewIfNeeded();
+        const rect = await restore.boundingBox(), fill = () => restore.evaluate(n => getComputedStyle(n,"::before").backgroundColor);
+        await page.mouse.move(0,0); const rest = await fill();
+        await restore.hover({position:{x:2,y:rect.height/2}});
+        await expect(tip).toHaveText("Return the Analyze homepage sections to their original order.");
+        const hover = await fill(); assert.notEqual(hover,rest);
+        await page.mouse.down(); assert.notEqual(await fill(),hover);
+        assert.deepEqual(await restore.boundingBox(),rect);
+        await page.mouse.move(rect.x-1,rect.y+rect.height/2); await page.mouse.up();
+        await page.mouse.move(0,0);
+        await field.getByRole("link",{name:"View Analyze"}).focus();
+        await page.keyboard.press("Shift+Tab"); await expect(restore).toBeFocused();
+        await expect(restore).toHaveAccessibleDescription("Return the Analyze homepage sections to their original order.");
+    }
+    await steadyMove("restore",restore, control => width===390 ? control.tap() : frontend==="bundled" ? control.click() : control.press("Enter"));
+    await expect(restore).toBeFocused();
+    await expect(page.locator("#defaultGuideStart")).toHaveValue("last");
     assert.deepEqual(await settingsOrder(),standard);
+    if (width===1440) await page.setViewportSize({width,height:960});
     await samplePreview("restored"); await expect(preview.locator("[data-moved]")).toHaveCount(0);
     await field.getByRole("link",{name:"View Analyze"}).tap(); await observe("restored");
     await page.reload(); await observe("restored-reload");
@@ -170,9 +254,8 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         for (const card of cards) if (card !== list) {
             assert.ok(card.y+card.height <= list.y+1 || list.y+list.height <= card.y+1,`${stage}: Interactions has its own row`);
         }
-        const [first,second] = painted.filter(card=>card!==list);
         if (width===390) assert.ok(painted.every((card,i)=>!i || card.y>=painted[i-1].y+painted[i-1].height-1),`${stage}: stacked`);
-        else if (stage!=="one-move") assert.ok(second.x>=first.x+first.width-1 && Math.abs(second.y-first.y)<=1,`${stage}: side by side`);
+        else assert.ok(painted.some((card,i)=>i && Math.abs(painted[i-1].y-card.y)<=1),`${stage}: neighboring breakdowns can still pair`);
     }
 });
 test("moving the pointer tints just its stationary interaction in every appearance",async t=>{

@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
+import { createProfileSource } from "./source-profile-fixture.mjs";
 import { interactionModelFact } from "../lib/interaction-model.mjs";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
 import { buildSanitizedRecord } from "../lib/export.mjs";
@@ -25,6 +26,8 @@ import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { setImmediate } from "node:timers/promises";
 import { createRecollectionController } from "../lib/recollection.mjs";
+import { createUsageRecordCountController } from "../lib/usage-record-counting.mjs";
+import { utimes } from "node:fs/promises";
 import { currentStatePayload } from "../lib/server.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
@@ -39,12 +42,12 @@ test("source path rejection is explicit for nonstrings, relative paths and wrong
     }
 });
 
-async function installation(t, { metadata174 = false } = {}) {
+async function installation(t, { metadata174 = false, profile = false } = {}) {
     const root = await mkdtemp(path.join(os.tmpdir(), "workiq-dynamic-synthetic-"));
     const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state") };
     await mkdir(config.sessionRoot);
-    const db = new DatabaseSync(config.appDbPath);
-    db.exec(metadata174 ? metadata174Schema : `PRAGMA user_version=156;
+    const db = profile ? (await createProfileSource(root)).db : new DatabaseSync(config.appDbPath);
+    if (!profile) db.exec(metadata174 ? metadata174Schema : `PRAGMA user_version=156;
         CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
         CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
         CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);`);
@@ -92,6 +95,676 @@ const call = (id = "synthetic-call") => event("tool.execution_start", {
 const managedSchema = `CREATE TABLE session_managed_mcp_event_display_names(
     session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT NOT NULL,
     PRIMARY KEY(session_id,event_id));`;
+
+test("history compatibility: an explicit closed run meters without a prompt message ID, response model, reply text or timing", async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID();
+    const tool = call("lookup"), turnId = "turn", apiCallId = "direct-api";
+    const p = event("user.message", { interactionId, content: "Find the invented review notes." });
+    const a = event("assistant.message", { interactionId, turnId, apiCallId, toolRequests: [{toolCallId:"lookup"}] });
+    const end = event("assistant.turn_end", {turnId});
+    const receipt = event("session.usage_record", {usage:{interactionId, apiCallId, model:"gpt-4.1",
+        inputTokens:100, cacheReadTokens:20, cacheWriteTokens:0, outputTokens:5}});
+    const close = event("session.completion_receipt", { schemaVersion:1, attempt:1, stopReason:"natural",
+        eventRange:{startEventId:p.id, endEventId:end.id}, sourceEventId:end.id, successfulToolCount:1, failedToolCount:0 });
+    const missing = event("assistant.message", {interactionId, turnId, apiCallId:"second-api", toolRequests:[]});
+    tool.data.turnId = turnId;
+    const batch = [p, a, tool, event("tool.execution_complete",{interactionId,toolCallId:"lookup",success:true,result:{content:"abcd"}}),
+        missing, receipt, end, close];
+    batch.forEach((e,i)=>{e.timestamp=new Date(Date.now()-10000+i*100).toISOString();});
+    const file = await logFor(app,id,batch);
+    let collector=await createCollector(app.context,{timers:false}); app.cleanup.push(()=>collector.close());
+    await collector.configure({...app.config,approved:true,enabled:false,windowDays:30,pollSeconds:5});
+    const read=async()=>(await currentStatePayload(app.context,await loadBoardState(app.context))).scenarios[0];
+    await collector.collectNow();
+    assert.equal((await read()).usage,null,"missing a receipt is not a whole-interaction total");
+    await collector.close(); collector=await createCollector(app.context,{timers:false});
+    await appendFile(file,JSON.stringify(event("session.usage_record",{usage:{...receipt.data.usage,apiCallId:"second-api",outputTokens:10}}))+"\n");
+    await collector.collectNow();
+    const complete=await read();
+    assert.equal(complete.usage?.total,215);
+    assert.equal(complete.usage?.steps.length,2);
+    assert.notEqual(complete.responseTiming?.status,"measured");
+    assert.deepEqual(complete.originalModel.models,[]);
+    assert.equal(complete.toolCalls[0].promptLink,undefined,"usage evidence must not rewrite historical prompt authorship");
+    assert.equal(complete.toolCalls[0].usageContextLinked,true,"the sized result has an explicit tool request in the same closed run");
+    await appendFile(file,JSON.stringify(event("user.message",{interactionId,content:"A rival prompt claimed this run."}))+"\n");
+    await collector.collectNow();
+    const disputed = await read();
+    assert.equal(disputed.usage,null,"a rival claim withdraws previously verified usage");
+    assert.equal(disputed.toolCalls[0].usageContextLinked,undefined);
+});
+
+test("history compatibility: a request-only meter for a retained run survives a restart before its closure", async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID(), turnId = "tool-turn";
+    const prompt = event("user.message", { interactionId, content: "Read the invented review notes." });
+    const tool = call("metered-lookup");
+    tool.data.turnId = turnId;
+    const response = event("assistant.message", { interactionId, turnId, apiCallId: "owned-request", toolRequests: [{ toolCallId: tool.data.toolCallId }] });
+    const meter = apiCallId => event("session.usage_record", { usage: { apiCallId, model: "gpt-4.1", inputTokens: 22, outputTokens: 3 } });
+    const unrelated = meter("unrelated-request"), owned = meter("owned-request");
+    const file = await logFor(app, id, [unrelated, prompt, response, tool,
+        event("tool.execution_complete", { toolCallId: tool.data.toolCallId, success: true }), owned]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    await collector.collectNow();
+    assert.equal((await read()).usage, null);
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    const end = event("assistant.turn_end", { turnId });
+    const closure = event("session.completion_receipt", { schemaVersion: 1, stopReason: "natural",
+        eventRange: { startEventId: prompt.id, endEventId: end.id }, sourceEventId: end.id });
+    await appendFile(file, [end, closure].map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const after = await read();
+    assert.equal(after.usage?.total, 25, "the earlier numeric original is still available when the root closes");
+    assert.equal(after.usage.steps.length, 1);
+    const dir = path.join(app.context.dataDir, "collector");
+    const { fingerprint } = JSON.parse(await readFile(path.join(dir, "index.json"), "utf8"));
+    const checkpoint = JSON.parse(await readFile(path.join(dir, fingerprint, `${id}.json`), "utf8"));
+    assert.equal(checkpoint.events.some(e => e.id === unrelated.id), false);
+});
+
+test("history compatibility: shared run receipts stay with their exact messages through restart and a rival withdraws them", async t => {
+    const app = await installation(t), id = app.session(), interactionId = "reused-run", model = "example";
+    const batch = [];
+    for (const n of [1,2]) {
+        const messageId = `message-${n}`, turnId = `turn-${n}`, toolCallId = `tool-${n}`, start = call(toolCallId);
+        start.data.turnId = turnId;
+        const response = (apiCallId, fields) => event("assistant.message", {interactionId,messageId:`response-${apiCallId}`,
+            originatingMessageId:messageId,turnId,apiCallId,model,...fields});
+        const receipt = (apiCallId,inputTokens) => event("session.usage_record",
+            {usage:{interactionId,apiCallId,model,inputTokens,outputTokens:1}});
+        batch.push(event("user.message",{messageId,interactionId,content:`Read invented item ${n}.`}),
+            response(`request-${n}`,{toolRequests:[{toolCallId}]}),start,
+            event("tool.execution_complete",{toolCallId,success:n===2}),
+            receipt(`request-${n}`,10*n),response(`answer-${n}`,{phase:"final_answer",toolRequests:[]}),
+            receipt(`answer-${n}`,20*n),event("assistant.turn_end",{turnId}));
+    }
+    const base = Date.now()-20000;
+    batch.forEach((e,index)=>{e.timestamp=new Date(base+index*100).toISOString();});
+    const file = await logFor(app,id,batch);
+    let collector = await createCollector(app.context,{timers:false});
+    app.cleanup.push(()=>collector.close());
+    await collector.configure({...app.config,approved:true,enabled:false,windowDays:30,pollSeconds:5});
+    const read = async () => (await currentStatePayload(app.context,await loadBoardState(app.context))).scenarios
+        .sort((a,b)=>a.userPrompt.text.localeCompare(b.userPrompt.text));
+    await collector.collectNow();
+    const first = await read();
+    assert.deepEqual(first.map(r=>r.usage?.total),[32,62]);
+    assert.deepEqual(first.map(r=>r.toolCalls[0].toolSucceeded),[false,true]);
+    await collector.close(); collector = await createCollector(app.context,{timers:false});
+    await collector.collectNow();
+    const reopened = await read();
+    assert.deepEqual(reopened.map(r=>[r.scenarioId,r.usage?.total]),first.map(r=>[r.scenarioId,r.usage?.total]));
+    await appendFile(file,JSON.stringify(event("assistant.message",{interactionId,originatingMessageId:"message-2",
+        apiCallId:"request-1",model,turnId:"rival",phase:"final_answer",toolRequests:[]}))+"\n");
+    await collector.collectNow();
+    assert.deepEqual((await read()).map(r=>r.usage),[null,null]);
+});
+
+test("history compatibility: with its own approval, an older journal without receipts is metered from the app's per-call index and keeps it after later appends", async t => {
+    const app = await installation(t, { profile: true }), id = app.session(), start = call("indexed-fetch");
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    app.cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const text = "Summarize the invented launch notes.";
+    const batch = [event("user.message", { content: text, messageId: "older-prompt", delivery: "idle" }),
+        event("assistant.turn_start", { turnId: "a" }), event("assistant.message", { turnId: "a", toolRequests: [{ toolCallId: "indexed-fetch" }] }), start,
+        event("tool.execution_complete", { toolCallId: "indexed-fetch", success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: "a" }),
+        event("assistant.turn_start", { turnId: "b" }), event("assistant.message", { turnId: "b", content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: "b" })];
+    const base = Date.now() - 60000;
+    batch.forEach((e, n) => { e.timestamp = new Date(base + n * 1000).toISOString(); });
+    const after = id => new Date(Date.parse(batch.find(e => e.data.turnId === id && e.type === "assistant.message").timestamp) + 4).toISOString();
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Invented answer");
+    index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',5000,100,4000,500,?)").run(id, after("a"));
+    index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',6000,300,5500,400,?)").run(id, after("b"));
+    const file = await logFor(app, id, batch);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    assert.equal((await read()).usage, null, "Source approval alone does not read the app's token records");
+    const config = (await collector.status()).config;
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5, usageRecords: true,
+        expectedConfigVersion: (await collector.status()).configVersion });
+    assert.equal((await collector.status()).config.usageRecords, true); assert.notEqual(config.usageRecords, true);
+    // Approval applies when collection next reads the chat.
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }),
+        timestamp: new Date(Date.parse(batch.at(-1).timestamp) + 100).toISOString() }) + "\n");
+    await collector.collectNow();
+    let record = await read();
+    assert.equal(record.usage?.total, 11400);
+    assert.deepEqual(record.usage.tokens, { freshInput: 600, cacheRead: 9500, cacheWrite: 900, output: 400 });
+    assert.equal(record.usageBasis, "copilot-usage-index");
+    const later = (type, data, ms) => ({ ...event(type, data), timestamp: new Date(Date.parse(batch.at(-1).timestamp) + ms).toISOString() });
+    const extension = [later("assistant.turn_start", { turnId: "c" }, 500), later("assistant.message", { turnId: "c", content: "More work" }, 700)];
+    await appendFile(file, extension.map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    assert.equal((await read()).usage, null, "Journal activity that continues the exchange retires its earlier indexed total");
+    index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',7000,50,6000,0,?)")
+        .run(id, new Date(Date.parse(extension[1].timestamp) + 4).toISOString());
+    await appendFile(file, JSON.stringify(later("assistant.turn_end", { turnId: "c" }, 900)) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage?.total, 18450, "The closed, extended exchange is counted again with its new call");
+    await appendFile(file, JSON.stringify(later("user.message", { content: "Unrelated later question.", delivery: "idle" }, 2000)) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage?.total, 18450, "A later prompt neither removes nor changes the indexed total");
+    index.exec("DROP TABLE assistant_usage_events");
+    await appendFile(file, JSON.stringify(later("session.info", { infoType: "note", message: "invented" }, 3000)) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage?.total, 18450, "An index WIRE cannot read never clears a total it already verified");
+});
+test("history compatibility: token-record approval names one Copilot account; a changed account stops the reads until approved again", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workiq-usage-account-")), cleanup = [];
+    t.after(async () => { for (const close of cleanup.reverse()) await close(); await rm(root, { recursive: true, force: true }); });
+    const { db, appDbPath, sessionRoot } = await createProfileSource(root);
+    cleanup.push(() => db.close());
+    const id = randomUUID();
+    db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Invented chat", "general_chat");
+    const base = Date.now() - 120000, at = n => new Date(base + n * 1000).toISOString();
+    const exchange = (text, n, a, b) => [event("user.message", { content: text, delivery: "idle" }), event("assistant.turn_start", { turnId: a }),
+        event("assistant.message", { turnId: a, toolRequests: [{ toolCallId: a + "-fetch" }] }), call(a + "-fetch"),
+        event("tool.execution_complete", { toolCallId: a + "-fetch", success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: a }),
+        event("assistant.turn_start", { turnId: b }), event("assistant.message", { turnId: b, content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: b })].map((e, k) => ({ ...e, timestamp: at(n + k) }));
+    const first = exchange("Summarize the invented launch notes.", 0, "a", "b"), second = exchange("List the invented owners.", 20, "c", "d");
+    const file = path.join(sessionRoot, id, "events.jsonl");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, [event("session.start", { sessionId: id, version: 1 }), ...first].map(e => JSON.stringify(e) + "\n").join(""));
+    const index = new DatabaseSync(path.join(root, "session-store.db"));
+    cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const indexed = (events, turn) => {
+        index.prepare("INSERT INTO turns VALUES (?,?,?,?)").run(id, turn, events[0].data.content, "Invented answer");
+        for (const reply of events.filter(e => e.type === "assistant.message")) index.prepare(`INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,
+            input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,?,NULL,'gpt-4.1',5000,100,4000,500,?)`)
+            .run(id, turn, new Date(Date.parse(reply.timestamp) + 4).toISOString());
+    };
+    indexed(first, 0);
+    const context = { dataDir: path.join(root, "private") }, config = { appDbPath, sessionRoot, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
+    const collector = await createCollector(context, { timers: false });
+    cleanup.push(() => collector.close());
+    await collector.configure({ ...config, usageRecords: true });
+    await collector.collectNow();
+    const read = async text => (await currentStatePayload(context, await loadBoardState(context))).scenarios.find(s => s.userPrompt?.text === text);
+    assert.equal((await read(first[0].data.content)).usage?.total, 10200);
+    assert.equal((await collector.status()).config.usageRecordsGrant.file, path.join(root, "session-store.db"));
+    db.prepare("UPDATE projects SET github_account_id='default'").run();
+    indexed(second, 1);
+    await appendFile(file, second.map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    assert.equal((await read(second[0].data.content)).usage, null, "A different Copilot account does not inherit the approval");
+    assert.equal((await read(first[0].data.content)).usage?.total, 10200, "Totals counted before the change stay");
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+    const granted = (await collector.status()).config.usageRecordsGrant;
+    await collector.configure({ ...config, pollSeconds: 15, expectedConfigVersion: (await collector.status()).configVersion });
+    assert.deepEqual((await collector.status()).config.usageRecordsGrant, granted, "A cadence-only save keeps the original grant and never re-binds it");
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: at(39) }) + "\n");
+    await collector.collectNow();
+    assert.equal((await read(second[0].data.content)).usage, null, "Saving preferences does not approve the new account");
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+    await collector.configure({ ...config, usageRecords: true, expectedConfigVersion: (await collector.status()).configVersion });
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: at(40) }) + "\n");
+    await collector.collectNow();
+    assert.equal((await read(second[0].data.content)).usage?.total, 10200, "A fresh approval for the current account reads again");
+    assert.equal((await collector.status()).usageRecords, "on");
+
+    // An account change between the index read and the commit refuses that commit.
+    const third = exchange("Name the invented reviewers.", 50, "e", "f");
+    indexed(third, 2);
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync;
+    let switched = false;
+    fsSync.statSync = (target, ...rest) => {
+        if (!switched && String(target).endsWith("session-store.db")) { switched = true; db.prepare("UPDATE projects SET github_account_id='workspace'").run(); }
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await appendFile(file, third.map(e => JSON.stringify(e) + "\n").join(""));
+    await assert.rejects(collector.collectNow(), e => [e.code, e.cause?.code].includes("COLLECTION_SOURCE_CHANGED"));
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.ok(switched);
+    assert.equal((await read(third[0].data.content))?.usage ?? null, null, "Nothing read under the replaced account is committed");
+    await collector.collectNow().catch(() => {});
+    assert.equal((await read(third[0].data.content))?.usage ?? null, null);
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+});
+test("history compatibility: a stale token-record approval stops the next chat's index read within the same pass", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workiq-usage-two-chats-")), cleanup = [];
+    t.after(async () => { for (const close of cleanup.reverse()) await close(); await rm(root, { recursive: true, force: true }); });
+    const { db, appDbPath, sessionRoot } = await createProfileSource(root);
+    cleanup.push(() => db.close());
+    const base = Date.now() - 120000, at = n => new Date(base + n * 1000).toISOString();
+    const index = new DatabaseSync(path.join(root, "session-store.db"));
+    cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const chats = [];
+    for (const [n, text] of [[0, "Summarize the invented launch notes."], [20, "List the invented owners."]]) {
+        const id = randomUUID(), a = "a" + n;
+        db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Invented chat", "general_chat");
+        const events = [event("user.message", { content: text, delivery: "idle" }), event("assistant.turn_start", { turnId: a }),
+            event("assistant.message", { turnId: a, toolRequests: [{ toolCallId: a + "-fetch" }] }), call(a + "-fetch"),
+            event("tool.execution_complete", { toolCallId: a + "-fetch", success: true, result: { content: "INVENTED" } }),
+            event("assistant.turn_end", { turnId: a })].map((e, k) => ({ ...e, timestamp: at(n + k) }));
+        const file = path.join(sessionRoot, id, "events.jsonl");
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, [event("session.start", { sessionId: id, version: 1 }), ...events].map(e => JSON.stringify(e) + "\n").join(""));
+        index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Invented answer");
+        index.prepare(`INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at)
+            VALUES (?,0,NULL,'gpt-4.1',5000,100,4000,500,?)`).run(id, new Date(Date.parse(events[2].timestamp) + 4).toISOString());
+        chats.push({ id, text });
+    }
+    const context = { dataDir: path.join(root, "private") };
+    const collector = await createCollector(context, { timers: false });
+    cleanup.push(() => collector.close());
+    // Approve, then switch the account right after the first index read of the next pass.
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync;
+    const opened = [];
+    fsSync.statSync = (target, ...rest) => {
+        if (String(target).endsWith("session-store.db")) { opened.push(target); if (opened.length === 1) db.prepare("UPDATE projects SET github_account_id='default'").run(); }
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await collector.configure({ appDbPath, sessionRoot, approved: true, enabled: false, windowDays: 30, pollSeconds: 5, usageRecords: true });
+    opened.length = 0;
+    await assert.rejects(collector.collectNow(), e => [e.code, e.cause?.code].includes("COLLECTION_SOURCE_CHANGED"));
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.equal(opened.length, 1, "Once the approval is stale, the second chat's index is never opened");
+    const scenarios = (await currentStatePayload(context, await loadBoardState(context))).scenarios;
+    for (const chat of chats) assert.equal(scenarios.find(s => s.userPrompt?.text === chat.text)?.usage ?? null, null);
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+});
+test("history compatibility: token records need a positively identified account; an unknown or legacy grant never reads", async t => {
+    const app = await installation(t), id = app.session();
+    const base = Date.now() - 60000, text = "Summarize the invented launch notes.";
+    const batch = [event("user.message", { content: text, delivery: "idle" }), event("assistant.turn_start", { turnId: "a" }),
+        event("assistant.message", { turnId: "a", toolRequests: [{ toolCallId: "u-fetch" }] }), call("u-fetch"),
+        event("tool.execution_complete", { toolCallId: "u-fetch", success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: "a" })];
+    batch.forEach((e, n) => { e.timestamp = new Date(base + n * 1000).toISOString(); });
+    const file = await logFor(app, id, batch);
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Done");
+    index.prepare(`INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at)
+        VALUES (?,0,NULL,'gpt-4.1',5000,100,4000,500,?)`).run(id, new Date(Date.parse(batch[2].timestamp) + 4).toISOString());
+    index.close();
+    const config = { ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await assert.rejects(collector.configure({ ...config, usageRecords: true }), e => e.status === 422 && /can't identify the Copilot account/.test(e.message));
+    await collector.configure(config);
+    assert.equal((await collector.status()).usageRecords, "off");
+    await collector.close();
+    const stored = path.join(app.context.dataDir, "collector", "config.json");
+    const legacy = JSON.parse(await readFile(stored, "utf8"));
+    await writeFile(stored, JSON.stringify({ ...legacy, usageRecords: true, usageRecordsGrant: { file: path.join(app.root, "session-store.db"), account: null } }));
+    collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    assert.equal((await collector.status()).usageRecords, "approval-changed", "An unknown account never looks approved");
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: new Date(base + 9000).toISOString() }) + "\n");
+    await collector.collectNow();
+    const record = (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    assert.equal(record.usage, null, "Unknown never equals unknown");
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+});
+test("history compatibility: Copilot's token records never replace a total the journal verified", async t => {
+    const app = await installation(t, { profile: true }), id = app.session(), start = call("journal-fetch"), model = "gpt-4.1";
+    const text = "Compare the invented launch notes.", later = "Now list the invented owners.";
+    const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId: "run-a", inputTokens: 2000, outputTokens: 200 } });
+    start.data.turnId = "a1";
+    const first = [event("user.message", { messageId: "prompt-a", interactionId: "run-a", content: text, delivery: "idle" }),
+        event("assistant.turn_start", { turnId: "a1" }),
+        event("assistant.message", { apiCallId: "a-one", turnId: "a1", model, originatingMessageId: "prompt-a", toolRequests: [{ toolCallId: "journal-fetch" }] }), start,
+        event("tool.execution_complete", { toolCallId: "journal-fetch", success: true, result: { content: "INVENTED" } }), receipt("a-one"),
+        event("assistant.turn_end", { turnId: "a1" }), event("assistant.turn_start", { turnId: "a2" }),
+        event("assistant.message", { apiCallId: "a-two", turnId: "a2", model, originatingMessageId: "prompt-a", phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+        receipt("a-two"), event("assistant.turn_end", { turnId: "a2" })];
+    const base = Date.now() - 60000;
+    first.forEach((e, n) => { e.timestamp = new Date(base + n * 100).toISOString(); });
+    const file = await logFor(app, id, first);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.find(s => s.userPrompt?.text === text);
+    assert.equal((await read()).usage?.total, 4400);
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+            CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+                input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?),(?,1,?,NULL)").run(id, text, "Invented answer", id, later);
+    for (const turn of ["a1", "a2"]) index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,?,9000,900,0,0,?)")
+        .run(id, model, new Date(Date.parse(first.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString());
+    index.close();
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5, usageRecords: true,
+        expectedConfigVersion: (await collector.status()).configVersion });
+    const second = [event("assistant.message", { content: "x".repeat(1100 * 1024) }),
+        event("user.message", { messageId: "prompt-b", content: later, delivery: "idle" }), call("later-fetch")];
+    second.forEach((e, n) => { e.timestamp = new Date(base + 5000 + n * 100).toISOString(); });
+    await appendFile(file, second.map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const record = await read();
+    assert.equal(record.usage?.total, 4400);
+    assert.equal(record.usageBasis, undefined);
+});
+// Two invented chats read in full before token records were approved: one the app's records can count, one they can't.
+async function readChatsWithoutTotals(t) {
+    const app = await installation(t, { profile: true }), id = app.session(), other = app.session();
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    app.cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const text = "Summarize the invented launch notes.", base = Date.now() - 60000;
+    const exchange = (prompt, callId) => [event("user.message", { content: prompt, delivery: "idle" }),
+        event("assistant.turn_start", { turnId: "a" }), event("assistant.message", { turnId: "a", toolRequests: [{ toolCallId: callId }] }), call(callId),
+        event("tool.execution_complete", { toolCallId: callId, success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: "a" }),
+        event("assistant.turn_start", { turnId: "b" }), event("assistant.message", { turnId: "b", content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: "b" })];
+    const batch = exchange(text, "indexed-fetch"), unmatched = exchange("Find the invented budget.", "unmatched-fetch");
+    [...batch, ...unmatched].forEach((e, n) => { e.timestamp = new Date(base + n * 1000).toISOString(); });
+    const after = turn => new Date(Date.parse(batch.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString();
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Invented answer");
+    const usage = index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,'gpt-4.1',?,?,?,?,?)");
+    usage.run(id, 5000, 100, 4000, 500, after("a"));
+    usage.run(id, 6000, 300, 5500, 400, after("b"));
+    const file = await logFor(app, id, batch);
+    await logFor(app, other, unmatched);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    const settings = { ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 };
+    await collector.configure(settings);
+    await collector.collectNow();
+    await collector.configure({ ...settings, usageRecords: true, expectedConfigVersion: (await collector.status()).configVersion });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.find(s => s.userPrompt?.text === text);
+    assert.equal((await read()).usage, null, "A chat WIRE already read stays unmeasured until it changes");
+    const counting = createUsageRecordCountController(app.context);
+    return { app, id, other, unmatched, file, index, usage, text, settings, counting, read, after: ms => new Date(Date.parse(unmatched.at(-1).timestamp) + ms).toISOString(),
+        collector: () => collector, restart: async () => { await collector.close(); collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close()); } };
+}
+test("history compatibility: a profile switch at publication opens no further chat's token records and saves nothing", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read, index, other, unmatched } = fixture;
+    const second = "Find the invented budget.", reply = turn => new Date(Date.parse(unmatched.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString();
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(other, second, "Invented answer");
+    for (const turn of ["a", "b"]) fixture.usage.run(other, 4000, 200, 3000, 0, reply(turn));
+    const before = await loadBoardState(app.context), preview = await counting.preview("panel");
+    assert.equal(preview.counts.chats, 2, "Two chats can be counted");
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync, db = path.join(app.root, "session-store.db");
+    let switched = false; const after = [];
+    // The selected histories are stat'ed synchronously only by the publication guard; switch the account at its first run.
+    fsSync.statSync = (target, ...rest) => {
+        const name = String(target);
+        if (!switched && (name.includes(fixture.id) || name.includes(other)) && name.endsWith(".jsonl")) {
+            switched = true; app.db.prepare("UPDATE projects SET github_account_id='default'").run();
+        } else if (switched && name.startsWith(db)) after.push(name.slice(db.length) || "main");
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }));
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.ok(switched, "The account changed during publication");
+    for (let n = 0; n < after.length; n += 2) assert.deepEqual(after.slice(n, n + 2), ["main", "-wal"], "Only the boundary pair is stat'ed; no chat's records are opened");
+    const saved = await loadBoardState(app.context);
+    assert.equal(saved.revision, before.revision);
+    assert.equal(saved.usageRecordCounts?.operations?.[preview.operationId], undefined);
+    assert.equal((await read()).usage, null);
+});
+test("history compatibility: a token-record row updated in the write-ahead log before publication refuses the count", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read, index } = fixture;
+    index.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;");
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync, db = path.join(app.root, "session-store.db");
+    const mainStamp = () => { const s = original(db); return [s.size, s.mtimeMs, s.ctimeMs].join(":"); };
+    const before = await loadBoardState(app.context), preview = await counting.preview("panel");
+    let updated = false, mainUnchanged = null;
+    // The selected chat's history is stat'ed synchronously only by the write guard, after every chat was reread.
+    fsSync.statSync = (target, ...rest) => {
+        if (!updated && String(target).includes(fixture.id)) {
+            updated = true; const stamp = mainStamp();
+            index.prepare("UPDATE assistant_usage_events SET output_tokens = output_tokens + 1 WHERE id = (SELECT MIN(id) FROM assistant_usage_events WHERE session_id = ?)").run(fixture.id);
+            mainUnchanged = stamp === mainStamp();
+        }
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_CHANGED" });
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.ok(updated, "The row changed after its reread and before publication");
+    assert.equal(mainUnchanged, true, "The update reached only the write-ahead log");
+    const after = await loadBoardState(app.context);
+    assert.equal(after.revision, before.revision, "Nothing was published");
+    assert.equal(after.usageRecordCounts?.operations?.[preview.operationId], undefined, "No receipt was written");
+    assert.equal((await read()).usage, null);
+});
+test("history compatibility: Check result before a delayed confirm stays unsettled until the original confirm settles it", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read } = fixture;
+    let clock = Date.now();
+    const lapsing = createUsageRecordCountController(app.context, { now: () => clock }), stale = await lapsing.preview("panel");
+    clock += 121000;
+    assert.equal((await lapsing.status("panel", { operationId: stale.operationId, receiptToken: stale.receiptToken })).phase, "not-started",
+        "Once the preview can no longer be confirmed, nothing was saved is final");
+    const preview = await counting.preview("panel"), ask = { operationId: preview.operationId, receiptToken: preview.receiptToken };
+    assert.equal((await counting.status("other-panel", ask)).phase, "verification-incomplete", "A valid preview can still be confirmed");
+    await assert.rejects(counting.status("other-panel", { ...ask, receiptToken: "0".repeat(64) }), { status: 403 });
+    assert.equal((await read()).usage, null);
+    assert.equal((await counting.confirm("panel", { operationId: preview.operationId, confirmed: true })).phase, "complete");
+    const settled = await counting.status("other-panel", ask);
+    assert.equal(settled.phase, "complete");
+    assert.equal((await read()).usage?.total, 11400);
+    assert.equal(Object.keys((await loadBoardState(app.context)).usageRecordCounts.operations).length, 1, "One receipt, no second confirm");
+});
+test("history compatibility: Check result never reports nothing was saved while a count is still being confirmed", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, read } = fixture;
+    let release, held = new Promise(resolve => { release = resolve; });
+    const counting = createUsageRecordCountController(app.context, { coordinateRecorder: async work => { await held; return work(); } });
+    held = Promise.resolve(); const preview = await counting.preview("panel");
+    held = new Promise(resolve => { release = resolve; });
+    const confirming = counting.confirm("panel", { operationId: preview.operationId, confirmed: true });
+    const pending = await counting.status("panel", { operationId: preview.operationId, receiptToken: preview.receiptToken });
+    assert.equal(pending.phase, "verification-incomplete", "A confirm in flight is not reported as unsaved");
+    assert.equal((await counting.status("other-panel", { operationId: preview.operationId, receiptToken: preview.receiptToken })).phase, "verification-incomplete");
+    await assert.rejects(counting.status("other-panel", { operationId: preview.operationId, receiptToken: "0".repeat(64) }), { status: 403 });
+    assert.equal((await read()).usage, null);
+    release();
+    assert.equal((await confirming).phase, "complete");
+    assert.equal((await counting.status("panel", { operationId: preview.operationId, receiptToken: preview.receiptToken })).phase, "complete");
+    assert.equal((await read()).usage?.total, 11400);
+});
+test("history compatibility: counting tokens in chats already read writes only the previewed totals, keeps one receipt and survives restart and the next append", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read } = fixture;
+    const before = await loadBoardState(app.context), evidence = structuredClone(before.evidence);
+    const preview = await counting.preview("panel");
+    assert.deepEqual(preview.counts, { interactions: 1, chats: 1, tokens: 11400, refused: 1 });
+    assert.deepEqual(preview.refusals, [{ reason: "no-records", count: 1 }]);
+    const unchanged = await loadBoardState(app.context);
+    assert.equal(unchanged.revision, before.revision, "Preview writes nothing");
+    assert.deepEqual(unchanged.evidence, evidence);
+
+    const receipt = await counting.confirm("panel", { operationId: preview.operationId, confirmed: true });
+    assert.deepEqual(receipt.counts, preview.counts);
+    assert.equal(receipt.phase, "complete");
+    const after = await loadBoardState(app.context);
+    assert.equal(after.revision, before.revision + 1);
+    for (const [n, record] of after.evidence.entries()) {
+        const { usageCalls, usageGap, ...rest } = record, { usageCalls: priorCalls, usageGap: priorGap, ...prior } = evidence[n];
+        assert.deepEqual(rest, prior, "Only token totals change");
+        if (record.userPrompt?.text !== fixture.text) assert.deepEqual([usageCalls, usageGap], [priorCalls, priorGap], "Records outside the preview are untouched");
+        else { assert.equal(usageGap, null); assert.ok(usageCalls.every(c => c.source === "copilot-usage-index")); }
+    }
+    const counted = await read();
+    assert.equal(counted.usage?.total, 11400);
+    assert.equal(counted.usageBasis, "copilot-usage-index");
+    const stored = after.evidence.find(r => r.userPrompt?.text === fixture.text).usageCalls;
+
+    assert.deepEqual(await counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), receipt, "A repeated confirmation reads the original receipt");
+    assert.equal((await loadBoardState(app.context)).revision, after.revision, "and writes nothing");
+    assert.deepEqual(await counting.status("another-panel", { operationId: preview.operationId, receiptToken: preview.receiptToken }), receipt);
+    await assert.rejects(counting.status("another-panel", { operationId: preview.operationId }), { status: 403 });
+    assert.equal((await counting.status("panel", { operationId: randomUUID() })).phase, "not-started");
+    assert.equal((await counting.preview("panel")).counts.interactions, 0, "A counted interaction is not offered again");
+
+    await fixture.restart();
+    await fixture.collector().collectNow();
+    assert.equal((await read()).usage?.total, 11400, "Restart keeps the total");
+    await appendFile(fixture.file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: fixture.after(100) }) + "\n");
+    await fixture.collector().collectNow();
+    assert.equal((await read()).usage?.total, 11400, "The next append keeps the total");
+    assert.deepEqual((await loadBoardState(app.context)).evidence.find(r => r.userPrompt?.text === fixture.text).usageCalls, stored,
+        "Ordinary collection qualifies the same calls once it reads the chat again");
+    await fixture.collector().configure({ ...fixture.settings, usageRecords: false, expectedConfigVersion: (await fixture.collector().status()).configVersion });
+    await fixture.restart();
+    await appendFile(fixture.file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: fixture.after(200) }) + "\n");
+    await fixture.collector().collectNow();
+    assert.equal((await read()).usage?.total, 11400, "Turning records off keeps the counted total");
+});
+test("history compatibility: counting tokens in chats already read refuses before writing when the records, history, approval or preview change", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting } = fixture;
+    const refusedWith = async (code, change) => {
+        const preview = await counting.preview("panel");
+        assert.equal(preview.counts.interactions, 1);
+        const revision = (await loadBoardState(app.context)).revision;
+        await change();
+        await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }),
+            error => error.code === code && error.status === 409 && /^Nothing was saved\./.test(error.message));
+        const state = await loadBoardState(app.context);
+        assert.ok(state.revision === revision || code === "USAGE_COUNT_UNAVAILABLE", "Nothing was saved");
+        assert.equal(state.usageRecordCounts, undefined);
+        assert.equal((await fixture.read()).usage, null);
+        assert.equal((await counting.status("panel", { operationId: preview.operationId })).phase, "not-started");
+    };
+    let row;
+    await refusedWith("USAGE_COUNT_CHANGED", () => { row = fixture.index.prepare("UPDATE assistant_usage_events SET output_tokens = 101 WHERE output_tokens = 100").run(); });
+    fixture.index.prepare("UPDATE assistant_usage_events SET output_tokens = 100 WHERE output_tokens = 101").run();
+    assert.equal(row.changes, 1);
+    await refusedWith("USAGE_COUNT_CHANGED", () => utimes(fixture.file, new Date(), new Date(Date.now() + 5000)));
+    let clock = Date.now();
+    const expiring = createUsageRecordCountController(app.context, { now: () => clock });
+    const preview = await expiring.preview("panel");
+    clock += 121000;
+    await assert.rejects(expiring.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_EXPIRED" });
+    await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_EXPIRED" },
+        "Another controller's preview is never confirmed");
+    await refusedWith("USAGE_COUNT_UNAVAILABLE", () => { app.db.prepare("UPDATE projects SET github_account_id='default'").run(); });
+    app.db.prepare("UPDATE projects SET github_account_id='workspace'").run();
+    await refusedWith("USAGE_COUNT_UNAVAILABLE", async () => {
+        await fixture.collector().configure({ ...fixture.settings, usageRecords: false, expectedConfigVersion: (await fixture.collector().status()).configVersion });
+    });
+    await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" }, "Records off hides the operation");
+    await fixture.collector().configure({ ...fixture.settings, enabled: false, usageRecords: true, expectedConfigVersion: (await fixture.collector().status()).configVersion });
+    await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" }, "Pause blocks the operation");
+});
+test("history compatibility: counting tokens checks the approval immediately before each chat's records are opened", async t => {
+    const { app, counting } = await readChatsWithoutTotals(t);
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync;
+    let opened = 0;
+    fsSync.statSync = (target, ...rest) => {
+        // The Copilot account changes right after the first chat's records are opened.
+        if (String(target).endsWith("session-store.db") && ++opened === 1) app.db.prepare("UPDATE projects SET github_account_id='default'").run();
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" });
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.equal(opened, 1, "The next chat's records are never opened under the replaced account");
+});
+test("history compatibility: a pasted image inside an exchange does not hide its exact receipts, but an unreadable entry still does", async t => {
+    for (const [kind, total] of [["session.binary_asset", 4400], ["assistant.message", null]]) {
+        const app = await installation(t), id = app.session(), start = call("image-fetch");
+        const messageId = "image-prompt", interactionId = "image-run", model = "gpt-4.1";
+        start.data.turnId = "turn-one";
+        const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId, inputTokens: 2000, outputTokens: 200 } });
+        const batch = [event("user.message", { messageId, interactionId, content: "Read the invented screenshot.", delivery: "idle" }),
+            event(kind, kind === "session.binary_asset" ? { mimeType: "image/png", data: "x".repeat(1100 * 1024) } : { content: "x".repeat(1100 * 1024) }),
+            event("assistant.message", { apiCallId: "img-one", turnId: "turn-one", model, originatingMessageId: messageId, toolRequests: [{ toolCallId: "image-fetch" }] }), start,
+            event("tool.execution_complete", { toolCallId: "image-fetch", success: true, result: { content: "INVENTED" } }), receipt("img-one"),
+            event("assistant.turn_start", { turnId: "turn-two" }),
+            event("assistant.message", { apiCallId: "img-two", turnId: "turn-two", model, originatingMessageId: messageId, phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+            receipt("img-two"), event("assistant.turn_end", { turnId: "turn-two" })];
+        const base = Date.now() - 20000;
+        batch.forEach((e, n) => { e.timestamp = new Date(base + n * 100).toISOString(); });
+        await logFor(app, id, batch);
+        const collector = await createCollector(app.context, { timers: false });
+        app.cleanup.push(() => collector.close());
+        await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+        await collector.collectNow();
+        const record = (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+        assert.equal(record.usage?.total ?? null, total, kind);
+        if (total === null) assert.equal(record.usageGap, "history-gap");
+    }
+});
+test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {
+    const app = await installation(t), id = app.session(), start = call("metered-fetch");
+    const model = "claude-sonnet-5-5", messageId = "metered-prompt", interactionId = "interaction-one";
+    const message = (apiCallId, turnId, fields) => event("assistant.message", { apiCallId, turnId,
+        model, originatingMessageId: messageId, ...fields });
+    const receipt = (n, apiCallId) => event("session.usage_record", { usage: { apiCallId, model, interactionId,
+        accounting: { sequence: n, sourceSessionId: id, usageId: `usage-${n}` },
+        inputTokens: 16000, cacheReadTokens: 10000, cacheWriteTokens: 1000, outputTokens: 1000 } });
+    start.data.turnId = "turn-one";
+    const opaque = "A/+".repeat(166) + "==";
+    const r1 = receipt(1, "api-one"), r2 = receipt(2, opaque);
+    r1.data.usage.initiator = "user";
+    r1.data.usage.interactionType = "conversation-user";
+    r2.data.usage.initiator = "agent";
+    r2.data.usage.interactionType = "conversation-agent";
+    r2.data.usage.accounting = { usageId: opaque };
+    delete r2.data.usage.interactionId;
+    const batch = [event("user.message", { messageId, interactionId, content: "Read the invented schedule." }),
+        message("api-one", "turn-one", { toolRequests: [{ toolCallId: "metered-fetch" }] }), start,
+        event("tool.execution_complete", { toolCallId: "metered-fetch", success: true, result: { content: "INVENTED_RETURN_TEXT" } }), r1,
+        event("assistant.turn_start", { turnId: "turn-two" }),
+        message(opaque, "turn-two", { phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: "turn-two" }), event("session.usage_checkpoint", { totalTokens: 900000 })];
+    const base = Date.now() - 20000;
+    batch.forEach((e, index) => { e.timestamp = new Date(base + index * 100).toISOString(); });
+    const file = await logFor(app, id, batch);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    assert.equal((await read()).usage, null);
+    await collector.close(); collector = await createCollector(app.context, { timers: false });
+    await appendFile(file, [r2, { ...r2, id: randomUUID() }].map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const record = await read();
+    assert.equal(record.usage?.total, 34000);
+    assert.equal(JSON.stringify(await loadBoardState(app.context)).includes(opaque),false);
+    assert.equal(JSON.stringify(record).includes(opaque),false);
+    assert.deepEqual(record.usage.tokens, { freshInput: 10000, cacheRead: 20000, cacheWrite: 2000, output: 2000 });
+    assert.equal(record.usage.steps.length, 2);
+    assert.equal(record.toolCalls[0].returnedTextBytes, 20);
+    assert.doesNotMatch(JSON.stringify(record), /INVENTED_RETURN_TEXT|api-one|api-two/);
+    const additional = receipt(3, "without-message-chunk");
+    delete additional.data.usage.cacheReadTokens;
+    await appendFile(file, JSON.stringify(additional) + "\n");
+    await collector.collectNow();
+    const partialCache = (await read()).usage;
+    assert.equal(partialCache.total, 51000, "A directly linked receipt does not need a separate message chunk.");
+    assert.equal(partialCache.tokens.cacheRead, null); assert.equal(partialCache.tokens.freshInput, null);
+    assert.equal(partialCache.tokens.output, 3000);
+    assert.equal(partialCache.steps.at(-1).tokens.input, 16000);
+    await appendFile(file, JSON.stringify({ ...r1, id: randomUUID(), data: { usage: { ...r1.data.usage, outputTokens: 1500 } } }) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage, null);
+    assert.equal((await read()).usageGap, "conflicting-receipt");
+});
 const managedCall = id => {
     const start = call(id);
     return { ...start, data: { ...start.data, toolName: "cc-invented-connector-fetch",
@@ -536,6 +1209,31 @@ test("backfill preserves the same credential-excluded prompt boundary as live-ta
         assert.equal(record.userPrompt.capture.reason, "credential-excluded");
         assert.doesNotMatch(JSON.stringify(state.evidence), /ghp_|Invented excluded current request/);
     }
+});
+
+test("an unrelated append after checkpoint compaction preserves a completed interaction's model history", async t => {
+    const app = await installation(t), id = app.session();
+    const at = Date.now() - 10000;
+    const write = (e, ms) => ({ ...e, timestamp: new Date(at + ms).toISOString() });
+    const p = write(event("user.message", { content: "Review the harbor notes.", messageId: "first" }), 0);
+    const response = write(event("assistant.message", { model: "Alder", originatingMessageId: "first", phase: "final_answer",
+        content: "Harbor notes reviewed.", turnId: "first-turn", apiCallId: "first-request" }), 20);
+    const file = await logFor(app, id, [p, write(call(), 10), response, write(event("assistant.turn_end", { turnId: "first-turn" }), 30)]);
+    let collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const [original] = (await loadBoardState(app.context)).evidence;
+    assert.equal(original.originalModelEvidence.partial, false);
+    const append = events => appendFile(file, events.map(e => JSON.stringify(e) + "\n").join(""));
+    await append([write(event("user.message", { content: "A different request.", messageId: "second" }), 40),
+        ...Array.from({ length: 320 }, (_, i) => write(event("assistant.turn_start", { turnId: `later-${i}` }), 50 + i))]);
+    await collector.collectNow(); await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await append([write(event("assistant.turn_end", { turnId: "later-319" }), 400)]);
+    await collector.collectNow();
+    const [retained] = (await loadBoardState(app.context)).evidence;
+    assert.deepEqual(retained.responseTiming, original.responseTiming);
+    assert.deepEqual(retained.originalModelEvidence, original.originalModelEvidence);
 });
 
 test("original model metadata survives collection, context eviction and restart without capturing replies", async t => {

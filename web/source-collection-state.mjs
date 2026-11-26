@@ -139,7 +139,9 @@ export function createSourceCollectionState({ bootstrap, collectionStatus, creat
                     && input.expectedConfigVersion === latest.github.status.configVersion
                     && latest.github.actions.includes("set-interval");
             } else if (endpoint === "/api/collection/configure") {
-                valid = exact(input, ["appDbPath", "sessionRoot", "approved", "enabled", "windowDays", "pollSeconds", "expectedConfigVersion"])
+                const records = Boolean(input) && Object.hasOwn(input, "usageRecords");
+                valid = exact(input, ["appDbPath", "sessionRoot", "approved", "enabled", "windowDays", "pollSeconds", ...(records ? ["usageRecords"] : []), "expectedConfigVersion"])
+                    && (!records || typeof input.usageRecords === "boolean")
                     && input.expectedConfigVersion === latest.github.status.configVersion
                     && input.approved === true && typeof input.enabled === "boolean"
                     && typeof input.appDbPath === "string" && typeof input.sessionRoot === "string"

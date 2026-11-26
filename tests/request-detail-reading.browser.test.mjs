@@ -419,7 +419,7 @@ test("normal request page leads with readable content and explicit, scoped reade
         const owner = section(page, "prompt"), copy = owner.getByRole("button", { name: "Copy prompt", exact: true });
         assert.equal((await copy.textContent()).trim(), "");
         await expect(copy.locator('svg[aria-hidden="true"]')).toHaveCount(1);
-        await expect(owner.locator(".reader-section-toggle")).toHaveCount(0);
+        await expect(owner.locator("h2 > .reader-section-toggle")).toHaveAttribute("aria-expanded", "true");
         await expect(prompt.locator(".full-text-toggle")).toHaveCount(0);
         assert.ok(await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-intro")) & Node.DOCUMENT_POSITION_FOLLOWING)));
         await expect(page.locator(".interaction-insights,[data-reader-section=reviews]")).toHaveCount(0);
@@ -601,9 +601,10 @@ test("normal response reader opens retained text immediately with explicit Retry
     await owner.locator(".reader-section-toggle").press("Enter");
     assert.equal(await owner.locator(".full-text-content,.ux-copy").count(), 0);
     await owner.locator(".reader-section-toggle").press("Space");
+    await read.click();
     await expect(host.locator(".full-text-content")).toHaveText(responseText);
     assert.equal(await host.locator(".full-text-content").textContent(), responseText);
-    assert.equal(evidenceReads(), reads + 1, "Reopening makes exactly one authorized already-retained evidence read, never a source/provider operation");
+    assert.equal(evidenceReads(), reads + 1, "Read response makes exactly one authorized retained-evidence read");
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), "Find the synthetic planning note.");
     for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
         await page.locator("#closeContextSidebar").click();

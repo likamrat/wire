@@ -1,5 +1,8 @@
 # Contributing to WIRE
 
+**Contents:** [Report a problem](#report-a-problem-or-propose-a-change) ·
+[Make a change](#make-a-change) · [Keep examples safe](#keep-examples-safe)
+
 Bug reports, documentation corrections and focused code changes are welcome.
 For suspected vulnerabilities, use [Security](SECURITY.md) instead of a public issue.
 
@@ -26,7 +29,8 @@ Contributions do not require an AI tool.
 3. Add regression coverage for changed behavior and run the
    [appropriate checks](docs/development.md#check-a-change). Update affected
    instructions and screenshots in the same change, using the shipped behavior
-   and invented data.
+   and invented data. For a guide change, [open the edited page and its images
+   in WIRE](docs/development.md#preview-documentation-changes) before review.
 4. Open a pull request explaining the problem, the change and how you checked it.
    Include known limitations or failing checks.
 

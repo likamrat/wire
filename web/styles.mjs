@@ -11,6 +11,7 @@ import { reportJourneyStyles } from "./report-journey-styles.mjs";
 import { settingsStyles } from "./settings-styles.mjs";
 import { periodFlowStyles } from "./period-flow-styles.mjs";
 import { textAccessStyles } from "./text-access-styles.mjs";
+import { messageMarkdownStyles } from "./message-markdown.mjs";
 import { semanticCueStyles } from "./semantic-cue-styles.mjs";
 import { percentageChartStyles } from "./percentage-charts-styles.mjs";
 import { contextualActionStyles } from "./contextual-action-styles.mjs";
@@ -599,8 +600,13 @@ ${reportJourneyStyles}
 #activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr) auto;align-items:center}
 @media(max-width:760px){#activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr)}.card-visibility-actions{grid-column:1;grid-row:auto;justify-self:start}}
 .hidden-cards-dialog{width:min(30rem,calc(100% - 24px))}
-.hidden-card-row{justify-content:space-between;border-top:1px solid var(--rule);padding-block:var(--space-sm)}
-.hidden-card-row small{display:block;font:var(--type-small)/var(--leading-ui) var(--font)}
+.hidden-cards-dialog .dialog-body{padding-block:var(--space-sm)}
+.hidden-card-list{list-style:none;margin:0;padding:0}
+.hidden-card-row{padding-block:var(--space-xs)}
+.hidden-card-row>button{margin-inline-start:auto}
+.hidden-card-row time{display:block;font:var(--type-small)/var(--leading-ui) var(--font)}
+.hidden-card-row+.hidden-card-row,.hidden-card-actions{border-block-start:1px solid var(--rule)}
+.hidden-cards-dialog .hidden-card-actions{display:flex;justify-content:flex-end;margin:0;padding-block-start:var(--space-xs)}
 .hidden-report-card{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-lg);color:var(--muted)}
 #reportStage3[data-cards-covered]{display:none!important}
 #activityList .card-reading-actions>.report-draft-trigger::before{content:"";display:block;position:absolute;inset:calc((100% - 2em)/2) 0;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--report-action-face);border:1px solid var(--report-action-edge)}
@@ -645,6 +651,7 @@ ${reportJourneyStyles}
 ${settingsStyles}
 ${periodFlowStyles}
 ${textAccessStyles}
+${messageMarkdownStyles}
 ${percentageChartStyles}
 ${contextualActionStyles}
 ${homeResultFilterStyles}
@@ -758,11 +765,11 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 :is([data-result-layer=tool] .result-tone-failure,.wire-search-outcome[data-result-layer=tool].result-tone-failure) {--cue-color:var(--tool-negative)}
 :is([data-result-layer=reported-api] .result-tone-failure,.wire-search-outcome[data-result-layer=reported-api].result-tone-failure) {--cue-color:var(--screen-returned-issue)}
 #homeView[data-result-layer=tool],#percentageCharts[data-layer=tool] {
- --chart-teal-label:var(--tool-positive);--chart-teal-top:var(--tool-positive);--chart-teal-mid:var(--tool-positive);--chart-teal-base:var(--tool-positive);--chart-teal-side:var(--tool-positive);--chart-teal-cap:var(--tool-positive);
- --chart-pink-label:var(--tool-negative);--chart-pink-top:var(--tool-negative);--chart-pink-mid:var(--tool-negative);--chart-pink-base:var(--tool-negative);--chart-pink-side:var(--tool-negative);--chart-pink-cap:var(--tool-negative);
+ --chart-teal-label:var(--tool-positive);--chart-teal-top:var(--tool-positive-mark);--chart-teal-mid:var(--tool-positive-mark);--chart-teal-base:var(--tool-positive-mark);--chart-teal-side:var(--tool-positive-mark);--chart-teal-cap:var(--tool-positive-mark);
+ --chart-pink-label:var(--tool-negative);--chart-pink-top:var(--tool-negative-mark);--chart-pink-mid:var(--tool-negative-mark);--chart-pink-base:var(--tool-negative-mark);--chart-pink-side:var(--tool-negative-mark);--chart-pink-cap:var(--tool-negative-mark);
 }
 #homeView[data-result-layer=reported-api],#percentageCharts[data-layer=reported-api] {
- --chart-pink-label:var(--screen-returned-issue);--chart-pink-top:var(--screen-returned-issue);--chart-pink-mid:var(--screen-returned-issue);--chart-pink-base:var(--screen-returned-issue);--chart-pink-side:var(--screen-returned-issue);--chart-pink-cap:var(--screen-returned-issue);
+ --chart-pink-label:var(--screen-returned-issue);--chart-pink-top:var(--outcome-returned-mark);--chart-pink-mid:var(--outcome-returned-mark);--chart-pink-base:var(--outcome-returned-mark);--chart-pink-side:var(--outcome-returned-mark);--chart-pink-cap:var(--outcome-returned-mark);
 }
 #requestContent .reader-call-summary>.wire-icon {inline-size:1em;block-size:1em;vertical-align:-.13em}
 .card-metadata [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
@@ -802,6 +809,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}
 .card-identities .service-cue>.wire-icon {align-self:flex-start;margin-block-start:.15em}
 :is(.card-reading-details,.tool-call-heading) {--call-key-width:4.5rem;--call-key-gap:var(--space-sm)}
+.card-reading-details:has(.usage-chip) {--call-key-width:5.75rem}
 :is(.card-reading-details,.reader-call-services) .card-identity-field {grid-template-columns:var(--call-key-width) minmax(0,1fr);gap:var(--call-key-gap)}
 .card-reading-details .card-identity-field+.card-identity-field {margin-top:6px}
 :is(.card-reading-details,.reader-call-services) .card-targets .card-identity-values {flex-flow:column nowrap;align-items:flex-start;gap:2px}

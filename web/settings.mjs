@@ -33,6 +33,8 @@ export const settingsMarkup = `
     <h2 id="generalTitle" tabindex="-1">General</h2>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
+      <a id="availableReleaseNotes" hidden>What's new in this update</a>
+      <a id="installedReleaseNotes" hidden>Installed release notes</a>
       </div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled><span class="check-action-label">Check for updates</span><span class="check-action-pending" hidden><span class="update-spinner" aria-hidden="true"></span>Checking</span></button>
         <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
@@ -56,6 +58,14 @@ export const settingsMarkup = `
       <span class="preference-destination">Regional ${uxIcons.disclosure}</span>
     </a>
   </section>
+  <article class="settings-section release-reader" data-settings-section="release-notes" aria-labelledby="releaseNotesHeading" hidden>
+    <a class="release-back" href="/settings" data-settings-link>${uxIcons.back} General</a>
+    <header><img src="/favicon.svg" width="32" height="32" alt=""><h2 id="releaseNotesHeading" tabindex="-1">What's new in WIRE</h2></header>
+    <div class="release-meta"><strong id="releaseReaderVersion"></strong><span id="releaseReaderStatus" role="status"></span>
+      <a id="releaseReaderGitHub" target="_blank" rel="noopener noreferrer" hidden>View on GitHub ${uxIcons["doc-external"]}</a></div>
+    <div id="releaseNotesBody"></div>
+    <button type="button" class="primary app-update-action" id="releaseReaderApply" hidden>Update and restart</button>
+  </article>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
     <p class="settings-intro">Review what WIRE keeps on this device and what you can remove.</p>
@@ -106,9 +116,13 @@ export const settingsMarkup = `
       </div>
       <div id="approvedSourceDetails" class="source-paths-read" hidden>
         <h4 id="approvedSourceTitle" tabindex="-1">Approved source paths</h4>
-        <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd></dl>
+        <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd><dt>Token records</dt><dd id="approvedUsageRecords"></dd></dl>
       </div>
       <div id="sourceEditAction" class="settings-actions" hidden><button id="editSource" type="button">Review source</button></div>
+      <div id="usageCountRow" class="settings-task-row" hidden><div class="settings-row-copy"><h3>Count tokens in chats already read</h3>
+        <p id="usageCountHelp" class="settings-help">Check which saved interactions Copilot's records can count. Nothing changes until you confirm.</p>
+        <p id="usageCountNotice" class="settings-help" role="status" hidden></p></div>
+        <button id="countUsageRecords" type="button" aria-describedby="usageCountHelp usageCountNotice">Check chats</button></div>
       <div id="sourceEditor" class="source-editor" hidden>
         <h4 id="sourceEditorTitle" class="visually-hidden">Review this source</h4>
         <p id="sourceChangeImpact" class="settings-help" role="status"></p>
@@ -118,6 +132,11 @@ export const settingsMarkup = `
         <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         </div>
+        <div class="settings-task-row" id="sourceUsageRecordsRow"><div class="settings-row-copy"><h3><label for="sourceUsageRecords">Read Copilot's token records</label></h3>
+          <p id="sourceUsageRecordsHelp" class="settings-help">Counts tokens for older chats whose logs don't record them. WIRE reads each call's model, token counts, time and sub-agent marker. It reads the prompt text only to match calls to prompts and doesn't save it. Chats already read count when they next change, or when you count them from Source access. Turning this off stops the reads; counted totals stay.</p>
+          <p id="sourceUsageRecordsFile" class="settings-help"></p></div>
+          <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsFile approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+        </div>
         <div id="sourcePreferenceSlot"></div>
         <p id="approvalScope"></p>
         <div id="sourceDraftStatusSlot"></div>
@@ -126,6 +145,16 @@ export const settingsMarkup = `
       </div>
       </section>
       <p id="registeredSourceNotice" hidden>Local Copilot source paths are not available in this runtime. <a href="/settings" data-settings-link>Open collection</a></p>
+      <dialog id="usageCountDialog" class="deletion-dialog decision-frame" aria-labelledby="usageCountTitle" aria-describedby="usageCountBoundary">
+        <div class="delete-heading"><span id="usageCountIcon" class="delete-warning-icon" aria-hidden="true"></span><h2 id="usageCountTitle">Count tokens in chats already read</h2></div>
+        <div class="decision-body">
+          <p id="usageCountBoundary">WIRE checks saved interactions that have no token total against Copilot's token records for the same chats. Checking doesn't save anything.</p>
+          <section id="usageCountPreviewResult" hidden><h3 id="usageCountSummary"></h3><p id="usageCountRefused"></p><ul id="usageCountReasons"></ul>
+            <p id="usageCountKept" class="settings-help">Confirming adds these totals only. Totals already counted, prompts, replies, saved reports and Copilot's files stay as they are. The check expires after two minutes.</p></section>
+          <p id="usageCountStatus" class="decision-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+        </div>
+        <div class="delete-actions"><button id="usageCountClose" type="button">Cancel</button><button id="usageCountRetry" type="button" data-decision-action="check" hidden>Check again</button><button id="usageCountCheck" type="button" data-decision-action="check" hidden>Check result</button><button id="usageCountConfirm" type="button" data-decision-action="commit" hidden>Count tokens</button></div>
+      </dialog>
     </section>
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
       <h2 id="connectionTitle" tabindex="-1">Collection</h2>
@@ -153,7 +182,7 @@ export const settingsMarkup = `
       <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
-  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "guideStart", "cardHideDuration"])}
+  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "analyzeSort", "guideStart", "cardHideDuration"])}
   ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
   ${pageSettings("reports", "Reports", "Set defaults for new reports. Existing drafts and saved files stay as they are.", ["reportFormats", "reportPeriod"])}
   ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}
@@ -283,12 +312,15 @@ export function mountDisplayTimeSettings({ time, onChange }) {
 }
 
 // Serialized into the local shell. Polls update status, never the in-progress form.
-export function mountCollectionSettings({ api, ux, write, read, invalidate, onDraftChange, collectionStatus, createNativeConfigurationState, sourceCollection }) {
+export function mountCollectionSettings({ api, ux, write, read, invalidate, onDraftChange, collectionStatus, createNativeConfigurationState, sourceCollection, onCommitted }) {
     if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
         throw new TypeError("Collection Settings requires the shared publication interface.");
     }
     const $ = id => document.getElementById(id);
-    const fields = ["sourceDatabase", "sourceSessions", "collectionWindow", "collectionCadence"];
+    // An approval to read token records holds only while the collector says it still names this file and account.
+    const grantedRecords = status => status?.config?.usageRecords === true && status.usageRecords !== "approval-changed";
+    const usageRecordsFile = database => database.replace(/[^\\/]*$/, "session-store.db");
+    const fields = ["sourceDatabase", "sourceSessions", "sourceUsageRecords", "collectionWindow", "collectionCadence"];
     const nativeConfiguration = typeof createNativeConfigurationState === "function" ? createNativeConfigurationState() : null;
     const nativeView = () => nativeConfiguration?.view(api.accessState?.().state);
     const sourceView = () => sourceCollection?.controlsActive ? sourceCollection.view(api.accessState()) : null;
@@ -317,11 +349,13 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function version(status) { return native(status)?.revision ?? status?.configVersion ?? JSON.stringify(status?.config ?? null); }
     function values() {
         return { appDbPath: $("sourceDatabase").value.trim(), sessionRoot: $("sourceSessions").value.trim(),
+            usageRecords: $("sourceUsageRecords").checked,
             windowDays: Number($("collectionWindow").value), pollSeconds: Number($("collectionCadence").value) };
     }
     function sourceValues(status) {
         const source = status?.config || status?.suggestedSource;
         return { appDbPath: source?.appDbPath || "", sessionRoot: source?.sessionRoot || "",
+            usageRecords: grantedRecords(status),
             windowDays: source?.windowDays ?? 30, pollSeconds: source?.pollSeconds ?? 5 };
     }
     function dirty() { return initialized && (native() ? Boolean(nativeView()?.dirty)
@@ -383,6 +417,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         windowOptions(false);
         const next = sourceValues(latest);
         for (const [id, key] of [["sourceDatabase", "appDbPath"], ["sourceSessions", "sessionRoot"], ["collectionWindow", "windowDays"], ["collectionCadence", "pollSeconds"]]) $(id).value = String(next[key]);
+        $("sourceUsageRecords").checked = next.usageRecords;
         $("sourceDatabase").classList.remove("settings-target");
         initialized = true; editing = false; stale = false;
     }
@@ -401,7 +436,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("approvedConnection").hidden = false;
         $("pauseCollection").hidden = false;
         for (const id of fields.concat(["collectNow", "editSource", "reviewSource", "connectCollection", "saveCollection", "cancelPreferences", "cancelSource"])) $(id).disabled = true;
-        for (const id of ["approvedDatabase", "approvedSessions", "sourceChangeImpact",
+        for (const id of ["approvedDatabase", "approvedSessions", "approvedUsageRecords", "sourceChangeImpact",
             "sourceSuggestion", "approvalScope", "settingsDraftStatus"]) setText(id, "");
         setText("connectionSourceTitle", "Microsoft 365 activity");
         $("connectionSource").hidden = true;
@@ -499,6 +534,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         const sources = sourceView();
         if (sources && !sources.current && initialized) readError ||= "Collection settings could not be read.";
         const control = native();
+        paintCount();
         if (control) { paintNative(control); return; }
         $("nativeCollectionSourceField").hidden = true;
         $("nativeCollectionSurfaces").disabled = true;
@@ -513,7 +549,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("connectionSourceHelp", "");
         $("connectionSourceHelp").hidden = true;
         const inspectingSource = visibleSection === "source-access";
-        const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot]) !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot]);
+        const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot, values().usageRecords])
+            !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot, grantedRecords(baseline)]);
+        const recordsOnly = approved && sourceChanged && values().appDbPath === baseline?.config?.appDbPath && values().sessionRoot === baseline?.config?.sessionRoot;
         $("approvedConnection").hidden = !approved;
         $("unapprovedConnection").hidden = approved || editing;
         $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
@@ -547,6 +585,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("settingsConnectionError").hidden = !readError || !inConfiguration();
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
+        setText("approvedUsageRecords", latest?.config?.approved !== true ? "" : grantedRecords(latest) ? latest.config.usageRecordsGrant?.file ?? ""
+            : latest.usageRecords === "approval-changed" ? "Not read. The Copilot account or path changed; review the source to approve again." : "Not read");
+        setText("sourceUsageRecordsFile", values().appDbPath ? `Reads ${usageRecordsFile(values().appDbPath)}` : "");
         setText("sourceEditorTitle", approved ? "Change source paths" : guidedReview ? "Review local history" : "Review this source");
         $("sourceEditorTitle").classList.toggle("visually-hidden", !guidedReview);
         setText("sourceChangeImpact", approved
@@ -559,9 +600,10 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("sourceSuggestion", !approved && latest?.suggestedSource?.error ? latest.suggestedSource.error : "");
         $("sourceSuggestion").hidden = !$("sourceSuggestion").textContent;
         setText("approvalScope", approved && !sourceChanged ? ""
-            : "Read these paths and save original prompts on this device." + (!approved ? " Copilot replies stay off." : "") + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
+            : "Read these paths" + (values().usageRecords ? ", including Copilot's token records," : "") + " and save original prompts on this device." + (!approved ? " Copilot replies stay off." : "") + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
         $("approvalScope").hidden = !$("approvalScope").textContent;
-        setText("connectCollection", approved ? sourceChanged ? "Approve and switch source" : "Save preferences" : "Approve source and start collection");
+        setText("connectCollection", approved ? sourceChanged ? recordsOnly ? values().usageRecords ? "Approve token records" : "Stop reading token records"
+            : "Approve and switch source" : "Save preferences" : "Approve source and start collection");
         $("connectCollection").dataset.intent = approved && !sourceChanged ? "save-preferences" : "approve-source";
         setText("pauseCollection", latest?.config?.enabled ? "Pause collection" : "Resume collection");
         for (const id of fields) $(id).disabled = working || !initialized;
@@ -747,16 +789,22 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             return;
         }
         const next = values();
-        const sourceApproval = reviewingSource && (baseline?.config?.approved !== true
-            || next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot);
-        if (!sourceApproval && (next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot)) {
+        const sourceDiffers = next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot
+            || next.usageRecords !== grantedRecords(baseline);
+        const sourceApproval = reviewingSource && (baseline?.config?.approved !== true || sourceDiffers);
+        if (!sourceApproval && sourceDiffers) {
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
         }
         const firstApproval = baseline.config?.approved !== true;
-        act("/api/collection/configure", { ...next, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
+        const recordsOnly = !firstApproval && next.appDbPath === baseline.config.appDbPath && next.sessionRoot === baseline.config.sessionRoot;
+        // Token records are sent only when someone changes the switch: an ordinary save leaves their approval to the collector.
+        const { usageRecords, ...paths } = next;
+        const records = usageRecords !== grantedRecords(baseline) ? { usageRecords } : {};
+        act("/api/collection/configure", { ...paths, ...records, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
             firstApprovalConfirmed = firstApproval;
             reviewReturn = null;
-            return sourceApproval ? "Source approved." : "Preferences saved.";
+            return !sourceApproval ? "Preferences saved." : !recordsOnly ? "Source approved."
+                : usageRecords ? "Token records approved." : "Token records turned off.";
         });
     }
     $("collectionForm").addEventListener("submit", event => event.preventDefault());
@@ -766,6 +814,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             nativeConfiguration.edit({ surfaces: $("nativeCollectionSurfaces").value.split(",").filter(Boolean),
                 windowDays: Number($("collectionWindow").value) });
         }
+        // Token records are approved for one database location; a changed path asks again.
+        if (["sourceDatabase", "sourceSessions"].includes(id) && $("sourceUsageRecords").checked
+            && (values().appDbPath !== baseline?.config?.appDbPath || values().sessionRoot !== baseline?.config?.sessionRoot)) $("sourceUsageRecords").checked = false;
         message(""); paint();
     });
     function openSourceReview({ onCancel } = {}) {
@@ -856,7 +907,216 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             if (current(stamp)) paint();
         }
     });
+    // Count tokens in chats already read: a read-only check, then a separate confirmation of exactly what it found.
+    // Helpers stay inside this function because the standalone Settings page serializes only its body.
+    const countKey = "workiq-evidence.usage-count-operation", countDialog = $("usageCountDialog");
+    const countReasons = {
+        "no-records": "Copilot has no token records for the chat", "prompt-not-matched": "The prompt doesn't match Copilot's records",
+        "calls-outside-rounds": "Calls fall outside the chat's model rounds", "no-calls": "No calls are recorded for the prompt",
+        "exchange-open": "The exchange is still open", "too-large": "The chat or its records are too large to read",
+        "chat-unavailable": "The chat is no longer available", "chat-changed": "The chat changed while WIRE was checking",
+        "records-unreadable": "Copilot's records couldn't be read", "journal-receipts": "The chat's log has its own counts; they're added when the chat next changes",
+        "over-limit": "Beyond the 128 chats one check can read",
+    };
+    const count = { phase: "closed", preview: null, receipt: null, result: null, busy: false, timer: null, trigger: null, epoch: 0, suppressClose: false };
+    const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+    function countAvailable() {
+        const sources = sourceView();
+        return !withdrawn && !native() && latest?.config?.approved === true && latest.config.enabled === true && latest.usageRecords === "on"
+            && latest.recollection?.available === true && !(sourceCollection?.copilotOnly && sources?.status?.global.paused === true);
+    }
+    function storedCount() {
+        try {
+            const value = JSON.parse(sessionStorage.getItem(countKey) ?? "null");
+            return value && /^[a-f0-9-]{36}$/.test(value.operationId) && /^[a-f0-9]{64}$/.test(value.receiptToken) ? value : null;
+        } catch { return null; }
+    }
+    function forgetCount() { try { sessionStorage.removeItem(countKey); } catch { /* the receipt check stays offered */ } count.receipt = null; }
+    function countStatus(text, error = false) {
+        setText("usageCountStatus", text);
+        $("usageCountStatus").classList.toggle("error", error);
+    }
+    function dropCountPreview() {
+        clearTimeout(count.timer);
+        const operationId = count.preview?.operationId;
+        count.preview = null;
+        if (operationId && !withdrawn) api("/api/usage-records/cancel", { operationId }).catch(() => {});
+    }
+    function renderCount() {
+        const { phase, preview, busy: working } = count, counts = preview?.counts;
+        setText("usageCountTitle", phase === "checking" ? "Checking chats..."
+            : phase === "preview" ? `Count tokens for ${plural(counts.interactions, "interaction")}?`
+            : phase === "empty" ? "No interactions can be counted" : phase === "pending" ? "Counting tokens..."
+            : phase === "complete" ? "Tokens counted" : phase === "uncertain" ? working ? "Checking the result..." : "Result not yet confirmed"
+            : phase === "not-saved" ? "Nothing was saved" : "Count tokens in chats already read");
+        countDialog.dataset.decisionPhase = phase === "preview" ? "confirm" : phase === "uncertain" ? working ? "checking" : "unknown"
+            : ["pending", "complete"].includes(phase) ? phase : ["not-saved", "error"].includes(phase) ? "error" : "";
+        $("usageCountBoundary").hidden = !["checking", "error"].includes(phase);
+        $("usageCountPreviewResult").hidden = !counts || !["preview", "empty", "pending"].includes(phase);
+        setText("usageCountSummary", !counts ? "" : counts.interactions
+            ? `${plural(counts.interactions, "interaction")} in ${plural(counts.chats, "chat")} can be counted · ${plural(counts.tokens, "token")}`
+            : counts.refused ? "None of the interactions without a total in the approved chats and history window can be counted"
+                : "No interaction without a total was found in the approved chats and history window");
+        setText("usageCountRefused", counts?.refused ? `${counts.refused.toLocaleString()} can't be counted` : "");
+        $("usageCountRefused").hidden = !counts?.refused;
+        const reasons = (counts?.refused ? preview.refusals : []).map(({ reason, count: n }) => {
+            const item = document.createElement("li"); item.textContent = `${countReasons[reason] ?? "Not counted"} · ${n.toLocaleString()}`; return item;
+        });
+        $("usageCountReasons").replaceChildren(...reasons);
+        $("usageCountReasons").hidden = !reasons.length;
+        $("usageCountKept").hidden = !counts?.interactions;
+        $("usageCountConfirm").hidden = !["preview", "pending"].includes(phase);
+        $("usageCountConfirm").disabled = phase !== "preview" || working;
+        setText("usageCountConfirm", counts?.interactions ? `Count ${plural(counts.interactions, "interaction")}` : "Count tokens");
+        $("usageCountRetry").hidden = !["error", "not-saved"].includes(phase);
+        $("usageCountRetry").disabled = working || !countAvailable();
+        $("usageCountCheck").hidden = phase !== "uncertain";
+        $("usageCountCheck").disabled = working;
+        $("usageCountClose").disabled = phase === "pending";
+        setText("usageCountClose", ["checking", "preview", "pending"].includes(phase) ? "Cancel" : "Close");
+        ux.pending($("usageCountConfirm"), phase === "pending");
+        ux.pending($("usageCountCheck"), working && phase === "uncertain");
+        const icon = phase === "complete" ? "check" : phase === "uncertain" && !working ? "unobserved" : working || phase === "pending" ? "pending" : "activity";
+        if ($("usageCountIcon").dataset.icon !== icon) { $("usageCountIcon").replaceChildren(ux.icon(icon)); $("usageCountIcon").dataset.icon = icon; }
+        $("usageCountIcon").firstElementChild?.classList.toggle("pending-indicator", working || phase === "pending");
+    }
+    function paintCount() {
+        const available = countAvailable(), pending = storedCount() ?? count.receipt;
+        $("usageCountRow").hidden = withdrawn || editing || visibleSection !== "source-access" || latest?.config?.approved !== true || !(available || pending);
+        $("countUsageRecords").disabled = count.busy || busy;
+        setText("countUsageRecords", pending ? "Check result" : "Check chats");
+        const notice = pending ? "A count's result wasn't confirmed. Check it before counting again."
+            : count.result ? `Last count: ${plural(count.result.counts.interactions, "interaction")} · ${plural(count.result.counts.tokens, "token")}.` : "";
+        setText("usageCountNotice", notice);
+        $("usageCountNotice").hidden = !notice;
+        // Turning records off, a lapsed approval or Pause retires an open check before anything is saved.
+        if (countDialog.open && !available && ["checking", "preview", "empty"].includes(count.phase)) {
+            count.epoch++; count.busy = false; dropCountPreview(); count.phase = "error";
+            countStatus("Copilot's token records are off, paused or need a new approval. Nothing was saved.", true);
+        }
+        if (countDialog.open) renderCount();
+    }
+    async function previewCount() {
+        const stamp = capture(), epoch = ++count.epoch;
+        dropCountPreview();
+        count.phase = "checking"; count.busy = true; countStatus(""); renderCount();
+        try {
+            const preview = await api("/api/usage-records/preview", {});
+            if (!current(stamp) || epoch !== count.epoch || !countDialog.open) {
+                if (preview?.operationId && current(stamp)) api("/api/usage-records/cancel", { operationId: preview.operationId }).catch(() => {});
+                return;
+            }
+            count.preview = preview;
+            count.phase = preview.operationId ? "preview" : "empty";
+            if (preview.operationId) count.timer = setTimeout(() => {
+                if (count.phase !== "preview" || count.preview !== preview || !current(stamp)) return;
+                dropCountPreview(); count.phase = "error";
+                countStatus("The check expired. Nothing was saved. Check again.", true); renderCount();
+            }, Math.max(0, Date.parse(preview.expiresAt) - Date.now()));
+        } catch (error) {
+            if (!current(stamp) || epoch !== count.epoch) return;
+            count.phase = "error"; countStatus(`${error.message} Nothing was saved.`, true);
+        } finally {
+            if (current(stamp) && epoch === count.epoch) { count.busy = false; renderCount(); }
+        }
+    }
+    function finishCount(result) {
+        if (result?.phase === "complete") {
+            forgetCount(); count.phase = "complete"; count.result = result; count.preview = null;
+            countStatus(`Counted ${plural(result.counts.interactions, "interaction")} in ${plural(result.counts.chats, "chat")} · ${plural(result.counts.tokens, "token")}. Saved reports are unchanged.`);
+            onCommitted?.();
+        } else if (result?.phase === "verification-incomplete") {
+            count.phase = "uncertain";
+            countStatus("WIRE is still counting. Check the result again in a moment; don't count again.", true);
+        } else if (result?.phase === "not-started") {
+            forgetCount(); count.phase = "not-saved"; count.preview = null;
+            countStatus("No count was saved for that check. Check chats again to count them.", true);
+        } else throw new Error("The result couldn't be read.");
+    }
+    async function confirmCount() {
+        const stamp = capture(), preview = count.preview;
+        if (!current(stamp) || count.phase !== "preview" || count.busy || !preview?.operationId || !countAvailable()) return;
+        if (Date.parse(preview.expiresAt) <= Date.now()) {
+            dropCountPreview(); count.phase = "error"; countStatus("The check expired. Nothing was saved. Check again.", true); renderCount(); return;
+        }
+        const receipt = { operationId: preview.operationId, receiptToken: preview.receiptToken };
+        try { sessionStorage.setItem(countKey, JSON.stringify(receipt)); }
+        catch { countStatus("This browser can't keep the result receipt, so nothing was counted. Allow session storage and check again.", true); return; }
+        clearTimeout(count.timer);
+        count.receipt = receipt; count.phase = "pending";
+        countStatus("Rereading the checked chats and saving only their totals. Keep this panel open.");
+        renderCount(); paintCount();
+        $("usageCountStatus").focus();
+        try {
+            const result = await api("/api/usage-records/confirm", { operationId: receipt.operationId, confirmed: true });
+            if (current(stamp)) finishCount(result);
+        } catch (error) {
+            if (!current(stamp)) return;
+            if (error.recollection?.outcome === "not-saved" && error.recollection.operationId === receipt.operationId && error.outcome !== "unknown") {
+                // Only the server can prove this confirmation was refused before anything was written.
+                forgetCount(); count.phase = "not-saved"; count.preview = null; countStatus(error.message, true);
+            } else { count.phase = "uncertain"; countStatus(`${error.message} Use Check result; counting won't run again.`, true); }
+        } finally { if (current(stamp)) { renderCount(); paintCount(); } }
+    }
+    async function checkCount() {
+        const stamp = capture(), receipt = count.receipt ?? storedCount();
+        if (!current(stamp) || !receipt || count.busy) return;
+        count.busy = true; renderCount();
+        try {
+            const result = await api("/api/usage-records/status", receipt);
+            if (current(stamp)) finishCount(result);
+        } catch (error) {
+            if (current(stamp)) countStatus(`Couldn't read the result. ${error.message} Nothing was counted again.`, true);
+        } finally { if (current(stamp)) { count.busy = false; renderCount(); paintCount(); } }
+    }
+    function openCount(event) {
+        if (!current(capture()) || $("countUsageRecords").disabled || countDialog.open) return;
+        count.trigger = event.currentTarget;
+        count.receipt = storedCount() ?? count.receipt;
+        count.preview = null; count.busy = false; countStatus("");
+        count.phase = count.receipt ? "uncertain" : "checking";
+        if (count.receipt) countStatus("A count's result wasn't confirmed. Check its result before counting again.", true);
+        renderCount();
+        countDialog.showModal();
+        countDialog.querySelector(".decision-body").scrollTop = 0;
+        $("usageCountClose").focus();
+        if (!count.receipt) void previewCount();
+    }
+    $("countUsageRecords").addEventListener("click", openCount);
+    $("usageCountConfirm").addEventListener("click", () => { void confirmCount(); });
+    $("usageCountRetry").addEventListener("click", () => { if (countAvailable() && !count.busy) void previewCount(); });
+    $("usageCountCheck").addEventListener("click", () => { void checkCount(); });
+    $("usageCountClose").addEventListener("click", () => { if (count.phase !== "pending") countDialog.close(); });
+    countDialog.addEventListener("cancel", event => { if (count.phase === "pending") event.preventDefault(); });
+    countDialog.addEventListener("close", () => {
+        if (count.suppressClose) { count.suppressClose = false; return; }
+        count.epoch++; count.busy = false;
+        if (count.phase !== "uncertain") { dropCountPreview(); count.phase = "closed"; }
+        paintCount();
+        const trigger = count.trigger;
+        count.trigger = null;
+        if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger);
+    });
+    countDialog.addEventListener("keydown", event => {
+        if (event.key !== "Tab") return;
+        const controls = [...countDialog.querySelectorAll("button")].filter(node => !node.disabled && node.checkVisibility());
+        if (!controls.length) { event.preventDefault(); $("usageCountStatus").focus(); return; }
+        const first = controls[0], last = controls.at(-1);
+        if (event.shiftKey && (document.activeElement === first || !countDialog.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !countDialog.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    });
+    function withdrawCount() {
+        count.epoch++; clearTimeout(count.timer);
+        // A dispatched confirmation stays checkable through its stored receipt; withdrawal isn't proof it failed.
+        count.phase = count.phase === "pending" || count.receipt ? "uncertain" : "closed";
+        count.preview = null; count.result = null; count.busy = false; count.trigger = null;
+        if (countDialog.open) { count.suppressClose = true; countDialog.close(); }
+        for (const id of ["usageCountSummary", "usageCountRefused", "usageCountStatus", "usageCountNotice"]) setText(id, "");
+        $("usageCountReasons").replaceChildren();
+        $("usageCountRow").hidden = true;
+    }
     function withdrawAccess() {
+        withdrawCount();
         if (!withdrawn) {
             const original = sourceValues(baseline);
             if (native()) safeDraft = null;

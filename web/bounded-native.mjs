@@ -9,16 +9,17 @@ export const boundedNativeStyles = `
 .source-outcome-population {display:grid;grid-template-columns:6rem minmax(0,1fr);gap:8px 16px;align-items:center;padding-block:12px}
 .source-outcome-population>h4 {grid-column:1/-1;font:var(--weight-medium) var(--type-small)/var(--leading-ui) var(--font);margin:0}
 .source-outcome-population>.percentage-ring {width:6rem}
-:is(.reader-message,.reader-source-record)>.report-document {padding:0;background:none;border:0;box-shadow:none;max-width:none;overflow-wrap:anywhere}
+:is(.reader-message,.reader-source-record)>:is(.report-document,.message-markdown) {padding:0;background:none;border:0;box-shadow:none;max-width:none;overflow-wrap:anywhere}
 .reader-message {margin-block:0 24px;min-width:0}
 .reader-section-content>.reader-message:last-child {margin-block-end:0}
 .reader-source-record>h3 {margin-block:0 8px}
 .reader-section-content>.reader-state {font-size:var(--type-body);font-weight:var(--weight-regular);line-height:var(--leading-ui)}
 .reader-message-header {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
 .reader-message-header h3 {margin:0;font:var(--weight-regular) var(--type-body)/1.5 var(--font)}
-.reader-message[data-author=user]>.report-document {border-inline-start:2px solid var(--screen-prompt-user);padding-inline-start:12px}
+.reader-message[data-author=user]>:is(.report-document,.message-markdown) {border-inline-start:2px solid var(--screen-prompt-user);padding-inline-start:12px}
 .reader-message[data-author=user]>.reader-message-header h3 {color:var(--screen-prompt-user)}
 :is(.reader-message,.reader-source-record)>.report-document :is(h3,p,ul,ol,pre) {margin-block:0 12px}
+:is(.reader-message,.reader-source-record)>.message-markdown {margin-block:0 12px}
 :is(.reader-message,.reader-source-record)>.report-document pre {white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
 :is(.reader-message,.reader-source-record)>.report-document table {display:block;max-width:100%;overflow:auto}
 .native-reader-evidence {margin-block:12px}
@@ -33,7 +34,7 @@ export const boundedNativeStyles = `
 export function mountBoundedNative({ api, ux, results, createState, sourceLabel, openConversation, presentHit, matchPolicyId, active,
     dimensional, onFilter = () => {}, formatDate = value => value, conversationHref = () => "#",
     onInventories = () => {}, onGroup = () => {}, onAnalysis = () => {}, onPage = () => {},
-    createReaderSections, presentation, renderText, savedSummary = () => "" }) {
+    createReaderSections, presentation, renderText, messageText, savedSummary = () => "" }) {
     const $ = id => document.getElementById(id);
     const state = createState(), search = createState(), analysis = createState();
     const models = new Set([state, search, analysis]), requests = new Map();
@@ -115,6 +116,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         for (const chart of root.querySelectorAll(".dimensional-scroll")) dimensional?.disposeView(chart);
         ux.withdrawAccess([root]);
         for (const item of [root, ...root.querySelectorAll("*")]) {
+            messageText?.release(item);
             for (const child of item.childNodes) if (child.nodeType === Node.TEXT_NODE) child.data = "";
             for (const attribute of [...item.attributes]) if (item !== root && !["class", "type"].includes(attribute.name)) {
                 if (item.namespaceURI !== "http://www.w3.org/2000/svg" || !(item.localName === "svg" && ["width", "height", "viewBox"].includes(attribute.name))
@@ -258,8 +260,10 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             { prompt: "Recorded user message", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation", "request-card-author");
         author.prepend(ux.icon("search-interaction"));
         // This paged source deliberately supplies recognition text, not an unrestricted
-        // conversation body. Don't shorten or Markdown-rewrite it again in the browser.
-        action.append(node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt"), ux.icon("read"));
+        // conversation body. Don't shorten it again; Markdown is displayed as plain words.
+        const recognized = node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt");
+        if (item.presentation && messageText) messageText.preview(recognized, item.title);
+        action.append(recognized, ux.icon("read"));
         const tools = item.presentation?.tools ?? [];
         const body = node("div", undefined, "card-reading-body"), context = node("div", undefined, "card-request-context");
         const key = node("dl", undefined, "card-identities");
@@ -420,7 +424,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const context = sections.add("context", "Context", { key: key("context"), initialOpen: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: ordinal !== undefined });
         if (completed) root.append(activity.element);
-        else root.append(prompt.element, activity.element, context.element, source.element);
+        else {
+            const usage = sections.add("usage", "Token usage", { key: key("usage"), collapsible: false });
+            usage.body.textContent = "No token counts were recorded for this conversation.";
+            root.append(prompt.element, activity.element, context.element, usage.element, source.element);
+        }
         // An exact target owns the reveal; set it before subscriptions can start a read.
         if (ordinal !== undefined) source.apply(true, false);
         const request = section => ({ schemaVersion: 1, revision, sources: [sourceId], conversationId,
@@ -460,14 +468,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             } else host.append(node("p", label + ": " + availability(fact), "reader-state"));
         }
         function richText(text) {
-            const body = renderText(text);
-            // Report headings are disclosures; a conversation must not hide its reply behind them.
-            for (const detail of [...body.querySelectorAll("details")].reverse()) {
-                const summary = detail.querySelector(":scope > summary"), heading = node("h3");
-                if (summary) { heading.append(...summary.childNodes); summary.remove(); }
-                detail.replaceWith(...(heading.childNodes.length ? [heading] : []), ...detail.childNodes);
-            }
-            return body;
+            return renderText(text);
         }
         function inspect(at) {
             rawTarget = at;

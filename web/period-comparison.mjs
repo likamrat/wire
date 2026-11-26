@@ -286,6 +286,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const presentation = assessmentFactories.periodComparison.createPresentation(time);
     let machine, metricSlotKey, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null;
     let selectedPeriod = "baseline", rosterKey = "", resultObservationHasError;
+    let usageChoice = {question:"all",threshold:30000};
     let completionIntent = null, entryIntent = null;
     let accessWithdrawn = false, acceptedPublication = null, outcomeLayer = "tool";
     const publicationToken = () => typeof api.publicationToken === "function" ? api.publicationToken() : null;
@@ -381,7 +382,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const selection = context.semanticSearch ? { receipt: structuredClone(context.semanticSearch.receipt),
             ...(value.selection.withinScenarioIds === undefined ? {} : { withinScenarioIds: [...value.selection.withinScenarioIds] }),
         } : undefined;
-        if (publicationCurrent(publication)) createReport?.(value, selection);
+        if (publicationCurrent(publication)) createReport?.(value, selection, usageChoice);
     });
     report.id = "createPeriodReport"; report.disabled = true; report.hidden = true;
     const resultHeading = el("div", undefined, "period-comparison-heading");
@@ -604,6 +605,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         table.tHead.before(columns);
         return table;
     }
+    function periodReadings(caption, headers, rows) {
+        const readings = dataTable(caption, headers, rows);
+        readings.className = "compare-period-readings";
+        return alignOutcomeReadings(readings);
+    }
     const signed = value => value === null ? "Not comparable" : `${value > 0 ? "+" : ""}${number(value)}`;
     const duration = value => assessmentFactories.timing.duration(value);
     const durationChange = value => assessmentFactories.createReportComparison().formatChange(value, "ms");
@@ -763,9 +769,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             detail.append(ux.icon("forward"));
             return [detail, ...cells, change];
         });
-        const readings = dataTable("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows);
-        readings.className = "compare-period-readings";
-        node.append(alignOutcomeReadings(readings));
+        node.append(periodReadings("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows));
         return node;
     }
     function numbersPanel(value, sides, names) {
@@ -1245,6 +1249,66 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             else chart.append(plottedPanel(value, sides, names));
             content.append(chart);
         }
+        if (a.usage && b.usage && (a.usage.eligible || b.usage.eligible)) {
+            const section = panel("Token usage", "compare-usage"), periods = [a.usage,b.usage];
+            const whole = periodReadings("Whole interactions with matching records",
+                ["Measure", "Baseline", "Selected", "Change"], [
+                    ["Metered tokens", ...periods.map(p => p.total === null ? "Not recorded" : number(p.total)),
+                        periods.every(p => p.total !== null) ? signed(b.usage.total-a.usage.total) : "—"],
+                    ["Metered / eligible", ...periods.map(p=>`${p.metered} / ${p.eligible}`), "—"],
+                    ["Input read from cache", ...periods.map(p=>p.cacheReadShare===null?"Not recorded":`${number(p.cacheReadShare*100)}%`), "—"],
+                ]);
+            const models = [...new Set(periods.flatMap(p=>p.models.map(m=>m.model)))];
+            const mix = periodReadings("Tokens by model", ["Model","Baseline","Selected","Change"], models.map(name=>{
+                const pair = periods.map(p=>p.models.find(m=>m.model===name));
+                return [name,...pair.map(m=>m?`${number(m.total)} (${counted(m.interactions,"interaction")})`:"No recorded tokens"),
+                    pair.every(Boolean) ? signed(pair[1].total-pair[0].total) : "—"];
+            }));
+            const findings = el("div"), choices = assessmentFactories.questionControls(doc, "compare", (key, choice) => {
+                if (!section.isConnected || !readCurrent(started, publication)) return;
+                usageChoice = {...usageChoice,[key]:choice}; showQuestion();
+            });
+            function showQuestion() {
+                choices.sync(usageChoice); findings.replaceChildren();
+                const {question,threshold} = usageChoice;
+                if (question === "all") {
+                    findings.append(whole);
+                    if (models.length) findings.append(el("h3","Tokens by model"), mix);
+                    return;
+                }
+                const pair = periods.map(p => p.questions[question === "tool" ? `tool-${threshold}` : question]);
+                const groups = pair.map(p => new Map(p.groups.map(g => [g.label,g])));
+                const labels = [...new Set(groups.flatMap(m => [...m.keys()]))];
+                const format = n => n == null ? "No reading" : number(n);
+                const name = question === "author" ? "Prompt author" : question === "model" ? "Model" : "Interactions that used";
+                const headers = [name,"Baseline","Selected","Change"];
+                const table = (caption, cells) => periodReadings(caption, headers, labels.map(label => [label, ...cells(groups.map(m=>m.get(label)))]));
+                if (!labels.length) { findings.append(el("p","No matching groups in either period.")); return; }
+                if (question === "tool" && pair.some(p=>p.groups.reduce((n,g)=>n+g.eligible,0)>p.eligible))
+                    findings.append(el("p","An interaction can appear under several tools.","compare-caption"));
+                if (question === "tool" && pair.some(p=>p.unranked))
+                    findings.append(el("p",`Without token counts: ${pair[0].unranked} baseline, ${pair[1].unranked} selected.`,"compare-caption"));
+                findings.append(el("h3","Recorded tokens by group"),
+                table("Recorded tokens by group", sides => {
+                    const [first,second] = sides.map(s=>s?.total);
+                    return [format(first),format(second),first == null || second == null ? "—" : signed(second-first)];
+                }), el("h3","Per metered interaction"),
+                table("Per metered interaction", sides => {
+                    const pair = sides.map(s=>s?.metered ? s.total/s.metered : null);
+                    return [...sides.map((s,i) => !s ? "No interactions" : `${format(pair[i])} (${s.metered} of ${s.eligible} metered)`),
+                        pair.includes(null) ? "—" : signed(pair[1]-pair[0])];
+                }));
+                if (question === "model") findings.append(el("h3","Input read from cache"), table("Share of input read from cache", sides =>
+                    [...sides.map(s => s?.cacheReadShare == null ? "Not recorded" : `${number(100*s.cacheReadShare)}%`),
+                        sides.every(s=>s?.cacheReadShare != null) ? `${signed((sides[1].cacheReadShare-sides[0].cacheReadShare)*100)} pp` : "—"]));
+                if (question === "tool") findings.append(el("h3","Returned Work IQ context"),table("Estimated tokens in returned Work IQ text", sides =>
+                    [...sides.map(s => s?.context.tokens == null ? "Not recorded" : `~${number(s.context.tokens)} (${s.context.sized} / ${s.context.calls} calls)`),
+                        sides.every(s=>s?.context.tokens != null && s.context.sized === s.context.calls) ? `~${signed(sides[1].context.tokens-sides[0].context.tokens)}` : "—"]));
+            }
+            showQuestion();
+            section.append(choices.host, findings);
+            content.append(section);
+        }
         if (!readCurrent(started, publication)) return;
         syncOutcomeChoices(value);
         if (!readCurrent(started, publication)) return;
@@ -1446,6 +1510,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         setStatus("Retained evidence or its permission changed. Read the current stored Analyze view before comparing again.", "notice");
     }
     function withdrawAccess() {
+        usageChoice = {question:"all",threshold:30000};
         if (accessWithdrawn) return;
         accessWithdrawn = true; generation++;
         inspectionReturn = null;
@@ -1527,7 +1592,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     const workspace = doc.getElementById("workspace");
     if (workspace) new MutationObserver(() => { if (shown) update(); }).observe(workspace, { attributes: true, attributeFilter: ["aria-busy"] });
-    return { update, consumer, observe, acceptedPair, recordsTarget, showRecords, closeInspection, stop, withdrawAccess, resumeAccess };
+    return { update, consumer, observe, acceptedPair, recordsTarget, showRecords, closeInspection, stop, withdrawAccess, resumeAccess,
+        startUsage(choice) { usageChoice = {question:choice?.question ?? "all",threshold:choice?.threshold ?? 30000}; } };
 }
 
 export const periodComparisonStyles = `
@@ -1614,9 +1680,9 @@ export const periodComparisonStyles = `
 .compare-outcome-row{min-width:0}
 .compare-bar-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
 .compare-outcome-bar{height:12px;display:flex;background:var(--canvas);border-radius:2px;overflow:hidden;margin-top:6px}
-.compare-outcomes[data-result-layer=tool],.compare-evidence[data-result-layer=tool]{--compare-success:var(--tool-positive);--compare-failure:var(--tool-negative)}
-.compare-outcomes[data-result-layer=reported-api],.compare-evidence[data-result-layer=reported-api]{--compare-failure:var(--screen-returned-issue)}
-.compare-mark-success{background:var(--compare-success,var(--chart-success))}.compare-mark-failure{background:var(--compare-failure,var(--chart-failure))}
+.compare-outcomes[data-result-layer=tool],.compare-evidence[data-result-layer=tool]{--compare-success:var(--tool-positive);--compare-failure:var(--tool-negative);--compare-success-mark:var(--tool-positive-mark);--compare-failure-mark:var(--tool-negative-mark)}
+.compare-outcomes[data-result-layer=reported-api],.compare-evidence[data-result-layer=reported-api]{--compare-failure:var(--screen-returned-issue);--compare-failure-mark:var(--outcome-returned-mark)}
+.compare-mark-success{background:var(--compare-success-mark,var(--compare-success,var(--chart-success)))}.compare-mark-failure{background:var(--compare-failure-mark,var(--compare-failure,var(--chart-failure)))}
 .compare-mark-partial{background:var(--chart-partial)}.compare-mark-unknown{background:var(--chart-unknown)}
 .compare-mark-other{background:var(--warning)}.compare-mark-transport{background:var(--danger)}
 .compare-values-table,.compare-whole-table{width:100%;table-layout:fixed;border-collapse:collapse;margin:14px 0 0;font-size:.875rem}
@@ -1838,6 +1904,13 @@ export const periodComparisonStyles = `
 .comparison-chart{margin-top:var(--space-md)}
 .compare-outcome-readings{display:grid;gap:var(--space-md);align-items:start}
 .compare-outcome-readings>.compare-changes{margin:0}
+.compare-usage.compare-panel{padding-inline:0;margin-top:var(--space-md);background:none}
+.compare-usage table+h3{margin-top:var(--space-lg)}
+@container comparison-panel (max-width:26rem){
+ .compare-usage colgroup{display:none}
+ .compare-usage tr>td:last-child{grid-column:1/-1;color:var(--muted)}
+ .compare-usage tr>td:last-child::before{content:attr(data-label) ": "}
+}
 .compare-changes tbody tr:last-child,.compare-changes tbody tr:last-child>*{border-bottom:0}
 .compare-result-pair{align-items:baseline}
 .compare-result-pair>.compare-outcome-row{margin:0;padding-inline:.5rem;text-align:center;min-width:0}

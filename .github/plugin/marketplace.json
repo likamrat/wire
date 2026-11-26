@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "wire",
-      "version": "1.0.1",
+      "version": "0.1.0",
       "description": "WIRE (Work IQ Request Explorer): inspect recorded Work IQ activity and prepare reviewed product feedback reports.",
       "source": "./plugin"
     }

@@ -9,11 +9,19 @@ test("only valid defaults survive reload; an unavailable write applies to this p
     }, addEventListener() {} };
     const load = () => createPageDefaults(pageDefaultSpecs, host);
     const prefs = load();
+    values.set("wire.page-defaults.v1.analyzeSort", '"cost"');
+    assert.equal(load().get("analyzeSort"),"tokens");
+    assert.equal(load().message("analyzeSort"),"");
     prefs.set("reportFormats", ["markdown", "pdf"]);
     assert.deepEqual(load().get("reportFormats"), ["pdf", "markdown"]);
     const original = pageDefaultSpecs.analyzeLayout.initial, reverse = original.toReversed();
     prefs.set("analyzeLayout", reverse);
     assert.deepEqual(load().get("analyzeLayout"), reverse);
+    for (const previous of [original.filter(k => k !== "usage"),reverse.filter(k => k !== "usage")]) {
+        values.set("wire.page-defaults.v1.analyzeLayout", JSON.stringify(previous));
+        assert.deepEqual(load().get("analyzeLayout"), previous[0] === "time" ? original : [...previous,"usage"]);
+        assert.equal(load().message("analyzeLayout"), "");
+    }
     for (const invalid of [reverse.slice(1), [...reverse, "unknown"], reverse.map(() => "time")]) {
         values.set("wire.page-defaults.v1.analyzeLayout", JSON.stringify(invalid));
         assert.deepEqual(load().get("analyzeLayout"), original);

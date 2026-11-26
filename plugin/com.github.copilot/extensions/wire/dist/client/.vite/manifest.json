@@ -1,27 +1,27 @@
 {
-  "_browser-runtime-D6g-fUSN.js": {
-    "file": "browser-runtime-D6g-fUSN.js",
+  "_browser-runtime-BJLpnUt0.js": {
+    "file": "browser-runtime-BJLpnUt0.js",
     "name": "browser-runtime"
   },
   "web/browser-entry.mjs": {
-    "file": "browser-CAP0Ezqc.js",
+    "file": "browser-WapfiUQO.js",
     "name": "browser",
     "src": "web/browser-entry.mjs",
     "isEntry": true,
     "imports": [
-      "_browser-runtime-D6g-fUSN.js"
+      "_browser-runtime-BJLpnUt0.js"
     ]
   },
   "web/frontend/entry.tsx": {
-    "file": "evaluation-HFFC5dtA.js",
+    "file": "evaluation-CGAv8nn5.js",
     "name": "evaluation",
     "src": "web/frontend/entry.tsx",
     "isEntry": true,
     "imports": [
-      "_browser-runtime-D6g-fUSN.js"
+      "_browser-runtime-BJLpnUt0.js"
     ],
     "css": [
-      "evaluation-9cjn3SwF.css"
+      "evaluation-zpuTYTdR.css"
     ]
   }
 }

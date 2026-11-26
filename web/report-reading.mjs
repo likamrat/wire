@@ -19,7 +19,7 @@ export function enhanceReportReading(source, { expanded, brand, icon, saved = fa
             section = source.createElement("section"); section.id = "wire-section-" + ordinal++;
             child.before(section); section.append(child);
         } else if (child.localName === "section") {
-            section = child.querySelector(":scope>h2") ? child : null;
+            section = child.dataset.tokenOverview !== "4" && child.querySelector(":scope>h2") ? child : null;
         } else if (["details", "nav", "header", "footer", "h1"].includes(child.localName)
             || child.classList.contains("report-footer")) section = null;
         else if (section) section.append(child);
@@ -57,6 +57,7 @@ body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=da
 .wire-reading-interaction .report-interaction{margin:12px 0;padding:0;border:0}
 .wire-reading-section>summary:focus-visible,.wire-reading-interaction>summary:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 .wire-reading-section>section:not(.wire-reading-multi-heading)>h2:first-child,.wire-reading-interaction>article>h3:first-child{display:none}
+[data-token-overview="4"]>h3{font-size:1.25rem;line-height:1.4;font-weight:500}
 body[data-wire-reader] .report-nav{position:sticky;top:0;z-index:2;background:var(--report-sheet,var(--paper));padding:12px 0;margin:16px 0;border-bottom:1px solid var(--rule);gap:8px 16px}
 ${saved ? `@media screen{
  body[data-wire-reader] .report-nav a{position:relative;isolation:isolate;min-height:44px;align-items:center}
@@ -66,6 +67,8 @@ ${saved ? `@media screen{
 @media screen and (hover:hover){body[data-wire-reader] .report-nav a:hover::before{background:var(--accent-soft)}}
 @media screen{body[data-wire-reader] .report-nav a:active::before{background:var(--accent-pressed)}}` : ""}
 body[data-wire-reader] [id]{scroll-margin-top:5rem}
+body[data-wire-reader] a,body[data-wire-reader] a:is(:hover,:active,:focus-visible){text-decoration:none}
+body[data-wire-reader] a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .wire-reading-interaction>article[id]{scroll-margin-top:9rem}
 .wire-reading-meta{margin-top:16px}
 .wire-reading-meta>summary{cursor:pointer;min-height:44px;align-content:center}
@@ -102,8 +105,8 @@ body[data-wire-reader] [id]{scroll-margin-top:5rem}
         if (!heading) continue;
         const details = source.createElement("details"), summary = source.createElement("summary");
         details.className = "wire-reading-section";
-        details.open = expanded ?? (main.dataset.productVersion === "1"
-            ? ["overview", "timing", "patterns", "examples"] : ["patterns", "examples"]).includes(section.id);
+        details.open = expanded ?? (section.hasAttribute("data-usage-question") || section.dataset.tokenOverview === "4" || (main.dataset.productVersion === "1"
+            ? ["overview", "timing", "patterns", "examples"] : ["patterns", "examples"]).includes(section.id));
         const multiple = section.querySelectorAll(":scope>h2").length > 1;
         if (multiple) section.classList.add("wire-reading-multi-heading");
         summary.textContent = multiple && section.id === "patterns" ? "Patterns" : labels[heading.textContent] || heading.textContent;

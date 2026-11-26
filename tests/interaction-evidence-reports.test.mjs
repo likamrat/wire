@@ -12,8 +12,49 @@ import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { acceptPeriodReport, freezePeriodReport } from "../lib/period-report.mjs";
 import { renderPeriodReportHtml, renderPeriodReportMarkdown } from "../lib/period-report-output.mjs";
+import { readSavedReportView } from "../lib/report-artifacts.mjs";
 
 const key = "a".repeat(64);
+test("token choices freeze across files and verified JSON-only reopening", async t => {
+    const a = record(), unmetered = record("unmetered"), privateModel = record("private-model");
+    for (const [n,r] of [a,unmetered,privateModel].entries()) {
+        r.userPrompt.sourceEventId = `prompt-${n}`;
+        r.toolCalls[0].toolCallId = `tool-${n}`;
+        r.toolCalls[0].startEventId = `start-${n}`;
+        r.toolCalls[0].completionEventId = `end-${n}`;
+    }
+    const call = { receiptId:"private-receipt", apiCallId:"private-call", model:"gpt-4.1", at:a.capturedAt,
+        tokens:{freshInput:50000,cacheRead:100000,cacheWrite:0,output:10000} };
+    a.usageCalls = [call]; privateModel.usageCalls = [{ ...call, model:"private-model-name" }];
+    const {context} = await privateFixture(t,[a,unmetered,privateModel]), controller=createExportController(context);
+    const options={tokens:true,rows:true,question:"model"}, bundle=await buildSanitizedBundle([a,unmetered,privateModel],key,{
+        promptMode:"none", formats:["html","markdown","pdf","json"], usageOptions:options });
+    const facts = bundle.snapshot.usageFacts.cohorts.selected;
+    assert.deepEqual([facts.total,facts.metered,facts.eligible,facts.rows.length],[320000,2,3,3]);
+    for (const name of ["product-report.json","coverage-and-redaction-manifest.json"])
+        assert.doesNotMatch(bundle.files[name],/"(?:pricing|priced|unpriced|usd|rateDate|amounts|dollars)"\s*:/i);
+    assert.deepEqual(facts.groups.map(g=>[g.label,g.total,g.cacheReadShare]),[
+        ["gpt-4.1",160000,2/3],["Other model",160000,2/3],
+    ]);
+    const task=getDocument({data:new Uint8Array(bundle.files["product-report.pdf"])});
+    let text="";
+    try { const doc=await task.promise; for(let page=1;page<=doc.numPages;page++)
+        text+=" "+(await (await doc.getPage(page)).getTextContent()).items.map(i=>i.str).join(" "); } finally { await task.destroy(); }
+    for (const content of [text,bundle.previewHtml,bundle.files["product-report.html"],bundle.files["product-report.md"]]) {
+        assert.match(content,/320,000 tokens/);
+        assert.match(content,/Usage by model/);
+        assert.doesNotMatch(content,/Est\. USD|retail cost|Unpriced|\$\d/i);
+        assert.doesNotMatch(content,/private-model-name|private-receipt|private-call/);
+    }
+    const preview = await controller.preview("usage-proof",undefined,{formats:["json"],promptMode:"none",usageOptions:options},
+        { kind:"all",revision:(await loadBoardState(context)).revision });
+    await controller.review("usage-proof",preview.previewId,true);
+    const saved=(await controller.confirm("usage-proof",preview.previewId,true)).bundle;
+    const opened=await readSavedReportView(context,await loadBoardState(context),saved.bundleId);
+    assert.match(opened.text,/320,000 tokens/); assert.match(opened.text,/Usage by model/);
+    const off=await buildSanitizedBundle([a],key,{formats:["json"],usageOptions:{tokens:false,rows:true}});
+    assert.equal(off.snapshot.usageFacts,undefined); assert.doesNotMatch(off.previewHtml,/Token &amp; cache breakdown/);
+});
 function record(id = "invented-timing-report") {
     const value = fixture(id);
     Object.assign(value.toolCalls[0], { durationMs: 11850, startedAt: "2026-10-01T12:00:00.000Z",

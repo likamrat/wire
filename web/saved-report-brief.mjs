@@ -3,7 +3,7 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     const doc = host.ownerDocument, source = doc.createElement("template");
     source.innerHTML = value.text;
     const main = source.content.querySelector("main"), model = value.brief;
-    if (!main || !model) return null;
+    if (!main || !model || main.querySelector('[data-token-overview="4"]')) return null;
     const elements = (node, selector) => Array.from(node.querySelectorAll(selector));
     const interactions = new Map(elements(main, "#examples>article[data-report-scenario]").map(n => [n.id, n]));
     const calls = new Map(elements(main, "#recorded-result-facts>section[id]").map(n => [n.id, n]));
@@ -115,6 +115,8 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         : g.signal || g.operation;
     function caseLink(id) { return jump(titleOf(interactions, id), "search-interaction", { type: "interaction", id }); }
     const frozenFinding = main.dataset.findingVersion === "1" ? main.querySelector(":scope>#finding") : null;
+    const usageSection = main.querySelector(":scope>#usage-selected");
+    const usageFinding = usageSection?.hasAttribute("data-usage-question") ? usageSection : null;
     function callLink(id) { return jump(titleOf(calls, id), frozenFinding ? "forward" : "search-tool", { type: "call", id }); }
     function facts(parent, pairs) {
         const dl = el("dl", undefined, "brief-facts");
@@ -173,7 +175,28 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         showing = route; mark(); panel.replaceChildren(); host.scrollTop = 0;
         if (stack.length) panel.append(action("Back", "back", back));
         const { type, id } = route;
-        if (type === "findings" && frozenFinding) {
+        if (type === "findings" && usageFinding) {
+            heading(text(usageFinding,"h2"));
+            panel.append(el("p",text(usageFinding,":scope>p")));
+            const original = usageFinding.querySelector("table");
+            if (original) {
+                const table = el("table",undefined,"usage-table");
+                table.append(el("caption","Group breakdown","visually-hidden"));
+                const head = table.createTHead().insertRow(), body = table.createTBody();
+                for (const cell of original.tHead.rows[0].cells) { const th=el("th",cell.textContent); th.scope="col"; head.append(th); }
+                for (const r of original.tBodies[0].rows) {
+                    const row = body.insertRow();
+                    for (const cell of r.cells) {
+                        const next=el(cell.cellIndex ? "td" : "th",cell.textContent);
+                        if (!cell.cellIndex) next.scope="row";
+                        row.append(next);
+                    }
+                }
+                const wrap=el("div",undefined,"usage-table-wrap"); wrap.tabIndex=0;
+                wrap.setAttribute("role","region"); wrap.setAttribute("aria-label","Group breakdown");
+                wrap.append(table); panel.append(wrap);
+            }
+        } else if (type === "findings" && frozenFinding) {
             findingFirst(frozenFinding);
         } else if (type === "findings") {
             const [group, ...more] = model.groups;
@@ -252,6 +275,10 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
             }
             const metadata = new Map(elements(main, "#coverage .report-facts>div,main>.report-facts>div").map(row => [text(row, "dt"), text(row, "dd")]));
             if (metadata.size) { const s = section("Saved scope"); facts(s, metadata); panel.append(s); }
+        }
+        if (type === "findings" && !usageFinding && usageSection?.hasAttribute("data-token-summary")) {
+            const lead = panel.querySelector("h2");
+            lead.after(el("p",text(usageSection,":scope>p"),"brief-meta"));
         }
         if (focus) panel.querySelector("h2").focus({ preventScroll: true });
     }

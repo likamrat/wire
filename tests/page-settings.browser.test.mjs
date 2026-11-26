@@ -5,6 +5,83 @@ import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { closeAnalyzeFilters, fulfillFixtureUpdateStatus, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 import { openDatePicker } from "./analytics-date-picker.mjs";
 
+for (const frontend of ["bundled", "react"]) test(`Analyze Filters accepts All dates over a recent default (${frontend})`, async t => {
+    const records = searchRecords(15);
+    for (const [i, record] of records.entries()) {
+        const date = i === 0 ? "2026-08-20" : "2026-09-29";
+        record.capturedAt = record.toolCalls[0].startedAt = `${date}T12:00:00Z`;
+    }
+    records[0].toolCalls[0].tool = "workiq-ask";
+    Object.assign(records[1].toolCalls[0], { toolSucceeded: false, reportedOutcome: "failed" });
+    records[0].userPrompt.text = "Find the August meeting minutes.";
+    const { runtime } = await searchFixture(t, { frontend, reply: false, records, copilotAccess: true });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ timezoneId: "UTC", viewport: { width: 1440, height: 1000 } });
+    await page.clock.setFixedTime(new Date("2026-09-30T12:00:00Z"));
+    await page.goto(new URL("/settings?section=analyze", runtime.url).href);
+    await selectActivityOption(page, "defaultAnalyzeRange", "14");
+    const viewAnalyze = page.getByRole("link", { name: "View Analyze", exact: true });
+    await viewAnalyze.click();
+    const headline = page.locator("#periodResult"), rows = page.locator("#activityList article");
+    await expect(headline).toHaveText("14 Work IQ tool calls (Sep 17–30, 2026)");
+    await expect(page.locator("#chartFooter")).toBeEmpty();
+    await selectActivityOption(page, "toolFilter", "workiq-fetch");
+    await selectActivityOption(page, "outcomeFilter", "success");
+    await expect(headline).toHaveText("13 Work IQ tool calls (Sep 17–30, 2026)");
+    await selectActivityOption(page, "toolFilter", "all");
+    await selectActivityOption(page, "outcomeFilter", "all");
+    await expect(headline).toHaveText("14 Work IQ tool calls (Sep 17–30, 2026)");
+    const accepted = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok()
+        && !response.request().postDataJSON().filters.from && !response.request().postDataJSON().filters.to);
+    await selectActivityOption(page, "dateFilter", "capture");
+    const snapshot = await (await accepted).json();
+    assert.equal(snapshot.analytics.timeSeries.points.length, 41);
+    assert.equal(snapshot.analytics.timeSeries.points[0].date, "2026-08-20");
+    assert.equal(snapshot.analytics.timeSeries.points[0].total, 1);
+    await expect(headline).toHaveText("15 Work IQ tool calls (All dates)");
+    await expect(page.locator("#dateFilter-control")).toHaveAccessibleName("Dates: All dates");
+    await closeAnalyzeFilters(page);
+    const oldest = page.locator("#chart .time-column").first();
+    await expect(oldest).toHaveAccessibleName(/Aug 20/);
+    await expect(page.locator("#openAnalyzeFilters")).toHaveText("Filters");
+    await expect(page).toHaveURL(runtime.url);
+    const plot = page.locator("#chart .flat-time-scroll");
+    const onScreen = await plot.evaluate(node => {
+        const clip = node.getBoundingClientRect();
+        return [...node.querySelectorAll(".dimensional-time-labels a")].filter(label => {
+            const box = label.getBoundingClientRect();
+            return box.left >= clip.left && box.right <= clip.right;
+        }).map(label => label.textContent);
+    });
+    assert.ok(onScreen.length > 0 && onScreen.length < 41);
+    await expect(page.locator("#chartFooter")).toBeEmpty();
+    const newest = page.locator("#chart .time-column").last();
+    await newest.focus();
+    await expect(newest).toHaveAccessibleName(/Sep 29, 2026: 14 Work IQ tool calls/);
+    assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /2026-08-20|workiq-fetch|search-0/);
+    await page.reload();
+    await expect(headline).toHaveText("15 Work IQ tool calls (All dates)");
+    await expect(oldest).toHaveAccessibleName(/Aug 20/);
+    await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics [data-reference-topic="time"]').click();
+    await page.locator("#chartReferenceShowData").click();
+    await expect(page.locator("#chartReferenceData").getByRole("link", { name: /Aug 20, 2026: 1/ })).toBeVisible();
+    await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
+    await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
+    const older = rows.filter({ hasText: "Find the August meeting minutes." }).locator(".request-card-open");
+    await older.click();
+    await expect(page.locator("#requestContent")).toContainText("Find the August meeting minutes.");
+    await page.goBack();
+    await expect(older).toBeFocused();
+    await navigateMain(page, "settings");
+    await navigateSettings(page, "analyze");
+    await expect(page.locator("#defaultAnalyzeRange-control")).toContainText("Last 14 days");
+    await viewAnalyze.click();
+    await expect(headline).toHaveText("15 Work IQ tool calls (All dates)");
+    await expect(page).toHaveURL(runtime.url);
+});
+
 test("page settings retain a nonempty format choice on reload and expose keyboard-searchable defaults", async t => {
     const { runtime } = await searchFixture(t, { frontend: "react", reply: false });
     const browser = await chromium.launch();

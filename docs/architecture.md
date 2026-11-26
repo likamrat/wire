@@ -5,6 +5,9 @@ not rerun those calls. Normal startup does not connect Microsoft 365 Chat
 or Cowork. The [README overview](../README.md#how-wire-fits) shows how that
 history becomes evidence for inspection and reports.
 
+**Contents:** [Local runtime](#local-runtime) · [Evidence boundaries](#evidence-boundaries) ·
+[Diagram sources](#diagram-sources)
+
 ## Local runtime
 
 The browser talks to one local Node server. Collection, analysis, literal
@@ -25,7 +28,9 @@ deployed services. Arrows point from each component to the resource it accesses.
 </a>
 
 The GitHub Copilot app's metadata database (SQLite) and history files are
-**read-only inputs**.
+**read-only inputs**. To fill gaps in historical token counts, WIRE can also
+read [Copilot's token records](collection.md#the-copilot-apps-usage-index)
+if you approve that file for the current account.
 WIRE's data directory holds its own content-addressed evidence snapshots,
 state, collection cursors, settings, consent and saved report files. Each
 directory has one writer. Concurrent instances need distinct data directories

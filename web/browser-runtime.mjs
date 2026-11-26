@@ -80,6 +80,8 @@ import { createArtifactEligibilityState } from "./artifact-eligibility-state.mjs
 import { createNativeReportPublicationState } from "./native-report-publication-state.mjs";
 import { mountBoundedNative } from "./bounded-native.mjs";
 import { createNativeActivityPresentation } from "./native-activity.mjs";
+import { createMessageMarkdown } from "./message-markdown.mjs";
+import { marked } from "marked";
 import { activityPage } from "./activity-page.mjs";
 import { createSavedFilePreview, createPreparedFileInspection } from "./saved-file-preview.mjs";
 import { createDiagnosticBundles } from "./diagnostic-bundles.mjs";
@@ -90,22 +92,27 @@ import { createCardVisibility } from "./card-visibility.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
 import { createReportDraftPicker } from "./report-draft-picker.mjs";
 import { normalizeSearchText } from "../lib/search-normalize.mjs";
+import { createUsageReading } from "./usage-reading.mjs";
+import { modelDisplayName } from "../lib/model-names.mjs";
+import { renderDailyTokenChart } from "./daily-token-chart.mjs";
+import { mountDocumentation } from "./documentation.mjs";
+import * as usage from "../lib/interaction-usage.mjs";
 
 function factories() {
     const timing = createTimingPresentation(createActivityProjection(null, null, ["unknown"]).summarize, { compact: true });
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
-        createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
+        mountDocumentation, createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
-        createCardVisibility,
-        mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows }),
+        createCardVisibility, renderDailyTokenChart, modelName: modelDisplayName, ...createUsageReading({ ...usage, modelName: modelDisplayName }),
+        mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows, pack: mountDashboardLayout }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync, homepageRows),
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,
             mountEnrollment: options => mountMicrosoftEnrollment({ ...options, createState: createMicrosoftEnrollmentState }),
         }),
-        createAccountProfile, createNativeActivityPresentation, activityPage, createNativeConfigurationState,
+        createAccountProfile, createNativeActivityPresentation, createMessageMarkdown: () => createMessageMarkdown({ marked }), activityPage, createNativeConfigurationState,
         createSourceCollectionState, createRefreshSources, mountSourceCollectionSettings, createBoundedNativeState,
         createNativeReportPublicationState, mountBoundedNative,
         savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection, createReportDraftPicker, normalizeSearchText,

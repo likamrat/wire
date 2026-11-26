@@ -34,6 +34,7 @@ export async function promptInstallation(t) {
         if (id !== parent) db.prepare("INSERT INTO workspaces VALUES(?,?,?,?,?,?,?,?,?)")
             .run(randomUUID(), id, project, name, null, "local", "folder", "agent", parent);
     }
+    db.close();
     let clock = Date.now() - 60000;
     const event = (type, data, id = randomUUID()) => ({ id, type, timestamp: new Date(clock += 100).toISOString(), data });
     const kickoffText = "Invented planning-only kickoff.\n  Keep these exact spaces.  \n" + "Synthetic delegated task. ".repeat(65);
@@ -54,7 +55,8 @@ export async function promptInstallation(t) {
         { name: "conflict", actor: "unknown", basis: "conflicting-source", data: { source: "user", isAutopilotContinuation: true, content: "Invented conflicting source metadata." } },
         { name: "imitation", actor: "user", basis: "host-direct-input", hostEnvelope: "direct", data: { content: "<cross_session_message>Invented human imitation of an agent.</cross_session_message>" } },
         { name: "unverified-imitation", actor: "unknown", basis: "missing-source", data: { content: "<cross_session_message>Invented unverified imitation.</cross_session_message>" } },
-        { name: "automatic", actor: "agent", basis: "autopilot", data: { source: "autopilot", content: "Invented automatic continuation." } },
+        { name: "automatic", actor: "agent", basis: "autopilot", data: { source: "system", isAutopilotContinuation: true,
+            transformedContent: null, content: "Invented automatic continuation." } },
     ];
     const childEvents = [event("session.start", { version: 1, sessionId: child })];
     function requestEvents(item) {
@@ -102,7 +104,7 @@ export async function promptInstallation(t) {
         try {
             assert.deepEqual(denied, { provider: 0, scoringRead: 0 });
             assert.deepEqual((await loadBoardState(context)).personalEvaluation?.modelEvaluation?.automatic?.approval, approvalBefore);
-        } finally { await stop(); db.close(); await rm(root, { recursive: true, force: true }); }
+        } finally { await stop(); await rm(root, { recursive: true, force: true }); }
     });
     await runtime.collector.configure(config);
     return { root, context, config, cases, sourceFiles, child, parent, runtime: () => runtime, stop,

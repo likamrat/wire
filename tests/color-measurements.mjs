@@ -5,6 +5,39 @@ export function rgb(value) {
     throw new TypeError(`Unsupported measured color: ${value}`);
 }
 
+// Scan a flat widget's actual ink and marks, excluding its rounded outer border.
+export async function paintedWidgetInsets(card, screenshotPath, foregroundSelector) {
+    const image = await card.screenshot({ path: screenshotPath, animations: "disabled" });
+    return card.evaluate(async (node, { base64, foregroundSelector }) => {
+        const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))]));
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d"); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+        const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const bounds = node.getBoundingClientRect(), scale = width / bounds.width, css = getComputedStyle(node);
+        const surface = (width * 2 + Math.floor(width / 2)) * 4;
+        const inset = Math.ceil(Math.max(20, parseFloat(css.borderTopLeftRadius)) * scale);
+        const foreground = foregroundSelector ? node.querySelector(foregroundSelector)?.getBoundingClientRect() : bounds;
+        if (!foreground) throw new Error(`Missing measured widget foreground: ${foregroundSelector}`);
+        const left = Math.max(inset, Math.floor((foreground.left - bounds.left) * scale));
+        const right = Math.min(width - inset, Math.ceil((foreground.right - bounds.left) * scale));
+        const top = Math.max(3, Math.floor((foreground.top - bounds.top) * scale));
+        const bottom = Math.min(height - 3, Math.ceil((foreground.bottom - bounds.top) * scale));
+        let first = height, last = -1;
+        for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) {
+            const i = (y * width + x) * 4;
+            if (Math.max(Math.abs(data[i] - data[surface]), Math.abs(data[i + 1] - data[surface + 1]),
+                Math.abs(data[i + 2] - data[surface + 2])) >= 24) {
+                first = Math.min(first, y); last = Math.max(last, y);
+            }
+        }
+        if (last < first) throw new Error("The widget has no measurable foreground paint.");
+        return { top: first / scale - parseFloat(css.borderTopWidth),
+            bottom: (height - last - 1) / scale - parseFloat(css.borderBottomWidth),
+            width: bounds.width, height: bounds.height };
+    }, { base64: image.toString("base64"), foregroundSelector });
+}
+
 // Measure ordinary screen text against its composed surface, including inset control faces.
 export function visibleInk() {
     const rgba = value => {
@@ -75,44 +108,6 @@ export function measureControlSurface(node) {
         focus: focus.outlineStyle !== "none" ? color(blend(rgba(focus.outlineColor), backdrop)) : null,
         focusWidth: parseFloat(focus.outlineWidth), fontSize: parseFloat(css.fontSize),
         box: box.toJSON(), disabled: node.matches(":disabled,[aria-disabled=true]") };
-}
-
-export async function shadowPaint(page, selector, side, distances = [2, 6, 12, 24, 40]) {
-    const bounds = await page.locator(selector).boundingBox();
-    const baseline = await page.screenshot();
-    await page.locator(selector).evaluate(node => node.style.setProperty("box-shadow", "none", "important"));
-    const flat = await page.screenshot();
-    await page.locator(selector).evaluate(node => node.style.removeProperty("box-shadow"));
-    const result = await page.evaluate(async ({ before, after, bounds, side, distances }) => {
-        async function pixels(base64) {
-            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), char => char.charCodeAt(0))]));
-            const canvas = document.createElement("canvas");
-            canvas.width = image.width; canvas.height = image.height;
-            const context = canvas.getContext("2d");
-            context.drawImage(image, 0, 0);
-            image.close();
-            return context.getImageData(0, 0, canvas.width, canvas.height);
-        }
-        const a = await pixels(before), b = await pixels(after), bands = [];
-        const bottom = side === "bottom";
-        const edge = bottom ? bounds.y + bounds.height : side === "right" ? bounds.x + bounds.width : bounds.x;
-        for (const distance of distances) {
-            const cross = Math.floor(edge + (side === "left" ? -distance : distance));
-            let delta = 0, count = 0;
-            const start = Math.ceil(bottom ? bounds.x + 20 : bounds.y + 80);
-            const end = bottom ? Math.min(a.width, bounds.x + bounds.width) - 20 : Math.min(a.height, bounds.y + bounds.height) - 40;
-            for (let along = start; along < end; along++) {
-                const x = bottom ? along : cross, y = bottom ? cross : along;
-                if (x < 0 || x >= a.width || y < 0 || y >= a.height) continue;
-                const i = (y * a.width + x) * 4;
-                delta += (b.data[i] - a.data[i] + b.data[i + 1] - a.data[i + 1] + b.data[i + 2] - a.data[i + 2]) / 3;
-                count++;
-            }
-            bands.push({ distance, darkening: count ? delta / count : 0 });
-        }
-        return bands;
-    }, { before: baseline.toString("base64"), after: flat.toString("base64"), bounds, side, distances });
-    return { bands: result, screenshot: baseline };
 }
 
 // Hide only text ink in the second exposure; the pseudo-face and composited opacity remain.

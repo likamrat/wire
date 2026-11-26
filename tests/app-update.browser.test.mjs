@@ -82,6 +82,39 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
     return { page, state, setup, actions, releases, healthReads, pages };
 }
 
+test("What's new opens the offered version's notes in WIRE without installing or following preview branches", async t => {
+    const {page,state,actions} = await workspace(t,{offer:null});
+    Object.assign(state,{phase:"available",candidate:next,availableRelease:{tag:"v1.2.0",commit:next,notes:"## What's new in v1.2.0\n\n### Fixed\n- Saved reports reopen.",url:"https://github.com/likamrat/wire/releases/tag/v1.2.0"}});
+    await page.getByRole("button",{name:"Check for updates",exact:true}).click();
+    await page.locator("#availableReleaseNotes").click();
+    await expect(page).toHaveURL(/section=release-notes&release=v1\.2\.0/);
+    await expect(page.locator("#releaseNotesBody li")).toHaveText("Saved reports reopen.");
+    await expect(page.locator("#releaseReaderGitHub")).toHaveAttribute("href",state.availableRelease.url);
+    await expect(page.locator("#releaseReaderVersion")).toHaveText("v1.2.0");
+    await expect(page.locator("#releaseReaderApply")).toBeVisible();
+    assert.equal(actions.some(r=>r.action==="apply"),false);
+    await page.goBack();
+    await expect(page.locator("#availableReleaseNotes")).toBeVisible();
+});
+
+test("a first public release can follow a higher development package label without reinstalling the same commit", async t => {
+    const {page,state,actions} = await workspace(t, { offer:null });
+    const release = { tag:"v0.1.0", commit:next, notes:"## What's new in v0.1.0\n\nTest baseline.",
+        url:"https://github.com/likamrat/wire/releases/tag/v0.1.0" };
+    Object.assign(state, { packageVersion:"1.0.1", phase:"available", candidate:next, availableRelease:release });
+    await page.getByRole("button",{name:"Check for updates",exact:true}).click();
+    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v1.0.1");
+    await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE v0.1.0 is available");
+    Object.assign(state, { packageVersion:"0.1.0", installed:next, candidate:null, phase:"current", availableRelease:null, installedRelease:release });
+    await page.reload();
+    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v0.1.0");
+    await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+    await page.locator("#installedReleaseNotes").click();
+    await expect(page.locator("#releaseReaderVersion")).toHaveText("v0.1.0");
+    await expect(page.locator("#releaseReaderGitHub")).toHaveAttribute("href",release.url);
+    assert.equal(actions.some(r=>r.action==="apply"),false);
+});
+
 test("React Settings checks, opts in and out, dismisses only this build, and schedules checks without applying", async t => {
     const { page, state, actions } = await workspace(t, { offer: null });
     const auto = page.getByRole("switch", { name: "Automatically check for updates" });
@@ -466,6 +499,32 @@ test("a retained uncertain operation blocks activation even outside its Settings
     assert.deepEqual(actions, [{ action: "status" }]);
 });
 
+test("reloading before opening status returns does not release a page with an unresolved operation", async t => {
+    const { page, setup, state } = await workspace(t);
+    await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+    const waiting = Promise.withResolvers(), resume = Promise.withResolvers();
+    setup.status = async route => {
+        setup.status = null; waiting.resolve(); await resume.promise;
+        await route.fulfill({ json: state }).catch(() => {}); // The original document left.
+    };
+    await page.addInitScript(() => {
+        sessionStorage.setItem("workiq-evidence.source-check.v1", "pending");
+        const fetch = window.fetch;
+        window.fetch = (...args) => {
+            if (args[0] === "/api/app-update/release-panel") sessionStorage.setItem("fixture.release-attempted", "true");
+            return fetch(...args);
+        };
+    });
+    try {
+        await page.reload(); await waiting.promise;
+        await page.reload();
+    } finally { resume.resolve(); }
+    await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+    await page.locator("#appUpdateApply").click();
+    await expect(page.locator("#appUpdateDetail")).toContainText("original result");
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("fixture.release-attempted")), null);
+});
+
 test("a clean managed tab retains its capability for bfcache and releases only its original page on departure", async t => {
     const { page, releases, actions } = await workspace(t);
     await expect(page.locator("#appUpdateAuto")).toBeEnabled();
@@ -520,14 +579,22 @@ test("single activation stays fenced through transport loss until the authentica
     await expect(page.locator("#appUpdateNotice")).toBeHidden();
     const hold = Promise.withResolvers();
     setup.apply = async route => { await hold.promise; await route.abort("connectionreset"); };
-    await page.locator("#settingsAppUpdate").click(); await expect(modal).toBeVisible();
+    await page.locator("#settingsAppUpdate").focus();
+    await page.keyboard.press("Enter"); await expect(modal).toBeVisible();
     const activity = page.locator("#appUpdateActivity");
+    if (process.env.WIRE_APP_UPDATE_PROOFS) {
+        await mkdir(process.env.WIRE_APP_UPDATE_PROOFS, { recursive: true });
+        await modal.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, "keyboard-update-progress.png") });
+    }
+    assert.equal(await modal.locator("h2").evaluate(title => getComputedStyle(title, "::before").content), "none",
+        "the focused update dialog must not paint a heading marker across its spinner");
+    await expect(modal).toBeFocused();
     await expect(page.locator("#appUpdateHint")).toHaveText("This tab reloads automatically.");
     const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);
     const start = await rotation();
     await expect.poll(rotation).not.toBe(start);
     await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
-    await expect(modal.getByRole("status")).toContainText("Starting update");
+    await expect(modal.getByRole("status")).toContainText("WIRE is updating");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
         document.querySelector('[data-category="themes"]').click();
@@ -539,6 +606,7 @@ test("single activation stays fenced through transport loss until the authentica
     setup.health = { ...setup.health, build: next, runtimeId: replacement, clientEntry: "/assets/client/newbuild-12345678.js" };
     await expect(page.locator("#appUpdateHint")).toContainText("runtime identity", { timeout: 12000 });
     await expect(modal).toBeVisible();
+    await page.keyboard.press("Tab"); await expect(page.locator("#appUpdateRecover")).toBeFocused();
     setup.capability = "d".repeat(64); setup.runtimeId = replacement;
     // The shell still names the stale entry: an available JS file is not loaded-client proof.
     await page.reload();
@@ -549,7 +617,7 @@ test("single activation stays fenced through transport loss until the authentica
     setup.status = route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Page permission expired." } });
     await page.reload();
     await expect(page.locator("#appUpdateHint")).toContainText("could not verify");
-    await expect(modal).toBeVisible(); await expect(page.locator("#appUpdateHeading")).not.toHaveText("WIRE updated");
+    await expect(modal).toBeVisible(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
     setup.status = route => route.abort("connectionreset");
     await page.locator("#appUpdateRecover").click();
     await expect(page.locator("#appUpdateHint")).toContainText("could not verify"); await expect(modal).toBeVisible();
@@ -560,7 +628,10 @@ test("single activation stays fenced through transport loss until the authentica
     await page.locator("#appUpdateRecover").click();
     await expect(page.locator("#appUpdateHint")).toContainText("does not confirm"); await expect(modal).toBeVisible();
     state.clientEntry = setup.entry;
-    await page.locator("#appUpdateRecover").click(); await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated");
+    delete state.packageVersion;
+    await page.locator("#appUpdateRecover").click();
+    const notice = page.locator("#appUpdateNotice");
+    await expect(notice.getByRole("status")).toHaveText("WIRE updated");
     await expect(modal).not.toBeVisible();
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }, { action: "apply", candidate: next }]);
     assert.equal(actions.filter(a => a.action === "preferences").length, 0);
@@ -577,6 +648,7 @@ test("the replacement shell shows recovery before its module loads and stops on 
     try {
         await page.reload({ waitUntil: "commit" });
         await expect(page.getByRole("dialog", { name: "Checking version" })).toBeVisible();
+        await expect(page.getByRole("dialog", { name: "Checking version" })).toBeFocused();
         await expect(page.locator("#loading")).toBeHidden();
         await expect(page.locator("#appUpdateActivity")).toBeVisible();
     } finally { hold.resolve(); }

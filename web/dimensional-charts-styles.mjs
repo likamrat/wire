@@ -63,8 +63,6 @@ ${dimensionalColumnStyles}
 .time-column .dimensional-count {pointer-events:auto;color:var(--accent);text-decoration:none;cursor:pointer;border-radius:var(--radius-small)}
 .time-column:is(:hover,:active) .dimensional-count {background:transparent;color:var(--ink)}
 .time-column:focus-visible .dimensional-count {outline:2px solid var(--focus);outline-offset:2px}
-#chartFooter:has(.chart-size-note) {flex-wrap:wrap}
-#chartFooter>.chart-size-note {flex:1 1 28ch;min-width:0;white-space:normal}
 .chart-details {margin-top:0;min-width:0}
 .chart-details>summary {min-height:44px;align-content:center;color:var(--accent);font-size:var(--type-small);cursor:pointer}
 #chartReadingNotes p {max-width:80ch}
@@ -72,30 +70,34 @@ ${dimensionalColumnStyles}
 .dimensional-time-labels {display:grid;grid-auto-flow:column;grid-auto-columns:var(--scene-pitch);min-height:48px;margin:0;padding-top:24px;color:var(--muted);font-size:var(--type-small);text-align:center}
 .dimensional-time-labels>span {padding-inline:8px;overflow-wrap:anywhere;min-width:0}
 .dimensional-time-labels>a {padding:4px;min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-small);color:var(--accent);text-decoration:none}
-.dimensional-time-labels>a:is(:hover,:focus-visible) {background:var(--hover);text-decoration:underline}
-.flat-time-plot {position:relative;min-width:100%;--time-gutter:40px}
-.flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0 0 0 var(--time-gutter);padding:0;border:0;border-bottom:1px solid var(--control)}
+.dimensional-time-labels>a:hover {background:var(--hover)}
+.dimensional-time-labels>a:active {background:var(--pill-pressed)}
+.flat-time-plot {position:relative;min-width:100%;--time-height:80px}
+.flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0;padding:0;border:0;border-bottom:1px solid var(--control)}
 .flat-time-plot .time-slot {position:relative;display:block;height:100%;min-width:0}
-.flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:84px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;pointer-events:none}
-.flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none}
+.flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);min-width:0;min-height:0;padding:0;border:0;border-radius:4px 4px 0 0;background:transparent;pointer-events:none;filter:drop-shadow(0 3px 5px color-mix(in srgb,var(--tool-positive-mark,var(--accent)) 24%,transparent))}
+.flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none;clip-path:inset(0 round 4px 4px 0 0);transition:opacity .12s ease-out}
+.flat-time-plot .time-chart:has(.time-slot:is(:hover,:has(:focus-visible))) .time-slot:not(:hover,:has(:focus-visible)) .time-stack {opacity:.32}
 .flat-time-column {display:block;max-width:none;overflow:visible;pointer-events:none}
+.flat-time-plot .time-stack>.flat-time-column {width:100%;height:100%}
 .flat-time-segment {fill-opacity:1;stroke:none;pointer-events:visibleFill}
+.flat-time-separator {stroke:var(--paper);stroke-width:1.5px;vector-effect:non-scaling-stroke;pointer-events:none}
 .flat-time-column [data-ux-tooltip]:hover {fill-opacity:1}
 .flat-time-plot .time-column:hover .time-stack {filter:none;outline:0}
-.flat-time-plot .time-column:focus-visible {outline:0}
+.flat-time-plot .time-column:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+.flat-time-plot .time-column:hover .dimensional-count,.flat-time-plot .time-zero[href]:hover .dimensional-count {background:var(--hover)}
 .flat-time-plot .dimensional-count {font-size:1rem;min-width:44px}
+.flat-time-plot .dimensional-count::before {content:"";position:absolute;inset:0 0 -8px;pointer-events:auto}
 .flat-time-plot .time-zero {position:absolute;bottom:0;left:50%;transform:translateX(-50%);height:0;background:none}
+.flat-time-plot .time-zero[href] {height:8px}
+.flat-time-plot .time-zero[href] .dimensional-count {bottom:100%}
 .time-zero[href] .dimensional-count {pointer-events:auto;color:var(--accent)}
 .time-zero[href]:focus-visible .dimensional-count {outline:2px solid var(--focus)}
 .time-segment-link {position:absolute;left:50%;transform:translateX(-50%)}
-.time-segment-link:is(:hover,:focus-visible) {outline:2px solid var(--focus);outline-offset:1px;z-index:1}
-.flat-time-plot .dimensional-time-labels {grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));grid-auto-flow:row;grid-auto-columns:auto;padding:12px 0 0;margin-left:var(--time-gutter);font-size:var(--type-small);min-height:44px}
-.flat-time-axis {position:absolute;bottom:0;left:calc(-1 * var(--time-gutter));height:var(--time-height);width:calc(var(--time-gutter) - 12px);display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;color:var(--muted);font-size:var(--type-small);font-variant-numeric:tabular-nums;pointer-events:none}
-.flat-time-axis>span {line-height:1}
-.flat-time-axis>span:first-child {transform:translateY(-50%)}
-.flat-time-axis>span:last-child {transform:translateY(50%)}
+.time-segment-link:focus-visible {outline:2px solid var(--focus);outline-offset:1px;z-index:1}
+.flat-time-plot .dimensional-time-labels {grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));grid-auto-flow:row;grid-auto-columns:auto;padding:12px 0 0;font-size:var(--type-small);min-height:44px}
 #chart:has(.flat-time-plot)+#chartFooter {justify-content:flex-start;gap:8px 24px}
 #chart:has(.flat-time-plot)+#chartFooter>span {white-space:normal;min-width:0}
-@media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}}
-@media(prefers-reduced-motion:reduce) {.flat-time-column,.flat-time-plot .time-column {animation:none;transition:none}}
+@media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}.flat-time-plot .time-chart .time-column .time-stack {opacity:1}.flat-time-plot .time-column:focus-visible {outline-color:Highlight}}
+@media(prefers-reduced-motion:reduce) {.flat-time-column,.flat-time-plot :is(.time-column,.time-stack) {animation:none;transition:none}}
 `;

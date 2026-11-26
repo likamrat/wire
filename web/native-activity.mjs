@@ -1,5 +1,5 @@
 // Present the accepted native conversation without converting it to a GitHub interaction.
-export function createNativeActivityPresentation({ api, ux, presentation, createReaderSections, sourceLabel, excerpt, timing, results, capturedAt, pagedList, activityIdentities }) {
+export function createNativeActivityPresentation({ api, ux, presentation, createReaderSections, sourceLabel, excerpt, timing, results, capturedAt, pagedList, activityIdentities, messageText }) {
     if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
         throw new TypeError("Native presentation requires the shared publication interface.");
     }
@@ -91,6 +91,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
     function clear(root, retire = false) {
         ux.withdrawAccess([root]);
         for (const element of [root, ...root.querySelectorAll("*")]) {
+            messageText?.release(element);
             for (const child of element.childNodes) if (child.nodeType === Node.TEXT_NODE) child.data = "";
             if (element === root && !retire) continue;
             for (const attribute of [...element.attributes]) {
@@ -115,7 +116,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         if (fact) return { label: factLabels[fact.kind], text: excerpt({ text: factTitle(fact) }), author: "unknown" };
         return { label: message ? messagePresentation(message).label : "Conversation",
             text: message ? message.value.text.trim() ? complete ? message.value.text : excerpt(message.value) : "Recorded message is empty." : "No recorded message text",
-            author: message?.value.author === "user" ? "user" : "unknown" };
+            author: message?.value.author === "user" ? "user" : "unknown",
+            formatted: Boolean(complete && message?.value.text.trim() && message.value.author !== "tool") };
     }
     function card({ record, setHref, rows, layer, onOpen, contextDateBasis, canOpenCounted }) {
         const revision = cardRevision;
@@ -133,7 +135,9 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const origin = node("span", "request-card-author", prompt.label);
         origin.prepend(ux.icon("search-interaction"));
         const body = node("div", "card-reading-body"), context = node("div", "card-request-context");
-        action.append(node("p", "request-card-prompt", prompt.text), ux.icon("read"));
+        const cardText = node("p", "request-card-prompt", prompt.text);
+        if (prompt.formatted && messageText) messageText.preview(cardText, prompt.text);
+        action.append(cardText, ux.icon("read"));
         const summary = results.summarize(rows);
         const signals = results.entries(layer, summary) ?? [];
         const highlight = signals.find(entry => entry.key === "failure") ?? signals.find(entry => entry.key !== "success") ?? signals[0];
@@ -199,6 +203,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const activity = sections.add("activity", countedTitle || "Recorded activity", { key: key("activity"), collapsible: false });
         const replies = sections.add("response", replyTitle, { key: key("response"), collapsible: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: false });
+        const usage = sections.add("usage", "Token usage", { key: key("usage"), collapsible: false });
+        usage.body.textContent = "No token counts were recorded for this conversation.";
         const updatesSection = updates.length ? sections.add("updates", "Recorded updates", { key: key("updates") }) : null;
         const emptyMessages = !updates.length && !conversation.messages.length;
         if (dateContext) root.append(node("p", "reader-state", dateContext));
@@ -206,7 +212,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             ...(updatesSection ? [updatesSection.element] : []),
             ...(!updates.length || conversation.calls.length || conversation.returnedResults.length
                 || activityMessages ? [activity.element] : []),
-            ...(emptyMessages || responses.length ? [replies.element] : []), source.element);
+            ...(emptyMessages || responses.length ? [replies.element] : []), usage.element, source.element);
         const field = (label, value) => {
             const group = node("div"), term = node("dt", "", label), definition = node("dd");
             definition.append(value);
@@ -224,14 +230,17 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             value.append(node("span", "duration-primary", timing.readerDuration(milliseconds)));
             return value;
         }
-        function copyText(value, label, className = "reader-message-text") {
-            const body = node(className === "reader-message-text" ? "p" : "pre",
-                className === "reader-message-text" ? "reader-request-text " + className : className, value);
+        // One-line source titles and questions show their words, not Markdown syntax.
+        const plainProse = value => messageText?.project(value) ?? value;
+        function copyText(value, label, className = "reader-message-text", formatted = false) {
+            let body = formatted && messageText ? messageText.render(value, { plain: "p", onFormat: next => { body = next; } })
+                : node(className === "reader-message-text" ? "p" : "pre", className === "reader-message-text" ? "reader-request-text " + className : className, value);
+            if (body.classList.contains("message-markdown")) body.classList.add("reader-request-text", "reader-message-text");
             if (className === "reader-message-text") {
                 const wrapper = node("div", "reader-input");
                 const copy = ux.copyButton({ label: "Copy " + label.toLowerCase(),
                     tooltip: "Copy original text (unmasked)",
-                    getText: () => current() && body.isConnected && body.checkVisibility() ? body.textContent : null });
+                    getText: () => current() && body.isConnected && body.checkVisibility() ? formatted && messageText ? value : body.textContent : null });
                 copy.setAttribute("aria-description", "Copies original text, unmasked.");
                 wrapper.append(body, copy);
                 return wrapper;
@@ -262,7 +271,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
                 if (child.kind === "unsupported-task-child") item.append(node("p", "reader-state", "Details unavailable for this entry."));
                 else {
                     const name = recordedText(child.fields.stepTitle);
-                    if (name) item.append(node("p", "", name));
+                    if (name) item.append(node("p", "", plainProse(name)));
                     else factField(item, "Title", child.fields.stepTitle);
                     taskStatus(item, child.fields);
                 }
@@ -284,7 +293,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
                 item.append(node("h3", "reader-context-heading", label));
                 if (["task", "task_step", "task_steps", "task_reasoning"].includes(fact.kind)) {
                     const title = recordedText(fields.name) || recordedText(fields.stepTitle);
-                    if (title) item.append(node("p", "native-update-title", title));
+                    if (title) item.append(node("p", "native-update-title", plainProse(title)));
                     else {
                         factField(item, "Title", fields.name, { omitAbsent: true });
                         factField(item, "Step", fields.stepTitle, { omitAbsent: true });
@@ -309,7 +318,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
                 } else if (fact.kind === "clarification") {
                     if (present(fields.questions)) for (const question of fields.questions.value) {
                         item.append(node("p", "native-update-title", typeof question === "string"
-                            ? question.trim() ? question : "The recorded question is empty." : question.question));
+                            ? question.trim() ? plainProse(question) : "The recorded question is empty." : plainProse(question.question)));
                         if (typeof question !== "string" && question.options.length) {
                             const options = node("ul", "native-update-list");
                             options.setAttribute("aria-label", "Recorded choices");
@@ -349,7 +358,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
                         : "Not marked consequential by the source. Approval is not recorded here."));
                     else item.append(node("p", "context-help-note", "The request does not establish approval or execution."));
                 } else if (fact.kind === "provider-progress") {
-                    if (present(fields.text)) item.append(copyText(fields.text.value, "Recorded progress text"));
+                    if (present(fields.text)) item.append(copyText(fields.text.value, "Recorded progress text", undefined, true));
                     else factField(item, "Text", fields.text);
                 } else if (fact.kind === "native-invocation") {
                     factField(item, "Tool", fields.toolName);
@@ -400,7 +409,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             else if (owner === replies.body && responses.length > 1) item.append(node("p", "muted",
                 message.value?.representation === "reply-fragment" ? "Reply fragment" : "Plain text representation"));
             item.append(value === null ? node("p", "reader-state", availability[message.availability] || "Message unavailable")
-                : value === "" ? node("p", "reader-state", "Recorded message is empty.") : copyText(value, label));
+                : value === "" ? node("p", "reader-state", "Recorded message is empty.")
+                    : copyText(value, label, undefined, display.kind !== "tool"));
             return item;
         }
         const messageLists = [], messagePageSize = 50;

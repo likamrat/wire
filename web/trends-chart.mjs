@@ -1,5 +1,5 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
-export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, onWindow, formatDate, formatAxisDate, weekContext, canInspect }) {
+export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, onWindow, formatDate, formatAxisDate, weekContext, canInspect, missingTokens }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false, userScrolling = false;
     const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format;
@@ -17,11 +17,11 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         return node;
     };
     const metric = (value, family, mode) => family.startsWith("pair-") ? value.amount : family === "timing" ? value.id === "p95" ? value.p95Ms : value.medianMs
-        : family === "tools" && mode === "reach" ? value.reach : mode === "count" ? value.count : value.percent;
-    const unitFor = (family, mode) => mode === "reach" || ["authors", "models", "problems", "pair-interactions"].includes(family) ? "interactions" : "calls";
+        : family === "usage" ? value.total : family === "tools" && mode === "reach" ? value.reach : mode === "count" ? value.count : value.percent;
+    const unitFor = (family, mode) => family === "usage" || family === "pair-tokens" ? "tokens" : mode === "reach" || ["authors", "models", "problems", "pair-interactions"].includes(family) ? "interactions" : "calls";
     const quantity = (n, plural) => `${number(n)} ${n === 1 ? plural.slice(0, -1) : plural}`;
     const reading = (amount, family, mode) => amount === null ? "Unavailable" : family === "timing" || family === "pair-ms" ? `${milliseconds(amount)} ms`
-        : mode === "count" ? quantity(amount, unitFor(family, mode)) : rate(amount);
+        : mode === "count" || unitFor(family, mode) === "tokens" ? quantity(amount, unitFor(family, mode)) : rate(amount);
     function erase(node) {
         const walker = doc.createTreeWalker(node, NodeFilter.SHOW_TEXT);
         for (let text = walker.nextNode(); text; text = walker.nextNode()) text.data = "";
@@ -39,6 +39,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             erase(tooltip); delete tooltip.dataset.chart;
         }
         root.querySelector(".trends-mark-focus")?.replaceChildren();
+        root.querySelector("[data-trend-reading]")?.removeAttribute("data-trend-reading");
         emphasize(null);
         if (!preserveDismissed) dismissed = null;
     }
@@ -48,8 +49,8 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (!canInspect() || !nodes.some(node => node.dataset.series === id)) id = null;
         if (scene) scene.emphasized = id;
         for (const node of nodes) {
+            // Reading recedes the other series; the read line keeps its exact width.
             node.style.opacity = id && node.dataset.series !== id ? ".22" : "1";
-            if (node.hasAttribute("data-trend-line")) node.style.strokeWidth = id && node.dataset.series === id ? "3" : "2";
         }
     }
     function outline(point, stroke, weight) {
@@ -60,6 +61,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (!scene || !canInspect()) return;
         scene.selection = selection;
         const overlay = root.querySelector(".trends-mark-selection");
+        if (!overlay) return;
         overlay.replaceChildren();
         root.querySelector('[data-trend-mark][aria-pressed=true]')?.setAttribute("aria-pressed", "false");
         const point = scene.points.find(point => point.id === selection?.id && scene.data.days[point.index].date === selection.date);
@@ -72,11 +74,11 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         for (const [label, value] of rows) list.append(element("dt", "", label), element("dd", "", String(value)));
         parent.append(list);
     }
-    // Equal samples share one true coordinate. Repeated taps reach each named
-    // series there without jittering the dates or inventing an intersection.
+    // Lines can coincide; grouped columns share a single zero or missing marker.
+    // Repeated taps at that coordinate still reach each underlying reading.
     function coincident(point) {
-        return scene.chartType === "lines" && point.amount !== null
-            ? scene.points.filter(other => other.index === point.index && other.amount === point.amount) : [];
+        return scene.chartType === "lines" || point.column < 0
+            ? scene.points.filter(other => other.index === point.index && other.amount === point.amount && other.x === point.x) : [];
     }
     function show(point) {
         if (!canInspect() || !scene || !point || root.hidden || !root.checkVisibility()) return;
@@ -104,12 +106,16 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const denominator = scene.family === "tools" && scene.mode === "reach" ? value.reachEligible : value.eligible;
         const numerator = scene.family === "tools" && scene.mode === "reach" ? value.interactions : value.count;
         const unit = unitFor(scene.family, scene.mode);
-        tooltip.append(element("div", "trends-tip-value", reading(point.amount, scene.family, scene.mode)));
+        tooltip.append(element("div", "trends-tip-value", point.missingLabel || reading(point.amount, scene.family, scene.mode)));
         // The mark already names its date, subject and value. Only its supporting facts describe it.
         const detail = element("div", "trends-tip-detail");
         detail.id = `${tooltip.id}-detail`; tooltip.append(detail);
-        if (scene.family.startsWith("pair-")) detail.append(element("div", "trends-tip-caption", value.context));
-        else if (scene.family !== "rhythm" || scene.mode === "share")
+        if (scene.family.startsWith("pair-")) {
+            if (value.context !== point.missingLabel) detail.append(element("div", "trends-tip-caption", value.context));
+        } else if (scene.family === "usage") {
+            if (value.eligible) detail.append(element("div", "trends-tip-caption", `${value.metered} of ${quantity(value.eligible,"interactions")} metered`));
+        }
+        else if ((scene.family !== "rhythm" || scene.mode === "share") && !(scene.family === "timing" && !day.calls))
             detail.append(element("div", "trends-tip-caption", `${number(numerator)} of ${quantity(denominator, unit)}${scene.family === "timing" ? " timed" : ""}`));
         if (scene.family === "rhythm" && scene.mode === "share") {
             const week = weekContext(day);
@@ -124,28 +130,49 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             if (scene.mode === "reach") detail.append(element("div", "trends-tip-caption", "Tools can reach the same interaction."));
         } else if (scene.family === "authors") facts(detail, [["Calls in these interactions", value.calls]]);
         else if (scene.family === "services") facts(detail, [["Also involve another service", value.also]]);
-        else if (scene.family === "models") facts(detail, [["Model not recorded", value.missing], ["Also use another model", value.also]]);
+        else if (scene.family === "models") {
+            facts(detail, [["Interactions without a verified model", value.missing], ["Also use another model", value.also]]);
+            if (value.recordedAs) detail.append(element("div", "trends-tip-caption", `Recorded as ${value.recordedAs}`));
+            else if (value.unrecognized) detail.append(element("div", "trends-tip-caption", "WIRE has no display name for this recorded ID."));
+        }
         else if (scene.family === "problems") facts(detail, [["Failed tool calls", value.failedCalls], ["Calls with API errors", value.apiErrorCalls]]);
-        else if (scene.family === "timing") facts(detail, [[point.id === "p95" ? "Median" : "P95",
-            reading(point.id === "p95" ? value.medianMs : value.p95Ms, "timing", scene.mode)],
-            ["Timing coverage", rate(value.percent)]]);
-        else if (!scene.family.startsWith("pair-")) facts(detail, [["Interactions", value.interactions]]);
-        if (coincident(point).length > 1) detail.append(element("div", "trends-tip-caption", "Several series have this value. Select the point again to inspect the next series."));
-        point.node.setAttribute("aria-describedby", detail.id);
+        else if (scene.family === "timing") {
+            if (day.timedCalls) facts(detail, [[point.id === "p95" ? "Median" : "95th percentile",
+                reading(point.id === "p95" ? value.medianMs : value.p95Ms, "timing", scene.mode)]]);
+        }
+        else if (scene.family !== "usage" && !scene.family.startsWith("pair-")) facts(detail, [["Interactions", value.interactions]]);
+        if (point.amount !== null && coincident(point).length > 1) detail.append(element("div", "trends-tip-caption", "Several series have this value. Select the point again to inspect the next series."));
+        if (detail.childElementCount) point.node.setAttribute("aria-describedby", detail.id);
         const at = new DOMPoint(point.x, point.y).matrixTransform(point.node.getScreenCTM());
         const overlay = root.querySelector(".trends-mark-focus");
-        overlay?.replaceChildren(outline(point, "var(--ink)", 1.5));
+        const plot = scene.plot();
+        overlay?.replaceChildren(...point.rect ? [] : [svgNode("line", { class: "trends-day-guide", x1: point.x, x2: point.x, y1: plot.top, y2: plot.bottom })],
+            outline(point, "var(--ink)", 1.5));
+        root.querySelector("[data-trend-reading]")?.removeAttribute("data-trend-reading");
+        point.node.dataset.trendReading = "";
         emphasize(point.id);
         const left = Math.max(8, doc.getElementById("main").getBoundingClientRect().left + 8);
         const scale = parseFloat(getComputedStyle(doc.documentElement).fontSize) / 16;
         const top = doc.querySelector(".app-header").getBoundingClientRect().bottom + 8;
         tooltip.style.maxWidth = `${Math.min(330 * scale, innerWidth - left - 12)}px`;
         tooltip.style.maxHeight = `${Math.max(80, innerHeight - top - 12)}px`; tooltip.hidden = false;
-        const box = tooltip.getBoundingClientRect();
-        const x = at.x + 12 + box.width < innerWidth ? at.x + 12 : at.x - box.width - 12;
-        const y = at.y - box.height - 12 >= top ? at.y - box.height - 12 : at.y + 12;
-        tooltip.style.left = `${Math.max(left, Math.min(innerWidth - box.width - 10, x))}px`;
-        tooltip.style.top = `${Math.max(top, Math.min(innerHeight - box.height - 10, y))}px`;
+        const box = tooltip.getBoundingClientRect(), gap = 12;
+        // The reading never covers its own point or another control, such as View chart.
+        const controls = [...doc.querySelectorAll("a[href],button,select,input,summary,[role=button]")]
+            .filter(node => !root.contains(node) && !tooltip.contains(node) && node.checkVisibility())
+            .map(node => node.getBoundingClientRect()).filter(rect => rect.width && rect.bottom > top && rect.top < innerHeight);
+        const self = { left: at.x - gap, right: at.x + gap, top: at.y - gap, bottom: at.y + gap };
+        const area = (p, rect) => Math.max(0, Math.min(p.left + box.width, rect.right) - Math.max(p.left, rect.left))
+            * Math.max(0, Math.min(p.top + box.height, rect.bottom) - Math.max(p.top, rect.top));
+        const clamp = p => ({ left: Math.max(left, Math.min(innerWidth - box.width - 10, p.left)), top: Math.max(top, Math.min(innerHeight - box.height - 10, p.top)) });
+        const above = at.y - box.height - gap, below = at.y + gap, right = at.x + gap, before = at.x - box.width - gap;
+        const placed = [{ left: right, top: above }, { left: before, top: above }, { left: right, top: below }, { left: before, top: below },
+            { left: at.x - box.width / 2, top: above }, { left: at.x - box.width / 2, top: below },
+            { left: right, top: at.y - box.height / 2 }, { left: before, top: at.y - box.height / 2 }].map(clamp)
+            .map((p, index) => ({ ...p, index, own: area(p, self), covered: controls.reduce((sum, rect) => sum + area(p, rect), 0) }))
+            .sort((a, b) => a.own - b.own || a.covered - b.covered || a.index - b.index)[0];
+        tooltip.style.left = `${placed.left}px`;
+        tooltip.style.top = `${placed.top}px`;
         tooltip.classList.add("open");
     }
     function hit(clientX, clientY, activate = false) {
@@ -183,22 +210,56 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const context = doc.createElement("canvas").getContext("2d");
         context.font = `${14 * scale}px ${getComputedStyle(root).fontFamily}`;
         const definitions = data.definitions[family], series = definitions.filter(row => !hidden.has(row.id));
-        const pair = family.startsWith("pair-"), bars = chartType !== "lines", shares = !["timing", "pair-ms"].includes(family) && mode !== "count";
+        const pair = family.startsWith("pair-"), bars = chartType !== "lines", shares = !["timing", "pair-ms","usage","pair-tokens"].includes(family) && mode !== "count";
         const maximum = Math.max(1, options.sharedMaximum ?? 0, ...data.days.map(day => Math.max(0, ...day.values[family].map(value => metric(value, family, mode) ?? 0))));
-        const dense = definitions.length > 2 || data.days.length > 7 && definitions.length > 1;
-        const labelWidth = dense ? 16 * scale : context.measureText(shares ? "100.0%" : number(maximum)).width + 8 * scale;
+        const occupiesColumn = amount => amount > 0 || family === "timing" && amount === 0;
+        const valueWidth = amount => context.measureText(shares ? rate(amount) : number(amount)).width;
+        // Size the date window for actual columns, not empty legend slots.
+        // Use the unfiltered series here so toggling a checkbox keeps dates in place.
+        let columnsPerDay = 1, groupSpacing = (definitions.length === 1 ? 48 : 32) * scale;
+        for (const day of data.days) {
+            let columns = 0;
+            for (const v of day.values[family]) {
+                const amount = metric(v,family,mode);
+                if (!occupiesColumn(amount)) continue;
+                columns++;
+                groupSpacing = Math.max(groupSpacing,valueWidth(amount) + 6 * scale);
+            }
+            columnsPerDay = Math.max(columnsPerDay,columns);
+        }
         // Keep the day pitch independent of checkboxes and encoding so the same date stays in view.
         const compact = indexed && definitions.length === 1 && data.days.length > 14;
         const tickWidth = Math.max(...labels.map(label => context.measureText(label).width));
+        // A token total can have many digits. Its value label may be omitted,
+        // but it must not force the only measured day outside the initial view.
+        const labelWidth = family === "usage" && compact ? 0 : context.measureText(shares ? "100%" : number(maximum)).width + 8 * scale;
         const dayWidth = pair ? Math.max(40 * scale, tickWidth + 12 * scale) : compact ? Math.max(24 * scale, labelWidth) : Math.max(tickWidth,
-            definitions.length * Math.max(labelWidth, 20 * scale)) + 16 * scale;
-        const left = (pair || family === "timing" ? 78 : 56) * scale;
+            columnsPerDay * 20 * scale) + 16 * scale;
+        const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
+        const step = Math.max(1, [1, 2, 5, 10].find(value => value * magnitude >= maximum / 4) * magnitude);
+        const max = shares ? 100 : Math.ceil(maximum / step) * step;
+        const axisText = value => `${number(value)}${shares ? "%" : ""}`;
+        const ticks = shares ? 4 : Math.round(max / step);
+        const axisWidth = Math.max(...Array.from({length:ticks+1}, (_, i) => context.measureText(axisText(max*i/ticks)).width)) + 20*scale;
+        const left = Math.max((pair || family === "timing" ? 78 : 56) * scale, axisWidth);
         // Native focus and scrollIntoView must treat the pinned scale as occluding the plot.
         root.style.scrollPaddingLeft = `${left}px`;
         const minimumWidth = data.days.length * dayWidth + left + 12 * scale, top = 26 * scale;
         let width = Math.max(root.clientWidth, minimumWidth), height = Math.max(1, root.clientHeight - 18);
         let bottom = height - 42 * scale, pitch = (width - left - 12 * scale) / data.days.length;
-        scene = { data, family, mode, hidden, chartType, indexed, options, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null };
+        scene = { data, family, mode, hidden, chartType, indexed, options, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null,
+            plot: () => ({ top, bottom }) };
+        scene.maximum = max;
+        if (!series.length) {
+            // Keep the reading position for re-enabling a series; no axes or
+            // dates describe a plot with nothing selected.
+            scene.reading = savedReading;
+            scene.resize = size => { scene.viewportWidth = size.width; };
+            erase(root); root.append(element("p", "trends-chart-empty", definitions.length ? "Choose a series to show in the chart."
+                : family === "models" ? "No recorded model names" : "No recorded service associations"));
+            onWindow?.(null);
+            return;
+        }
         const placements = [];
         function place(node, geometry) {
             const update = () => {
@@ -206,11 +267,8 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             };
             placements.push(update); update(); return node;
         }
-        const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
-        const step = Math.max(1, [1, 2, 5, 10].find(value => value * magnitude >= maximum / 4) * magnitude);
-        const max = shares ? 100 : Math.ceil(maximum / step) * step;
-        scene.maximum = max;
         const x = index => left + pitch * (index + .5), y = value => bottom - value * (bottom - top) / max;
+        const tickStride = () => compact ? Math.ceil((tickWidth + 8 * scale) / pitch) : 1;
         const svg = place(svgNode("svg", { role: "group", "aria-label": `Daily ${bars ? "columns" : "lines"} · ${shares ? "percent" : ["timing", "pair-ms"].includes(family) ? "milliseconds" : unitFor(family, mode)}`,
             "data-time-axis": family, "data-chart-type": bars ? "columns" : "lines" }),
             () => ({ viewBox: `0 0 ${width} ${height}`, width, height }));
@@ -239,25 +297,25 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             }
         }
         const axis = svgNode("g", { class: "trends-y-axis", "pointer-events": "none" });
-        axis.append(place(svgNode("rect", { x: 0, y: top - 12 * scale, width: left - 5 * scale, fill: "var(--paper)" }),
-            () => ({ height: bottom - top + 24 * scale })));
-        const ticks = shares ? 4 : Math.round(max / step);
+        axis.append(place(svgNode("rect", { x: 0, y: 0, width: left - 5 * scale, fill: "var(--paper)" }),
+            () => ({ height })));
         for (let index = 0; index <= ticks; index++) {
             const value = max * index / ticks;
             if (!shares && !Number.isInteger(value)) continue;
             svg.append(place(svgNode("line", { x1: left, class: index ? "trends-grid" : "trends-grid trends-baseline" }),
                 () => ({ x2: width - 16 * scale, y1: y(value), y2: y(value) })));
-            axis.append(place(svgNode("text", { x: left - 14 * scale, "text-anchor": "end" }, `${number(value)}${shares ? "%" : ""}`),
+            axis.append(place(svgNode("text", { x: left - 14 * scale, "text-anchor": "end" }, axisText(value)),
                 () => ({ y: y(value) + 4 * scale })));
         }
-        const slotWidth = () => Math.min(Math.max(48 * scale, labelWidth), (pitch - (compact ? 4 : 12) * scale) / series.length);
+        const slotWidth = () => Math.min(groupSpacing, (pitch - (compact ? 4 : 12) * scale) / columnsPerDay);
+        const barWidth = () => Math.min(44 * scale, slotWidth() - 4 * scale);
         function position(point) {
             const stride = slotWidth();
-            point.x = x(point.index) + (bars || point.amount === null ? (point.slot - (series.length - 1) / 2) * stride : 0);
+            point.x = x(point.index) + (bars && point.column >= 0 ? (point.column - (point.columns - 1) / 2) * stride : 0);
             point.y = point.amount === null ? bottom + 11 * scale : y(point.amount);
             if (point.rect) {
-                const barWidth = Math.min(44 * scale, stride - 4 * scale);
-                Object.assign(point.rect, { x: point.x - barWidth / 2, y: point.y, width: barWidth, height: bottom - point.y });
+                const w = barWidth();
+                Object.assign(point.rect, { x: point.x - w / 2, y: point.y, width: w, height: bottom - point.y });
                 point.y += point.rect.height / 2;
             }
         }
@@ -267,25 +325,32 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         for (const [index, day] of data.days.entries()) {
             const values = new Map(day.values[family].map(value => [value.id, value]));
             const grouped = bars && series.length > 1;
-            const allZero = grouped && series.every(({id}) => metric(values.get(id), family, mode) === 0);
-            const positives = grouped ? series.flatMap(({id}, slot) => metric(values.get(id), family, mode) > 0 ? [slot] : []) : [];
-            const neighbors = new Map(positives.map((slot, n) => [slot, [positives[n-1], positives[n+1]]]));
-            if (allZero) svg.append(place(svgNode("text", { "text-anchor":"middle", "aria-hidden":"true", "pointer-events":"none" }, shares ? "0%" : "0"),
-                () => ({x:x(index), y:bottom - 5 * scale})));
-            for (const [slot, { id }] of series.entries()) {
+            const amounts = series.map(({id}) => metric(values.get(id),family,mode));
+            const columnValues = amounts.filter(occupiesColumn);
+            const columns = columnValues.length, allZero = grouped && amounts.every(amount => amount === 0);
+            const columnWidths = columnValues.map(valueWidth);
+            let nextColumn = 0, labeledMissing = false, labeledZero = false;
+            const markedDayLabel = !columns && (allZero || amounts.every(amount => amount === null));
+            for (const { id } of series) {
                 const value = values.get(id), amount = metric(value, family, mode), ink = color(id, family);
-                const point = { index, id, slot, value, amount, rect: bars && amount > 0 ? {} : null };
+                const column = !allZero && occupiesColumn(amount) ? nextColumn++ : -1;
+                const point = { index, id, column, columns, value, amount, rect: bars && amount > 0 ? {} : null };
+                const usageGap = amount === null && (family === "usage" || value.tokenGap);
+                const timingGap = amount === null && (family === "timing" || family === "pair-ms");
+                point.missingLabel = usageGap ? (value.tokenGap || missingTokens?.(day,value))
+                    : timingGap ? day.calls ? "No recorded duration" : "No matching calls" : null;
                 position(point);
                 const n = scene.points.push(point) - 1;
                 const noActivity = options.distinguishEmpty && !day.calls;
                 const node = point.node = svgNode("g", { "data-series": id, "data-trend-mark": n, tabindex: n ? -1 : 0,
-                    role: "button", "aria-pressed": "false", "aria-label": `${formatDate(day.date)}: ${value.label}, ${reading(amount, family, mode)}${noActivity ? ", no matching dated calls" : ""}` });
+                    role: "button", "aria-pressed": "false", "aria-label": `${formatDate(day.date)}: ${value.label}, ${point.missingLabel || reading(amount, family, mode)}${noActivity ? ", no matching dated calls" : ""}` });
+                if (grouped && column < 0 && amount === 0 && columns && !allZero) node.setAttribute("pointer-events","none");
                 const paint = svgNode("g", { "aria-hidden": "true", stroke: "none" }); node.append(paint); svg.append(node);
                 if (point.rect) paint.append(place(svgNode("rect", { fill: ink, "data-trend-bar": "", "data-series": id }), () => point.rect));
                 if (!bars && amount !== null) {
                     const from = last.get(id);
                     if (from && !weekStarts.has(index)) {
-                        paths.append(place(svgNode("line", { stroke: ink, "stroke-width": 2, "data-series": id, "data-trend-line": "",
+                        paths.append(place(svgNode("line", { stroke: ink, "stroke-width": 2.5, "stroke-linecap": "round", "data-series": id, "data-trend-line": "",
                             ...(pair && value.secondary ? { "stroke-dasharray": "6 4" } : {}) }),
                             () => ({ x1: from.x, y1: from.y, x2: point.x, y2: point.y })));
                         scene.segments.push({ from, to: point });
@@ -296,56 +361,62 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                         : pair && value.secondary
                         ? place(svgNode("rect", { width: 6 * scale, height: 6 * scale, fill: "var(--paper)", stroke: ink, "stroke-width": 2 }),
                             () => ({ x: point.x - 3 * scale, y: point.y - 3 * scale }))
-                        : place(svgNode("circle", { r: 3 * scale, fill: "var(--paper)", stroke: ink, "stroke-width": 2 }),
+                        : place(svgNode("circle", { r: 3 * scale, fill: "var(--paper)", stroke: ink, "stroke-width": 2, "data-trend-point": "" }),
                             () => ({ cx: point.x, cy: point.y })));
                 }
                 if (!bars) last.set(id, amount === null ? null : point);
                 if (!point.rect) paint.append(place(svgNode("circle", { r: 8 * scale, fill: "transparent" }),
                     () => ({ cx: point.x, cy: point.y })));
-                // In a mixed count group the bars carry the positive values; a day of
-                // all drawn zeros has one date-centred label. Keep measured timing zeros explicit.
-                if (amount === null || bars && !allZero && (!compact || amount > 0) && (!grouped || amount > 0 || family === "timing")) {
+                // Names belong in the legend and exact reading. A number never
+                // drifts sideways to fit, and coincident gaps get just one dash.
+                if (amount === null ? !labeledMissing && (!timingGap || day.calls) && (!usageGap || day.calls && (value.eligible || id === "usage" || value.tokenActivity))
+                    : bars && (column >= 0 || !labeledZero && (!columns || allZero) && !compact)) {
                     const text = amount === null ? "—" : shares ? rate(amount) : number(amount);
-                    const label = svgNode("text", { "text-anchor": "middle" }, text);
-                    const named = `${value.label} ${text}`, namedWidth = grouped && amount > 0 ? context.measureText(named).width : Infinity;
-                    const numberWidth = grouped ? context.measureText(text).width : 0;
-                    paint.append(place(label, () => {
-                        let cx = point.x, space = grouped ? slotWidth() - 2 * scale : Infinity;
-                        if (grouped && amount > 0 && family !== "timing") {
-                            const [prev,next] = neighbors.get(slot), margin = 2 * scale;
-                            const start = (prev === undefined ? x(index) - pitch/2 : cx - (slot-prev)*slotWidth()/2) + margin;
-                            const end = (next === undefined ? x(index) + pitch/2 : cx + (next-slot)*slotWidth()/2) - margin;
-                            space = end-start;
-                            const half = (namedWidth <= space ? namedWidth : numberWidth)/2;
-                            cx = Math.max(start+half,Math.min(end-half,cx));
-                        }
-                        const shown = grouped && namedWidth <= space ? named : text;
-                        if (label.textContent !== shown) label.textContent = shown;
-                        return { x: cx, y: amount === null ? point.y + 4 * scale : y(amount) - 5 * scale,
-                            visibility: numberWidth <= space || amount === null ? "visible" : "hidden" };
+                    const labelWidth = context.measureText(text).width;
+                    paint.append(place(svgNode("text", { "text-anchor": "middle" }, text), () => {
+                        const stride = slotWidth(), half = labelWidth / 2 + 2 * scale;
+                        // Never push a label sideways onto another series. When
+                        // numbers would collide, the pinned reading stays exact.
+                        const fits = Math.abs(point.x-x(index)) + half <= pitch/2 && (column < 0 || columnValues.every((other,j) => {
+                            if (j === column) return true;
+                            const distance = Math.abs(j-column)*stride;
+                            return (other <= amount || distance >= half + barWidth()/2)
+                                && (Math.abs(y(other)-y(amount)) > 18 * scale || distance >= half + columnWidths[j]/2);
+                        }));
+                        return { x: point.x, y: amount === null ? point.y + 4 * scale : y(amount) - 5 * scale,
+                            visibility: fits && (usageGap || !compact || !markedDayLabel || index % tickStride() === 0) ? "visible" : "hidden" };
                     }));
+                    if (amount === null) labeledMissing = true;
+                    if (amount === 0) labeledZero = true;
                 }
             }
         }
+        // A line marks only where a run ends or stands alone; reading a day reveals its own point.
+        const continues = new Set(scene.segments.map(segment => segment.from));
+        for (const point of scene.points) if (!point.rect && point.amount !== null && !continues.has(point)) point.node.dataset.trendEnd = "";
         for (const [index, day] of data.days.entries())
             svg.append(place(svgNode("text", { "text-anchor": "middle", "data-date-tick": day.date }, labels[index]),
                 () => ({ x: x(index), y: bottom + 32 * scale,
-                    visibility: compact && index % Math.ceil((tickWidth + 8 * scale) / pitch) ? "hidden" : "visible" })));
+                    visibility: index % tickStride() ? "hidden" : "visible" })));
         svg.append(svgNode("g", { class: "trends-mark-selection", "pointer-events": "none" }),
             axis, svgNode("g", { class: "trends-mark-focus", "pointer-events": "none" }));
         erase(root); root.append(svg);
         select(selection);
-        if (!series.length) root.append(element("p", "trends-chart-empty", data.definitions[family].length ? "No series shown"
-            : family === "models" ? "No recorded model names" : "No recorded service associations"));
         root.scrollLeft = !savedReading || savedReading.end ? root.scrollWidth : savedReading.day * pitch;
         if (indexed && !savedReading && root.scrollLeft > 1) {
             const span = Math.max(1, Math.floor((root.clientWidth - left - 12 * scale) / pitch));
-            let total = 0, best = -1, start = 0;
+            let total = 0, best = -1, start = 0, metered = 0, bestMetered = -1;
             // Start with the most activity that fits. Prefer the latest equally populated span.
             for (let i = 0; i < data.days.length; i++) {
                 total += data.days[i].calls;
-                if (i >= span) total -= data.days[i - span].calls;
-                if (i >= span - 1 && total >= best) { best = total; start = i - span + 1; }
+                if (family === "usage") metered += Number(data.days[i].values.usage.some(v=>v.total !== null));
+                if (i >= span) {
+                    total -= data.days[i - span].calls;
+                    if (family === "usage") metered -= Number(data.days[i-span].values.usage.some(v=>v.total !== null));
+                }
+                if (i >= span - 1 && (metered > bestMetered || metered === bestMetered && total >= best)) {
+                    bestMetered = metered; best = total; start = i - span + 1;
+                }
             }
             root.scrollLeft = start * pitch;
         }
@@ -457,7 +528,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         }
     }, { capture: true, passive: true });
     function rememberReading() {
-        if (scene) { scene.reading = { end: root.scrollWidth - root.clientWidth - root.scrollLeft < 2, day: root.scrollLeft / scene.pitch }; reportWindow(); }
+        if (scene?.points.length) { scene.reading = { end: root.scrollWidth - root.clientWidth - root.scrollLeft < 2, day: root.scrollLeft / scene.pitch }; reportWindow(); }
     }
     function reportWindow() {
         if (!onWindow || !scene?.indexed || !canInspect()) return;
@@ -475,6 +546,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         root.scrollLeft = Math.max(0, point.x - root.clientWidth / 2);
     }
     function barPercent(value) {
+        if (!scene) return 0;
         const amount = metric(value, scene.family, scene.mode);
         return amount === null ? 0 : amount * 100 / scene.maximum;
     }

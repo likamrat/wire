@@ -111,9 +111,8 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
     await expect(page.locator("#dateFilter")).toHaveValue("capture");
     const count = reads.length;
     await page.locator("#analyze-trend-tools").click();
-    await page.getByRole("button", { name: "Open trend", exact: true }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
-    assert.deepEqual(reads.slice(count).map(read => read.filters), [{ author: "user" }]);
+    assert.deepEqual(reads.slice(count).map(read => read.filters), [{ author: "user", collection:"history" }]);
     await page.getByRole("button", { name: "Back to Analyze" }).click();
     await expect(page).toHaveURL(url + "/");
     await expect(page.locator("#promptAuthorFilter")).toHaveValues(["user"]);
@@ -189,7 +188,7 @@ for (const frontend of ["react", "bundled"]) {
         await page.goBack(); await ready(page);
         await expect(page.locator("#contextSidebar")).not.toBeVisible();
         const home = page.url(), link = page.locator("#analyze-trend-tools"), count = reads.length;
-        await expect(page.locator("a.analyze-trend-link:visible")).toHaveCount(6);
+        await expect(page.locator("a.analyze-trend-link:visible")).toHaveCount(7);
         await expect(link).toHaveAttribute("href", "/trends");
         await link.evaluate(node => node.scrollIntoView({ block: "center" }));
         await link.focus(); await frames(page);
@@ -198,7 +197,7 @@ for (const frontend of ["react", "bundled"]) {
         await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
         assert.equal(page.url(), url + privateTrends);
         assert.equal(reads.length - count, 1, "no intermediate default read");
-        assert.deepEqual(reads.at(-1).filters, { tool: "workiq-fetch", author: "user", service: "Calendar" });
+        assert.deepEqual(reads.at(-1).filters, { tool: "workiq-fetch", author: "user", service: "Calendar", collection:"history" });
         assert.equal(reads.at(-1).from, day); assert.equal(reads.at(-1).to, day);
         assert.equal(reads.at(-1).timeContext.timeZone, "America/Los_Angeles");
         assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /workiq-fetch|Calendar|2026-09-30|invented-trend-origin/);
@@ -220,9 +219,19 @@ for (const frontend of ["react", "bundled"]) {
     });
 }
 for (const frontend of ["react", "bundled"]) {
-    test(`${frontend}: all six Analyze widgets open their own daily evidence and return to the exact activating link`, async t => {
-        const { page, url, reads } = await setup(t, frontend, records());
-        await page.goto(`${url}/?range=custom&from=${day}&to=${day}&source=github-copilot`); await ready(page);
+    test(`${frontend}: six call and interaction widgets open their own daily evidence and return to the exact activating link`, async t => {
+        const source = records(), early = "2026-09-05T01:00:00Z", late = "2026-11-23T18:00:00Z";
+        const last = structuredClone(source[0]);
+        Object.assign(last, {scenarioId:"latest-only",sourceSessionId:"latest-chat"});
+        last.userPrompt.sourceEventId = "latest-prompt";
+        Object.assign(last.toolCalls[0], {toolCallId:"latest-only-call",startEventId:"latest-only-start",completedAt:late,startedAt:late});
+        for (const r of source) Object.assign(r.toolCalls[0], {startedAt:early,completedAt:early});
+        const { page, url, reads } = await setup(t, frontend, [...source,last]);
+        await page.goto(`${url}/?source=github-copilot&scope=all`); await ready(page);
+        await expect(page.locator("#activityCount")).toHaveText("3");
+        const chart = page.locator("#chart");
+        for (const [date,count] of [["Sep 4",2],["Sep 5",0],["Nov 23",1]])
+            await expect(chart.getByRole("link",{name:new RegExp(`^${date}, 2026: ${count} Work IQ tool call`)})).toBeAttached();
         const origin = page.url();
         for (const [family, size] of [["rhythm", 2], ["tools", 2], ["services", 2], ["authors", 2], ["models", 2], ["problems", 1]]) {
             const link = page.locator(`#analyze-trend-${family}`), before = reads.length;
@@ -235,15 +244,32 @@ for (const frontend of ["react", "bundled"]) {
                 await consent.getByRole("button", { name: "Open trend" }).click();
             }
             await expect(visiblePanel(page)).toHaveAttribute("data-family", family);
+            assert.deepEqual([reads.at(-1).from,reads.at(-1).to],["2026-09-04","2026-11-23"],`${family}: all 81 local calendar days`);
             await expect(visiblePanel(page).getByRole("heading", { level: 2 })).toBeFocused();
             assert.equal(reads.length - before, 1, family); assert.equal(page.url(), url + privateTrends);
-            await visiblePanel(page).getByRole("button", { name: `View ${size} call${size === 1 ? "" : "s"}` }).click();
-            const calls = page.locator(".trends-evidence-row a"); await expect(calls).toHaveCount(size);
-            await calls.filter({ hasText: "workiq-fetch" }).click();
-            await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:invented-trend-origin-0");
-            await page.goBack(); await ready(page); await expect(page.locator("#contextSidebar")).not.toBeVisible();
+            const series=({rhythm:"rhythm",problems:"problems",authors:"user",models:"Juniper",services:"Calendar",tools:"workiq-fetch"})[family];
+            await visiblePanel(page).locator(`[data-trend-mark][aria-label^="Sep 4, 2026:"][data-series="${series}"]`).press("Enter");
+            const n = family==="tools" ? 1 : size;
+            await visiblePanel(page).getByRole("button", { name: `View ${n} call${n === 1 ? "" : "s"}` }).click();
+            const calls = page.locator(".trends-evidence-row a"); await expect(calls).toHaveCount(n);
+            for (const [index,r] of source.slice(0,n).entries()) {
+                if (index && !await page.locator(".trends-dialog[open]").count()) await visiblePanel(page).getByRole("button",{name:`View ${n} calls`}).click();
+                await calls.filter({ hasText: r.toolCalls[0].tool }).click();
+                await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", `request:${r.scenarioId}`);
+                await expect(page.locator(`[data-tool-call-id="${r.toolCalls[0].toolCallId}"]`)).toBeAttached();
+                await page.goBack(); await ready(page); await expect(page.locator("#contextSidebar")).not.toBeVisible();
+            }
             await expect(visiblePanel(page)).toHaveAttribute("data-family", family);
             if (await page.locator(".trends-dialog[open]").count()) await page.keyboard.press("Escape");
+            if (family === "rhythm") {
+                const point = date => visiblePanel(page).locator(`[data-trend-mark][aria-label^="${date}, 2026:"]`);
+                await point("Sep 5").press("Enter"); await expect(visiblePanel(page).getByRole("button",{name:"View 0 calls"})).toBeDisabled();
+                await point("Nov 23").press("Enter"); await visiblePanel(page).getByRole("button",{name:"View 1 call"}).click();
+                await calls.click(); await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key","request:latest-only");
+                await expect(page.locator('[data-tool-call-id="latest-only-call"]')).toBeAttached();
+                await page.goBack(); await ready(page);
+                if (await page.locator(".trends-dialog[open]").count()) await page.keyboard.press("Escape");
+            }
             if (family === "tools") await page.goBack();
             else await page.getByRole("button", { name: "Back to Analyze" }).click();
             await ready(page); await expect(link).toBeFocused(); assert.equal(page.url(), origin);
@@ -257,14 +283,14 @@ test("qualified outcome transition cancels in place, accepts only supported scop
     const link = page.getByRole("link", { name: "View trend: Errors & failures", exact: true });
     await link.click();
     const decision = page.getByRole("dialog"), original = page.url();
-    for (const text of ["affected interactions", "Outcome filter does not carry over", "all prompt authors", "all services", "last 7 days"]) {
+    for (const text of ["affected interactions", "Outcome filter does not carry over", "all prompt authors", "all services"]) {
         await expect(decision).toContainText(text);
     }
     await page.keyboard.press("Escape"); await expect(link).toBeFocused();
     assert.equal(page.url(), original); assert.equal(reads.length, 0);
     await link.click(); await decision.getByRole("button", { name: "Open trend" }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "problems");
-    assert.deepEqual(reads.at(-1).filters, {}); assert.equal(page.url(), url + privateTrends);
+    assert.deepEqual(reads.at(-1).filters, {collection:"history"}); assert.equal(page.url(), url + privateTrends);
     const beforeReload = reads.length;
     await page.reload(); await ready(page);
     assert.equal(reads.length, beforeReload, "reload cannot replace a bound home scope with all calls");
@@ -281,7 +307,7 @@ for (const frontend of ["react", "bundled"]) {
         const { page, url } = await setup(t, frontend, records());
         await page.goto(`${url}/?range=custom&from=${day}&to=${day}&source=github-copilot`); await ready(page);
         const links = page.locator("a.analyze-trend-link:visible"), proof = process.env.WIRE_TRENDS_PROOFS, checks = [], issues = [];
-        await expect(links).toHaveCount(6);
+        await expect(links).toHaveCount(7);
         for (const [width, scale] of [[1600,1],[900,1],[390,2]]) {
             await page.setViewportSize({width,height:900});
             await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; },scale);
@@ -291,6 +317,7 @@ for (const frontend of ["react", "bundled"]) {
                 const box = n => {const b=n.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height};};
                 const range = document.createRange(); range.selectNodeContents(heading);
                 return {id:link.id, text:link.innerText, accessible:link.getAttribute("aria-label"),
+                    font:parseFloat(getComputedStyle(link).fontSize),rootFont:parseFloat(getComputedStyle(document.documentElement).fontSize),
                     title:box(heading), link:box(link), header:box(link.parentElement),
                     card:box(link.closest(".percentage-card,.chart-panel")), titleLines:range.getClientRects().length};
             }));
@@ -299,11 +326,30 @@ for (const frontend of ["react", "bundled"]) {
             if (activity.card.x + activity.card.w <= result.card.x + 2 && Math.abs(activity.card.y-result.card.y)<2)
                 if (Math.abs(activity.link.y-result.link.y)>1) issues.push(`${width}: adjacent action tops differ by ${activity.link.y-result.link.y}px`);
             for (const row of rows) {
-                if (row.text !== "View trend" || !row.accessible?.startsWith("View trend: ")) issues.push(`${row.id} wording: ${row.text}`);
+                const action = row.id === "analyze-trend-usage" ? "View by day" : "View trend";
+                if (row.text !== action || !row.accessible?.startsWith(action + ": ")) issues.push(`${row.id} wording: ${row.text}`);
+                if (row.font < row.rootFont) issues.push(`${width} ${row.id}: ${row.font}px link below reading size`);
                 if (row.link.h<44 || row.link.x<row.header.x-1 || row.link.x+row.link.w>row.header.x+row.header.w+1)
                     issues.push(`${width} ${row.id}: action outside header or less than 44px tall`);
                 if (row.title.x+row.title.w>row.link.x+1 && row.title.y+row.title.h>row.link.y+1 && row.link.y+row.link.h>row.title.y+1)
                     issues.push(`${width} ${row.id}: overlapping title/action`);
+            }
+            if (width===1600) {
+                for (const kind of ["header","tools","models","authors","services"]) {
+                    const link = kind==="header" ? links.first() : page.locator(`[data-breakdown="${kind}"] .percentage-label[href]`).first();
+                    const face = kind==="services" ? link.locator("..") : link, pseudo = kind==="header" ? "::before" : null;
+                    const paint = () => face.evaluate((node,pseudo)=>getComputedStyle(node,pseudo).backgroundColor,pseudo);
+                    await page.mouse.move(0,0); await expect(link).toHaveCSS("text-decoration-line","none");
+                    await link.hover(); const hover=await paint(), box=await link.boundingBox();
+                    assert.notEqual(hover,"rgba(0, 0, 0, 0)",`${kind} hover must be visible`);
+                    await expect(link).toHaveCSS("text-decoration-line","none");
+                    await page.mouse.down(); assert.notEqual(await paint(),hover,`${kind} press must differ from hover`);
+                    await expect(link).toHaveCSS("text-decoration-line","none"); assert.deepEqual(await link.boundingBox(),box);
+                    await page.mouse.move(0,0); await page.mouse.up();
+                    await link.press("Tab"); await page.keyboard.press("Shift+Tab"); await expect(link).toBeFocused();
+                    await expect(link).toHaveCSS("text-decoration-line","none");
+                    assert.equal(await face.evaluate((node,pseudo)=>getComputedStyle(node,pseudo).outlineStyle,pseudo),"solid",`${kind} keyboard focus`);
+                }
             }
             if (proof) {
                 await mkdir(proof,{recursive:true});

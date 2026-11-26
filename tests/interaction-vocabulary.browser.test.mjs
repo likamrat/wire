@@ -438,7 +438,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
         await expect(card("copilot").locator(".service-availability")).toHaveCount(0);
         await expect(card("preparation").locator(".service-availability")).toHaveCount(0);
         await card("automatic").locator(".request-card-open").click();
-        await expect(page.locator('[data-reader-section="prompt"] .reader-section-title')).toHaveText("Agent prompt (automatic continuation)");
+        await expect(page.locator('[data-reader-section="prompt"] .reader-section-heading > .reader-section-toggle')).toHaveText("Agent prompt (automatic continuation)");
         await expect(page.locator('[data-reader-section="prompt"] .ux-copy')).toHaveCount(0);
         await page.locator("#closeContextSidebar").click();
     }

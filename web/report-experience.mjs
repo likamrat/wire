@@ -1,4 +1,3 @@
-// Screen copy only: file names, format values and saved report bytes are unchanged.
 export const reportFileChoices = {
     html: { name: "HTML", purpose: "Web page" },
     pdf: { name: "PDF", purpose: "Print document" },
@@ -13,15 +12,16 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed, deleteNamed }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, changeUsage, questionControls, viewUsageTrend, openDeskActivity, closePreview, current, createCalendar, selectNamed, deleteNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
-        ["all", "All activity"], ["errors", "Errors & failures"],
+        ["all", "All activity"], ["errors", "Errors & failures"], ["tokens", "Token usage"],
         ["completed", "Completed calls"], ["mine", "Human prompts"], ["agent", "Agent prompts"],
     ];
     const help = {
         all: "",
         errors: "Compare interactions with a failed call or a recorded error against all eligible interactions. A completed call can contain an API error.",
+        tokens: "Recorded model tokens, cache usage and per-interaction coverage. Missing counts are not zero.",
         completed: "All calls completed without a recorded error. The answer can still be wrong.",
         mine: "Started by you, including any calls made by an agent.",
         agent: "Started by an agent. Unknown authors are excluded.",
@@ -59,7 +59,69 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         for (const panel of root.querySelectorAll(".report-options-popover:popover-open")) panel.hidePopover();
     }
     const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
-    let deskFocus = "all";
+    let deskFocus = "all", setupOpen = false, setupOrigin = null, lastNamedId = null;
+    const galleryHeader = el("div", "report-gallery-header"), galleryTitle = el("h2", "", "New report");
+    galleryTitle.tabIndex = -1;
+    const setupBack = button("Back to report choices", () => {
+        setupOpen = false; sync();
+        (setupOrigin?.isConnected && setupOrigin.checkVisibility() ? setupOrigin : customChoice).focus({ preventScroll: true });
+    });
+    setupBack.prepend(ux.icon("back"));
+    const defaults = el("div", "report-defaults"), presetList = el("ul", "report-preset-list"), presetControls = new Map();
+    const presetLimit = el("p", "report-preset-limit");
+    presetLimit.id = "reportPresetLimit";
+    const descriptions = {
+        all: "Prompts, Work IQ calls and results.", errors: "Failed calls and returned API errors.",
+        tokens: "Recorded tokens, cache usage and coverage.", completed: "Calls completed without a recorded error.",
+        mine: "Interactions started by a person.", agent: "Interactions started by an agent.",
+    };
+    const roles = { all: "report-all", errors: "scope-issues", tokens: "report-tokens", completed: "result-success", mine: "author-user", agent: "author-agent" };
+    function reportChoice(title, description, role, action, verb = "Preview") {
+        const row = el("li"), control = button("", action, "report-tile-open"), copy = el("span", "report-preset-copy");
+        const name = el("span", "report-preset-name", title), detail = el("span", "report-preset-description", description);
+        const destination = el("span", "report-preset-destination", verb);
+        copy.append(name, detail); destination.append(ux.icon("forward"));
+        control.append(ux.icon(role), copy, destination); row.append(control); presetList.append(row);
+        return { control, destination };
+    }
+    for (const [id, title] of presets) {
+        const choice = reportChoice(title, descriptions[id], roles[id], event => {
+            deskFocus = id; sync(); choose(id, event.currentTarget);
+        });
+        choice.control.id = "reportPreset-" + id; choice.control.dataset.reportPreset = id;
+        presetControls.set(id, choice);
+    }
+    const { control: customChoice } = reportChoice("Custom report", "Choose activity, dates and report settings.", "report-custom",
+        event => showSetup(event.currentTarget), "Set up");
+    customChoice.id = "reportCustomSetup";
+    const resumePreview = button("Resume preview", () => {
+        const preset = read().resumePreset;
+        if (preset) { deskFocus = preset; sync(); choose(preset, resumePreview); }
+    }, "report-resume-preview");
+    resumePreview.prepend(ux.icon("read")); resumePreview.append(ux.icon("forward"));
+    resumePreview.id = "reportResumePreview";
+    const draftShelf = el("section", "report-draft-shelf"); draftShelf.id = "reportDraftsPanel";
+    const draftTitle = el("h2", "", "Drafts"), draftRows = el("ul", "report-draft-rows");
+    presetList.setAttribute("role", "list"); draftRows.setAttribute("role", "list");
+    draftTitle.tabIndex = -1;
+    const draftEmpty = el("p", "muted", "Use Add to report on an interaction to create a draft.");
+    draftShelf.append(draftTitle, draftRows, draftEmpty);
+    function clearDraftRows() {
+        const text = doc.createTreeWalker(draftRows, NodeFilter.SHOW_TEXT);
+        while (text.nextNode()) text.currentNode.data = "";
+        for (const entry of draftRows.querySelectorAll("[data-report-draft]")) {
+            const attribute = entry.getAttributeNode("data-report-draft");
+            attribute.value = ""; entry.removeAttributeNode(attribute);
+        }
+        draftRows.replaceChildren();
+    }
+    const draftShortcut = button("Drafts", () => { draftTitle.focus(); draftTitle.scrollIntoView({ block: "nearest" }); });
+    draftShortcut.classList.add("report-draft-shortcut"); draftShortcut.prepend(ux.icon("report-files"));
+    galleryHeader.append(galleryTitle, setupBack, draftShortcut);
+    function showSetup(origin) {
+        setupOrigin = origin; setupOpen = true; sync();
+        galleryTitle.focus({ preventScroll: true });
+    }
     function selectField(id, caption) {
         const field = el("div", "report-form-field"), label = el("label", "", caption), select = el("select");
         label.htmlFor = select.id = id;
@@ -126,9 +188,11 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     let optionSignature;
     let replacePrompt = null;
-    namedSelect.onchange = () => {
-        const value = read(), id = namedSelect.value;
+    function chooseNamed(id, origin) {
+        const value = read();
         if (!current() || namedSelect.disabled) return;
+        showSetup(origin);
+        if (id === value.namedReport?.id) return;
         if (!value.resumePreset) { selectNamed(id); return; }
         namedSelect.value = value.namedReport?.id ?? "";
         replacePrompt?.remove();
@@ -138,9 +202,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             button("Keep preview", () => { replacePrompt.remove(); replacePrompt = null; byId("namedReportDraft-control")?.focus(); }));
         namedRow.after(replacePrompt);
         queueMicrotask(() => { if (current() && replacePrompt?.isConnected) replacePrompt.querySelector("button").focus(); });
-    };
+    }
+    namedSelect.onchange = () => chooseNamed(namedSelect.value, namedSelect);
     desk.append(namedRow, draftChoices, outlineDescription, outlineChoices, treatment, outlineAction, prepareHint);
-    gallery.append(el("h2", "", "New report"), desk);
+    gallery.append(galleryHeader, resumePreview, defaults, presetLimit, presetList, desk);
     const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
     selection.classList.add("report-explicit-selection");
     const selectionHeader = el("header", "report-selection-header"), selectionBody = el("div", "report-selection-body");
@@ -204,7 +269,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const service = select("reportService", "Service", [["", "All services"], ...read().services.map(value => [value, value])]);
     outcome.addEventListener("change", () => { if (current()) changeFocus({ outcome: outcome.value }); });
     service.addEventListener("change", () => { if (current()) changeFocus({ services: service.value ? [service.value] : [] }); });
-    refine.append(byId("reportResultText").closest("label"), byId("reportRecordedContext").closest("label"), byId("reportRecordedContextHelp"));
+    refine.append(byId("reportResultText").closest("label"), byId("reportRecordedContext").closest("label"), byId("reportRecordedContextHelp"), byId("reportUsageOptions"));
     const scope = button("Change activity selection", () => { refine.hidePopover(); showSelection(); });
     refine.append(scope); done(refine);
     const refineButton = opener("Change what's included", refine);
@@ -213,6 +278,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
     const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Formats", formatGroup);
     draftChoices.append(compactLabel, datesRow);
+    const usageChoices = questionControls(doc, "report", changeUsage, { filters:true });
+    const trendQuestion = button("View in Trends",viewUsageTrend);
+    draftChoices.append(usageChoices.host,trendQuestion);
     const activityRow = optionsRow("Activity source", scopeChoice), draftMembership = el("span", "report-draft-membership");
     activityRow.append(draftMembership);
     outlineChoices.append(activityRow, fileRow);
@@ -306,6 +374,20 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         if (!current()) return;
         const value = read();
         const draftOptions = value.draftCatalog?.drafts ?? [];
+        if (value.namedReport?.id && value.namedReport.id !== lastNamedId) setupOpen = true;
+        lastNamedId = value.namedReport?.id ?? null;
+        desk.hidden = !setupOpen;
+        defaults.hidden = presetList.hidden = setupOpen || value.prepared;
+        setupBack.hidden = !setupOpen;
+        galleryTitle.firstChild.data = setupOpen ? value.namedReport?.name || "Custom report" : "New report";
+        draftShortcut.hidden = setupOpen || !draftOptions.length;
+        resumePreview.hidden = setupOpen || !value.resumePreset || value.prepared;
+        resumePreview.disabled = value.locked || value.loading;
+        customChoice.disabled = value.locked || value.loading;
+        presetLimit.textContent = value.nativeScope
+            ? "Microsoft conversation reports use All activity. Choose an interaction-only source for other reports."
+            : value.options.promptMode === "original" ? "Personal details may be included. Detected credentials are still removed." : "";
+        presetLimit.hidden = setupOpen || !presetLimit.textContent;
         namedRow.hidden = !draftOptions.length || value.prepared;
         namedSelect.disabled = value.locked || value.loading;
         deleteButton.hidden = !draftOptions.some(d => d.id === value.namedReport?.id);
@@ -318,12 +400,29 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
                 if (d.createdAt) option.dataset.detail = "Created " + time.formatDate(d.createdAt, value.timeContext, true);
                 return option;
             }));
+            clearDraftRows();
+            for (const item of draftOptions) {
+                const row = el("li"), entry = button("", event => chooseNamed(item.id, event.currentTarget), "report-tile-open");
+                entry.dataset.reportDraft = item.id;
+                const copy = el("span", "report-draft-copy");
+                copy.append(el("span", "report-preset-name", item.name), el("span", "report-preset-description",
+                    item.unavailable ? "Selection unavailable" : `${item.scenarioIds.length} selected ${item.scenarioIds.length === 1 ? "interaction" : "interactions"}`));
+                entry.append(ux.icon("report-files"), copy, ux.icon("forward")); row.append(entry); draftRows.append(row);
+            }
         }
+        for (const entry of draftRows.querySelectorAll("button")) entry.disabled = value.locked || value.loading;
+        draftEmpty.hidden = Boolean(draftOptions.length);
         namedSelect.value = value.namedReport?.id ?? "";
         toolbar.hidden = !value.prepared;
+        const usageHost = value.prepared ? byId("reportUsageOptions") : draftChoices;
+        if (usageChoices.host.parentElement !== usageHost) usageHost.append(usageChoices.host);
+        usageChoices.host.hidden = value.nativeScope && !value.paired;
+        usageChoices.sync(value.options.usageOptions, value.locked || value.saved || value.options.usageOptions?.tokens === false, value.paired || value.nativeScope);
+        trendQuestion.hidden = !value.options.usageOptions?.question || value.prepared || value.paired || value.explicitScope || value.namedReport
+            || value.nativeScope || deskFocus !== "all" || !value.dates?.from || !value.dates?.to;
         gallery.hidden = value.paired && value.prepared;
         if (privacyGroup.parentElement !== choices) choices.append(privacyGroup);
-        const privacyHost = value.prepared ? privacy : treatment;
+        const privacyHost = value.prepared || !setupOpen ? privacy : treatment;
         if (promptOptions.parentElement !== privacyHost) privacyHost.prepend(promptOptions);
         legend.classList.toggle("visually-hidden", value.prepared);
         legend.textContent = value.prepared ? "Report text" : "Chat details in this report";
@@ -331,9 +430,17 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             if (dateButton.parentElement !== choices) choices.prepend(dateButton);
             if (formatGroup.parentElement !== choices) dateButton.after(formatGroup);
         } else {
-            if (dateButton.parentElement !== datesRow) datesRow.append(dateButton);
+            const dateHost = setupOpen ? datesRow : defaults;
+            if (dateButton.parentElement !== dateHost) {
+                if (setupOpen) datesRow.append(dateButton);
+                else defaults.prepend(dateButton);
+            }
             if (formatGroup.parentElement !== fileRow) fileRow.append(formatGroup);
+            const scopeHost = setupOpen ? activityRow : defaults;
+            if (scopeChoice.parentElement !== scopeHost) scopeHost.append(scopeChoice, draftMembership);
+            if (!setupOpen && privacyButton.parentElement !== defaults) defaults.append(privacyButton);
         }
+        if ((setupOpen || value.prepared) && privacyButton.parentElement !== privacyRow) privacyRow.append(privacyButton);
         selection.dataset.desk = String(!value.prepared);
         useActivity.hidden = value.prepared;
         byId("additionalMasking").hidden = !value.prepared;
@@ -359,9 +466,17 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const scopeIssue = value.hiddenCardIssue || !resume && (value.namedReport ? !named?.scenarioIds.length || named.unavailable
             ? "This draft has no complete available selection. Choose another draft or update its interactions." : "" : value.explicitScope && value.scopeIssue);
         prepare.disabled ||= Boolean(scopeIssue);
+        for (const [id, { control, destination }] of presetControls) {
+            control.disabled = prepare.disabled || value.nativeScope && id !== "all";
+            destination.firstChild.data = !updated && value.resumePreset === id ? "Resume" : "Preview";
+            if (value.nativeScope && id !== "all") control.setAttribute("aria-describedby", presetLimit.id);
+            else control.removeAttribute("aria-describedby");
+        }
         prepareHint.textContent = value.locked ? "Finish or check the current save before preparing another report."
             : value.unavailable ? "Waiting for activity to load." : !value.options.formats.length ? "Choose at least one file format to preview the report." : scopeIssue || "";
         prepareHint.hidden = !prepareHint.textContent;
+        const hintHost = setupOpen ? desk : gallery;
+        if (prepareHint.parentElement !== hintHost) hintHost.append(prepareHint);
         if (prepareHint.hidden) prepare.removeAttribute("aria-describedby"); else prepare.setAttribute("aria-describedby", prepareHint.id);
         datePicker.showRange(labelDates(value.dates));
         dateButton.hidden = value.paired;
@@ -417,17 +532,19 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         }
     }
     return {
-        sync, syncDrawer, backSlot, openCalendar, showSelection, selectionReturn,
-        hasDeskDraft: () => deskFocus !== "all" || periodPanel.matches(":popover-open") && !calendar.hidden,
+        sync, syncDrawer, backSlot, draftShelf, openCalendar, showSelection, selectionReturn,
+        hasDeskDraft: () => setupOpen || deskFocus !== "all" || periodPanel.matches(":popover-open") && !calendar.hidden,
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {
-            optionSignature = undefined; namedSelect.replaceChildren(); namedRow.hidden = true;
+            usageChoices.sync({},true); trendQuestion.hidden = true;
+            optionSignature = undefined; namedSelect.replaceChildren(); namedRow.hidden = true; clearDraftRows();
+            galleryTitle.firstChild.data = "New report";
             draftMembership.textContent = "";
             replacePrompt?.remove(); replacePrompt = null;
             syncDrawer(false);
             closeOptions();
-            deskFocus = "all";
+            deskFocus = "all"; setupOpen = false; setupOrigin = null; lastNamedId = null;
             calendarEditor.clear();
             datePicker.showRange("");
             scopeCaption.textContent = scopeName.textContent = "";

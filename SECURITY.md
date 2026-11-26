@@ -1,5 +1,8 @@
 # Security
 
+**Contents:** [Report a vulnerability](#report-a-vulnerability) ·
+[Test without exposing data](#test-without-exposing-data)
+
 ## Report a vulnerability
 
 Email suspected WIRE vulnerabilities to [likamrat@microsoft.com](mailto:likamrat@microsoft.com).

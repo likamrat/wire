@@ -125,6 +125,8 @@ test("wrapped adjacent actions receive one native click without losing hoverable
         const tip = await page.getByRole("tooltip").boundingBox(), to = await center(target);
         const initial = await target.textContent(), clicks = await page.evaluate(() => window.adjacentActivations);
         await page.mouse.move(to.x, to.y);
+        await page.clock.runFor(180);
+        assert.equal(await page.getByRole("tooltip").innerText(), "Change this interaction's report selection.");
         await page.mouse.click(to.x, to.y);
         const pointer = { label: await target.textContent(), clicks: await page.evaluate(() => window.adjacentActivations),
             focused: await target.evaluate(node => node === document.activeElement) };

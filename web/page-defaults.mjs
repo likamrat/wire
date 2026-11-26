@@ -7,15 +7,17 @@ export const pageDefaultSpecs = {
         choices: [["manual", "Until I restore them"], ["tab", "Only in this tab"]] },
     analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
+    analyzeSort: { id: "defaultAnalyzeSort", label: "Default interaction sort", help: "Applies when you open a fresh Analyze view.", initial: "recent",
+        choices: [["recent", "Most recent"], ["tokens", "Most tokens"]] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     analyzeLayout: { id: "analyzeLayout", ordered: true, label: "Homepage layout",
         help: "Move a section to see where it will appear in Analyze.",
-        initial: ["time", "outcomes", "interactions", "tools", "services", "models", "authors"],
-        choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["interactions", "Interactions"],
+        initial: ["time", "outcomes", "usage", "interactions", "tools", "services", "models", "authors"],
+        choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["usage", "Token usage"], ["interactions", "Interactions"],
             ["tools", "Work IQ tool calls"], ["services", "Services and operations"], ["models", "Response models"], ["authors", "Prompt authors"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "Choose the chart to show on a fresh visit.", initial: "problems",
-        choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
+        choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"], ["usage", "Token usage"]] },
     reportFormats: { id: "defaultReportFormats", label: "Default formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
     reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Ends today.", initial: "7",
@@ -48,7 +50,13 @@ export function createPageDefaults(specs, host = window) {
         if (raw !== null) {
             try {
                 const stored = JSON.parse(raw);
-                value = valid(key, key === "guideStart" && stored === "index" ? "outcomes" : stored);
+                if (key === "analyzeLayout" && Array.isArray(stored) && !stored.includes("usage")) {
+                    const previous = specs[key].initial.filter(id => id !== "usage");
+                    // Only extend a complete older layout; malformed preferences still get the normal warning.
+                    if (stored.length === previous.length && previous.every(id => stored.includes(id)))
+                        value = stored.every((id, i) => id === previous[i]) ? [...specs[key].initial] : [...stored, "usage"];
+                }
+                value ??= valid(key, key === "guideStart" && stored === "index" ? "outcomes" : key === "analyzeSort" && stored === "cost" ? "tokens" : stored);
             }
             catch (error) { if (!(error instanceof SyntaxError)) throw error; }
         }
@@ -143,16 +151,23 @@ export function bindPageDefaults(prefs, specs, syncSelects, rowsFor) {
 function layoutPreview() {
     // Static silhouettes only: no chart renderer, evidence, or source connection.
     const columns = '<path d="M2 23v-8h5v8zm9 0V6h5v17zm9 0V11h5v12zm9 0V2h5v21zm9 0V9h5v14z"/>';
-    const ring = '<g fill="none" stroke="currentColor" stroke-width="4"><circle cx="13" cy="13" r="9" opacity=".25"/><circle cx="13" cy="13" r="9" pathLength="100" stroke-dasharray="69 31" transform="rotate(-90 13 13)"/></g><path opacity=".55" d="M30 8h13v3H30zm0 7h9v3h-9z"/>';
+    const ring = '<g fill="none" stroke="currentColor" stroke-width="4"><circle cx="12" cy="13" r="9" opacity=".25"/><circle cx="12" cy="13" r="9" pathLength="100" stroke-dasharray="69 31" transform="rotate(-90 12 13)"/></g><path d="M25 8h13v4H25z"/><path opacity=".45" d="M38 8h7v4h-7zm-13 8h5v2h-5zm8 0h5v2h-5zm8 0h4v2h-4z"/>';
     const entries = '<path d="M2 3h54v3H2zm0 11h41v3H2z"/><path opacity=".45" d="M2 8h37v2H2zm0 11h28v2H2z"/>';
     const bars = '<path d="M2 5h39v3H2zm0 7h28v3H2zm0 7h16v3H2z"/>';
     const labels = { time:"Activity over time", tools:"Tool calls", services:"Services" };
-    const marks = { time:columns, outcomes:ring, interactions:entries };
-    const tiles = pageDefaultSpecs.analyzeLayout.choices.map(([key,name]) => {
+    const marks = { time:columns, outcomes:ring, interactions:entries,
+        usage:'<path d="M2 4h15v6H2zm23 0h12v6H25zM2 18h9v4H2zm11 0h20v4H13zm22 0h9v4h-9z"/>' };
+    const items = pageDefaultSpecs.analyzeLayout.choices.map(([key,name]) => [key,labels[key] ?? name]);
+    const tiles = items.map(([key,label]) => {
         const box = key === "interactions" ? 'viewBox="0 0 60 26" preserveAspectRatio="none"' : 'viewBox="0 0 46 26"';
-        return `<div data-tile="${key}"><span>${labels[key] ?? name}</span><svg ${box} aria-hidden="true" focusable="false">${marks[key] ?? bars}</svg></div>`;
+        return `<div data-tile="${key}"><span>${label}</span><svg ${box} aria-hidden="true" focusable="false">${marks[key] ?? bars}</svg></div>`;
     });
-    return `<figure class="layout-preview" aria-hidden="true"><figcaption>Layout preview</figcaption><div class="layout-preview-grid">${tiles.join("")}</div></figure>`;
+    // Full-width sections can separate every pair. Reserve space for one row per
+    // section so a reorder never moves the controls below the preview.
+    const names = items.map(([,label]) => `<span>${label}</span>`).join("");
+    return `<figure class="layout-preview" aria-hidden="true" style="--preview-rows:${tiles.length}"><figcaption>Layout preview</figcaption>
+      <div class="layout-preview-size"><div><div class="layout-preview-labels">${names}</div><svg></svg></div></div>
+      <div class="layout-preview-grid">${tiles.join("")}</div></figure>`;
 }
 
 export function defaultField(key, icons) {
@@ -161,9 +176,9 @@ export function defaultField(key, icons) {
     const status = `<p class="settings-help" role="status" id="${id}Status" hidden></p>`;
     if (pageDefaultSpecs[key].ordered) return `<fieldset class="page-default-field analyze-layout-field" id="${id}" tabindex="-1" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="analyze-layout-editor"><ol>${choices.map(([k, name]) => `<li data-section="${k}"><div><span>${name}</span>
-        <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["chart-collapse"]}</button>
-        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons.chevron}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
-      <div class="analyze-layout-actions"><button type="button" class="quiet" data-restore>Restore WIRE layout</button>
+        <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["move-up"]}</button>
+        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons["move-down"]}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
+      <div class="analyze-layout-actions"><button type="button" id="restoreAnalyzeLayout" data-restore>Restore WIRE Default Layout</button>
       <a href="/" data-nav="analyze">View Analyze</a></div><p class="visually-hidden" role="status" id="${id}Announcement"></p>${status}</fieldset>`;
     if (Array.isArray(initial)) return `<fieldset id="${id}" class="page-default-field" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="page-default-formats">${choices.map(([v, text]) =>

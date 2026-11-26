@@ -4,17 +4,21 @@ const topics = [
         <li>Choose your file formats and whether to keep, mask or leave out chat details.</li>
         <li>Select <strong>Prepare preview</strong>. Review the result, then select <strong>Save report</strong> to keep it.</li></ol>
         <h3>Where does it go?</h3><p>Save writes the files on this device. Open <strong>Reports → Saved library</strong> to find them again.</p>`],
-    ["history", "Find missing activity", `<p>First check whether a filter hides the activity or whether WIRE never collected it.</p>
-        <ol><li>In <strong>Analyze → Filters</strong>, choose <strong>All dates</strong> and clear other restrictions. This shows more saved activity without reading more history.</li>
-        <li>If the activity is still missing, check the approved source in <strong>Settings → Source access</strong> and the history window in <strong>Collection</strong>.</li></ol>
+    ["history", "Find missing activity", `<ol><li>In <strong>Analyze → Filters</strong>, choose <strong>All dates</strong> and clear other restrictions. This shows more saved activity without reading more history.</li>
+        <li>Scroll across the time chart for more days. On long timelines, choose <strong>First dates</strong> to reach the earliest days.</li>
+        <li>If you hid a card, open <strong>Hidden cards</strong> above the interaction list and choose <strong>Restore</strong> beside it.</li>
+        <li>If the interaction is still missing from the list, check the approved source in <strong>Settings → Source access</strong> and the history window in <strong>Collection</strong>.</li></ol>
         <h3>Missing text in Search</h3><p>Search looks in saved activity and reports. It can’t find reply text that wasn’t retained.</p>`],
     ["counts", "Understand activity counts", `<p>One interaction can include several calls. Not every saved call identifies the prompt that started it.</p>
         <h3>Example</h3><p>If the records link three matching calls to the same originating prompt, Analyze counts <strong>1 interaction</strong> and <strong>3 matching tool calls</strong>. The totals include matches across all pages.</p>
+        <h3>Token usage</h3><p>Open a card to see its token breakdown. The Analyze total counts each matching interaction once, even if it used several tools. Interactions without a recorded token count stay out of the total.</p>
         <h3>Reading a particular chart</h3><p>Use <strong>Guide</strong> in Analyze or Trends for the measure, its scope and a worked example.</p>`],
     ["results", "Read tool results", `<p>A completed call means the tool reported success. It does not establish that the whole task finished or that the answer was correct.</p>
         <h3>If a call failed</h3><p>Open the interaction and expand the affected call to read the recorded reason, if available. A call with no recorded result is not a failed call.</p>
         <h3>Which app did Copilot use?</h3><p>Look for <strong>Target</strong> on the call. A prompt can mention Calendar without Copilot using it. <strong>Asked Copilot</strong> tells you there was a request. It doesn’t tell you which apps Copilot used.</p>
         <h3>Who sent the prompt?</h3><p>A <strong>Human prompt</strong> came from a person. An <strong>Agent prompt</strong> came from an agent. <strong>Sender unclear</strong> means the saved record doesn't tell WIRE which one sent it. The card shows why.</p>`],
+    ["updates", "When an update stops", `<p>If a window didn’t confirm it was ready, WIRE stopped before restarting. Keep your windows open. Finish any edits and check the result of any pending save or deletion in its original window. Then choose <strong>Settings → General → Update and restart</strong> in one window.</p>
+        <p>If you see <strong>Restart not confirmed</strong>, choose <strong>Check restart status</strong> instead of starting the update again.</p>`],
 ];
 
 export const wireHelpMarkup = `<section id="wireHelpView" class="wire-help" aria-labelledby="pageTitle" hidden>

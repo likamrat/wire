@@ -6,28 +6,36 @@ const phases = ["current", "available", "unknown", "checking", "preparing", "res
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const manualOnly = state => state && (!state.supported || state.phase === "manual");
 const checkingMessage = "Checking for updates";
+const updatingMessage = "WIRE is updating";
 const minManualCheckMs = 3000;
+const validRelease = (release, commit) => release == null || release.commit === commit && sha(commit)
+    && /^v\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(release.tag) && release.url === `https://github.com/likamrat/wire/releases/tag/${release.tag}`
+    && typeof release.notes === "string" && release.notes.length <= 64000;
 function decode(value) {
     if (!value || typeof value.supported !== "boolean" || typeof value.automatic !== "boolean"
         || !phases.includes(value.phase) || typeof value.message !== "string"
         || ![value.installed, value.candidate, value.dismissed].every(id => id === null || sha(id))
         || value.lastChecked !== null && (!Number.isFinite(value.lastChecked) || !Number.isFinite(new Date(value.lastChecked).getTime()))
         || value.packageVersion !== undefined && typeof value.packageVersion !== "string"
+        || !validRelease(value.availableRelease,value.candidate) || !validRelease(value.installedRelease,value.installed)
+        || value.refusal !== undefined && (!uuid(value.refusal?.operation) || typeof value.refusal.message !== "string")
         || value.clientEntry !== undefined && !asset(value.clientEntry)) throw new Error("WIRE returned an unreadable update status.");
     return value;
 }
 
 /** Page-owned controls never renew a capability or replay an update command. */
-export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, formatChecked }) {
+export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, formatChecked, openNotes }) {
     const $ = id => document.getElementById(id);
     const dialog = $("appUpdateFence"), notice = $("appUpdateNotice"), manual = $("appUpdateCheck"), automatic = $("appUpdateAuto");
     const entry = new URL(loadedEntry);
     const fixed = { mode: "same-origin", credentials: "same-origin", redirect: "error", cache: "no-store" };
     let state, busy = false, expected, checkingRestart = false, allowReload = false, storageAvailable = true;
     let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "";
-    let manualChecking = false, endCheckFeedback;
+    let manualChecking = false, endCheckFeedback, openingStatusOnly = false, changingPreferences = false;
+    let notesTag = null, notesText;
     let coordination = false, peerWatch, peerTimer;
     let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
+    let parked = false, presenceSequence = 0, checkingWake = false, wakeTimer;
     function receipt(value) {
         if (value) sessionStorage.setItem(receiptKey, JSON.stringify(value));
         else sessionStorage.removeItem(receiptKey);
@@ -36,12 +44,47 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     function render() {
         const available = state?.supported && state.phase === "available" && sha(state.candidate) && state.candidate !== state.installed;
         const shown = available && state.candidate !== state.dismissed;
+        const offered = available ? state.availableRelease : null, installed = state?.installedRelease;
+        for (const [id, release] of [["noticeReleaseNotes", shown && !success && !result && offered],["availableReleaseNotes",offered],["installedReleaseNotes",installed]]) {
+            const link = $(id);
+            link.hidden = !release;
+            link.textContent = release ? id === "noticeReleaseNotes" ? "What's new" : id === "availableReleaseNotes" ? "What's new in this update" : "Installed release notes" : "";
+            if (release) link.href = `/settings?section=release-notes&release=${release.tag}`;
+            else link.removeAttribute("href");
+        }
+        if (notesTag !== null) {
+            const record = [offered,installed].find(r=>r && r.tag===notesTag);
+            $("releaseReaderVersion").textContent = record?.tag ?? "";
+            $("releaseReaderStatus").textContent = record ? record === installed ? "Installed version" : "Available update"
+                : !state || state.phase === "checking" ? "Reading release information…" : "These notes are not available for this installation.";
+            const github = $("releaseReaderGitHub"); github.hidden = !record;
+            if (record) github.href = record.url; else github.removeAttribute("href");
+            const body = $("releaseNotesBody");
+            if (notesText !== record?.notes) {
+                body.replaceChildren(); notesText = record?.notes;
+                let list;
+                for (const line of (notesText ?? "").split(/\r?\n/)) {
+                    if (!line.trim() || /^## What's new in v[\d.]+\s*$/i.test(line)) continue;
+                    const bullet = /^[-*] (.+)/.exec(line), heading = /^#{1,6} (.+)/.exec(line);
+                    if (!bullet) list = null;
+                    if (bullet && !list) { list = document.createElement("ul"); body.append(list); }
+                    const node = document.createElement(bullet ? "li" : heading ? "h3" : "p");
+                    node.textContent = bullet?.[1] ?? heading?.[1] ?? line;
+                    (list ?? body).append(node);
+                }
+            }
+            $("releaseReaderApply").hidden = !record || record !== offered;
+            $("releaseReaderApply").disabled = busy || Boolean(expected) || !panelVerified;
+        }
         notice.toggleAttribute("data-install-result", Boolean(result));
         notice.inert = Boolean(expected) || !shown && !success && !result;
         if (!notice.inert) {
-            $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
+            notice.toggleAttribute("data-updated", Boolean(success));
+            const heading = $("appUpdateHeading"), title = success || (result ? "Update not installed" : offered ? `WIRE ${offered.tag} is available` : "WIRE update available");
+            if (heading.textContent !== title) heading.textContent = title;
             const detail = $("appUpdateDetail");
-            const description = success || result || feedback || "Update and restart WIRE. Your saved data won’t change.";
+            const description = success ? "" : result || feedback || "Update and restart WIRE. Your saved data won’t change.";
+            detail.hidden = !description;
             if (detail.textContent !== description) detail.textContent = description;
             $("appUpdateApply").hidden = !shown || Boolean(success);
         }
@@ -60,12 +103,12 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         manual.setAttribute("aria-busy", String(manualChecking));
         manual.querySelector(".check-action-pending").hidden = !manualChecking;
         const status = feedback || (result ? `Update not installed. ${result}` : checking ? checkingMessage
-            : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
+            : offered ? `WIRE ${offered.tag} is available.` : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
         const lastCheck = available || checking || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
         const summary = [status, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
         if (line.textContent !== summary) line.textContent = summary;
         line.hidden = !summary;
-        $("appUpdateVersion").textContent = state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";
+        $("appUpdateVersion").textContent = installed ? `WIRE ${installed.tag}` : state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";
     }
     async function post(action, fields = {}) {
         const response = await fetch("/api/app-update", { ...fixed, method: "POST",
@@ -83,17 +126,19 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function schedule() {
         clearTimeout(scheduleTimer);
-        if (!state?.supported || expected || manualOnly(state)) return;
+        if (parked || !state?.supported || expected || manualOnly(state)) return;
         if (coordination) watchPeers();
         if (["checking", "preparing", "restarting"].includes(state.phase)) scheduleTimer = setTimeout(() => void run("status"), 2500);
         else if (state.automatic) scheduleTimer = setTimeout(() => void run("auto-check"), day);
     }
-    async function run(action, fields) {
-        if (busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
+    async function run(action, fields, opening = false) {
+        if (parked || busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
         const generation = lifetime;
+        openingStatusOnly = opening;
         const returnFocus = action === "check" && document.activeElement === manual;
         const previousCandidate = state?.candidate;
         manualChecking = action === "check";
+        changingPreferences = action === "preferences" || action === "dismiss";
         busy = true; feedback = ["check", "auto-check"].includes(action) ? checkingMessage : "";
         if (action === "preferences") { pendingPreference = fields.enabled; feedback = "Saving update preferences…"; }
         clearTimeout(scheduleTimer); render();
@@ -105,6 +150,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             const next = await post(action, fields);
             if (minimum) await minimum;
             if (generation !== lifetime) return;
+            openingStatusOnly = false;
             state = next;
             coordination ||= next.coordinated === true;
             panelVerified = true;
@@ -113,6 +159,9 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         } catch (error) {
             if (minimum) await minimum;
             if (generation !== lifetime) return;
+            // Navigation may cancel the opening fetch before pagehide runs. A
+            // refused/unreadable response, unlike transport loss, remains unverified.
+            openingStatusOnly &&= error instanceof TypeError || ["AbortError", "TimeoutError"].includes(error.name);
             // Reconcile preferences/dismissals by reading; never repeat a lost command.
             state = null;
             panelVerified = false;
@@ -124,7 +173,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             feedback = error.refused ? error.message : "Update status could not be confirmed. Check again when WIRE is available.";
         } finally {
             pendingPreference = undefined;
-            endCheckFeedback = undefined; manualChecking = false;
+            endCheckFeedback = undefined; manualChecking = changingPreferences = false;
             if (feedback === checkingMessage || feedback === "Saving update preferences…") feedback = "";
             busy = false;
             if (restoring) { restoring = false; state = null; void run("status"); }
@@ -144,7 +193,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if ($("appUpdateHint").textContent !== hint) $("appUpdateHint").textContent = hint;
         $("appUpdateRecover").hidden = !retry;
         $("appUpdateActivity").hidden = retry;
-        if (!dialog.open) { dialog.showModal(); $("appUpdateFenceTitle").focus(); }
+        if (!dialog.open) dialog.showModal();
     }
     function reconnecting() {
         if (expected && dialog.open && $("appUpdateRecover").hidden) fence("Reconnecting to WIRE");
@@ -152,37 +201,92 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     async function peerRequest(path, body, signal) {
         const response = await fetch("/api/app-update/" + path, { ...fixed, method: "POST", signal,
             headers: { "Content-Type": "application/json", "X-Board-Capability": capability }, body: JSON.stringify(body) });
-        if (!response.ok) throw Object.assign(new Error("Update coordination is unavailable."), { status: response.status });
+        if (!response.ok) {
+            const data = await response.json();
+            throw Object.assign(new Error(typeof data.error === "string" ? data.error : "Update coordination is unavailable."), { status: response.status });
+        }
         return response.json();
     }
+    function readinessHold() {
+        const hold = reason();
+        if (hold) return hold.kind;
+        return !storageAvailable || unfinishedAtSuspension || changingPreferences ? "operation" : "";
+    }
+    const presence = sequence => fetch("/api/app-update/presence", { ...fixed, method: "POST", keepalive: true,
+        headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
+        body: JSON.stringify({ runtimeId, sequence }), signal: AbortSignal.timeout(5000) });
+    function onFreeze(event) {
+        if (!event.isTrusted || parked || !document.hidden || !panelVerified || !coordination || busy || expected
+            || !uuid(runtimeId) || !sha(state?.installed) || readinessHold()) return;
+        parked = true;
+        document.documentElement.inert = true;
+        clearTimeout(scheduleTimer); clearTimeout(peerTimer); peerTimer = undefined;
+        peerWatch?.abort();
+        // The browser can suspend JS before delivery. Only receipt on the server
+        // removes the blocker; on resume we rejoin even if this reply was lost.
+        void presence(++presenceSequence).catch(() => { /* Delivery unknown: rejoin on wake in either case. */ });
+    }
+    async function onWake() {
+        if (!parked || checkingWake) return;
+        clearTimeout(wakeTimer); checkingWake = true;
+        if (presenceSequence % 2) presenceSequence++;
+        try {
+            const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
+            const health = response.ok && await response.json();
+            if (health?.service !== "workiq-evidence" || health.protocol !== 1 || !uuid(health.runtimeId)
+                || !sha(health.build) || !asset(health.clientEntry)) throw Error("Unverified runtime");
+            if (health.updating) { fence(updatingMessage); return; }
+            if (health.runtimeId !== runtimeId) {
+                // This view slept through the offer. Load the current document at its
+                // original address; it must not manufacture an Apply/success receipt.
+                allowReload = true; location.reload(); return;
+            }
+            const joined = await presence(presenceSequence);
+            if (joined.status === 403) { allowReload = true; location.reload(); return; }
+            if (!joined.ok || (await joined.json()).state !== "ready") { fence(updatingMessage); return; }
+            parked = false;
+            document.documentElement.inert = false;
+            if (dialog.open) dialog.close();
+            await run("status");
+        } catch {
+            if (parked) fence("Reconnecting to WIRE");
+        } finally {
+            checkingWake = false;
+            if (parked && !allowReload) wakeTimer = setTimeout(onWake, 1000);
+        }
+    }
+    document.addEventListener("freeze", onFreeze, { capture: true });
+    document.addEventListener("resume", onWake, { capture: true });
     async function watchPeers() {
-        if (peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
+        if (parked || peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
         const controller = new AbortController(), generation = lifetime;
         peerWatch = controller;
         let wait = 0;
         try {
-            const { candidate, operation } = await peerRequest("watch", {}, AbortSignal.any([controller.signal, AbortSignal.timeout(26000)]));
+            const { candidate, operation, probe } = await peerRequest("watch", {}, AbortSignal.any([controller.signal, AbortSignal.timeout(26000)]));
+            if (uuid(probe) && !candidate && !expected && generation === lifetime && !controller.signal.aborted) {
+                await peerRequest("readiness", { probe, hold: readinessHold() }, AbortSignal.timeout(5000));
+                return;
+            }
             if (!candidate || expected || generation !== lifetime || controller.signal.aborted) return;
             if (!sha(candidate) || !uuid(operation) || !sha(state?.installed) || !uuid(runtimeId) || entry.origin !== location.origin || !asset(entry.pathname)) return;
-            const ready = () => {
-                const hold = reason();
-                if (hold) return hold.kind;
-                return !storageAvailable || unfinishedAtSuspension || busy && !manualChecking ? "operation" : "";
-            };
-            let hold = ready();
+            let hold = readinessHold();
             if (!hold) {
-                try { receipt({ candidate, previous: state.installed, runtimeId, origin: location.origin, peer: true }); }
+                try { receipt({ candidate, previous: state.installed, runtimeId, origin: location.origin, peer: true, operation }); }
                 catch { hold = "operation"; }
             }
             if (!hold) {
                 clearTimeout(scheduleTimer); restoredReceipt = false;
-                fence("Preparing to restart"); render();
-                hold = ready();
+                fence(updatingMessage); render();
+                hold = readinessHold();
             }
-            try { await peerRequest("readiness", { operation, candidate, hold }, AbortSignal.timeout(5000)); }
+            let acknowledgment;
+            try { acknowledgment = await peerRequest("readiness", { operation, candidate, hold }, AbortSignal.timeout(5000)); }
             catch { if (expected) { await recover(); return; } throw new Error("Readiness was not confirmed."); }
             if (hold) {
-                if (expected) finish("Finish the pending work before updating.");
+                const message = typeof acknowledgment.message === "string" ? acknowledgment.message : "Finish the pending work before updating.";
+                if (expected) finish(message);
+                else { result = message; feedback = success = ""; render(); }
                 wait = 1000; return;
             }
             await recover();
@@ -191,7 +295,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             wait = 1500;
         } finally {
             if (peerWatch === controller) peerWatch = null;
-            if (!expected && generation === lifetime && coordination && !controller.signal.aborted) {
+            if (!parked && !expected && generation === lifetime && coordination && !controller.signal.aborted) {
                 peerTimer = setTimeout(() => { peerTimer = undefined; void watchPeers(); }, wait);
             }
         }
@@ -209,7 +313,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const generation = lifetime, wanted = expected;
         checkingRestart = true; clearTimeout(recoveryTimer);
         if (restoredReceipt) fence("Checking version");
-        else if (attempt === 0) fence(state?.phase === "preparing" ? "WIRE is updating" : "Checking update status");
+        else if (attempt === 0) fence(wanted.peer || state?.phase === "preparing" ? updatingMessage : "Checking update status");
         try {
             const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
             const health = response.ok && await response.json();
@@ -233,7 +337,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                         fence("Update status does not confirm the running build. Check restart status before continuing.", true); return;
                     }
                     state = confirmed; panelVerified = true; coordination ||= confirmed.coordinated === true;
-                    finish(confirmed.packageVersion ? `WIRE v${confirmed.packageVersion} is running.` : "Restart complete.", true);
+                    finish(confirmed.installedRelease ? `WIRE updated to ${confirmed.installedRelease.tag}` : confirmed.packageVersion ? `WIRE updated to v${confirmed.packageVersion}` : "WIRE updated", true);
                     return;
                 }
                 const file = await fetch(health.clientEntry, { ...fixed, signal: AbortSignal.timeout(4000) });
@@ -251,10 +355,11 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             const next = await post("status");
             state = next;
             if (next.phase === "restarting") fence("Restarting WIRE");
-            if (next.phase === "preparing" && wanted.peer) fence(next.awaitingViews ? "Preparing to restart" : "WIRE is updating");
+            if (next.phase === "preparing") fence(updatingMessage);
             if (next.supported && wire && health.runtimeId === runtimeId && health.build === wanted.previous && next.installed === wanted.previous
                 && (["error", "manual"].includes(next.phase) || (wanted.peer || refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))) {
-                finish(refusal || ((manualRead || wanted.peer) && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
+                const peerRefusal = wanted.peer && uuid(wanted.operation) && next.refusal?.operation === wanted.operation && next.refusal.message;
+                finish(refusal || peerRefusal || ((manualRead || wanted.peer) && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
                 return;
             }
         } catch { reconnecting(); } // Keep checking health without renewing the old panel capability.
@@ -268,6 +373,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     async function apply() {
         if (busy || expected || !panelVerified || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
+        success = "";
         const candidate = state.candidate, hold = reason();
         if (hold || unfinishedAtSuspension) { result = hold?.message || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
         if (!uuid(runtimeId) || !sha(state.installed) || entry.origin !== location.origin || !asset(entry.pathname)) {
@@ -281,7 +387,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         } catch {
             busy = false; result = "Allow session storage so WIRE can verify the restart. Nothing was started."; render(); schedule(); return;
         }
-        fence("Starting update"); render();
+        fence(updatingMessage); render();
         // Opening a modal moves focus synchronously. Recheck after blur/change handlers have run.
         const lastMinute = reason();
         if (lastMinute) { finish(lastMinute.message); return; }
@@ -297,28 +403,31 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     dialog.addEventListener("cancel", event => event.preventDefault());
     for (const type of ["click", "auxclick", "keydown", "pointerdown", "beforeinput", "input", "change", "paste", "drop", "submit"]) {
         window.addEventListener(type, event => {
-            if (expected && !dialog.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+            if (parked || expected && !dialog.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
         }, true);
     }
     window.addEventListener("beforeunload", event => { if (expected && !allowReload) { event.preventDefault(); event.returnValue = ""; } });
     // Capture before private owners withdraw and clear their in-memory state. Never
     // release an unfinished panel, a bfcache entry or a replacement runtime's grant.
     window.addEventListener("pagehide", event => {
+        const opening = lifetime === 0 && openingStatusOnly && !panelVerified;
         lifetime++;
         endCheckFeedback?.();
         peerWatch?.abort(); clearTimeout(peerTimer); peerTimer = undefined;
         clearTimeout(scheduleTimer);
         const hold = reason();
-        const unfinished = Boolean(busy && !manualChecking && feedback !== checkingMessage || expected || hold);
+        const unfinished = Boolean(changingPreferences || expected || hold);
         if (event.persisted) { unfinishedAtSuspension ||= unfinished; panelVerified = false; return; }
-        if (!panelVerified || !state || !uuid(runtimeId) || !storageAvailable || unfinished || unfinishedAtSuspension) return;
+        if ((!opening && (!panelVerified || !state)) || !uuid(runtimeId) || !storageAvailable || unfinished || unfinishedAtSuspension) return;
         // A manual installation has no updater interlock to release.
-        const releasePath = state.supported ? "/api/app-update/release-panel" : "/api/session/release";
+        const releasePath = opening || state.supported ? "/api/app-update/release-panel" : "/api/session/release";
         void fetch(releasePath, {
-            ...fixed, method: "POST", keepalive: true, body: "{}", headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
+            ...fixed, method: "POST", keepalive: true, body: JSON.stringify(opening ? { startingRuntime: runtimeId } : {}),
+            headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
         }).catch(() => {});
     }, true);
     window.addEventListener("pageshow", event => {
+        if (event.persisted && parked) { void onWake(); return; }
         if (event.persisted && !expected) {
             state = null; render();
             if (busy) restoring = true;
@@ -327,9 +436,23 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     });
     $("appUpdateApply").addEventListener("click", apply);
     $("settingsAppUpdate").addEventListener("click", apply);
+    $("releaseReaderApply").addEventListener("click", apply);
+    for (const id of ["noticeReleaseNotes","availableReleaseNotes","installedReleaseNotes"]) $(id).addEventListener("click", e => {
+        if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        const record = id === "installedReleaseNotes" ? state?.installedRelease : state?.availableRelease;
+        if (record && !expected) openNotes(record.tag);
+    });
     $("appUpdateRecover").addEventListener("click", () => void recover(0, "", true));
     $("appUpdateDismiss").addEventListener("click", () => {
-        if (success || result && state?.phase !== "available") { success = result = ""; render(); }
+        if (success || result && state?.phase !== "available") {
+            const focused = success && document.activeElement === $("appUpdateDismiss");
+            success = result = ""; render();
+            if (focused) {
+                const target = !notice.inert ? $("appUpdateApply") : manual.checkVisibility() ? manual : $("pageTitle");
+                (target.checkVisibility() ? target : $("main")).focus({ preventScroll: true });
+            }
+        }
         else if (state?.candidate) void run("dismiss", { candidate: state.candidate }).then(() => {
             if (notice.inert && document.activeElement === document.body) {
                 ($("settingsAppUpdate").checkVisibility() ? $("settingsAppUpdate") : $("pageTitle")).focus({ preventScroll: true });
@@ -349,14 +472,15 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     if (expected) void recover();
     else {
         if (dialog.open) dialog.close();
-        void run("status").then(() => {
+        void run("status", {}, true).then(() => {
             if (state?.supported && state.automatic) void run("auto-check");
         });
     }
     return {
         render,
+        showNotes(tag) { notesTag = tag; if (tag !== null) render(); },
         reconnecting,
-        locked: () => Boolean(expected),
+        locked: () => parked || Boolean(expected),
         beforeOwnerRetirement() { unfinishedAtSuspension ||= Boolean(reason()); },
     };
 }

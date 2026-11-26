@@ -6,6 +6,11 @@ without AI, provider calls or credit spending.
 
 For the user task, see [Find saved text](user-guide.md#find-saved-text).
 
+**Contents:** [Matching](#matching-and-original-text-ranges) ·
+[Retrieval and live protocol](#retrieval-and-live-protocol) ·
+[Corpus authority and Open](#corpus-authority-and-open) · [Screen behavior](#screen-behavior) ·
+[Withdrawal and return](#withdrawal-and-return) · [Check a Search change](#check-a-search-change)
+
 ## Matching and original-text ranges
 
 `lib/search-text.mjs` owns matching:

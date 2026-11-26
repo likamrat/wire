@@ -25,6 +25,8 @@ const copies = [
     ...["icon", "icon-dark", "lockup", "lockup-dark", "wordmark", "wordmark-dark", "report-brand-v1", "report-brand-v1-dark"]
         .map(name => `assets/wire-${name}.svg`),
     "dist/client",
+    // The in-app guide reads these from the WIRE folder.
+    "README.md", "CONTRIBUTING.md", "SECURITY.md", "docs",
     "node_modules/marked/lib/marked.esm.js", "node_modules/marked/LICENSE",
     "node_modules/pdfjs-dist/build/pdf.mjs", "node_modules/pdfjs-dist/build/pdf.worker.mjs",
     "node_modules/pdfjs-dist/cmaps", "node_modules/pdfjs-dist/standard_fonts", "node_modules/pdfjs-dist/LICENSE",

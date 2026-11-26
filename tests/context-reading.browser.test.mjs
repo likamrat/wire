@@ -104,7 +104,7 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
     return { page, runtime, records, context, payloadReads, requests, acceptFixtureChange: async () => { expected = await loadBoardState(context); } };
 }
 
-test("normal isolated source opens retained correction, retry and reply immediately; Analyze Back is exact", { timeout: 40000 }, async t => {
+test("normal isolated source opens retained context and reads its reply on request; Analyze Back is exact", { timeout: 40000 }, async t => {
     const app = await setup(t), { page, runtime, records, payloadReads } = app;
     await page.goto(runtime.url + "#analyze"); await ready(page);
     assert.equal(payloadReads.length, 0, "Analyze never preloads retained response payloads");
@@ -117,6 +117,10 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await page.keyboard.press("Enter"); await ready(page);
     await page.getByRole("button", { name: "Source details", exact: true }).click();
     await page.locator(".reader-linked-context > summary").click();
+    const readLinked = page.locator(".reader-linked-context").getByRole("button", { name: "Read response", exact: true });
+    await expect(readLinked).toBeVisible();
+    assert.equal(payloadReads.length, 0, "Opening the source or linked context does not read its reply");
+    await readLinked.click();
     await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
     const reader = page.locator("#requestContent"), linked = reader.locator(".reader-linked-context");
     const timeline = reader.locator(".request-context-timeline");
@@ -166,6 +170,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(reader.locator(".full-text-content")).toHaveCount(0);
     await open.click(); await ready(page);
     await linked.locator(":scope > summary").click();
+    await readLinked.click();
     await expect(linked.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
     for (const [width, scale, theme] of [[1280, 1, "dark"], [375, 2, "light"]]) {
         await chooseTheme(page, theme);
@@ -179,6 +184,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
         await expect(correction.locator(".full-text-content")).toHaveCount(0);
         await linked.locator(":scope > summary").press("Space");
         await expect(correction.locator(".full-text-content")).toHaveText(records[1].userPrompt.text);
+        await readLinked.click();
         if (proof) {
             await mkdir(proof, { recursive: true });
             await page.evaluate(() => scrollTo(0, 0)); await frames(page);

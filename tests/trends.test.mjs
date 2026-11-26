@@ -69,6 +69,14 @@ test("cohort filtering retains every day and does not expand exact member identi
     assert.equal(result.days[7].values.authors.find(value => value.id === "agent").count, 0);
 });
 
+test("the Analyze token handoff does not add earlier collection calls to current history",()=>{
+    const [current,earlier]=data(); earlier.isLegacy=true;
+    const records=[current,earlier], combined=run(records), history=run(records,{filters:{collection:"history"}}), legacy=run(records,{filters:{collection:"legacy"}});
+    assert.deepEqual([combined.totals.usagePopulation.eligible,history.totals.usagePopulation.eligible,legacy.totals.usagePopulation.eligible],[2,1,1]);
+    assert.ok(history.members.every(m=>m.scenarioId===current.scenarioId));
+    assert.ok(legacy.members.every(m=>m.scenarioId===earlier.scenarioId));
+});
+
 test("latest matching day respects retained source, filter, local midnight and undated exclusions without changing period counts", () => {
     const empty = { from: "2026-03-20", to: "2026-03-26" };
     for (const [filters, expected] of [[{}, "2026-03-09"], [{tool:"workiq-retrieve"}, "2026-03-08"], [{service:"Calendar"},null]]) {

@@ -2,10 +2,11 @@
 export function createAnalyzeTrendsEntry({ time, results, authorship, categories }) {
     const subjects = {
         rhythm: "Tool calls", problems: "Errors & failures", tools: "Tool usage",
-        authors: "Prompt authors", models: "Response models", services: "Services",
+        authors: "Prompt authors", models: "Response models", modelTokens: "Tokens by response model", services: "Services", usage: "Token usage",
     };
-    function project(family, { scope, route, revision, hasSearch, includesNative, hasEarlier, otherSources, supportedTools }) {
-        if (!Object.hasOwn(subjects, family)) throw new RangeError("Unknown Analyze widget.");
+    function project(widget, { scope, route, revision, hasSearch, includesNative, otherSources, supportedTools, coverage, usageCalendar }, selectedDay) {
+        if (!Object.hasOwn(subjects, widget)) throw new RangeError("Unknown Analyze widget.");
+        const family = widget === "modelTokens" ? "usage" : widget;
         const f = scope.filters, zone = scope.timeContext.timeZone, filters = {}, changes = [];
         if (family === "problems") changes.push("Analyze counts recorded outcomes. Errors & failures counts affected interactions, not failed calls; a completed call can contain an API error.");
         if (scope.layer !== "tool") changes.push(`Analyze shows ${results.unit(scope.layer, 2)}. Trends uses recorded Work IQ tool calls and their originating interactions.`);
@@ -14,7 +15,7 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         if (includesNative || otherSources || f.sources?.some(source => source !== "github-copilot") || route.nativeGroup) {
             changes.push("Trends uses retained GitHub Copilot activity only. Other sources and Microsoft groups do not carry over.");
         }
-        if (f.scope === "legacy" || f.scope === "history" && hasEarlier) changes.push("Trends uses both retained collections, not just the selected collection.");
+        if (["legacy","history"].includes(f.scope)) filters.collection=f.scope;
         const omitted = [
             [f.projectIds, "project"], [f.sourceSessionIds, "chat or recorder source"], [f.endpoints, "path or operation"],
             [f.workloads, "activity category"], [f.activityTypes, "activity type"],
@@ -41,15 +42,19 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         } else if (services.length) changes.push("Trends cannot apply this service selection. It opens with all services.");
         const civil = value => /^\d{4}-\d\d-\d\d$/.test(value);
         let period = ["7", "14", "30"].includes(route.range) ? route.range : "custom", range;
-        if (f.from && f.to) {
-            range = { from: civil(f.from) ? f.from : time.day(f.from, zone), to: civil(f.to) ? f.to : time.day(f.to, zone) };
-            if (!civil(f.from) || !civil(f.to)) changes.push("Trends includes whole calendar days, not partial days.");
+        const extent = family === "usage" ? usageCalendar?.range : coverage && {from:coverage.firstAt,to:coverage.lastAt};
+        const from = f.from || extent?.from, to = f.to || extent?.to;
+        if (from && to) {
+            range = {from:civil(from) ? from : time.day(from,zone), to:civil(to) ? to : time.day(to,zone)};
+            if (f.from && !civil(f.from) || f.to && !civil(f.to)) changes.push("Trends includes whole calendar days, not partial days.");
         } else {
             period = "7"; range = time.preset(period, zone);
             changes.push(`Analyze has ${f.from || f.to ? "an open-ended period" : "no date limit"}. Trends opens the last 7 days (${range.from} – ${range.to}).`);
         }
-        return { changes, entry: { revision, family, measure: family === "rhythm" ? "count" : "share",
-            period, range, timeContext: { ...scope.timeContext }, filters, date: range.from === range.to ? range.from : null,
+        if (coverage?.undatedRows) changes.push("Calls without a recorded date cannot appear in a daily trend.");
+        return { changes, entry: { revision, family, ...(widget === "modelTokens" ? {usageQuestion:"model"} : {}),
+            measure: family === "usage" ? "tokens" : family === "rhythm" ? "count" : "share",
+            period, range, timeContext: { ...scope.timeContext }, filters, date: selectedDay ?? (range.from === range.to ? range.from : null),
             series: ({ tools: filters.tool, authors: filters.author, services: filters.service })[family] ?? null } };
     }
 
@@ -58,20 +63,20 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         const create = (tag, text, cls) => {
             const node = document.createElement(tag); if (text) node.textContent = text; if (cls) node.className = cls; return node;
         };
-        function link(family) {
-            const label = "View trend";
-            const node = create("a", label, "text-link analyze-trend-link");
-            node.href = "/trends"; node.id = `analyze-trend-${family}`;
-            node.setAttribute("aria-label", `${label}: ${subjects[family]}`);
+        function link(family, day, text) {
+            const label = text || (family === "usage" ? "View by day" : "View trend");
+            const node = create("a", label, day ? "text-link usage-date-link" : "text-link analyze-trend-link");
+            node.href = "/trends"; node.id = `analyze-trend-${family}${day ? "-"+day : ""}`;
+            node.setAttribute("aria-label", day ? `${label}: explore token usage` : `${label}: ${subjects[family]}`);
             function activate(event) {
                 if (event.type === "auxclick" && event.button !== 1) return;
                 event.preventDefault();
                 if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
                     announce("Open this link in the current tab to carry the widget’s scope.", "info"); return;
                 }
-                const context = getContext();
-                if (!context) { announce("Wait for a current Analyze view before opening this trend.", "stale"); return; }
-                const { changes, entry } = project(family, context);
+                const context = getContext(family);
+                if (!context || day && !context.usageCalendar?.days.some(d => d.date === day && d.active)) { announce("Wait for a current Analyze view before opening this trend.", "stale"); return; }
+                const { changes, entry } = project(family, context,day);
                 if (!changes.length) { open(entry, node); return; }
                 dismiss?.();
                 const dialog = create("dialog", "", "analyze-trend-decision");
@@ -86,10 +91,10 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
                 cancel.onclick = stay;
                 dialog.addEventListener("cancel", event => { event.preventDefault(); stay(); });
                 accept.onclick = () => {
-                    const latest = getContext(); stay();
+                    const latest = getContext(family); stay();
                     // A read, Search change or history traversal while deciding invalidates that decision.
                     if (!latest || latest.snapshot !== context.snapshot || latest.route !== context.route || latest.hasSearch !== context.hasSearch
-                        || latest.searchMembership !== context.searchMembership || JSON.stringify(project(family, latest)) !== JSON.stringify({ changes, entry })) {
+                        || latest.searchMembership !== context.searchMembership || JSON.stringify(project(family, latest,day)) !== JSON.stringify({ changes, entry })) {
                         announce("Analyze changed. Open the trend again to review its current scope.", "stale"); return;
                     }
                     open(entry, node);

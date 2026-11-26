@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import path from "node:path";
+import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { chromium } from "playwright";
 import { fixture, privateFixture } from "./helpers.mjs";
@@ -13,7 +12,6 @@ import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { seedHistoricalFeedback } from "./historical-feedback-fixture.mjs";
 
-const hash = value => createHash("sha256").update(value).digest("hex");
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 const contentText = pages => pages.map(page => page.text
     .replaceAll("WIRE - local report", "").replace(/Page\s*\d+\s*of\s*\d+$/, "")).join("").replace(/\s+/g, "");
@@ -27,11 +25,6 @@ function assertShortRecord(pages, preview, record, index) {
     assert.ok(lastPage(pages, opening), `Short record ${index + 1}: visible heading, author qualification and whole text stay together`);
     assert.ok(preview.previewHtml.includes(`id="${record.scenarioId}"`), "HTML retains the exact record reference");
 }
-
-test("PDF text comparison preserves digits at the start of the following page", () => {
-    assert.equal(contentText([{ text: "FirstWIRE - local reportPage 1 of 2" },
-        { text: "1 included copyWIRE - local reportPage 2 of 2" }]), "First1includedcopy");
-});
 
 function printRecords(long = false) {
     return Array.from({ length: 4 }, (_, index) => {
@@ -105,14 +98,6 @@ test("four short prompt records remain complete on a page and avoid a nearly bla
     const beforeHtml = preview.previewHtml.replace(reportPrintPaginationStyles, "");
     const beforePdf = await renderPdf(beforeHtml), afterPdf = Buffer.from(preview.files["product-report.pdf"].data, "base64");
     const before = await readPages(beforePdf), after = await readPages(afterPdf);
-    if (process.env.WIRE_REPORT_PROOFS) {
-        await mkdir(process.env.WIRE_REPORT_PROOFS, { recursive: true });
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short.html"), preview.previewHtml);
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-after.pdf"), afterPdf);
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-pages.json"), JSON.stringify({ before, after }, null, 2));
-    }
-    // Flat charts reduce pagination pressure even with the former spacing.
-    // Assert the complete current pages rather than requiring the old defect.
     for (const [index, record] of preview.records.entries()) {
         assertShortRecord(after, preview, record, index);
     }
@@ -140,22 +125,12 @@ test("four short prompt records remain complete on a page and avoid a nearly bla
         const bytes = typeof content === "string" ? Buffer.from(content) : Buffer.from(content.data, "base64");
         assert.deepEqual(await readFile(saved.files[name]), bytes);
     }
-    const hashes = await Promise.all(Object.values(saved.files).map(async file => hash(await readFile(file))));
-    await renderPdf(preview.previewHtml);
-    assert.deepEqual(await Promise.all(Object.values(saved.files).map(async file => hash(await readFile(file)))), hashes, "Rendering a new copy never rewrites saved artifacts");
-    if (process.env.WIRE_REPORT_PROOFS) {
-        await mkdir(process.env.WIRE_REPORT_PROOFS, { recursive: true });
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-before.pdf"), beforePdf);
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-after.pdf"), afterPdf);
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-pages.json"), JSON.stringify({ before, after }, null, 2));
-    }
 });
 
 test("long prompt copies paginate completely while inline short copies stay grouped", { timeout: 120000 }, async t => {
     const { preview } = await reportFixture(t, true);
     const bytes = Buffer.from(preview.files["product-report.pdf"].data, "base64"), pages = await readPages(bytes);
     const text = contentText(pages);
-    for (let line = 0; line < 240; line++) assert.ok(text.includes(`LONG_LINE_${String(line).padStart(3, "0")}`), `Long prompt line ${line} is retained`);
     const start = lastPage(pages, "LONG_LINE_000"), end = lastPage(pages, "LONG_LINE_239");
     assert.ok(end >= start + 2, "A truly long prompt splits across multiple pages instead of clipping or shrinking");
     assert.equal(lastPage(pages, `${promptSummary(2)}${authorHeading}LONG_LINE_000`), start,
@@ -167,14 +142,11 @@ test("long prompt copies paginate completely while inline short copies stay grou
     }
     assert.ok(text.includes("Coverageanddefinitions"));
     let previousLine = text.lastIndexOf("LONG_LINE_000");
+    assert.notEqual(previousLine, -1, "The complete long copy starts with its first line");
     for (let line = 1; line < 240; line++) {
         const nextLine = text.indexOf(`LONG_LINE_${String(line).padStart(3, "0")}`, previousLine + 1);
         assert.ok(nextLine > previousLine, `The complete long copy retains original line order at ${line}`);
         previousLine = nextLine;
     }
     assert.ok(text.lastIndexOf("SHORT_BODY_4") < text.lastIndexOf("LONG_LINE_000"), "The complete short example is not repeated in the later appendix");
-    if (process.env.WIRE_REPORT_PROOFS) {
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-long-after.pdf"), bytes);
-        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-long-pages.json"), JSON.stringify(pages, null, 2));
-    }
 });

@@ -7,11 +7,12 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { visualWidgetFixture } from "./visual-widget-fixture.mjs";
-import { fixture, privateFixture, chooseTheme, setLegacyTimeBucket } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, setLegacyTimeBucket, navigateMain, navigateSettings } from "./helpers.mjs";
+import { usagePreview } from "./usage-preview-fixture.mjs";
 
 const proof = process.env.WIRE_DASHBOARD_PACKING_PROOFS;
 const baselineFile = process.env.WIRE_DASHBOARD_PACKING_BASE;
-const widgetSelector = ".analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card";
+const widgetSelector = ".analyze-outcome-summary,.analyze-chart-main,#analyzeUsage,#percentageCharts .percentage-card";
 
 function records(kind) {
     if (kind === "zero") return [];
@@ -70,7 +71,7 @@ async function setup(t, kind) {
 function geometry() {
     const root = document.querySelector(".analyze-dashboard");
     const box = node => node.getBoundingClientRect().toJSON();
-    const cards = [...root.querySelectorAll(".analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card")]
+    const cards = [...root.querySelectorAll(".analyze-outcome-summary,.analyze-chart-main,#analyzeUsage,#percentageCharts .percentage-card")]
         .filter(node => node.checkVisibility()).map(node => ({
             key: node.dataset.breakdown || (node.matches(".analyze-outcome-summary") ? "outcomes" : "time"),
             ...box(node), content: node.innerText, rowSpan: node.style.gridRowEnd,
@@ -83,8 +84,15 @@ function geometry() {
     });
     const ring = root.querySelector(".percentage-ring"), legend = root.querySelector("#outcomeChart .percentage-legend");
     const text = [...root.querySelectorAll(".percentage-label,.percentage-value")].filter(node => node.checkVisibility());
+    const readings = [...root.querySelectorAll("#percentageCharts .percentage-tool-list")].map(list => ({
+        card: list.closest(".percentage-card").dataset.breakdown, width: list.clientWidth,
+        rows: [...list.children].map(row => ({
+            row: box(row), label: box(row.querySelector(".percentage-label")),
+            value: box(row.querySelector(".percentage-value")), track: box(row.querySelector(".percentage-bar-track")),
+        })),
+    }));
     const widgetHeight = bounds.height - list.height - parseFloat(getComputedStyle(root).columnGap);
-    return { cards, bounds, gaps, list, widgetHeight, ring: ring && box(ring), legend: legend && box(legend),
+    return { cards, bounds, gaps, list, readings, rem:parseFloat(getComputedStyle(document.documentElement).fontSize), widgetHeight, ring: ring && box(ring), legend: legend && box(legend),
         count: document.querySelector("#activityCount").textContent,
         fontLoaded: document.fonts.check('600 30px "Asta Sans"'),
         typography: text.map(node => {
@@ -104,15 +112,28 @@ function assertPacking(value, key) {
     assert.equal(value.fontLoaded, true, key);
     assert.ok(value.overflow <= 1, key);
     assert.deepEqual(value.clipped, [], key);
+    for (const {card,width,rows} of value.readings) {
+        const paired = width >= 36 * value.rem && card !== "authors" && rows.length >= 4;
+        for (let i=0; i<rows.length; i++) {
+            const {row,label,value:amount,track}=rows[i];
+            if (paired) {
+                if (i%2) {
+                    assert.ok(Math.abs(row.top-rows[i-1].row.top)<1 && row.left>=rows[i-1].row.right,`${key}/${card}: adjacent ranks share a row`);
+                    assert.ok(Math.abs(track.width-rows[i-1].track.width)<1,`${key}/${card}: both bars use equal track widths`);
+                }
+                assert.ok(track.top>=Math.max(label.bottom,amount.bottom)-1 && amount.left-label.right<=9,`${key}/${card}: bar below its adjacent name and value`);
+            } else if (i) assert.ok(row.top>=rows[i-1].row.bottom-1,`${key}/${card}: single list`);
+        }
+    }
     for (const track of value.tracks) if (track.columns > 1) assert.ok(track.gap >= 8, "Inline labels, bars and values keep their horizontal separation");
-    assert.deepEqual(value.cards.map(card => card.key), ["time", "outcomes", "tools", "services", "models", "authors"]);
+    assert.deepEqual(value.cards.map(card => card.key), ["time", "outcomes", "usage", "tools", "services", "models", "authors"]);
     for (const card of value.cards) for (const other of value.cards) if (card !== other) {
         assert.ok(card.right <= other.x + 1 || other.right <= card.x + 1 || card.bottom <= other.y + 1 || other.bottom <= card.y + 1,
             `${key}: ${card.key} and ${other.key} do not overlap`);
     }
     for (const { key: name, gap } of value.gaps) assert.ok(gap >= -.1 && gap <= 18,
         `${key}: ${name} follows the actual card above, not a taller neighboring row (${gap}px)`);
-    for (const card of value.cards) assert.ok(["time","outcomes"].includes(card.key)
+    for (const card of value.cards) assert.ok(["time","outcomes","usage"].includes(card.key)
         ? card.bottom <= value.list.top : card.top >= value.list.bottom, `${key}: Interactions separates the charts from the breakdowns`);
 }
 
@@ -209,4 +230,134 @@ test("packing survives accepted refresh, grouping, focus, repeated layout and em
     const empty = await setup(t, "zero");
     await expect(empty.locator(".analyze-dashboard")).not.toBeVisible();
     await expect(empty.locator("#activityCount")).toHaveText("0");
+});
+
+test("mixed tall breakdowns reflow without transient overlap or perpetual span writes", async t => {
+    const page = await setup(t, "long");
+    await page.setViewportSize({ width: 1920, height: 1100 }); await settle(page);
+    await page.evaluate(() => {
+        window.collapseFrames = [];
+        let remaining = 90;
+        function sample() {
+            const cards = [...document.querySelectorAll(".analyze-widget")].map(node => node.getBoundingClientRect());
+            window.collapseFrames.push(cards.some((a, i) => cards.slice(i + 1).some(b =>
+                Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+                Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1)));
+            if (--remaining) requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+    });
+    for (const key of ["models", "services", "time", "models", "services", "time", "authors", "authors"]) {
+        await page.locator(`#analyzeCollapse-${key}`).click(); await settle(page);
+        assertPacking(await page.evaluate(geometry), `after ${key}`);
+    }
+    assert.ok((await page.evaluate(() => window.collapseFrames)).every(overlap => !overlap), "No overlapping cards during sampled reflow frames");
+    if (proof) await writeFile(path.join(proof, "collapse-frames.json"), JSON.stringify(await page.evaluate(() => window.collapseFrames)));
+});
+
+for (const frontend of ["bundled", "react"]) test(`${frontend}: every Analyze widget collapses in place without hidden focus or uneven gutters`, async t => {
+    const cleanup = [], errors = [], samples = [];
+    t.after(async () => { for (const close of cleanup.reverse()) await close(); assert.deepEqual(errors, []); });
+    const { runtime } = await usagePreview({ after: close => cleanup.push(close) }, frontend, { paginated: true });
+    const browser = await chromium.launch(); cleanup.push(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, timezoneId: "UTC", reducedMotion: "reduce" });
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(runtime.url); await settle(page);
+    const keys = ["time", "outcomes", "usage", "interactions", "tools", "services", "models", "authors"];
+    const control = key => page.locator(`#analyzeCollapse-${key}`);
+    await expect(page.locator(".analyze-widget-toggle:visible")).toHaveCount(keys.length);
+    const original = await page.locator("#activityList article").allTextContents();
+    const toolbar = page.locator("#analyzeToolbar"), bulk = toolbar.locator("#analyzeToggleAll");
+    for (const [width, scale] of [[1600, 1], [390, 1], [900, 2]]) {
+        await page.setViewportSize({ width, height: 1100 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await control("usage").click();
+        await expect(bulk).toHaveAccessibleName("Collapse all");
+        const prefs = await page.evaluate(() => JSON.stringify(localStorage));
+        await bulk.press("Enter");
+        await expect(page.locator(".analyze-widget-toggle[aria-expanded=false]:visible")).toHaveCount(8);
+        await expect(bulk).toBeFocused(); await expect(bulk).toHaveAccessibleName("Expand all");
+        await control("time").click(); await expect(bulk).toHaveAccessibleName("Collapse all");
+        await control("time").click(); await expect(bulk).toHaveAccessibleName("Expand all");
+        await bulk.click(); await expect(page.locator(".analyze-widget-toggle[aria-expanded=true]:visible")).toHaveCount(8);
+        assert.equal(await page.evaluate(() => JSON.stringify(localStorage)), prefs);
+        assert.ok(await toolbar.evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+        assert.ok(await page.locator("#analyzeResultScope").evaluate(node => node.clientWidth >= Math.min(180, node.parentElement.clientWidth)),
+            "The toolbar wraps before squeezing the scope caption into individual letters");
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await bulk.hover(); await page.screenshot({ path: path.join(proof, `${frontend}-${width}-collapse-all.png`) });
+        }
+    }
+    const layout = () => page.locator(".analyze-widget").evaluateAll(nodes => {
+        const cards = nodes.filter(node => node.checkVisibility()).map(node => ({ key: node.querySelector(".analyze-widget-toggle").id,
+            ...node.getBoundingClientRect().toJSON() }));
+        return cards.map(card => {
+            const above = cards.filter(other => other !== card && other.left < card.right - 1 && other.right > card.left + 1 && other.bottom <= card.top + .1);
+            return { ...card, gap: above.length ? card.top - Math.max(...above.map(other => other.bottom)) : null,
+                overlap: cards.some(other => other !== card && Math.min(card.right, other.right) - Math.max(card.left, other.left) > 1
+                    && Math.min(card.bottom, other.bottom) - Math.max(card.top, other.top) > 1) };
+        });
+    });
+    function assertGutters(cards) {
+        for (const card of cards) {
+            assert.equal(card.overlap, false, `${card.key}: no overlap`);
+            if (card.gap !== null) assert.ok(card.gap >= 15.5 && card.gap <= 17.5,
+                `${card.key}: actual card gap is ${card.gap}px`);
+        }
+    }
+    for (const [width, scale, theme] of [[1600, 1, "light"], [390, 1, "dark"], [900, 2, "light"]]) {
+        await page.setViewportSize({ width, height: 1100 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        for (const key of keys) {
+            const button = control(key);
+            await button.scrollIntoViewIfNeeded();
+            const before = await button.boundingBox(), preferences = await page.evaluate(() => JSON.stringify(localStorage));
+            const originalScroll = await page.evaluate(() => scrollY);
+            await button.press("Enter"); await expect(button).toHaveAttribute("aria-expanded", "false");
+            await expect(button).toBeFocused();
+            const hidden = await button.evaluate(node => node.getAttribute("aria-controls").split(" ").map(id => {
+                const body = document.getElementById(id); return { hidden: !body.checkVisibility(), inert: body.inert };
+            }));
+            assert.ok(hidden.length > 0 && hidden.every(body => body.hidden && body.inert), `${key}: every controlled body is hidden and inert`);
+            await settle(page);
+            const after = await button.boundingBox();
+            const clamped = await page.evaluate(original => Math.max(0, original - Math.max(0, document.documentElement.scrollHeight - innerHeight)), originalScroll);
+            assert.ok(Math.abs(after.y - before.y - clamped) <= 1,
+                `${key}: activating header moved ${after.y - before.y}px with ${clamped}px required by the page's new end`);
+            assert.equal(await page.evaluate(() => JSON.stringify(localStorage)), preferences, "Collapse never creates or changes saved preferences");
+            await button.press("Space"); await expect(button).toHaveAttribute("aria-expanded", "true");
+            await expect(button).toBeFocused(); await settle(page);
+        }
+        for (const closed of [["time", "usage"], ["outcomes", "services", "authors"], ["interactions", "models", "tools"]]) {
+            for (const key of closed) await control(key).click();
+            await settle(page);
+            const value = await layout(); samples.push({ frontend, width, scale, closed, cards: value });
+            assertGutters(value);
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+            if (proof && closed.includes("interactions") && scale === 1) {
+                await mkdir(proof, { recursive: true });
+                await page.screenshot({ path: path.join(proof, `${frontend}-${width}-${closed.join("-")}-collapsed.png`), fullPage: true });
+            }
+            for (const key of closed) await control(key).click();
+        }
+    }
+    assert.deepEqual(await page.locator("#activityList article").allTextContents(), original, "No card, reading or report action is removed by collapse");
+    await page.setViewportSize({ width: 1600, height: 1100 }); await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    const slider = page.locator("#analyzeUsage .usage-date-slider");
+    await slider.press("End");
+    const selected = await slider.getAttribute("aria-valuetext"), index = await slider.inputValue();
+    await control("usage").click(); await navigateMain(page, "settings"); await navigateSettings(page, "analyze");
+    await page.locator('#analyzeLayout [data-section="models"] [data-step="-1"]').click();
+    await page.getByRole("link", { name: "View Analyze", exact: true }).click(); await settle(page);
+    await expect(control("usage")).toHaveAttribute("aria-expanded", "false");
+    assertGutters(await layout());
+    await control("usage").click();
+    await expect(slider).toHaveValue(index); await expect(slider).toHaveAttribute("aria-valuetext", selected);
+    await slider.press("Home"); await expect(slider).toHaveValue("0");
+    const custom = await layout(); samples.push({ frontend, custom });
+    assertGutters(custom);
+    await control("usage").click(); await page.reload(); await settle(page);
+    await expect(page.locator(".analyze-widget-toggle[aria-expanded=true]:visible")).toHaveCount(8);
+    if (proof) await writeFile(path.join(proof, `${frontend}-collapse-geometry.json`), JSON.stringify(samples, null, 2));
 });

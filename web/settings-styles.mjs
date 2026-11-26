@@ -1,7 +1,32 @@
 export const settingsStyles = `
+#usageCountDialog #usageCountBoundary{color:var(--muted);margin:0 0 16px}
+#usageCountPreviewResult{margin:0;padding:4px 0 4px 16px;border-left:3px solid var(--accent)}
+#usageCountPreviewResult h3{margin:0;font-size:var(--type-reading);line-height:var(--leading-reading)}
+#usageCountPreviewResult p{margin:8px 0}
+#usageCountReasons{margin:0;padding-left:20px}
+#usageCountReasons li+li{margin-top:4px}
+.release-reader>header,.release-meta{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.release-reader>header{margin:16px 0 8px}
+.release-meta{color:var(--muted);font-size:var(--type-small);border-bottom:1px solid var(--surface-divider);padding-bottom:16px}
+.release-reader .wire-icon{width:1em;height:1em;vertical-align:-.12em}
+#releaseNotesBody{max-width:68ch;margin:20px 0;overflow-wrap:anywhere}
+#releaseNotesBody h3{margin:20px 0 6px}
+#releaseNotesBody ul{padding-inline-start:1.4em}
+#noticeReleaseNotes,#availableReleaseNotes,#installedReleaseNotes,.release-meta a,.release-back{text-decoration:underline;text-underline-offset:3px}
+#availableReleaseNotes,#installedReleaseNotes{margin-inline-end:.75em}
 #appUpdateNotice {position:relative;box-sizing:border-box;max-width:100%;padding:var(--space-lg);margin-bottom:var(--space-lg);
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
+#appUpdateNotice>.wire-icon,#appUpdateDismiss>.wire-icon {display:none}
+#appUpdateNotice[data-updated] {display:flex;align-items:center;gap:var(--space-xs);padding:var(--space-xs);padding-inline-start:var(--space-md);
+ background:var(--success);border-color:var(--success);color:var(--on-accent)}
+#appUpdateNotice[data-updated]>.wire-icon,#appUpdateNotice[data-updated] #appUpdateDismiss>.wire-icon {display:block;flex:none}
+#appUpdateNotice[data-updated] .app-update-copy {flex:1;min-width:0;overflow-wrap:anywhere}
+#appUpdateNotice[data-updated] .app-update-actions {flex:none;margin:0}
+#appUpdateNotice[data-updated] #appUpdateDismiss {display:grid;place-items:center;width:44px;min-height:44px;padding:0;color:inherit;
+ --pill-hover:color-mix(in srgb,currentColor 10%,transparent);--pill-pressed:color-mix(in srgb,currentColor 16%,transparent)}
+#appUpdateNotice[data-updated] #appUpdateDismiss>span {display:none}
+#appUpdateNotice[data-updated] #appUpdateDismiss:focus-visible {outline:2px solid currentColor;outline-offset:-2px}
 #appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(1.25rem);transition-duration:180ms}
 body:has(#appUpdateFence[open]) #appUpdateNotice,body:has(#workspace:not([hidden]) #settingsView:not([hidden]) [data-settings-section=general]:not([hidden])) #appUpdateNotice[data-install-result] {display:none;transition:none}
 @media(min-width:64rem) {
@@ -27,6 +52,8 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 [data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .app-version-card .settings-row-copy {flex:1 1 12rem}
 #appUpdateFence {box-sizing:border-box;width:min(21rem,calc(100vw - 2rem));padding:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
+#appUpdateFence:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}
+@media(forced-colors:active) {#appUpdateFence:focus-visible {outline-color:Highlight}}
 #appUpdateFence h2 {margin:0;font-size:var(--type-section);line-height:var(--leading-heading)}
 .app-update-title {display:flex;align-items:center;gap:var(--space-sm)}
 .update-spinner {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
@@ -170,40 +197,46 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view .settings-section>h2:has(+ :is(.settings-reply-row,.settings-group,.settings-theme-row,.app-version-card)) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
-.settings-nav-group {padding-inline:var(--space-md);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-control);font-weight:var(--weight-strong)}
+.settings-nav-group {margin-block-end:var(--space-sm);padding-inline:var(--space-md);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-control);font-weight:var(--weight-strong)}
 .settings-view .page-default-field {min-width:0;margin:0;padding:0;border:0}
 .settings-view .page-default-field+.page-default-field {margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--rule)}
 .page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .settings-view .page-default-field>.settings-help {margin:.35rem 0 .65rem}
 .page-default-field>.select-control {width:min(100%,22rem)}
-.analyze-layout-editor {display:grid;grid-template-columns:minmax(0,1fr) minmax(13rem,.8fr);align-items:start;gap:var(--space-lg)}
+.analyze-layout-editor {display:grid;grid-template-columns:minmax(0,1fr) minmax(13rem,.8fr);align-items:start;gap:var(--space-lg);overflow-anchor:none}
 .analyze-layout-field ol {min-width:0;margin:0;padding-inline-start:1.75rem;border-block:1px solid var(--rule)}
-.layout-preview {margin:0;padding:12px;background:var(--canvas);border-radius:var(--radius-small);min-width:0}
+.layout-preview {display:grid;align-self:stretch;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;margin:0;padding:12px;background:var(--canvas);border-radius:var(--radius-small);min-width:0}
 .layout-preview figcaption {margin:0 0 8px;font-size:var(--type-small);font-weight:var(--weight-medium);color:var(--ink)}
-.layout-preview-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
-.layout-preview-grid>[data-tile] {display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;align-content:center;gap:4px;padding:6px 8px;border:1px solid transparent;border-radius:4px;background:var(--paper);color:var(--ink);font-size:var(--type-caption);line-height:var(--leading-control);overflow-wrap:anywhere}
+.layout-preview-grid,.layout-preview-size {grid-area:2/1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:4px}
+.layout-preview-size {visibility:hidden;pointer-events:none;grid-template-rows:repeat(var(--preview-rows),1fr)}
+.layout-preview-labels {display:grid}
+.layout-preview-labels>span {grid-area:1/1}
+:is(.layout-preview-grid,.layout-preview-size)>div {display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;align-content:center;gap:4px;padding:3px 8px;border:1px solid transparent;border-radius:4px;background:var(--paper);color:var(--ink);font-size:var(--type-caption);line-height:var(--leading-control);overflow-wrap:anywhere}
 .layout-preview-grid>[data-full-row] {grid-column:1/-1}
 .layout-preview-grid>[data-moved] {border-color:var(--accent);background:var(--accent-soft)}
-.layout-preview-grid svg {display:block;width:2.75rem;height:1.5rem;max-width:100%;fill:currentColor;color:var(--accent)}
+.layout-preview svg {display:block;width:2.75rem;height:1.25rem;max-width:100%;fill:currentColor;color:var(--accent)}
 .layout-preview-grid>[data-tile=interactions] svg {width:65%}
 @container settings (max-width:60rem) {
- .layout-preview-grid {grid-template-columns:minmax(0,1fr)}
- .layout-preview-grid>[data-tile] {grid-template-columns:minmax(0,1fr) auto;align-items:center}
- .layout-preview-grid svg {width:2.25rem;height:1rem}
+ .layout-preview-grid,.layout-preview-size {grid-template-columns:minmax(0,1fr)}
+ :is(.layout-preview-grid,.layout-preview-size)>div {grid-template-columns:minmax(0,1fr) auto;align-items:center}
+ .layout-preview svg {width:2.25rem;height:1rem}
  .layout-preview-grid>[data-tile=interactions] svg {width:2.25rem}
 }
 @container settings (min-width:60.001rem) and (max-width:64rem) {
  body:not(.wire-frontend-react) .layout-preview-grid[data-standard] {grid-template-columns:minmax(0,1fr)}
 }
 @container settings (min-width:40.001rem) and (max-width:60rem) {
- .wire-frontend-react .layout-preview-grid[data-standard] {grid-template-columns:repeat(2,minmax(0,1fr))}
- .wire-frontend-react .layout-preview-grid[data-standard]>:is([data-tile=time],[data-tile=outcomes]) {grid-column:1/-1}
+ .wire-frontend-react :is(.layout-preview-grid[data-standard],.layout-preview-size) {grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @container settings-pane (max-width:34rem) {
  .analyze-layout-editor {grid-template-columns:minmax(0,1fr);gap:var(--space-sm)}
  .layout-preview {grid-row:1}
- .layout-preview-grid {gap:2px}
- .layout-preview-grid>[data-tile] {padding:2px 8px}
+ .layout-preview-grid,.layout-preview-size {gap:2px}
+ :is(.layout-preview-grid,.layout-preview-size)>div {padding:2px 8px}
+}
+@container settings (max-width:40rem) {
+ .layout-preview-size {display:none}
+ .layout-preview-grid {grid-auto-rows:auto}
 }
 @media(forced-colors:active) {
  .layout-preview-grid>[data-tile] {border-color:CanvasText}
@@ -214,6 +247,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .analyze-layout-field li>div,.analyze-layout-actions {display:flex;align-items:center;gap:4px}
 .analyze-layout-field li span {flex:1;min-width:0}
 .analyze-layout-field li button {min-width:44px;min-height:44px}
+.analyze-layout-field li button:disabled {visibility:hidden}
 .analyze-layout-actions {justify-content:space-between;flex-wrap:wrap;margin-top:8px}
 .analyze-layout-actions a {display:inline-flex;align-items:center;min-height:44px}
 .page-default-formats {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));gap:0 .75rem}

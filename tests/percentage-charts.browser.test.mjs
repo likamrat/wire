@@ -120,6 +120,7 @@ test("result chart titles and accessible names follow accepted units and clear o
         await page.evaluate(analytics => window.view.update(analytics, { layer: analytics.layer, filters: {} }), analytics);
         await expect(card).toHaveAccessibleName("Results by source");
         await expect(card.locator(".percentage-content")).toHaveAttribute("data-unit-mode", "separate");
+        await expect(card.locator(".outcome-share-strip")).toHaveCount(0);
         assert.equal(await card.locator(".percentage-ring").count(), 0);
         assert.deepEqual(await card.locator("[data-count-unit]").evaluateAll(nodes => nodes.map(node => node.dataset.countUnit)),
             analytics.unitPopulations.map(population => population.unit));
@@ -179,11 +180,10 @@ test("flat outcome paint retains exact tiny/full circles, inert centers, local f
                 const start = +node.dataset.start, end = +node.dataset.end;
                 const angle = (start + (end - start) * .37) * Math.PI * 2 + Math.PI / 2;
                 const local = new DOMPoint(85 * Math.cos(angle), 85 * Math.sin(angle));
-                const point = local.matrixTransform(node.getScreenCTM());
                 const id = node.getAttribute("fill").match(/^url\(#(.+)\)$/)[1];
                 return { start, end, count: +node.dataset.count, exact: +node.dataset.exactFraction,
                     contains: node.isPointInFill(local), center: node.isPointInFill(new DOMPoint(0, 0)),
-                    localFill: Boolean(node.ownerSVGElement.querySelector(`[id="${id}"]`)), x: point.x, y: point.y };
+                    localFill: Boolean(node.ownerSVGElement.querySelector(`[id="${id}"]`)) };
             });
             assert.equal(measured.exact, measured.count / total);
             assert.ok(Math.abs(measured.end - measured.start - measured.exact) < 1e-14);
@@ -215,32 +215,31 @@ test("flat outcome paint retains exact tiny/full circles, inert centers, local f
     }
 });
 
-test("outcome emphasis preserves light fades, accepted dark fills and forced colors with explicit or OS themes", async t => {
+test("outcome emphasis keeps the read slice's geometry, recedes the others and respects forced colors with explicit or OS themes", async t => {
     const page = await setup(t);
     await update(page, [6, 1, 1]);
     const label = page.locator('[data-percentage-card="outcomes"] [data-category="failure"] .percentage-label');
     const slice = page.locator('.percentage-slice[data-category="failure"]');
+    const other = page.locator('.percentage-slice[data-category="success"]');
     for (const os of ["light", "dark"]) for (const explicit of [null, "light", "dark"]) {
-        await page.emulateMedia({ colorScheme: os, forcedColors: "none" });
+        await label.blur();
+        await page.emulateMedia({ colorScheme: os, forcedColors: "none", reducedMotion: "reduce" });
         await page.evaluate(theme => {
             if (theme) document.documentElement.dataset.evidenceTheme = theme;
             else document.documentElement.removeAttribute("data-evidence-theme");
         }, explicit);
+        const rest = await slice.evaluate(node => node.getBoundingClientRect().toJSON());
         await label.focus();
         const paint = await slice.evaluate(node => {
             const css = getComputedStyle(node);
-            return { fill: css.fill, filter: css.filter };
+            return { fill: css.fill, filter: css.filter, stroke: css.stroke, opacity: css.opacity, box: node.getBoundingClientRect().toJSON() };
         });
-        if ((explicit || os) === "light") {
-            assert.match(paint.fill, /^url\(/);
-            assert.equal(paint.filter, "brightness(0.9)");
-        } else {
-            const cue = page.locator('[data-percentage-card="outcomes"] [data-category="failure"] .percentage-cue');
-            assert.equal(paint.fill, await cue.evaluate(node => getComputedStyle(node).color));
-            assert.notEqual(paint.fill, await page.locator('[data-percentage-card="outcomes"] [data-category="success"] .percentage-cue')
-                .evaluate(node => getComputedStyle(node).color));
-            assert.equal(paint.filter, "none");
-        }
+        assert.match(paint.fill, /^url\(/);
+        assert.equal(paint.filter, "none");
+        assert.equal(paint.stroke, "none");
+        assert.equal(paint.opacity, "1");
+        assert.deepEqual(paint.box, rest, "Emphasis never widens the painted annulus");
+        assert.ok(Number(await other.evaluate(node => getComputedStyle(node).opacity)) < .5);
         await page.emulateMedia({ forcedColors: "active" });
         assert.equal(await slice.evaluate(node => getComputedStyle(node).filter), "none");
         assert.doesNotMatch(await slice.evaluate(node => getComputedStyle(node).fill), /^url\(/);

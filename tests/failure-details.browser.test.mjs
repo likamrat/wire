@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -7,6 +9,7 @@ import { retainEvent } from "../lib/collector.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture } from "./helpers.mjs";
+import { recollectionFixture } from "./recollection-fixture.mjs";
 
 test("reader shows the recorded processing failure separately from the default unsaved reply", { timeout: 30000 }, async t => {
     const source = [
@@ -63,4 +66,59 @@ test("reader shows the recorded processing failure separately from the default u
     await expect(call).not.toContainText(/try again|sign in now/i);
     await page.setViewportSize({ width: 390, height: 900 });
     assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+});
+
+test("expanded fetch retains a separate completion detail without attributing it to either path or the next discovery", { timeout: 30000 }, async t => {
+    const app = await recollectionFixture(t, { collectInitially: false });
+    const prompt = "Inspect the two invented folders.", reason = "The folder version has changed.";
+    const calls = Array.from({ length: 7 }, (_, i) => {
+        const toolCallId = `folder-call-${i + 1}`, fetch = i === 5;
+        return [
+            ["tool.execution_start", { toolCallId, toolName: fetch ? "workiq-fetch" : "workiq-search_paths",
+                arguments: fetch ? { entityUrls: ["/me/drive/root:/example-a", "/me/drive/root:/example-b"] } : { query: "folders" } }],
+            ["tool.execution_complete", { toolCallId, success: !fetch, ...(fetch ? { error: {
+                code: "failure", message: `MCP server 'workiq': {"unknown":"EXCLUDED_RAW"}`, statusCode: 409,
+                details: [{ code: "VersionMismatch", message: reason }],
+            } } : {}) }],
+        ];
+    }).flat();
+    const now = Date.now() - 30000;
+    const source = [["session.start", { sessionId: app.sourceId, version: 1 }],
+        ["user.message", { content: prompt }], ...calls].map(([type, data], i) => ({
+        id: `event-${i}`, timestamp: new Date(now + 100 * i).toISOString(), type, data,
+    }));
+    await writeFile(app.files[0], source.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.collector.collectNow();
+    await app.restart();
+    const state = await loadBoardState(app.context);
+    const record = state.evidence.find(row => row.userPrompt.text === prompt);
+    assert.deepEqual(record.toolCalls.slice(5).map(call => [call.order, call.tool, call.reportedOutcome, call.apiResults.length]),
+        [[6, "workiq-fetch", "failed", 0], [7, "workiq-search_paths", "succeeded", 0]]);
+    assert.doesNotMatch(JSON.stringify(record), /EXCLUDED_RAW/);
+
+    const browser = await chromium.launch();
+    app.closeClient(() => browser.close());
+    const page = await browser.newPage();
+    await page.route("**/*", route => new URL(route.request().url()).origin === new URL(app.runtime.url).origin
+        ? route.continue() : route.abort());
+    await page.goto(app.runtime.url);
+    await page.locator(".activity-card").filter({ hasText: prompt }).locator(".request-card-open").click();
+    const call = page.locator('[data-reader-section=activity] [data-tool-call-id="folder-call-6"]');
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(call.locator(".reader-entry-label")).toHaveText("Call #6");
+    const detail = call.locator(".technical-detail");
+    for (const text of [reason, "VersionMismatch", "409", "could not extract all error details",
+        "/me/drive/root:/example-a", "/me/drive/root:/example-b"]) await expect(detail).toContainText(text);
+    await expect(call.locator(".api-result-entry")).toHaveCount(0);
+    const discovery = page.locator('[data-reader-section=activity] [data-tool-call-id="folder-call-7"]');
+    await expect(discovery.locator(".reader-entry-label")).toHaveText("Call #7");
+    await expect(discovery).toContainText("workiq-search_paths");
+    await expect(discovery).toContainText("1 tool call completed");
+    await expect(discovery).not.toContainText(reason);
+    if (process.env.WIRE_FAILURE_PROOFS) {
+        await mkdir(process.env.WIRE_FAILURE_PROOFS, { recursive: true });
+        await detail.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: path.join(process.env.WIRE_FAILURE_PROOFS, "expanded-fetch.png") });
+    }
 });

@@ -35,6 +35,7 @@ async function setup(t) {
     const state = { revision: 7, evidence: sources, exports: [], pseudonymKey: "a".repeat(64) };
     const model = buildAssessmentModel(state);
     const moduleSource = await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url), "utf8");
+const markedSource = await readFile(new URL("../node_modules/marked/lib/marked.esm.js", import.meta.url), "utf8");
     const browser = await chromium.launch();
     const context = await browser.newContext({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce", timezoneId: "America/Los_Angeles" });
     const page = await context.newPage(), unexpected = [], errors = [], calls = [];
@@ -45,6 +46,7 @@ async function setup(t) {
         if (url.origin !== "https://wire.invalid") { unexpected.push(url.href); return route.abort(); }
         if (request.method() === "GET" && url.pathname === "/") return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "artificial-prompt-proof", UNBOUND_FIXTURE_BOOTSTRAP) });
         if (request.method() === "GET" && url.pathname === "/assets/assessment-contract.mjs") return route.fulfill({ contentType: "text/javascript", body: moduleSource });
+        if (request.method() === "GET" && url.pathname === "/assets/marked.mjs") return route.fulfill({ contentType: "text/javascript", body: markedSource });
         if (request.method() === "GET" && url.pathname === "/favicon.svg") return route.fulfill({ status: 204 });
         const input = request.postDataJSON();
         calls.push(url.pathname);

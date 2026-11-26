@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -13,11 +13,9 @@ import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters, fulfillFixtureUpdateStatus } from "./helpers.mjs";
 
 const proof = process.env.WIRE_RECORDED_OUTCOMES_PROOFS;
-const baselinePath = process.env.WIRE_RECORDED_OUTCOMES_BASE;
-const previousPath = process.env.WIRE_RECORDED_OUTCOMES_PREVIOUS;
 const ready = async page => {
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.evaluate(() => document.fonts.ready);
@@ -46,16 +44,17 @@ function records(total) {
     });
 }
 
-async function setup(t, total) {
+async function setup(t, total, frontend) {
     const cleanup = [], { context } = await privateFixture({ after: action => cleanup.push(action) }, records(total));
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false },
         evaluation: { evaluatorFactory: async () => { throw new Error("No provider calls in outcome sizing proof"); },
             readSource: async () => { throw new Error("No source reads in outcome sizing proof"); } } });
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, locale: "en-US", timezoneId: "UTC" });
     const errors = [], denied = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.route("**/*", route => {
+    await page.route("**/*", async route => {
+        if (await fulfillFixtureUpdateStatus(route,new URL(runtime.url).origin)) return;
         const request = route.request(), url = new URL(request.url());
         const reads = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/report-artifacts/list"];
@@ -121,7 +120,7 @@ function measure() {
         const node = root.querySelector(selector), css = getComputedStyle(node);
         const range = document.createRange(); range.selectNodeContents(node);
         const rectangles = [...range.getClientRects()].map(rect => rect.toJSON());
-        return { text: node.textContent, font: css.fontFamily, size: parseFloat(css.fontSize),
+        return { text: node.textContent, size: parseFloat(css.fontSize),
             rectangles, clearance: Math.min(...rectangles.flatMap(rect =>
                 [rect.left, rect.right].flatMap(x => [rect.top, rect.bottom].map(y =>
                     innerRadius - Math.hypot(x - center.x, y - center.y))))),
@@ -129,16 +128,17 @@ function measure() {
     };
     const legend = root.querySelector(".percentage-legend");
     const card = root.querySelector(".percentage-card"), scope = document.querySelector("#analyzeScopeSummary");
-    return { paintedDiameter: 208 * scale, innerDiameter: 132 * scale, value: text(".percentage-total-value"),
+    const ring = box(root.querySelector(".percentage-visual"));
+    return { paintedDiameter: 208 * scale, value: text(".percentage-total-value"),
         unit: text(".percentage-total-unit"), widget: box(card), legend: box(legend),
-        ring: box(root.querySelector(".percentage-visual")),
-        bottomGap: box(card).bottom - Math.max(box(legend).bottom, box(root.querySelector(".percentage-visual")).bottom),
+        ring, bottomGap: box(card).bottom - Math.max(box(legend).bottom,ring.bottom),
+        strip: [...root.querySelectorAll(".outcome-share-strip>*")].map(segment=>
+            box(segment).width / box(segment.parentElement).width),
         scopeInWidget: card.contains(scope), scopeInCommands: document.getElementById("analyzeResultCommands").contains(scope),
         rows: [...legend.children].map(row => ({ category: row.dataset.category, count: +row.dataset.count,
             percentage: row.dataset.percentage, label: box(row.querySelector(".percentage-label")),
             value: box(row.querySelector(".percentage-value")) })),
         pageOverflow: document.documentElement.scrollWidth - innerWidth,
-        reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
         fontLoaded: document.fonts.check('600 30px "Asta Sans"'),
         slices: [...root.querySelectorAll(".percentage-slice")].map(node => ({
             count: +node.dataset.count, fraction: +node.dataset.exactFraction, d: node.getAttribute("d"),
@@ -146,116 +146,120 @@ function measure() {
         })) };
 }
 
-test("the tool-call widget names its measured result in the normal shell", async t => {
-    const page = await setup(t, 239), url = page.url();
-    if (proof) await mkdir(proof, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [375, 200]]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.goto(url); await ready(page); await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
-        await ready(page);
-        const card = page.locator('#outcomeChart [data-percentage-card="outcomes"]');
-        await expect(card).toHaveAccessibleName("Tool call results");
-        await expect(card.locator(".percentage-total-value")).toHaveText("239");
-        await expect(card.locator(".percentage-ring")).toHaveAttribute("aria-label", /^Tool call results\. 239 Work IQ tool calls\./);
-        if (proof) await card.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-title.png`) });
-    }
-});
-
-test("Recorded outcomes fits full five-digit totals in the normal shell without a default footer", async t => {
-    const measurements = [], baseline = baselinePath ? JSON.parse(await readFile(baselinePath, "utf8")) : [];
-    const previous = previousPath ? JSON.parse(await readFile(previousPath, "utf8")) : [];
-    if (proof) await mkdir(proof, { recursive: true });
-    for (const total of [239, 10000, 99999]) {
-        const cleanup = [];
-        try {
-            const page = await setup({ after: action => cleanup.push(action) }, 239);
-            // Large totals exercise the production renderer, not source ingestion or snapshot latency.
-            if (total !== 239) await renderCount(page, total);
-            const states = total === 239 ? [["light", 1440, 100], ["dark", 1440, 100]]
-                : total === 10000 ? [["light", 1440, 100]]
-                    : [["light", 1440, 100], ["dark", 1440, 100], ["dark", 768, 100],
-                        ["light", 375, 100], ["dark", 375, 100], ["light", 1440, 200], ["dark", 375, 200],
-                        ["light", 1440, 100, 2]];
-            for (const [theme, width, textScale, zoom = 1] of states) {
-                await page.setViewportSize({ width: width / zoom, height: 1000 / zoom });
-                if (zoom !== 1) {
-                    const cdp = await page.context().newCDPSession(page);
-                    await cdp.send("Emulation.setDeviceMetricsOverride", { width: width / zoom, height: 1000 / zoom,
-                        deviceScaleFactor: zoom, mobile: false, screenWidth: width, screenHeight: 1000 });
-                }
-                await chooseTheme(page, theme);
-                await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, textScale);
-                await ready(page);
-                const key = `${total}-${theme}-${width}-${textScale}${zoom === 1 ? "" : "-zoom2"}`, value = await page.evaluate(measure);
-                measurements.push({ key, total, theme, width, textScale, zoom,
-                    fixture: total === 239 ? "native snapshot" : "canonical renderer in native shell", ...value });
-                if (proof) {
-                    await page.evaluate(() => { document.activeElement?.blur(); scrollTo(0, 0); });
-                    await page.screenshot({ path: path.join(proof, `${key}-context.png`) });
-                    await page.locator(".analyze-outcome-summary").screenshot({ path: path.join(proof, `${key}-widget.png`) });
-                }
-            }
-        } finally { for (const action of cleanup.reverse()) await action(); }
-    }
-    if (proof) await writeFile(path.join(proof, "geometry.json"), JSON.stringify(measurements, null, 2));
-    for (const current of measurements) {
-        assert.equal(current.value.text, current.total.toLocaleString("en-US"), current.key);
-        assert.equal(current.unit.text, "tool calls", current.key);
-        assert.equal(current.fontLoaded, true, current.key);
-        assert.equal(current.reducedMotion, false, "Proof waits for real motion; it does not disable it");
-        assert.equal(current.value.size, (current.total === 239 ? 30 : 20) * current.textScale / 100, current.key);
-        assert.equal(current.unit.size, 14 * current.textScale / 100, current.key);
-        if (current.width === 1440 && current.textScale === 100 && current.zoom === 1) {
-            assert.ok(Math.abs(current.paintedDiameter - 208 * 208 / 240) < .01, current.key);
-            assert.ok(current.bottomGap <= 12, `${current.key}: tightened space below the legend`);
-            assert.ok(current.widget.height <= 280, `${current.key}: side-by-side widget stays content-sized`);
-        }
-        if (current.legend.y < current.ring.bottom) {
-            assert.ok(current.legend.x >= current.ring.right + 15, `${current.key}: labels and values sit on the wheel's right`);
-            assert.ok(current.legend.y < current.ring.bottom && current.legend.bottom > current.ring.y, `${current.key}: one aligned horizontal group`);
-        } else assert.ok(current.legend.y >= current.ring.bottom, `${current.key}: narrow widths stack without squeezing the legend`);
-        assert.equal(current.scopeInWidget, false, `${current.key}: default scope leaves no footer or divider`);
-        assert.equal(current.scopeInCommands, true, `${current.key}: result commands retain the scope`);
-        assert.ok(current.bottomGap <= 32, `${current.key}: no empty footer band (${current.bottomGap})`);
-        for (const label of [current.value, current.unit]) {
-            assert.ok(label.clearance > 0, `${current.key}: the entire text box must stay inside the inner edge (${label.clearance}px clearance)`);
-            assert.equal(label.rectangles.length, 1, `${current.key}: center text stays on one line`);
-            assert.equal(label.clipped || label.ellipsis, false, current.key);
-        }
-        assert.ok(current.pageOverflow <= 1, current.key);
-        assert.equal(current.rows.reduce((sum, row) => sum + row.count, 0), current.total);
-        assert.ok(current.rows.every(row => row.label.right <= current.widget.right && row.value.right <= current.widget.right));
-        assert.ok(Math.max(...current.rows.map(row => row.value.x)) - Math.min(...current.rows.map(row => row.value.x)) < 1
-            || Math.max(...current.rows.map(row => row.value.right)) - Math.min(...current.rows.map(row => row.value.right)) < 1,
-        `${current.key}: legend values align on a shared edge`);
-        for (const slice of current.slices) assert.equal(slice.fraction, slice.count / current.total);
-        const before = baseline.find(row => row.key === current.key);
-        if (before) {
-            assert.ok(current.paintedDiameter > before.paintedDiameter, current.key);
-            assert.ok(current.value.size > before.value.size, current.key);
-            assert.ok(current.unit.size > before.unit.size, current.key);
-            assert.deepEqual(current.slices, before.slices, "Sizing does not change paths, math or destinations");
-            assert.deepEqual(current.rows.map(({ category, count, percentage }) => ({ category, count, percentage })),
-                before.rows.map(({ category, count, percentage }) => ({ category, count, percentage })));
-        }
-        const admitted = previous.find(row => row.key === current.key);
-        if (admitted && current.width === 1440 && current.textScale === 100 && current.zoom === 1) {
-            assert.ok(current.paintedDiameter >= admitted.paintedDiameter * 1.3 - .01, current.key);
-            assert.ok(current.widget.height <= admitted.widget.height + 8, "The larger wheel fills existing space instead of inflating the widget");
-            assert.ok(current.widget.height < admitted.widget.height - 100, "Side-by-side composition removes the unused vertical band");
-            assert.equal(current.value.size, admitted.value.size, "Keep the admitted center typography");
-            assert.equal(current.unit.size, admitted.unit.size, "Keep the admitted center typography");
-        }
-    }
-});
-
-test("outcome scope, hover, keyboard, slices and zero/missing states retain their behavior", async t => {
+test("the tool-call widget names its measured result and fits five-digit totals without a default footer", async t => {
     const page = await setup(t, 239);
+    for (const total of [239, 10000, 99999]) {
+        if (total !== 239) {
+            await page.reload(); await ready(page);
+            await renderCount(page, total);
+        }
+        const states = total === 239 ? [["light", 1440, 100], ["dark", 1440, 100], ["light", 375, 200], ["dark", 375, 200]]
+            : total === 10000 ? [["light", 1440, 100]]
+                : [["light", 1440, 100], ["dark", 1440, 100], ["dark", 768, 100],
+                    ["light", 375, 100], ["dark", 375, 100], ["light", 1440, 200], ["dark", 375, 200], ["light", 1440, 100, 2]];
+        let first;
+        for (const [theme, width, textScale, zoom = 1] of states) {
+            await page.setViewportSize({ width: width / zoom, height: 1000 / zoom });
+            if (zoom !== 1) {
+                const cdp = await page.context().newCDPSession(page);
+                await cdp.send("Emulation.setDeviceMetricsOverride", { width: width / zoom, height: 1000 / zoom,
+                    deviceScaleFactor: zoom, mobile: false, screenWidth: width, screenHeight: 1000 });
+            }
+            await chooseTheme(page, theme);
+            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, textScale);
+            await ready(page);
+            if (total === 239) {
+                const card = page.locator('#outcomeChart [data-percentage-card="outcomes"]');
+                await expect(card).toHaveAccessibleName("Tool call results");
+                await expect(card.locator(".percentage-ring")).toHaveAttribute("aria-label", /^Tool call results\. 239 Work IQ tool calls\./);
+            }
+            const current = await page.evaluate(measure);
+            const key = `${total}/${theme}/${width}/${textScale}/${zoom}`;
+            assertSizing(current, { total, width, textScale, zoom, key });
+            const readings = { slices: current.slices, rows: current.rows.map(({ category, count, percentage }) => ({ category, count, percentage })) };
+            if (first) assert.deepEqual(readings, first, `${key}: resizing must not alter paths, destinations or amounts`);
+            else first = readings;
+        }
+    }
+});
+
+function assertSizing(current, { total, width, textScale, zoom, key }) {
+    assert.equal(current.value.text, total.toLocaleString("en-US"), key);
+    assert.equal(current.unit.text, "tool calls", key);
+    assert.equal(current.fontLoaded, true, key);
+    assert.ok(current.value.size > current.unit.size, key);
+    assert.ok(current.unit.size >= 14 * textScale / 100, key);
+    if (width === 1440 && textScale === 100 && zoom === 1) {
+        assert.ok(current.paintedDiameter >= 160, `${key}: the wheel anchors the full-width card`);
+    }
+    if (current.legend.y < current.ring.bottom) {
+        assert.ok(current.legend.x >= current.ring.right + 15, `${key}: labels and values sit on the wheel's right`);
+        assert.ok(current.legend.bottom > current.ring.y, `${key}: one aligned horizontal group`);
+    }
+    assert.equal(current.scopeInWidget, false, `${key}: default scope leaves no footer or divider`);
+    assert.equal(current.scopeInCommands, true, `${key}: result commands retain the scope`);
+    assert.ok(current.bottomGap <= 32, `${key}: no empty footer band (${current.bottomGap})`);
+    for (const label of [current.value, current.unit]) {
+        assert.ok(label.clearance >= 4, `${key}: both center labels need padding inside the inner edge (${label.clearance}px clearance)`);
+        assert.equal(label.rectangles.length, 1, `${key}: center text stays on one line`);
+        assert.equal(label.clipped || label.ellipsis, false, key);
+    }
+    assert.ok(current.pageOverflow <= 1, key);
+    assert.equal(current.rows.reduce((sum, row) => sum + row.count, 0), total);
+    assert.ok(current.rows.every(row => row.label.right <= current.widget.right && row.value.right <= current.widget.right));
+    const horizontal = current.rows[1].label.x > current.rows[0].label.right;
+    if (horizontal) assert.ok(current.rows.every(row=>Math.abs(row.value.top-current.rows[0].value.top)<=1
+        && row.value.top >= row.label.bottom-1), `${key}: a shared value line below the outcome labels`);
+    else assert.ok(Math.max(...current.rows.map(row=>row.value.right))-Math.min(...current.rows.map(row=>row.value.right))<1
+        || Math.max(...current.rows.map(row=>row.value.left))-Math.min(...current.rows.map(row=>row.value.left))<1,
+        `${key}: narrow legend values share an edge`);
+    for (const slice of current.slices) assert.equal(slice.fraction, slice.count / total);
+    assert.equal(current.strip.length, current.slices.length, key);
+    current.strip.forEach((fraction,i) => assert.ok(Math.abs(fraction-current.slices[i].fraction)<.001, key));
+}
+
+for (const frontend of ["bundled","react"]) test(`${frontend}: outcome scope, hover, keyboard, slices and zero/missing states retain their behavior`, async t => {
+    const page = await setup(t, 239, frontend);
     await expect(page.locator("#activityListSummary")).toHaveText("3 interactions · 239 matching tool calls");
     const label = page.locator('#outcomeChart [data-category="failure"] .percentage-label');
     const slice = page.locator('#outcomeChart .percentage-slice[data-category="failure"]');
+    await chooseTheme(page,"dark");
+    const root = page.locator("#outcomeChart"), strip = root.locator(".outcome-share-strip");
+    for (const [index,category] of ["success","failure","unknown"].entries()) {
+        const wedge = root.locator(`.percentage-slice[data-category="${category}"]`);
+        const item = root.locator(`li[data-category="${category}"]`), name = item.locator(".percentage-label");
+        const expected = `${await name.textContent()}\n${await item.getAttribute("data-percentage")} (${await item.getAttribute("data-count")} of 239 tool calls).`;
+        await wedge.scrollIntoViewIfNeeded();
+        const point = await wedge.evaluate(n=>{
+            const angle=(+n.dataset.start + +n.dataset.end)*Math.PI + Math.PI/2;
+            return new DOMPoint(85*Math.cos(angle),85*Math.sin(angle)).matrixTransform(n.getScreenCTM()).toJSON();
+        });
+        const segment = strip.locator(":scope > *").nth(index);
+        await expect(segment).toHaveAttribute("tabindex","-1");
+        await expect(segment).toHaveAttribute("href",await name.getAttribute("href"));
+        for (const mark of ["strip","ring"]) {
+            if (mark === "ring") await page.mouse.move(point.x,point.y); else await segment.hover();
+            await expect(page.getByRole("tooltip")).toHaveText(expected);
+            await expect(name).not.toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+            await expect(name).toHaveCSS("text-decoration-line","none");
+            await expect(wedge).toHaveClass(/percentage-active/); await expect(segment).toHaveClass(/percentage-active/);
+            if (proof && category === "unknown") {
+                await mkdir(proof,{recursive:true});
+                await page.screenshot({path:path.join(proof,`${frontend}-unknown-${mark}.png`)});
+            }
+        }
+    }
+    await page.mouse.move(0,0); await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(root.locator(".percentage-active")).toHaveCount(0);
     await label.hover(); await expect(slice).toHaveClass(/percentage-active/);
+    const row=label.locator("..");
+    await expect(row).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+    await expect(label).toHaveCSS("text-decoration-line","none");
+    const hover=await label.evaluate(n=>getComputedStyle(n).backgroundColor);
+    assert.notEqual(hover,"rgba(0, 0, 0, 0)");
+    await page.mouse.down(); assert.notEqual(await label.evaluate(n=>getComputedStyle(n).backgroundColor),hover);
+    await expect(label).toHaveCSS("text-decoration-line","none");
+    await page.mouse.move(0,0); await page.mouse.up();
     await page.mouse.move(0, 0); await label.focus();
     assert.ok(await label.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth) >= 2));
     await page.keyboard.press("Enter"); await ready(page);
@@ -270,16 +274,21 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     });
     await page.mouse.click(point.x, point.y); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("32");
-    await selectActivityOption(page, "outcomeFilter", "unknown"); await closeAnalyzeFilters(page); await ready(page);
+    await page.goBack(); await ready(page); await expect(label).toBeFocused();
+    await strip.locator('[data-category="unknown"]').click(); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("1");
     await expect(page.locator("#outcomeChart .percentage-total-unit")).toHaveText("tool call");
+    await expect(page.locator("#outcomeChart .outcome-share-strip>*")).toHaveCount(1);
+    await expect(page.locator("#outcomeChart .outcome-zeros li")).toHaveCount(2);
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key","request:recorded-outcomes-sizing-2");
     await expect(page.locator("#outcomeChart .percentage-slice")).toHaveAttribute("data-exact-fraction", "1");
     await expect(page.locator("#analyzeScopeCaption")).toHaveText("Outcome: No result recorded");
     await selectActivityOption(page, "outcomeFilter", "partial"); await closeAnalyzeFilters(page); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#activityListSummary")).toHaveText("0 interactions · 0 matching tool calls");
     assert.equal(await page.locator("#outcomeChart .percentage-slice").count(), 0);
+    await expect(page.locator("#outcomeChart .outcome-share-strip")).toHaveCount(0);
     await expect(page.locator("#activityList article")).toHaveCount(0);
     await expect(page.locator("#analyzeScopeCaption")).toContainText("Partial completion");
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);

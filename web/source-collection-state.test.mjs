@@ -200,6 +200,7 @@ test("source commands keep GitHub interval, Microsoft configuration and native P
     const githubBasis = { generation: 2, configVersion: "a".repeat(64) };
     const valid = [
         ["/api/collection/configure", { ...input.github.status.config, expectedConfigVersion: "a".repeat(64) }],
+        ["/api/collection/configure", { ...input.github.status.config, usageRecords: true, expectedConfigVersion: "a".repeat(64) }],
         ["/api/collection/enabled", { enabled: true, expectedConfigVersion: "a".repeat(64) }],
         ["/api/collection/now", {}],
         ["/api/collection/now", { expectedBasis: githubBasis }],
@@ -215,7 +216,8 @@ test("source commands keep GitHub interval, Microsoft configuration and native P
             { operationId: bootstrap.runtimeId, deadline }, access), TypeError);
     }
     for (const [route, body] of [
-        ["/api/collection/configure", configure], ["/api/collection/microsoft/configure", { ...configure, schemaVersion: 1 }],
+        ["/api/collection/configure", configure], ["/api/collection/configure", { ...input.github.status.config, usageRecords: "yes", expectedConfigVersion: "a".repeat(64) }],
+        ["/api/collection/microsoft/configure", { ...configure, schemaVersion: 1 }],
         ["/api/collection/microsoft/configure", { ...configure, globalRevision: 1 }],
         ["/api/collection/microsoft/configure", { ...configure, expectedRevision: 2 }],
         ["/api/collection/microsoft/configure", { ...configure, surfaces: [] }],

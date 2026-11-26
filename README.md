@@ -9,22 +9,19 @@
 
 # Work IQ Request Explorer
 
-Synthetic evals are essential, but they will always have a blind spot: how people
-actually work with AI. People phrase requests differently, bring different context
-and take different paths through multi-turn conversations. Those choices shape
-both their own prompts and the prompts their agents generate, influencing the
-tool calls and results that follow.
+**Contents:** [Getting started](#getting-started) · [How WIRE fits](#how-wire-fits) ·
+[Trends](#trends) · [Reports](#reports) · [Compare](#compare) · [Guides](#guides) ·
+[Contributing](#contributing) · [Security](#security) · [License](#license)
 
-WIRE (Work IQ Request Explorer) was built to help you understand that blind spot
-in your own work. It puts recorded human and agent-generated prompts beside their
-Work IQ calls and results, so you can inspect personal patterns, unexpected
-behavior and failures.
+WIRE shows what happened after a person or an agent asked for something in the
+GitHub Copilot app. Open a recorded interaction to see the prompt, the Work IQ
+tools it used and the results each call returned.
 
-Those real interactions can become the basis for better synthetic eval cases.
-Product teams and customers building agents on Work IQ APIs and MCP can use
-that evidence to test the behaviors people rely on and improve their agents.
+Use those records to find patterns in your own work. If you're building an
+agent, a failed call or an unexpected follow-up can give you a concrete case
+to test that a synthetic evaluation might have missed.
 
-[![Analyze with matching interactions and an open reader showing the prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
+[![Analyze with outcome, activity and token charts, and an open reader showing a prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
@@ -100,18 +97,19 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 
 Follow changes in daily tool use, errors or timing. Select a day to inspect
 the calls behind it, or compare two measures over the same dates.
-See [Trends](docs/user-guide.md#trends) for the seven measures and what each counts.
+See [Trends](docs/user-guide.md#trends) for the eight measures and what each counts.
 
-[![Trends Overview showing daily interactions with errors and the option to compare two measures.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+[![Trends shows a day with one interaction and no recorded errors.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
 ## Reports
 
 In Analyze, choose **Add to report** on an interaction card or in the reader to
 [add it to a named draft](docs/reporting.md#keep-interactions-in-a-draft).
-You can also start in Reports with a focus such as **Errors & failures**.
-[Preview the report](docs/reporting.md) before saving a local copy.
+To report on a pattern instead, open **Reports** and select **Errors & failures**
+under **New report**. [Read the preview](docs/reporting.md) and check its text
+before saving a local copy.
 
-[![Report setup beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
+[![Report choices, including Errors & failures and Custom report, beside drafts and recent reports.](docs/images/report-choices.png)](docs/reporting.md)
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
@@ -119,10 +117,11 @@ You can also start in Reports with a focus such as **Errors & failures**.
 
 ## Compare
 
-Compare a selected period with a baseline. Open either period's count to see
-the calls it includes. See [Compare two periods](docs/reporting.md#compare).
+Compare a selected period with a baseline, including call results and token
+usage. Open either period's count to see the calls it includes. See
+[Compare two periods](docs/reporting.md#compare).
 
-[![Compare with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+[![Compare with call results for each period: 1 of 4 baseline calls failed, versus 5 of 19 selected calls.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
 ## Guides
 
@@ -130,7 +129,7 @@ the calls it includes. See [Compare two periods](docs/reporting.md#compare).
 - [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
 - [Create and read reports](docs/reporting.md)
 - [Develop and troubleshoot](docs/development.md)
-- [Technical documentation](docs/README.md)
+- [Documentation index](docs/README.md)
 
 ## Contributing
 

@@ -25,7 +25,7 @@ export const uxIconSources = Object.freeze({
     "search-action": "workflow", "search-tool": "wrench",
     "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
     "compare-periods": "scale",
-    "report-all": "layers", "scope-issues": "triangle-alert",
+    "report-all": "layers", "report-tokens": "chart-column", "report-custom": "sliders-horizontal", "scope-issues": "triangle-alert",
     "author-user": "user-round", "author-agent": "bot", "author-unknown": "circle-question-mark",
     "report-files": "files", "report-options": "ellipsis", "report-masked": "eye-off",
     "report-original": "triangle-alert", "report-none": "message-square-off",
@@ -36,11 +36,15 @@ export const uxIconSources = Object.freeze({
     "zoom-in": "plus", "zoom-out": "minus",
     "reader-maximize": "maximize-2", "reader-restore": "minimize-2",
     "chart-collapse": "chevron-up",
+    "move-up": "chevron-up", "move-down": "chevron-down",
     calendar: "calendar-days",
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", tree: "list-tree", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",
     "diagnostic-bundle": "package", "work-item-link": "external-link",
+    "navigation-documentation": "book-open-text", "doc-link": "link", "doc-external": "external-link", "doc-image-off": "image-off",
+    "doc-note": "info", "doc-tip": "lightbulb", "doc-important": "circle-alert", "doc-warning": "triangle-alert", "doc-caution": "octagon-alert",
+    "doc-commit": "git-commit-horizontal", "doc-branch": "git-branch", "doc-offline": "wifi-off", "doc-copy": "copy", "doc-copied": "check", "doc-contents": "list-tree",
 });
 
 export const serviceIconSources = Object.freeze({
@@ -54,7 +58,7 @@ export const serviceIconRole = service => "service:" + service.toLowerCase().rep
 
 export function iconSize(role) {
     return role.startsWith("navigation-") || role.startsWith("settings-") || role === "search-analysis" ? 24
-        : role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small", "sun", "moon"].includes(role) ? 16 : 20;
+        : role.startsWith("doc-") || role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small", "sun", "moon"].includes(role) ? 16 : 20;
 }
 
 // Lucide's canonical names have changed since the family shipped in React Icons.

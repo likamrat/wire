@@ -6,7 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, selectActivityOption } from "./helpers.mjs";
-import { selectReportFocus, prepareReportPreview, viewAllSavedReports } from "./report-journey-helpers.mjs";
+import { viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
@@ -95,6 +95,13 @@ function documentationRecords() {
                 model: ["gpt-5.4", "claude-sonnet-4.6"][index % 2], modelStatus: "recorded",
             }],
         };
+        // Invented token receipts; a few interactions stay unmetered so coverage gaps remain visible.
+        if (![5, 9, 11].includes(index)) row.usageCalls = [{
+            receiptId: "documentation-usage-" + index, apiCallId: "documentation-api-" + index,
+            model: ["gpt-5.4", "claude-sonnet-4.6"][index % 2], at: at(days, 8),
+            tokens: { freshInput: 4000 + index * 1700, cacheRead: 9000 + (index % 5) * 6000,
+                cacheWrite: index % 4 === 0 ? 1200 : 0, output: 800 + index * 90 },
+        }];
         return row;
     });
 }
@@ -272,11 +279,20 @@ test("capture documentation through the normal renderer with isolated light-them
         }
     }
 
+    if (reportsOnly) {
+        await page.locator('nav [data-nav=analyze]').click();
+        await ready();
+        await page.locator("#activityList .report-draft-trigger").first().click();
+        const picker = page.getByRole("dialog", { name: "Report drafts" });
+        await picker.getByRole("button", { name: "New draft", exact: true }).click();
+        await picker.getByLabel("Draft name").fill("Launch follow-up");
+        await picker.getByRole("button", { name: "Create draft and add" }).click();
+        await page.getByRole("button", { name: "Dismiss confirmation" }).click();
+    }
     await page.locator('nav [data-nav=reports]').click();
     await ready();
-    await selectReportFocus(page, "errors");
     await capture("report-choices", { fullPage: true });
-    let prepared = await preparedChange(() => prepareReportPreview(page));
+    let prepared = await preparedChange(() => page.locator("#reportPreset-errors").click());
     assert.equal(prepared.snapshot.reportPopulation.reference.length, 12);
     assert.equal(prepared.records.length, 4);
     const report = page.frameLocator(".report-contained-frame");
@@ -380,16 +396,17 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.locator("#reportLibraryLink").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
 
+    await page.goto(app.runtime.url); await ready();
     await page.locator('nav [data-nav=trends]').click();
     const sections = page.getByRole("navigation", { name: "Trends sections" });
     await sections.getByRole("button", { name: "Overview" }).click();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     await capture("trends-overview", { top: true });
     await sections.getByRole("button", { name: "Charts" }).click();
-    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
-    await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts" }).click();
+    await page.getByRole("button", { name: "Show or hide charts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Show or hide charts" }).getByRole("button", { name: "Open all charts" }).click();
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await capture("trends-collapsed", { top: true });
 
     await page.locator('nav [data-nav=settings]').click();

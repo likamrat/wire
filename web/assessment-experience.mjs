@@ -634,6 +634,8 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 if (data.observationRef !== observation.observationRef || typeof data.text !== "string" || !sameBasis(data.basis, view.basis)
                     || !["full-record", "bounded-fragment"].includes(data.completeness) || data.finality !== "unverified") throw new Error("The response does not match this evidence context.");
                 if (event && !visibility) textAccess.setOpen(key, true);
+                // Format the reply on its first paint instead of swapping raw Markdown after it appears.
+                await textAccess.formatReady?.();
                 if (!currentRead()) return;
                 const produced = textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
                     key, mode: "complete", subject: "response", contentFirst, copyNoticeId, visibility, actionsHost, copyLabel, headingLabel,
@@ -656,7 +658,7 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 load.hidden = true;
                 about.hidden = true;
                 if (restoreFocus && (document.activeElement === load || document.activeElement === document.body)) {
-                    ux.restoreFocus(reader.querySelector(".full-text-toggle") || liveText.querySelector("pre"));
+                    ux.restoreFocus(reader.querySelector(".full-text-toggle") || liveText.querySelector(".full-text-content"));
                 }
             } catch (error) {
                 if (currentRead()) {
@@ -720,8 +722,11 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 if (!currentReader()) return;
                 load.hidden = false;
                 about.hidden = false;
-            } else if (open) void readResponse();
-            else clearResponse("", true);
+            } else if (open) {
+                load.textContent = "Read response";
+                load.hidden = false;
+                about.hidden = false;
+            } else clearResponse("", true);
         });
         if (!currentReader()) { stop?.(); return; }
         if (eager) {
