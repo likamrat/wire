@@ -955,7 +955,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("usageCountPreviewResult").hidden = !counts || !["preview", "empty", "pending"].includes(phase);
         setText("usageCountSummary", !counts ? "" : counts.interactions
             ? `${plural(counts.interactions, "interaction")} in ${plural(counts.chats, "chat")} can be counted · ${plural(counts.tokens, "token")}`
-            : counts.refused ? "None of the interactions without a total can be counted" : "Every saved interaction with tool calls already has a total");
+            : counts.refused ? "None of the interactions without a total in the approved chats and history window can be counted"
+                : "No interaction without a total was found in the approved chats and history window");
         setText("usageCountRefused", counts?.refused ? `${counts.refused.toLocaleString()} can't be counted` : "");
         $("usageCountRefused").hidden = !counts?.refused;
         const reasons = (counts?.refused ? preview.refusals : []).map(({ reason, count: n }) => {

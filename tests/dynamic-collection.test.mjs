@@ -496,6 +496,50 @@ async function readChatsWithoutTotals(t) {
     return { app, id, file, index, usage, text, settings, counting, read, after: ms => new Date(Date.parse(unmatched.at(-1).timestamp) + ms).toISOString(),
         collector: () => collector, restart: async () => { await collector.close(); collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close()); } };
 }
+test("history compatibility: a token-record row updated in the write-ahead log before publication refuses the count", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read, index } = fixture;
+    index.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;");
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync, db = path.join(app.root, "session-store.db");
+    const mainStamp = () => { const s = original(db); return [s.size, s.mtimeMs, s.ctimeMs].join(":"); };
+    const before = await loadBoardState(app.context), preview = await counting.preview("panel");
+    let updated = false, mainUnchanged = null;
+    // The selected chat's history is stat'ed synchronously only by the write guard, after every chat was reread.
+    fsSync.statSync = (target, ...rest) => {
+        if (!updated && String(target).includes(fixture.id)) {
+            updated = true; const stamp = mainStamp();
+            index.prepare("UPDATE assistant_usage_events SET output_tokens = output_tokens + 1 WHERE id = (SELECT MIN(id) FROM assistant_usage_events WHERE session_id = ?)").run(fixture.id);
+            mainUnchanged = stamp === mainStamp();
+        }
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }), { code: "USAGE_COUNT_CHANGED" });
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.ok(updated, "The row changed after its reread and before publication");
+    assert.equal(mainUnchanged, true, "The update reached only the write-ahead log");
+    const after = await loadBoardState(app.context);
+    assert.equal(after.revision, before.revision, "Nothing was published");
+    assert.equal(after.usageRecordCounts?.operations?.[preview.operationId], undefined, "No receipt was written");
+    assert.equal((await read()).usage, null);
+});
+test("history compatibility: Check result before a delayed confirm stays unsettled until the original confirm settles it", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read } = fixture;
+    let clock = Date.now();
+    const lapsing = createUsageRecordCountController(app.context, { now: () => clock }), stale = await lapsing.preview("panel");
+    clock += 121000;
+    assert.equal((await lapsing.status("panel", { operationId: stale.operationId, receiptToken: stale.receiptToken })).phase, "not-started",
+        "Once the preview can no longer be confirmed, nothing was saved is final");
+    const preview = await counting.preview("panel"), ask = { operationId: preview.operationId, receiptToken: preview.receiptToken };
+    assert.equal((await counting.status("other-panel", ask)).phase, "verification-incomplete", "A valid preview can still be confirmed");
+    await assert.rejects(counting.status("other-panel", { ...ask, receiptToken: "0".repeat(64) }), { status: 403 });
+    assert.equal((await read()).usage, null);
+    assert.equal((await counting.confirm("panel", { operationId: preview.operationId, confirmed: true })).phase, "complete");
+    const settled = await counting.status("other-panel", ask);
+    assert.equal(settled.phase, "complete");
+    assert.equal((await read()).usage?.total, 11400);
+    assert.equal(Object.keys((await loadBoardState(app.context)).usageRecordCounts.operations).length, 1, "One receipt, no second confirm");
+});
 test("history compatibility: Check result never reports nothing was saved while a count is still being confirmed", async t => {
     const fixture = await readChatsWithoutTotals(t), { app, read } = fixture;
     let release, held = new Promise(resolve => { release = resolve; });
