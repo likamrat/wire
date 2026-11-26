@@ -839,9 +839,11 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         // Token records are sent only when someone changes the switch: an ordinary save leaves their approval to the collector.
         const { usageRecords, ...paths } = next;
         const records = usageRecords !== grantedRecords(baseline) ? { usageRecords } : {};
-        act("/api/collection/configure", { ...paths, ...records, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
+        act("/api/collection/configure", { ...paths, ...records, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, saved => {
             firstApprovalConfirmed = firstApproval;
             reviewReturn = null;
+            // First connection keeps the source when WIRE can't identify the Copilot account; the saved state says so.
+            if (firstApproval && usageRecords && !grantedRecords(saved)) return "Source connected. Token records are off because WIRE couldn't identify the Copilot account.";
             return !sourceApproval ? "Preferences saved." : !recordsOnly ? "Source approved."
                 : usageRecords ? "Token records approved." : "Token records turned off.";
         });

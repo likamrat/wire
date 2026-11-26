@@ -404,9 +404,15 @@ test("history compatibility: token records need a positively identified account;
     const config = { ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
     let collector = await createCollector(app.context, { timers: false });
     app.cleanup.push(() => collector.close());
-    await assert.rejects(collector.configure({ ...config, usageRecords: true }), e => e.status === 422 && /can't identify the Copilot account/.test(e.message));
-    await collector.configure(config);
+    // First connection keeps the default request but connects without token records when the account is unidentified.
+    const first = await collector.configure({ ...config, usageRecords: true });
+    assert.equal(first.config.usageRecords, false);
+    assert.equal(Object.hasOwn(first.config, "usageRecordsGrant"), false);
     assert.equal((await collector.status()).usageRecords, "off");
+    // A later explicit request still refuses and leaves the connection unchanged.
+    const before = await readFile(path.join(app.context.dataDir, "collector", "config.json"), "utf8");
+    await assert.rejects(collector.configure({ ...config, usageRecords: true }), e => e.status === 422 && /can't identify the Copilot account/.test(e.message));
+    assert.equal(await readFile(path.join(app.context.dataDir, "collector", "config.json"), "utf8"), before);
     await collector.close();
     const stored = path.join(app.context.dataDir, "collector", "config.json");
     const legacy = JSON.parse(await readFile(stored, "utf8"));

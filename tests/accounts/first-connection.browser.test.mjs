@@ -269,9 +269,14 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     assert.equal((await runtime.collector.status()).config, null);
     release.resolve();
     await expect(page.locator("#firstCollectionActivity")).toBeVisible();
-    await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
+    // Token records were left on, but this invented app reports no identifiable account: the source connects and they stay off.
+    await expect(page.locator("#settingsMessage")).toHaveText("Source connected. Token records are off because WIRE couldn't identify the Copilot account.");
     assert.equal(mutations.filter(row => row.path === "/api/collection/configure").length, 1);
+    assert.equal(mutations.find(row => row.path === "/api/collection/configure").body.usageRecords, true);
     const stored = await loadBoardState(context), status = await runtime.collector.status();
+    assert.equal(status.config.usageRecords, false);
+    assert.equal(Object.hasOwn(status.config, "usageRecordsGrant"), false, "No token grant is stored without an identified account");
+    assert.equal(status.usageRecords, "off");
     assert.ok(stored.evidence.length > 0, "The ordinary approved source writer committed activity.");
     assert.equal(status.config.windowDays, 30);
     assert.equal(status.config.pollSeconds, 5);
@@ -281,8 +286,11 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     await expect(page.locator("#firstConnectionWelcome")).toBeHidden();
     await expect(page.locator("#activityList")).toContainText("Find the Cedar planning notes.");
     await capture(page, "first-activity");
+    await page.reload(); await ready(page);
     await navigateMain(page, "settings");
     await navigateSettings(page, "connection");
+    await expect(page.getByRole("switch", { name: "Token records", exact: true })).not.toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
     await page.locator("#pauseCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("paused");
     await navigateMain(page, "analyze"); await ready(page);
@@ -576,6 +584,26 @@ test("Copilot's token records start on for a new source but stay unread until ap
     await later(30000);
     const kept = await tokens(/11,400/);
     assert.match(kept, /11,400/, "Turning records off neither rereads the changed file nor removes the counted total");
+});
+
+test("leaving token records on at first connection binds the grant to the identified account and file", { timeout: 60000 }, async t => {
+    const { page, runtime, mutations, home } = await tokenRecordChat(t);
+    const swtch = page.getByRole("switch", { name: "Token records", exact: true });
+    await page.goto(runtime.url); await ready(page);
+    await page.locator("#welcomeReviewSource").click();
+    await expect(swtch).toBeChecked();
+    assert.equal(mutations.length, 0, "The default is a draft, not a read");
+    await page.locator("#connectCollection").click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
+    const status = await runtime.collector.status();
+    assert.equal(status.config.usageRecords, true);
+    assert.equal(status.config.usageRecordsGrant.file, path.join(home, "session-store.db"));
+    assert.match(status.config.usageRecordsGrant.account, /^[0-9a-f]{16,}$/);
+    assert.notEqual(status.usageRecords, "off");
+    await page.reload(); await ready(page);
+    await navigateMain(page, "settings"); await openSourceEditor(page);
+    await expect(swtch).toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("On");
 });
 
 test("Count tokens in chats already read checks first, counts only after a separate confirmation and checks a lost result without counting again", { timeout: 120000 }, async t => {
