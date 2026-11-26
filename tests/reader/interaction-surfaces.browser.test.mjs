@@ -33,25 +33,31 @@ async function tooltipPaint(page, surface) {
     const tooltip = await page.getByRole("tooltip").elementHandle();
     const paint = await tooltip.evaluate((node, selector) => {
         const css = getComputedStyle(node);
-        return { text: node.textContent, background: css.backgroundColor, ink: css.color, border: css.borderTopColor,
+        return { text: node.textContent, background: css.backgroundColor, ink: css.color,
+            solidEdge: ["Top", "Right", "Bottom", "Left"].every(side => css[`border${side}Style`] === "solid" && parseFloat(css[`border${side}Width`]) >= 1),
             surface: getComputedStyle(document.querySelector(selector)).backgroundColor,
             fontSize: parseFloat(css.fontSize), box: node.getBoundingClientRect().toJSON(),
             scrollHeight: node.scrollHeight, clientHeight: node.clientHeight };
     }, surface);
-    // Sample actual underlay paint, including the modal backdrop outside its panel.
+    // Sample the same edge pixels with and without the floating reading.
+    const painted = await page.screenshot();
     await tooltip.evaluate(node => { node.style.visibility = "hidden"; });
     let underlay;
     try { underlay = await page.screenshot(); }
     finally { await tooltip.evaluate(node => node.style.removeProperty("visibility")); }
-    paint.underlay = await page.evaluate(async ({ png, box }) => {
-        const image = await createImageBitmap(new Blob([Uint8Array.from(atob(png), char => char.charCodeAt(0))]));
-        const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
-        const context = canvas.getContext("2d"); context.drawImage(image, 0, 0); image.close();
-        const sx = canvas.width / innerWidth, sy = canvas.height / innerHeight;
-        const points = [[box.left + box.width / 2, box.top + 1], [box.left + box.width / 2, box.bottom - 1],
-            [box.left + 1, box.top + box.height / 2], [box.right - 1, box.top + box.height / 2]];
-        return points.map(([x, y]) => `rgb(${[...context.getImageData(Math.floor(x * sx), Math.floor(y * sy), 1, 1).data].slice(0, 3).join(",")})`);
-    }, { png: underlay.toString("base64"), box: paint.box });
+    paint.edges = await page.evaluate(async ({ images, box }) => {
+        const samples = await Promise.all(images.map(async png => {
+            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(png), char => char.charCodeAt(0))]));
+            const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
+            const context = canvas.getContext("2d"); context.drawImage(image, 0, 0); image.close();
+            const sx = canvas.width / innerWidth, sy = canvas.height / innerHeight;
+            const cx = Math.floor((box.left + box.width / 2) * sx), cy = Math.floor((box.top + box.height / 2) * sy);
+            return [[cx, Math.round(box.top * sy)], [cx, Math.round(box.bottom * sy) - 1],
+                [Math.round(box.left * sx), cy], [Math.round(box.right * sx) - 1, cy]].map(([x, y]) =>
+                `rgb(${[...context.getImageData(x, y, 1, 1).data].slice(0, 3).join(",")})`);
+        }));
+        return samples[0].map((edge, i) => ({ edge, underlay: samples[1][i] }));
+    }, { images: [painted, underlay].map(png => png.toString("base64")), box: paint.box });
     return paint;
 }
 async function native(t) {
@@ -114,10 +120,11 @@ test("real chart and modal hover information have one readable, distinct surface
     if (proofs) await writeFile(path.join(proofs, "tooltip-paint.json"), JSON.stringify(measurements, null, 2));
     for (const value of measurements) {
         assert.ok(contrast(value.ink, value.background) >= 4.5, `${value.theme} ${value.kind}: text contrast`);
-        assert.ok(contrast(value.background, value.surface) >= 3, `${value.theme} ${value.kind}: popup separates from its surface`);
-        for (const underlay of value.underlay) assert.ok(
-            Math.max(contrast(value.background, underlay), contrast(value.border, underlay)) >= 3,
-            `${value.theme} ${value.kind}: face or edge separates from actual composited ${underlay}`);
+        for (const { edge, underlay } of value.edges) {
+            for (const surface of [value.surface, underlay]) assert.ok(
+                contrast(value.background, surface) >= 3 || value.solidEdge && contrast(edge, surface) >= 3,
+                `${value.theme} ${value.kind}: face ${value.background} or solid edge ${edge} must separate from ${surface} by 3:1`);
+        }
         assert.ok(value.fontSize >= 14, "Use the screen's readable small-text role rather than caption-sized help");
     }
 });
