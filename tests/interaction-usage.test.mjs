@@ -273,6 +273,9 @@ test("the index reader tells an absent index from one it cannot read", async t =
     assert.deepEqual(index.turns,[{turn:0,text:"Hello",complete:true}]);
     assert.equal(index.rows[0].input,10);
     assert.equal(readUsageIndex(path.join(dir,"absent.db"),"s"),null,"No file means no records");
+    assert.throws(() => readUsageIndex(dir,"s"), e => e.code === "usage_index_unreadable" && e.reason === "not-a-file");
+    assert.throws(() => readUsageIndex(file,"s",{ limits:{ turns:5000, rows:0, promptBytes:1<<20 } }), e => e.reason === "bounds","A chat past the bounds is not read in part");
+    assert.throws(() => readUsageIndex(file,"s",{ limits:{ turns:5000, rows:10, promptBytes:4 } }), e => e.reason === "bounds");
     assert.throws(() => readUsageIndex(file,"s",{ open(){ throw Object.assign(new Error("locked"),{ code:"ERR_SQLITE_ERROR" }); } }),
         e => e.code === "usage_index_unreadable" && e.reason === "open");
     const old = new DatabaseSync(file); old.exec("DROP TABLE assistant_usage_events"); old.close();

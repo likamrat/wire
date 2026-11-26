@@ -366,15 +366,20 @@ putting the raw opaque ID in new retained model metadata or in reports.
 Older Copilot journals have no per-call receipts. The Copilot app also keeps
 its own per-call accounting in `session-store.db` beside the approved chat
 database (`turns` and `assistant_usage_events`). Source approval doesn't
-cover it. **Read Copilot's token records** in the source review shows that exact
-path and records a separate approval (`usageRecords`), off by default and for
-existing approvals. With it on, when the journal can't establish a total, WIRE
-reads that index read-only for the same approved chat.
+cover it. **Read Copilot's token records** in the source review shows the exact
+resolved file and records a separate approval (`usageRecords`), off by default and
+for existing approvals. The approval names that file and the Copilot account the
+app reports. Changing a path in review turns the switch off; if the account or
+file later differs, WIRE stops reading it and Settings asks for a new approval.
+With it on, when the journal can't establish a total, WIRE reads that index
+read-only for the same approved chat.
 
-- WIRE reads only the turn's prompt text (to match it, never retained) and each
+- WIRE reads the turn's prompt text only to match it (never retained) and each
   call's model, token counts, sub-agent marker and time.
-- A missing file means no records. A file WIRE can't open or whose tables don't
-  match is a failed read: the reader says so and an existing total stays.
+- A missing file means no records. A file WIRE can't access or open, whose
+  tables don't match, or whose chat exceeds 5,000 turns, 50,000 calls or 16 MiB
+  of prompt text is a failed read: the reader says so and an existing total
+  stays. A chat is never read in part.
 - Approval applies when collection next reads a chat. Chats WIRE already read
   in full aren't recounted until they change.
 - Turning it off stops every read of the file. Totals already counted stay

@@ -476,6 +476,9 @@ test("Copilot's token records stay unread until turned on in source review; turn
     await page.locator("#welcomeReviewSource").click();
     await expect(swtch).not.toBeChecked();
     await expect(page.locator("#approvalScope")).not.toContainText("token records");
+    const recordsFile = path.join(home, "session-store.db");
+    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(`Reads ${recordsFile}`);
+    await expect(page.locator("#sourceUsageRecordsHelp")).toContainText("reads the prompt text only to match calls to prompts and doesn't save it");
     for (const theme of ["light", "dark"]) { await chooseTheme(page, theme); await page.locator("#sourceUsageRecordsRow").scrollIntoViewIfNeeded(); await capture(page, `token-records-off-${theme}`); }
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
@@ -488,6 +491,11 @@ test("Copilot's token records stay unread until turned on in source review; turn
     await expect(swtch).toBeChecked();
     await expect(page.locator("#approvalScope")).toContainText("including Copilot's token records");
     await expect(page.locator("#connectCollection")).toHaveText("Approve token records");
+    const database = page.locator("#sourceDatabase"), approvedPath = await database.inputValue();
+    await database.fill(path.join(home, "other", "data.db"));
+    await expect(swtch).not.toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(`Reads ${path.join(home, "other", "session-store.db")}`);
+    await database.fill(approvedPath); await swtch.check();
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme); await page.locator("#sourceSessions").focus(); await page.keyboard.press("Tab");
         await expect(swtch).toBeFocused();
@@ -497,7 +505,7 @@ test("Copilot's token records stay unread until turned on in source review; turn
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Token records approved.");
     assert.equal(configures().at(-1).body.usageRecords, true);
-    await expect(page.locator("#approvedUsageRecords")).toHaveText("session-store.db, next to data.db");
+    await expect(page.locator("#approvedUsageRecords")).toHaveText(recordsFile);
     assert.equal(await tokens("Unavailable"), unread, "A chat WIRE already read is not recounted until it changes");
 
     await later(20000);

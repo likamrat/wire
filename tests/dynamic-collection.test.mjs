@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
+import { createProfileSource } from "./source-profile-fixture.mjs";
 import { interactionModelFact } from "../lib/interaction-model.mjs";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
 import { buildSanitizedRecord } from "../lib/export.mjs";
@@ -256,6 +257,56 @@ test("history compatibility: with its own approval, an older journal without rec
     await appendFile(file, JSON.stringify(later("session.info", { infoType: "note", message: "invented" }, 3000)) + "\n");
     await collector.collectNow();
     assert.equal((await read()).usage?.total, 18450, "An index WIRE cannot read never clears a total it already verified");
+});
+test("history compatibility: token-record approval names one Copilot account; a changed account stops the reads until approved again", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workiq-usage-account-")), cleanup = [];
+    t.after(async () => { for (const close of cleanup.reverse()) await close(); await rm(root, { recursive: true, force: true }); });
+    const { db, appDbPath, sessionRoot } = await createProfileSource(root);
+    cleanup.push(() => db.close());
+    const id = randomUUID();
+    db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Invented chat", "general_chat");
+    const base = Date.now() - 120000, at = n => new Date(base + n * 1000).toISOString();
+    const exchange = (text, n, a, b) => [event("user.message", { content: text, delivery: "idle" }), event("assistant.turn_start", { turnId: a }),
+        event("assistant.message", { turnId: a, toolRequests: [{ toolCallId: a + "-fetch" }] }), call(a + "-fetch"),
+        event("tool.execution_complete", { toolCallId: a + "-fetch", success: true, result: { content: "INVENTED" } }), event("assistant.turn_end", { turnId: a }),
+        event("assistant.turn_start", { turnId: b }), event("assistant.message", { turnId: b, content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: b })].map((e, k) => ({ ...e, timestamp: at(n + k) }));
+    const first = exchange("Summarize the invented launch notes.", 0, "a", "b"), second = exchange("List the invented owners.", 20, "c", "d");
+    const file = path.join(sessionRoot, id, "events.jsonl");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, [event("session.start", { sessionId: id, version: 1 }), ...first].map(e => JSON.stringify(e) + "\n").join(""));
+    const index = new DatabaseSync(path.join(root, "session-store.db"));
+    cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const indexed = (events, turn) => {
+        index.prepare("INSERT INTO turns VALUES (?,?,?,?)").run(id, turn, events[0].data.content, "Invented answer");
+        for (const reply of events.filter(e => e.type === "assistant.message")) index.prepare(`INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,
+            input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,?,NULL,'gpt-4.1',5000,100,4000,500,?)`)
+            .run(id, turn, new Date(Date.parse(reply.timestamp) + 4).toISOString());
+    };
+    indexed(first, 0);
+    const context = { dataDir: path.join(root, "private") }, config = { appDbPath, sessionRoot, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
+    const collector = await createCollector(context, { timers: false });
+    cleanup.push(() => collector.close());
+    await collector.configure({ ...config, usageRecords: true });
+    await collector.collectNow();
+    const read = async text => (await currentStatePayload(context, await loadBoardState(context))).scenarios.find(s => s.userPrompt?.text === text);
+    assert.equal((await read(first[0].data.content)).usage?.total, 10200);
+    assert.equal((await collector.status()).config.usageRecordsGrant.file, path.join(root, "session-store.db"));
+    db.prepare("UPDATE projects SET github_account_id='default'").run();
+    indexed(second, 1);
+    await appendFile(file, second.map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    assert.equal((await read(second[0].data.content)).usage, null, "A different Copilot account does not inherit the approval");
+    assert.equal((await read(first[0].data.content)).usage?.total, 10200, "Totals counted before the change stay");
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+    await collector.configure({ ...config, usageRecords: true, expectedConfigVersion: (await collector.status()).configVersion });
+    await appendFile(file, JSON.stringify({ ...event("session.info", { infoType: "note", message: "invented" }), timestamp: at(40) }) + "\n");
+    await collector.collectNow();
+    assert.equal((await read(second[0].data.content)).usage?.total, 10200, "A fresh approval for the current account reads again");
+    assert.equal((await collector.status()).usageRecords, "on");
 });
 test("history compatibility: Copilot's token records never replace a total the journal verified", async t => {
     const app = await installation(t), id = app.session(), start = call("journal-fetch"), model = "gpt-4.1";

@@ -129,8 +129,9 @@ export const settingsMarkup = `
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         </div>
         <div class="settings-task-row" id="sourceUsageRecordsRow"><div class="settings-row-copy"><h3><label for="sourceUsageRecords">Read Copilot's token records</label></h3>
-          <p id="sourceUsageRecordsHelp" class="settings-help">Counts tokens for older chats from session-store.db, next to data.db. WIRE reads each call's model and token counts and doesn't save the app's prompt text. Chats already read count when they next change. Turning this off stops the reads; counted totals stay.</p></div>
-          <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+          <p id="sourceUsageRecordsHelp" class="settings-help">Counts tokens for older chats whose logs don't record them. WIRE reads each call's model, token counts, time and sub-agent marker. It reads the prompt text only to match calls to prompts and doesn't save it. Chats already read count when they next change. Turning this off stops the reads; counted totals stay.</p>
+          <p id="sourceUsageRecordsFile" class="settings-help"></p></div>
+          <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsFile approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
         </div>
         <div id="sourcePreferenceSlot"></div>
         <p id="approvalScope"></p>
@@ -302,6 +303,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         throw new TypeError("Collection Settings requires the shared publication interface.");
     }
     const $ = id => document.getElementById(id);
+    // An approval to read token records holds only while the collector says it still names this file and account.
+    const grantedRecords = status => status?.config?.usageRecords === true && status.usageRecords !== "approval-changed";
+    const usageRecordsFile = database => database.replace(/[^\\/]*$/, "session-store.db");
     const fields = ["sourceDatabase", "sourceSessions", "sourceUsageRecords", "collectionWindow", "collectionCadence"];
     const nativeConfiguration = typeof createNativeConfigurationState === "function" ? createNativeConfigurationState() : null;
     const nativeView = () => nativeConfiguration?.view(api.accessState?.().state);
@@ -337,7 +341,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function sourceValues(status) {
         const source = status?.config || status?.suggestedSource;
         return { appDbPath: source?.appDbPath || "", sessionRoot: source?.sessionRoot || "",
-            usageRecords: status?.config?.usageRecords === true,
+            usageRecords: grantedRecords(status),
             windowDays: source?.windowDays ?? 30, pollSeconds: source?.pollSeconds ?? 5 };
     }
     function dirty() { return initialized && (native() ? Boolean(nativeView()?.dirty)
@@ -531,7 +535,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("connectionSourceHelp").hidden = true;
         const inspectingSource = visibleSection === "source-access";
         const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot, values().usageRecords])
-            !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot, baseline?.config?.usageRecords === true]);
+            !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot, grantedRecords(baseline)]);
         const recordsOnly = approved && sourceChanged && values().appDbPath === baseline?.config?.appDbPath && values().sessionRoot === baseline?.config?.sessionRoot;
         $("approvedConnection").hidden = !approved;
         $("unapprovedConnection").hidden = approved || editing;
@@ -566,7 +570,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("settingsConnectionError").hidden = !readError || !inConfiguration();
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
-        setText("approvedUsageRecords", latest?.config?.approved !== true ? "" : latest.config.usageRecords === true ? "session-store.db, next to data.db" : "Not read");
+        setText("approvedUsageRecords", latest?.config?.approved !== true ? "" : grantedRecords(latest) ? latest.config.usageRecordsGrant?.file ?? ""
+            : latest.usageRecords === "approval-changed" ? "Not read. The Copilot account or path changed; review the source to approve again." : "Not read");
+        setText("sourceUsageRecordsFile", values().appDbPath ? `Reads ${usageRecordsFile(values().appDbPath)}` : "");
         setText("sourceEditorTitle", approved ? "Change source paths" : guidedReview ? "Review local history" : "Review this source");
         $("sourceEditorTitle").classList.toggle("visually-hidden", !guidedReview);
         setText("sourceChangeImpact", approved
@@ -769,7 +775,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         }
         const next = values();
         const sourceDiffers = next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot
-            || next.usageRecords !== (baseline?.config?.usageRecords === true);
+            || next.usageRecords !== grantedRecords(baseline);
         const sourceApproval = reviewingSource && (baseline?.config?.approved !== true || sourceDiffers);
         if (!sourceApproval && sourceDiffers) {
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
@@ -793,6 +799,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             nativeConfiguration.edit({ surfaces: $("nativeCollectionSurfaces").value.split(",").filter(Boolean),
                 windowDays: Number($("collectionWindow").value) });
         }
+        // Token records are approved for one database location; a changed path asks again.
+        if (["sourceDatabase", "sourceSessions"].includes(id) && $("sourceUsageRecords").checked
+            && (values().appDbPath !== baseline?.config?.appDbPath || values().sessionRoot !== baseline?.config?.sessionRoot)) $("sourceUsageRecords").checked = false;
         message(""); paint();
     });
     function openSourceReview({ onCancel } = {}) {
