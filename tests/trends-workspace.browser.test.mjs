@@ -803,6 +803,24 @@ test("aligned call heights agree and changing weeks keep their own denominators"
     await expect(landing).toContainText("No matching dated calls");
     await expect(landing.getByRole("button",{name:/Nov 17.*no matching dated calls/i})).toHaveAccessibleName(/0 interactions/);
     await expect(landing.getByRole("button",{name:"Nov 15, 2026: Errors & failures, 0 interactions",exact:true})).toBeVisible();
+    // Reading a point keeps View chart reachable and the line at its resting width.
+    await page.setViewportSize({width:1440,height:1100});
+    await expect.poll(()=>landing.locator(".trends-plot svg").evaluate(svg=>svg.getBoundingClientRect().width)).toBeGreaterThan(600);
+    const viewChart=landing.getByRole("link",{name:/View chart/}).or(landing.getByRole("button",{name:/View chart/})).first();
+    const strokes=()=>landing.locator("[data-trend-line]").evaluateAll(ns=>[...new Set(ns.map(n=>getComputedStyle(n).strokeWidth))]);
+    const resting=await strokes();
+    const window=await landing.locator(".trends-plot").boundingBox();
+    for (const mark of await landing.locator("[data-trend-mark]:not([aria-label*='no matching dated calls'])").all()) {
+        const at=await mark.boundingBox();
+        if (!at || at.x < window.x + 40 || at.x + at.width > window.x + window.width) continue; // scrolled behind the axis or out of view
+        await page.mouse.move(0,0); await expect(page.locator("#trendsTooltip")).toBeHidden(); await mark.hover();
+        await expect(page.locator("#trendsTooltip"),await mark.getAttribute("aria-label")).toBeVisible();
+        const [tip,link]=[await page.locator("#trendsTooltip").boundingBox(),await viewChart.boundingBox()];
+        const overlap=Math.max(0,Math.min(tip.x+tip.width,link.x+link.width)-Math.max(tip.x,link.x))*Math.max(0,Math.min(tip.y+tip.height,link.y+link.height)-Math.max(tip.y,link.y));
+        assert.equal(overlap,0,`${await mark.getAttribute("aria-label")}: reading covers View chart`);
+        assert.deepEqual(await strokes(),resting);
+    }
+    await page.mouse.move(0,0); await page.setViewportSize({width:1280,height:800});
     await page.getByRole("button",{name:"Call volume and duration",exact:true}).click();
     const pair=page.locator(".trends-panel-pair"), plots=pair.locator(".trends-plot:visible");
     const select=(i,v)=>selectActivityOption(page,`trendsPairMeasure${i}`,JSON.stringify(v));
