@@ -46,6 +46,7 @@ async function setup(t, records, pdf) {
     const reports = async () => {
         await page.goto(new URL("/reports", runtime.url).href);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy","false");
+        await page.locator("#reportCustomSetup").click();
     };
     await reports();
     const sent = path => requests.filter(req => req.path === path).map(req => req.body);
@@ -75,7 +76,7 @@ async function pick(page, ids) {
     const picker = page.locator("#reportActivityOptions");
     await picker.getByRole("radio",{name:/^Selected interactions/}).check();
     for (const id of ids) await picker.locator(`input[data-report-request="${id}"]`).check();
-    await picker.getByRole("button",text("Close")).click();
+    await picker.getByRole("button",text("Use activity")).click();
 }
 async function addFormat(page, format) {
     await page.getByRole("button",{name:/^Formats:/}).click();
@@ -133,6 +134,7 @@ test("whole-chat reports preserve the selected identities, three disclosure choi
         await page.goto(new URL("/?session=test-session",page.url()).href);
         await page.locator("#createSessionReport").click();
         await expect(page.locator("#reportDeskDates")).toHaveAccessibleName("Dates: All retained dates");
+        await page.locator("#reportCustomSetup").click();
         await page.locator(`.report-before-prepare input[value="${mode}"]`).check();
         let p = await prepare(page);
         for (const f of ["pdf","json","markdown"]) p = await addFormat(page,f);

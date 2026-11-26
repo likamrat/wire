@@ -9,6 +9,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../../lib/store.mjs";
 import { privateFixture, fixture, navigateMain, selectActivityOption } from "../support/helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const hashes = async entries => Promise.all(entries.map(async entry => [
     entry.bundleId, await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, digest(await readFile(file))])),
@@ -71,7 +72,7 @@ async function previewAfter(page, action) {
 }
 async function prepare(page) {
     await overview(page);
-    return previewAfter(page, () => page.locator("#prepareReportPreview").click());
+    return previewAfter(page, () => prepareLandingReport(page, "all"));
 }
 async function save(page) {
     const preview = await prepare(page);
