@@ -439,10 +439,16 @@ test("trusted sidebar reversals return the scrolled interaction to its original 
         const toggle = await collapse(page).boundingBox();
         await page.mouse.click(toggle.x + toggle.width / 2, toggle.y + toggle.height / 2);
     }
+    async function settledToggle(expanded) {
+        await expect(collapse(page)).toHaveAttribute("aria-expanded", String(expanded));
+        await settled(page);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    }
     const checkpoints = [];
-    for (const [index, wait] of [450, 900, 75, 75, 75, 450, 450, 900].entries()) {
+    for (let index = 0; index < 8; index++) {
         await clickMovingToggle();
-        await page.waitForTimeout(wait);
+        if (index >= 2 && index <= 4) await page.waitForTimeout(75); // Reverse the rail mid-motion.
+        else await settledToggle(index % 2 === 1);
         if (index === 1) checkpoints.push(await selected.evaluate(node => ({ cardY: node.getBoundingClientRect().y, scrollY })));
     }
     const evidence = await page.evaluate(() => window.finishScrolledMotion());
@@ -461,10 +467,10 @@ test("trusted sidebar reversals return the scrolled interaction to its original 
     await page.mouse.move(1000, 700);
     await page.mouse.wheel(0, 120);
     await page.waitForFunction(previous => scrollY > previous + 50, after.scrollY);
-    await settled(page);
+    await settledToggle(false);
     const wheelY = await page.evaluate(() => scrollY);
     await clickMovingToggle();
-    await settled(page);
+    await settledToggle(true);
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - wheelY) < 1, "Finishing motion never restores stale pre-wheel scroll");
 });
 
