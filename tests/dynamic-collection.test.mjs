@@ -335,6 +335,54 @@ test("history compatibility: token-record approval names one Copilot account; a 
     assert.equal((await read(third[0].data.content))?.usage ?? null, null);
     assert.equal((await collector.status()).usageRecords, "approval-changed");
 });
+test("history compatibility: a stale token-record approval stops the next chat's index read within the same pass", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workiq-usage-two-chats-")), cleanup = [];
+    t.after(async () => { for (const close of cleanup.reverse()) await close(); await rm(root, { recursive: true, force: true }); });
+    const { db, appDbPath, sessionRoot } = await createProfileSource(root);
+    cleanup.push(() => db.close());
+    const base = Date.now() - 120000, at = n => new Date(base + n * 1000).toISOString();
+    const index = new DatabaseSync(path.join(root, "session-store.db"));
+    cleanup.push(() => index.close());
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+        CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+            input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    const chats = [];
+    for (const [n, text] of [[0, "Summarize the invented launch notes."], [20, "List the invented owners."]]) {
+        const id = randomUUID(), a = "a" + n;
+        db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Invented chat", "general_chat");
+        const events = [event("user.message", { content: text, delivery: "idle" }), event("assistant.turn_start", { turnId: a }),
+            event("assistant.message", { turnId: a, toolRequests: [{ toolCallId: a + "-fetch" }] }), call(a + "-fetch"),
+            event("tool.execution_complete", { toolCallId: a + "-fetch", success: true, result: { content: "INVENTED" } }),
+            event("assistant.turn_end", { turnId: a })].map((e, k) => ({ ...e, timestamp: at(n + k) }));
+        const file = path.join(sessionRoot, id, "events.jsonl");
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, [event("session.start", { sessionId: id, version: 1 }), ...events].map(e => JSON.stringify(e) + "\n").join(""));
+        index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(id, text, "Invented answer");
+        index.prepare(`INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at)
+            VALUES (?,0,NULL,'gpt-4.1',5000,100,4000,500,?)`).run(id, new Date(Date.parse(events[2].timestamp) + 4).toISOString());
+        chats.push({ id, text });
+    }
+    const context = { dataDir: path.join(root, "private") };
+    const collector = await createCollector(context, { timers: false });
+    cleanup.push(() => collector.close());
+    // Approve, then switch the account right after the first index read of the next pass.
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync;
+    const opened = [];
+    fsSync.statSync = (target, ...rest) => {
+        if (String(target).endsWith("session-store.db")) { opened.push(target); if (opened.length === 1) db.prepare("UPDATE projects SET github_account_id='default'").run(); }
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await collector.configure({ appDbPath, sessionRoot, approved: true, enabled: false, windowDays: 30, pollSeconds: 5, usageRecords: true });
+    opened.length = 0;
+    await assert.rejects(collector.collectNow(), e => [e.code, e.cause?.code].includes("COLLECTION_SOURCE_CHANGED"));
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.equal(opened.length, 1, "Once the approval is stale, the second chat's index is never opened");
+    const scenarios = (await currentStatePayload(context, await loadBoardState(context))).scenarios;
+    for (const chat of chats) assert.equal(scenarios.find(s => s.userPrompt?.text === chat.text)?.usage ?? null, null);
+    assert.equal((await collector.status()).usageRecords, "approval-changed");
+});
 test("history compatibility: token records need a positively identified account; an unknown or legacy grant never reads", async t => {
     const app = await installation(t), id = app.session();
     const base = Date.now() - 60000, text = "Summarize the invented launch notes.";
