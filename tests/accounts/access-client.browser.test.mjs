@@ -9,7 +9,7 @@ import { createFixtureRuntimeAccess } from "../../lib/runtime-access.mjs";
 import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { fixture, privateFixture, restoreLegacySearch, revealStoredRefresh, selectActivityOption } from "../support/helpers.mjs";
-import { prepareReportPreview } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
 import { openDatePicker } from "../analyze/analytics-date-picker.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 
@@ -85,7 +85,7 @@ async function regenerate(page, action) {
     return preview;
 }
 async function prepareNamedReport(page) {
-    await regenerate(page, () => prepareReportPreview(page));
+    await regenerate(page, () => prepareLandingReport(page, "all"));
     const preview = await regenerate(page, () => page.getByLabel("Report name", { exact: true }).fill("Synthetic retained save"));
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
     return preview;
@@ -710,6 +710,7 @@ test("sign-out clears the report name and masking terms while keeping the chosen
     await expect(page.locator("#reportTitle")).not.toHaveValue("Synthetic retained save");
     await expect(page.locator("#manualTerms")).toHaveValue("");
     await expect(page.locator("#formatOptions input[value=json]")).toBeChecked();
+    await page.locator("#reportCustomSetup").click();
     await expect(page.locator("#prepareReportPreview")).toBeVisible();
     assert.equal(app.requests.filter(path => path === "/api/export").length, 0);
 });

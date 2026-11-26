@@ -128,7 +128,7 @@ export function renderAccountSettingsFixture(section = "connection") {
     }
     html = html.slice(0, html.lastIndexOf(`<script nonce="${nonce}">`)) + "</body></html>";
     html = html.replace(/<link rel="icon"[^>]*>/, "");
-    html = html.replace('src="/favicon.svg"', 'src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E"');
+    html = html.replaceAll('src="/favicon.svg"', 'src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E"');
     html = html.replace("</head>", `<style>${accountSettingsStyles}</style></head>`);
     const script = `
 const ux = (${shell.ux})(${JSON.stringify(shell.icons).replaceAll("<", "\\u003c")});
