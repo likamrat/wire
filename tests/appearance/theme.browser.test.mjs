@@ -9,6 +9,7 @@ import { buildActivityAnalytics, buildRequestActivity } from "../../lib/activity
 import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP, fixture as recordedInteraction, privateFixture } from "../support/helpers.mjs";
 import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
+import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
 
 const proofDir = process.env.WORKIQ_THEME_PROOF_DIR;
 const records = ["/me/messages", "/me/events", "/me/drive/root/children", "/teams/fixture/channels", "/me/people", "/me/todo/lists"].map((apiPath, index) => ({
@@ -154,12 +155,13 @@ async function inspect(page) {
         for (const node of document.body.querySelectorAll("*")) {
             if (!node.checkVisibility({ visibilityProperty: true }) || node.closest(".visually-hidden, .skip-link") || node.tagName === "OPTION") continue;
             const box = node.getBoundingClientRect();
-            const scroller = node.closest(".dimensional-scroll,#countTable");
+            const scroller = node.closest(".dimensional-scroll,#countTable,.token-history-scroll");
             if (!scroller && (box.right > innerWidth + 1 || box.left < -1)) overflow.push(node.id || node.className || node.tagName);
             if (scroller) {
                 const bounds = scroller.getBoundingClientRect();
                 if (bounds.right > innerWidth + 1 || bounds.left < -1) overflow.push("dimensional-scroll");
-                if (scroller.scrollWidth > scroller.clientWidth && (getComputedStyle(scroller).overflowX !== "auto" || scroller.tabIndex !== 0)) overflow.push("inaccessible-chart-overflow");
+                const keyboard = scroller.matches(".token-history-scroll") ? scroller.querySelector("input[type=range]:enabled") : scroller;
+                if (scroller.scrollWidth > scroller.clientWidth && (getComputedStyle(scroller).overflowX !== "auto" || keyboard?.tabIndex !== 0)) overflow.push("inaccessible-chart-overflow");
             }
             const hasText = [...node.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && child.textContent.trim());
             if (!hasText && !node.matches("input:not([type=checkbox]),select")) continue;
@@ -383,7 +385,7 @@ test("a real switch in another panel changes appearance without invalidating a f
     const { runtime, page, profile } = await recordedApp(t), other = await profile.newPage();
     await page.goto(new URL("/reports", runtime.url).href);
     const made = page.waitForResponse(res => res.url().endsWith("/api/preview") && res.ok());
-    await page.getByRole("button", { name: "Prepare preview" }).click();
+    await prepareLandingReport(page, "all");
     const { previewId } = await (await made).json();
     assert.ok(previewId);
     const report = page.locator("#reportReviewBody").frameLocator("iframe:visible").locator("h1");

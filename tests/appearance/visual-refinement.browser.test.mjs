@@ -41,6 +41,7 @@ test("a project choice filters by recorded project and preserves chats without o
 test("switching appearance with the keyboard preserves unfinished report choices without preparing a copy", async t => {
     const page = await setup(t);
     await navigateMain(page, "reports");
+    await page.locator("#reportCustomSetup").click();
     const keep = page.getByRole("radio", { name: /^Keep chat details\b/ });
     await keep.check();
     const formats = page.getByRole("button", { name: /^Formats:/ });
