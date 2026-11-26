@@ -1454,7 +1454,7 @@ export const trendsStyles = `
 .trends-evidence-row>a:active>[data-icon-role=forward]{background:color-mix(in srgb,currentColor 24%,transparent)}
 .trends-evidence-context{color:var(--ink);font:var(--weight-regular) var(--type-body)/1.5 var(--font);overflow-wrap:anywhere}
 .trends-evidence-time{color:var(--muted);font:var(--weight-regular) var(--type-small)/1.5 var(--font)}
-.trends-tooltip{position:fixed;z-index:var(--layer-tooltip);width:max-content;max-width:20.625rem;overflow:auto;background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:10px;box-shadow:var(--surface-shadow);padding:14px 16px;opacity:0;transition:opacity 110ms ease-out;font-variant-numeric:tabular-nums}
+.trends-tooltip{position:fixed;z-index:var(--layer-tooltip);width:max-content;max-width:20.625rem;overflow:auto;background:var(--floating-paper);color:var(--ink);border:1px solid var(--control);border-radius:10px;box-shadow:var(--surface-shadow);padding:14px 16px;opacity:0;transition:opacity 110ms ease-out;font-variant-numeric:tabular-nums}
 .trends-tooltip.open{opacity:1}.trends-tip-heading{display:flex;justify-content:space-between;gap:22px;margin-bottom:8px}.trends-tip-heading>span:first-child{min-width:0;overflow-wrap:anywhere}.trends-tip-heading>span:last-child{flex:none}.trends-tip-value{font-size:var(--type-title);line-height:1.2}
 .trends-tip-series{display:flex;align-items:center;gap:6px}
 .trends-tip-caption{color:var(--muted);margin-top:4px}.trends-tip-facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 20px;margin:10px 0 0}.trends-tip-facts dt{color:var(--muted);overflow-wrap:anywhere}.trends-tip-facts dd{margin:0;text-align:right}

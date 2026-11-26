@@ -564,6 +564,8 @@ Every chart mark, legend row, value and bar uses one reading on the shared
 floating surface: the name first, then the share with its count of the true
 denominator, then what the row means.
 
+- Keep reading text at 4.5:1 contrast or higher. Where the floating surface
+  matches the chart or dialog, its one-pixel edge provides at least 3:1 contrast.
 - Reading a mark keeps its exact geometry. Other marks in the same chart recede;
   never add a stroke, brightness change, scale or plate.
 - A reading never covers the figures it explains or a neighbouring control. Rows

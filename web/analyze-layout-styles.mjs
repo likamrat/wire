@@ -29,7 +29,7 @@ export const analyzeLayoutStyles = `
 .token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--accent)}
 .token-history-dates time {min-width:max(3.75em,calc(var(--day-column-width) + var(--space-sm)));padding:4px 4px 0;box-sizing:border-box;text-align:center;white-space:nowrap}
 .token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
-.token-day-reading {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
+.token-day-reading {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--control);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
 .token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;overflow-wrap:anywhere;opacity:0;pointer-events:none}
 #evidence-tooltip[data-tone=chart] {--tooltip-gap:var(--space-md);max-width:min(18rem,calc(100% - 2 * var(--tooltip-gap)))}
 #evidence-tooltip[data-tone=chart]::first-line {color:var(--accent)}
