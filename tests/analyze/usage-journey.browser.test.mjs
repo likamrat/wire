@@ -505,7 +505,8 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     const narrow = await readings.evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().y));
     assert.ok(narrow.every((y,i)=>!i || y>narrow[i-1]),"Narrow token readings remain in ranked order");
     await page.setViewportSize({width,height:900});
-    const meteredModel = models.getByRole("link",{name:`${modelName}: 33% (112,000 tokens). View 2 metered interactions.`,exact:true});
+    const modelLabel = `Unrecognized model (${modelName})`;
+    const meteredModel = models.getByRole("link",{name:`${modelLabel}: 33% (112,000 tokens). View 2 metered interactions.`,exact:true});
     if (width < 500) await meteredModel.tap(); else await meteredModel.press("Enter");
     await expect(page.locator("#activityListSummary")).toHaveText(`${modelName}: 2 metered interactions`);
     const cardIds = () => rows.evaluateAll(nodes=>nodes.map(n=>n.dataset.viewKey).sort());
@@ -547,7 +548,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(clearModel).toHaveCount(0); await expect(chips).toContainText("workiq-fetch");
     await closeAnalyzeFilters(page); await expect(rows).toHaveCount(4); await expect(filterButton).toHaveText("1 filter applied");
     await shares.click();
-    const scopedModel = models.getByRole("link",{name:new RegExp(`${modelName}: .* View 1 metered interaction\\.$`)});
+    const scopedModel = models.getByRole("link",{name:`${modelLabel}: 15% (30,000 tokens). View 1 metered interaction.`,exact:true});
     await scopedModel.click();
     await expect(page.locator("#activityListSummary")).toHaveText(`${modelName}: 1 metered interaction`);
     assert.deepEqual(await cardIds(),[measuredIds[1]]);
@@ -664,6 +665,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     assert.equal(pair.snapshot.usageFacts.cohorts.baseline.groups.find(g=>g.label==="Human").total,63000);
     assert.equal(pair.snapshot.usageFacts.cohorts.later.groups.find(g=>g.label==="Human").total,12000);
     await page.goto(new URL("/reports",runtime.url).href);
+    await page.locator("#reportCustomSetup").click();
     await selectActivityOption(page,"reportUsagequestion","tool");
     await selectActivityOption(page,"reportUsagethreshold","60000");
     await selectActivityOption(page,"reportUsageauthor","agent");
