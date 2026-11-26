@@ -834,6 +834,11 @@ A clean tab that tells WIRE its browser is putting it to sleep catches up when
 it wakes, at the same address. If the browser disconnects without confirming
 that the tab is clean, WIRE stops before restarting rather than risking an edit.
 
+If a tab loses the first update-status response, it retries in place without
+reloading or starting an update. On an older build, if that tab says **Update
+status could not be confirmed**, save your work there, then choose **Check for
+updates** in that same tab's General settings. A new tab can't answer for it.
+
 - Dismissing the notification leaves the update available in General.
 - If installation fails, General shows **Update not installed** and the
   reason. Away from General, the notification shows the same message.

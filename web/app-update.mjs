@@ -131,6 +131,20 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (["checking", "preparing", "restarting"].includes(state.phase)) scheduleTimer = setTimeout(() => void run("status"), 2500);
         else if (state.automatic) scheduleTimer = setTimeout(() => void run("auto-check"), day);
     }
+    async function readOpeningStatus(attempt = 0) {
+        const generation = lifetime;
+        await run("status", {}, true);
+        if (generation !== lifetime || parked || expected) return;
+        if (state?.supported && state.automatic) void run("auto-check");
+        else if (!state && openingStatusOnly && attempt < 2) {
+            // The host may have registered this document before its status reply was lost.
+            // Retry only that read with the original capability, never an update command.
+            scheduleTimer = setTimeout(() => void readOpeningStatus(attempt + 1), (attempt + 1) * 1000);
+        }
+    }
+    function retryOpeningStatus() {
+        if (openingStatusOnly && !state && !busy && !parked && !expected) void readOpeningStatus();
+    }
     async function run(action, fields, opening = false) {
         if (parked || busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
         const generation = lifetime;
@@ -257,6 +271,9 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     document.addEventListener("freeze", onFreeze, { capture: true });
     document.addEventListener("resume", onWake, { capture: true });
+    document.addEventListener("resume", retryOpeningStatus);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) retryOpeningStatus(); });
+    window.addEventListener("online", retryOpeningStatus);
     async function watchPeers() {
         if (parked || peerWatch || peerTimer || expected || !coordination || !panelVerified) return;
         const controller = new AbortController(), generation = lifetime;
@@ -459,7 +476,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             }
         });
     });
-    manual.addEventListener("click", () => void run(state?.supported ? "check" : "status"));
+    manual.addEventListener("click", () => {
+        if (!busy && !state && openingStatusOnly) void readOpeningStatus();
+        else void run(state?.supported ? "check" : "status");
+    });
     automatic.addEventListener("change", () => void run("preferences", { enabled: automatic.checked }));
     try {
         const saved = sessionStorage.getItem(receiptKey);
@@ -472,9 +492,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     if (expected) void recover();
     else {
         if (dialog.open) dialog.close();
-        void run("status", {}, true).then(() => {
-            if (state?.supported && state.automatic) void run("auto-check");
-        });
+        void readOpeningStatus();
     }
     return {
         render,

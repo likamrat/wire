@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
@@ -537,6 +538,64 @@ test("a clean managed tab retains its capability for bfcache and releases only i
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
     await expect.poll(() => releases).toEqual([capability]);
+});
+
+test("a lost opening update reply rejoins the peer watch in the original document", async t => {
+    const cleanup = new AsyncDisposableStack();
+    t.after(() => cleanup.disposeAsync());
+    const { context } = await privateFixture({ after: close => cleanup.defer(close) });
+    const channel = Object.assign(new EventEmitter(), { connected: true, env: { WIRE_UPDATE_LAUNCHER: "1", WIRE_UPDATE_BUILD: old } });
+    const actions = [];
+    channel.send = ({ id, request }) => {
+        actions.push(request.action);
+        channel.emit("message", { type: "wire-update-response", id, value: {
+            supported: true, automatic: false, installed: old, candidate: null, dismissed: null,
+            lastChecked: null, phase: "current", message: "Up to date.",
+        } });
+    };
+    const runtime = await startServer(context, createExportController(context), {
+        port: 0, collector: { timers: false }, frontend: "react", updateChannel: channel,
+    });
+    cleanup.defer(() => runtime.close());
+    const browser = await chromium.launch(); cleanup.defer(() => browser.close());
+    const page = await browser.newPage(), requests = [], documents = [];
+    page.on("request", r => {
+        if (r.isNavigationRequest() && r.frame() === page.mainFrame()) documents.push(r.url());
+        const path = new URL(r.url()).pathname;
+        if (path.startsWith("/api/app-update")) requests.push([path, r.headers()["x-board-capability"]]);
+    });
+    await page.route("**/api/app-update", async route => {
+        assert.deepEqual(route.request().postDataJSON(), { action: "status" });
+        const response = await route.fetch();
+        assert.equal(response.status(), 200);
+        assert.equal((await response.json()).coordinated, true);
+        await route.abort("connectionreset");
+    }, { times: 1 });
+    await page.goto(runtime.url + "settings");
+    await expect.poll(() => requests.map(([path]) => path)).toEqual(["/api/app-update", "/api/app-update", "/api/app-update/watch"]);
+    assert.deepEqual(actions, ["status", "status"]);
+    assert.equal(new Set(requests.map(([, cap]) => cap)).size, 1);
+    assert.deepEqual(documents, [runtime.url + "settings"]);
+    await expect(page.locator("#appUpdateCheck")).toBeEnabled();
+});
+
+test("an opening status refusal or unreadable reply does not retry or release the document", async t => {
+    const { page, setup, actions, releases } = await workspace(t, { offer: null });
+    await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+    await page.clock.install();
+    for (const [status, json, message] of [
+        [403, { error: "Page permission expired." }, "Page permission expired."],
+        [200, {}, "Update status could not be confirmed."],
+    ]) {
+        setup.status = route => route.fulfill({ status, json });
+        const before = actions.length;
+        await page.reload();
+        await expect(page.locator("#appUpdateStatus")).toContainText(message);
+        const releasedOnDeparture = releases.length;
+        await page.clock.runFor(2500);
+        assert.deepEqual(actions.slice(before), [{ action: "status" }]);
+        assert.equal(releases.length, releasedOnDeparture);
+    }
 });
 
 test("manual reload releases a clean page without releasing a suspended page or an uncertain operation", async t => {
