@@ -37,7 +37,7 @@ sources you can enable in a normal installation.
 | Pause collection | Stops automatic acquisition; retained activity stays readable. |
 | Refresh | One bounded read of already-approved local history, including the deliberate GitHub manual exception under Pause. |
 | Read stored activity | Reads WIRE's saved view/status, without checking original history. |
-| Token records | Separately approves the displayed usage file for the identified Copilot account. Leave it off to read only the approved history. |
+| Token records | Separately approves the displayed usage file for the identified Copilot account. On by default for a source that isn't approved yet; turn it off to read only the approved history. |
 | [Count tokens in chats already read](#count-tokens-in-chats-already-read) | Checks eligible chats for missing totals. Only a separate confirmation saves the counts shown. |
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
@@ -371,11 +371,14 @@ Older Copilot journals have no per-call receipts. The Copilot app also keeps
 its own per-call accounting in `session-store.db` beside the approved chat
 database (`turns` and `assistant_usage_events`). Source approval doesn't
 cover it. **Token records** under the GitHub Copilot app in **Settings > Sources** shows the exact
-resolved file and records a separate approval (`usageRecords`), off by default and
-for existing approvals. The approval names that file and the Copilot account the
-app reports; WIRE refuses it when it can't identify that account. Only turning the
+resolved file and records a separate approval (`usageRecords`). The switch starts on
+for a source that isn't approved yet, so first approval lists it under **What
+approving allows**; nothing is read until that confirmation. Existing approvals
+keep their saved setting. The approval names that file and the Copilot account the
+app reports; WIRE refuses it when it can't identify that account, and the refusal
+says to turn the switch off to continue without it. Only turning the
 switch on or off changes the approval; saving other preferences keeps it as
-granted. Changing a path in review turns the switch off; if the account or file
+granted. Changing an approved source's path turns the switch off; if the account or file
 later differs, including between a read and its commit, WIRE stops reading it and
 Settings asks for a new approval.
 With it on, when the journal can't establish a total, WIRE reads that index

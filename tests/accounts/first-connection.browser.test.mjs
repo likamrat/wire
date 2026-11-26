@@ -496,12 +496,16 @@ async function tokenRecordChat(t) {
     return { ...fixture, text, base, exchange, activityEvents, indexed, reply, usage, journal, later, refresh, tokens };
 }
 
-test("Copilot's token records stay unread until turned on in source review; turning them off stops the reads and keeps counted totals", { timeout: 90000 }, async t => {
+test("Copilot's token records start on for a new source but stay unread until approval; turning them off stops the reads and keeps counted totals", { timeout: 90000 }, async t => {
     const { page, runtime, mutations, home, indexed, usage, reply, later, tokens, activityEvents } = await tokenRecordChat(t);
     const swtch = page.getByRole("switch", { name: "Token records", exact: true }), configures = () => mutations.filter(m => m.path === "/api/collection/configure");
     await page.goto(runtime.url); await ready(page);
     await page.locator("#welcomeReviewSource").click();
-    await expect(swtch).not.toBeChecked();
+    // A new source starts with token records on, but nothing is read until first approval is confirmed.
+    await expect(swtch).toBeChecked();
+    await expect(page.locator("#approvalScope")).toContainText("Read token records · Reads more");
+    assert.equal(configures().length, 0, "The default is a draft, not a read");
+    await swtch.uncheck();
     await expect(page.locator("#approvalScope")).not.toContainText("token records");
     const recordsFile = path.join(home, "session-store.db");
     await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(recordsFile);
@@ -510,7 +514,6 @@ test("Copilot's token records stay unread until turned on in source review; turn
     await expect(help).toContainText("token counts Copilot already recorded");
     await expect(swtch).toHaveAccessibleDescription(/doesn't generate new tokens or cost you anything/);
     await expect(page.locator("#sourceUsageRecordsFacts")).toContainText("match calls but doesn't save them");
-    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await swtch.hover();
@@ -525,6 +528,9 @@ test("Copilot's token records stay unread until turned on in source review; turn
     assert.doesNotMatch(unread, /11,400|Counted from/);
 
     await navigateMain(page, "settings"); await openSourceEditor(page);
+    // A saved Off stays Off; the new-source default never re-enables an existing grant.
+    await expect(swtch).not.toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
     const beforeTokenApproval = configures().length;
     await swtch.focus(); await page.keyboard.press("Space");
     await expect(swtch).toBeChecked();
@@ -587,6 +593,8 @@ test("Count tokens in chats already read checks first, counts only after a separ
     };
     await page.goto(runtime.url); await ready(page);
     await page.locator("#welcomeReviewSource").click();
+    // This scenario starts Off on purpose; opting out keeps the first read free of token records.
+    await page.getByRole("switch", { name: "Token records", exact: true }).uncheck();
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
     await expect(row).toBeHidden();

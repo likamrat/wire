@@ -352,7 +352,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function sourceValues(status) {
         const source = status?.config || status?.suggestedSource;
         return { appDbPath: source?.appDbPath || "", sessionRoot: source?.sessionRoot || "",
-            usageRecords: grantedRecords(status),
+            // A new source starts with token records on; an existing approval keeps exactly what was granted.
+            usageRecords: status?.config?.approved === true ? grantedRecords(status) : true,
             windowDays: source?.windowDays ?? 30, pollSeconds: source?.pollSeconds ?? 5 };
     }
     function dirty() { return initialized && (native() ? Boolean(nativeView()?.dirty)
@@ -548,7 +549,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("connectionSourceHelp").hidden = true;
         const next = values();
         const pathsChanged = approved && (next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot);
-        const recordsChanged = next.usageRecords !== grantedRecords(baseline);
+        const recordsChanged = next.usageRecords !== sourceValues(baseline).usageRecords;
         const sourceChanged = pathsChanged || recordsChanged;
         const recordsOnly = approved && recordsChanged && !pathsChanged;
         $("approvedConnection").hidden = !approved;
@@ -577,8 +578,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("settingsConnectionError", readError ? "Collection settings could not be read." : "");
         $("settingsConnectionError").hidden = !readError || !inConfiguration();
         const recordsStopped = approved && latest.usageRecords === "approval-changed" && !next.usageRecords;
-        const recordsState = recordsChanged && initialized ? "Changed" : recordsStopped ? "Stopped: the Copilot account or path changed"
-            : approved && grantedRecords(latest) ? "On" : "Off";
+        const recordsState = recordsChanged && initialized && approved ? "Changed" : recordsStopped ? "Stopped: the Copilot account or path changed"
+            : approved ? grantedRecords(latest) ? "On" : "Off" : "";
         setText("sourceUsageRecordsState", latest ? recordsState : "");
         $("sourceUsageRecordsState").dataset.state = recordsState === "On" ? "on" : recordsState === "Changed" ? "changed" : recordsStopped ? "attention" : "off";
         setText("sourceUsageRecordsFile", next.appDbPath ? usageRecordsFile(next.appDbPath) : "");
@@ -586,7 +587,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("sourceUsageRecordsAccount", grantAccount ? ` · ${grantAccount}` : "");
         const sourcePartChanged = initialized && (pathsChanged || recordsChanged);
         setText("connectionSourceSummary", !latest ? "" : [approved ? "WIRE can read this" : "WIRE can't read this yet",
-            sourceExpanded ? "" : `Token records ${recordsStopped ? "stopped" : approved && grantedRecords(latest) ? "on" : "off"}`,
+            sourceExpanded ? "" : `Token records ${recordsStopped ? "stopped" : (approved ? grantedRecords(latest) : next.usageRecords) ? "on" : "off"}`,
             !sourceExpanded && sourcePartChanged ? "Changed" : ""].filter(Boolean).join(" · "));
         setText("sourceChangeImpact", stale ? "Settings changed. Cancel edits to reload."
             : uncertain ? "Change unconfirmed."
@@ -853,7 +854,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
                 windowDays: Number($("collectionWindow").value) });
         }
         // Token records are approved for one database location; a changed path asks again.
-        if (["sourceDatabase", "sourceSessions"].includes(id) && $("sourceUsageRecords").checked
+        if (["sourceDatabase", "sourceSessions"].includes(id) && $("sourceUsageRecords").checked && baseline?.config?.approved === true
             && (values().appDbPath !== baseline?.config?.appDbPath || values().sessionRoot !== baseline?.config?.sessionRoot)) $("sourceUsageRecords").checked = false;
         message(""); paint();
     });

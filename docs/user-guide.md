@@ -59,8 +59,8 @@ or **Settings > Sources**.
 
 1. Under **GitHub Copilot app**, check that **Metadata database** and **Chat
    history folder** point to the Copilot app you want to read. Edit a path if
-   the suggestion is wrong. Leave **Token records** off unless you want WIRE to
-   read the extra file shown there.
+   the suggestion is wrong. **Token records** starts on, so WIRE will also read
+   the file shown there. Turn it off if you'd rather it didn't.
 2. Under **Schedule**, set **History to include** and **Check frequency**.
    **What approving allows** lists what WIRE will read. When it's right, choose
    **Approve source and start collection**.

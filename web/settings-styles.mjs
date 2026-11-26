@@ -364,7 +364,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view .source-commit>h3 {margin:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .source-commit[data-risk=widen]>h3 {color:var(--disclosure-risk)}
 .source-impact {list-style:none;display:grid;gap:var(--space-md);margin:var(--space-md) 0 0;padding:0}
-.source-impact li {display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:start;font-size:var(--type-body);line-height:1.5}
+.source-impact li {display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:start;font-size:var(--type-body);line-height:1.5;overflow-wrap:anywhere}
 .source-impact li>svg {margin-top:1px;color:var(--muted)}
 .source-impact li[data-risk=widen]>svg,.source-impact li[data-risk=widen] .source-impact-tag {color:var(--disclosure-risk)}
 .source-impact li strong {font-weight:var(--weight-medium)}
