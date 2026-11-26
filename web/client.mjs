@@ -12193,6 +12193,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("pageTitle"), "Settings");
         const home = el("a", "", "Analyze");
         home.href = "/";
+        home.dataset.nav = "analyze";
+        home.addEventListener("click", event => activateNavigation(home, event));
         $("breadcrumbs").replaceChildren(home, document.createTextNode(" / Settings"));
         renderSettingsNavigation();
         const latest = api.accessState();
