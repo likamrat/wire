@@ -106,6 +106,8 @@ beneath each outcome label.
   charts and its label, and shows the count and percentage.
 - Clicking either mark opens the label's evidence. The label is the single
   keyboard stop for that outcome.
+- Back and Forward revisit pages of the chart's exact results. Going back to
+  the chart restores focus to the control that opened the results.
 - Zero-count outcomes stay available as compact definition links. They don't
   take up a primary outcome column or get a painted segment.
 - Small layouts keep the strip and stack the labelled readings below the ring.

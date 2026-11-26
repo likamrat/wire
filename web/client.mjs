@@ -6229,7 +6229,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         position.dataset.pagePosition = "";
         position.tabIndex = -1;
         if (roster.pages > 1) {
-            const turnPage = offset => navigate(routeFor("analyze", { widget, page: Math.max(0, activityPage + offset) }), true,
+            const turnPage = offset => navigate(routeFor("analyze", { widget, page: Math.max(0, activityPage + offset) }), !widget,
                 { paging: capturePager(pager, offset) });
             const prev = button("Previous", () => turnPage(-1));
             prev.disabled = activityPage === 0 || !pageReady;
