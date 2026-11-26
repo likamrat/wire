@@ -46,8 +46,6 @@ export const percentageChartStyles = `
 .percentage-note,.percentage-service-scope,.percentage-coverage {color:var(--muted);font-size:var(--type-small);line-height:1.5;max-width:none}
 .percentage-service-scope {margin:0 0 8px}
 .percentage-basis {display:block;font-size:var(--type-caption);color:var(--muted);font-weight:var(--weight-regular)}
-.model-id {font-family:var(--mono);font-size:var(--type-caption);color:var(--muted);font-weight:var(--weight-regular);overflow-wrap:anywhere}
-.percentage-model-id {font-family:var(--mono)}
 .model-name[tabindex="0"] {border-radius:var(--radius-small)}
 .model-name[tabindex="0"]:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
 .percentage-coverage {margin-top:16px}

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
-import { readSourceProfileProjection, unavailableSourceProfile } from "../../lib/source-profile.mjs";
+import { readSourceModelCatalog, readSourceProfileProjection, unavailableSourceProfile } from "../../lib/source-profile.mjs";
 import { readSourceMetadata } from "../../lib/source-reader.mjs";
 import { metadataReadVersion, SOURCE_METADATA_READER_VERSION } from "../../lib/source-metadata.mjs";
 import { createGitHubProfile } from "../../lib/github-profile.mjs";
@@ -19,6 +19,28 @@ async function fixture(t) {
     t.after(async () => { source.db.close(); for (const cleanup of cleanups.reverse()) await cleanup(); });
     return { ...source, root, context };
 }
+
+test("model names use only the selected account's bounded exact pairs; conflicting and nontext names stay absent", async t => {
+    const {db,appDbPath}=await fixture(t), key="copilot-available-models-v2";
+    const set=value=>db.prepare("INSERT OR REPLACE INTO app_state(key,value) VALUES(?,?)").run(key,JSON.stringify(value));
+    const rows=()=>Object.fromEntries(readSourceModelCatalog(appDbPath).entries);
+    const root=[{id:"a",name:"Root name"}], scoped=[{id:"a",name:"Workspace name"},{id:"dup",name:"First"},
+        {id:"dup",name:"Rival"},{id:"bad",name:{extra:"Do not publish"}},{id:"bad-control",name:"split\nline"}];
+    set({accountId:"default",models:root,scopedModels:{workspace:scoped,default:[{id:"a",name:"Other account"}]}});
+    assert.deepEqual(rows(),{a:"Workspace name"});
+    set({accountId:"default",models:root});assert.deepEqual(rows(),{});
+    set({accountId:"workspace",models:root});assert.deepEqual(rows(),{a:"Root name"});
+    if (process.platform === "win32") {
+        const helper=fileURLToPath(new URL("../../scripts/read-copilot-metadata.mjs",import.meta.url));
+        const {stdout}=await promisify(execFile)(process.execPath,[helper,appDbPath,"--model-catalog"],{windowsHide:true});
+        assert.deepEqual(JSON.parse(stdout).projection,readSourceModelCatalog(appDbPath));
+        assert.doesNotMatch(stdout,/settings_json|access_token|avatarUrl|DO-NOT-READ/);
+    }
+    set({accountId:"workspace",models:root,scopedModels:{workspace:[]}});assert.deepEqual(rows(),{});
+    set({accountId:"workspace",models:Array.from({length:257},(_,i)=>({id:String(i),name:"Excess"}))});assert.deepEqual(rows(),{});
+    db.prepare("UPDATE app_state SET value='{' WHERE key=?").run(key);assert.deepEqual(rows(),{});
+    db.exec("PRAGMA user_version=156");assert.deepEqual(rows(),{});
+});
 
 test("unrelated metadata churn after the actual Windows helper does not withdraw an unchanged profile", {
     skip: process.platform !== "win32",

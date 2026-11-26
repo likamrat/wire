@@ -135,8 +135,8 @@ shares can overlap. When you read the numbers:
 - Returned API entries, Graph call sites and HTTP recorder captures have their
   own units. Don't add them to tool-call totals.
 - In **Response models**, hover or focus a row to read the original model ID.
-  **Unrecognized model** means an ID was recorded but WIRE can't format its
-  name. A missing model name doesn't mean zero usage.
+  WIRE shows the name from your Copilot app account, or the recorded ID if the
+  app has no name for it. A missing model ID doesn't mean zero usage.
 - Breakdowns show the percentage first, with the count in parentheses. On wide
   tool and model cards, read each pair from left to right, then down.
 - Model percentages use all matching interactions, including those without

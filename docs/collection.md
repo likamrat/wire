@@ -442,6 +442,15 @@ When a response explicitly identifies a retained Work IQ run, its request-only
 receipt can survive a collection restart before the final boundary arrives.
 WIRE still shows no total until it verifies the complete exchange.
 
+#### Model display names
+
+WIRE reads `copilot-available-models-v2` from the approved app database for
+screen labels. It uses the selected account's scoped list, or the root list
+only when that account owns it and has no scoped list. Only exact ID/name
+pairs for models already in the current evidence reach the screen. Missing,
+conflicting or unavailable labels leave the recorded ID intact. A catalog
+refresh does not rewrite receipts, saved evidence or exported reports.
+
 #### Returned text size
 
 A matched Work IQ completion may keep its returned text byte count (roughly four

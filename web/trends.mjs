@@ -81,13 +81,13 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
     // Screen names only. Series IDs, filters and exports keep the recorded model ID.
     function screenModelNames(value) {
         if (typeof modelName !== "function" || !value?.definitions?.models) return value;
-        const relabel = series => {
-            const name = modelName(series.id);
-            // An unrecognized series keeps its exact recorded ID; its reading says no display name exists.
-            return name.recognized ? { ...series, label: name.label, recordedAs: series.id } : { ...series, unrecognized: true };
+        const relabel = (series, id) => {
+            const name = modelName(id);
+            return { ...series, label: name.label, recordedAs: name.recognized ? id : undefined, unrecognized: !name.recognized };
         };
-        const values = values => values?.models ? { ...values, models: values.models.map(relabel) } : values;
-        return { ...value, definitions: { ...value.definitions, models: value.definitions.models.map(relabel) },
+        const values = values => values?.models ? { ...values, models: values.models.map(s => relabel(s,s.id)),
+            ...(value.usageQuestion === "model" && values.usage ? {usage:values.usage.map(s => s.id.startsWith("model:") ? relabel(s,s.id.slice(6)) : s)} : {}) } : values;
+        return { ...value, definitions: values(value.definitions),
             totals: { ...value.totals, values: values(value.totals.values) },
             days: value.days.map(day => ({ ...day, values: values(day.values) })) };
     }
@@ -102,7 +102,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         svg.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(id, family), "stroke-width": 3 }));
         return svg;
     }
-    let data = null, timingData = null, family = null, period = "7", filters = {}, range = null, offset = 0;
+    let data = null, timingData = null, catalogKey = "", family = null, period = "7", filters = {}, range = null, offset = 0;
     let usageChoice = { question:"all", threshold:30000 };
     let pending = 0, requestedKey = "", acceptedKey = "", enabled = false, bound = null, lastRevision = null;
     let overviewScroll = 0, dialogOrigin = null, inspecting = null, inspectionKey = "";
@@ -1235,7 +1235,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         toolbarContext.textContent = "";
         localChoices.close(false); datePicker.close(false); scrub(local);
         clearPending(); evidenceReturn = null;
-        pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
+        pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = catalogKey = ""; lastRevision = null;
         workspace.before(feedback);
         landingChart.withdrawAccess(); landingSource = null; landing.hidden = true; guide.hidden = true;
         pairActive=false;pairOrigin=null;pair.clear();landingExtra.hidden=true;chartsButton.hidden=selectedCharts.hidden=true;
@@ -1264,6 +1264,17 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
     }
     function update() {
         const wasEnabled = enabled, context = getContext();
+        const names = JSON.stringify(context.modelNames ?? {});
+        const namesChanged = catalogKey !== names;
+        if (namesChanged) {
+            catalogKey = names;
+            if (data) {
+                hideHover(); if (dialog.open) { dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
+                data = screenModelNames(data);
+                if (timingData) timingData = screenModelNames(timingData);
+                inspectionKey = "";
+            }
+        }
         if (!context.active) {
             clearPending(); evidenceReturn = null; failedRead = null;
             if (entryKey !== acceptedEntry) entryKey = null;
@@ -1311,7 +1322,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         }
         routeScopeKey = routeKey;
         if (root.getAttribute("aria-busy") === "true" && readingRevision === context.revision && readingZone === context.timeContext.timeZone) {
-            if (changedSection && current()) paint();
+            if ((changedSection || namesChanged) && current()) paint();
             return;
         }
         if (!entry) { acceptedEntry = entryKey = null; homeBack.hidden = true; }
@@ -1321,7 +1332,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
             ...(usageChoice.question !== "all" ? { usageQuestion:usageChoice.question, usageThreshold:usageChoice.threshold } : {}) };
         const key = JSON.stringify(input);
         if (key !== requestedKey || lastRevision !== context.revision && key === acceptedKey) void read({ range, period, filters, offset, initial });
-        else if (data && key === acceptedKey && (!wasEnabled || changedSection)) paint();
+        else if (data && key === acceptedKey && (!wasEnabled || changedSection || namesChanged)) paint();
     }
     return { update, withdrawAccess,
         evidenceOrigin: () => current() ? evidenceReturn?.origin ?? null : null,

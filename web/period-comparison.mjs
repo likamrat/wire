@@ -280,7 +280,7 @@ export function createPeriodComparisonPresentation(time) {
     return { choices, preset, names, rates, completeDays };
 }
 
-export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState,
+export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState, modelNameNode = id => id,
     assessmentFactories, getContext, navigate, open, useAnalyze, ux, onSearch, recordLink, syncFilters, createReport, openSearch, onAccepted, onPairChange, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument;
     const presentation = assessmentFactories.periodComparison.createPresentation(time);
@@ -619,7 +619,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const share = (numerator, denominator) => presentation.rates({ count: denominator, success: numerator },
         { count: denominator, success: numerator }, "success")[0] ?? "Unavailable";
     const chartView = () => ["timeline", "tools", "timing"].includes(getContext().route.comparisonView) ? getContext().route.comparisonView : "outcomes";
-    const presentationKey = () => JSON.stringify([chartView(), getContext().route.comparisonFocus, getContext().route.chart]);
+    const presentationKey = () => JSON.stringify([chartView(), getContext().route.comparisonFocus, getContext().route.chart, getContext().snapshot?.modelNames]);
     function focusedLabels(labels) {
         const focus = getContext().route.comparisonFocus;
         return Object.fromEntries(Object.entries(labels).filter(([key]) => !focus
@@ -1261,7 +1261,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             const models = [...new Set(periods.flatMap(p=>p.models.map(m=>m.model)))];
             const mix = periodReadings("Tokens by model", ["Model","Baseline","Selected","Change"], models.map(name=>{
                 const pair = periods.map(p=>p.models.find(m=>m.model===name));
-                return [name,...pair.map(m=>m?`${number(m.total)} (${counted(m.interactions,"interaction")})`:"No recorded tokens"),
+                return [modelNameNode(name),...pair.map(m=>m?`${number(m.total)} (${counted(m.interactions,"interaction")})`:"No recorded tokens"),
                     pair.every(Boolean) ? signed(pair[1].total-pair[0].total) : "—"];
             }));
             const findings = el("div"), choices = assessmentFactories.questionControls(doc, "compare", (key, choice) => {
@@ -1282,7 +1282,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const format = n => n == null ? "No reading" : number(n);
                 const name = question === "author" ? "Prompt author" : question === "model" ? "Model" : "Interactions that used";
                 const headers = [name,"Baseline","Selected","Change"];
-                const table = (caption, cells) => periodReadings(caption, headers, labels.map(label => [label, ...cells(groups.map(m=>m.get(label)))]));
+                const table = (caption, cells) => periodReadings(caption, headers, labels.map(label => [question === "model" ? modelNameNode(label) : label, ...cells(groups.map(m=>m.get(label)))]));
                 if (!labels.length) { findings.append(el("p","No matching groups in either period.")); return; }
                 if (question === "tool" && pair.some(p=>p.groups.reduce((n,g)=>n+g.eligible,0)>p.eligible))
                     findings.append(el("p","An interaction can appear under several tools.","compare-caption"));

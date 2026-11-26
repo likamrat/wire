@@ -329,8 +329,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const activityProjection = createActivityProjection(time, recordedCategories, Object.keys(results.labels("tool")));
     const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
+    const screenModelName = id => assessmentFactories.modelName?.(id, workspaceState.evidence?.modelNames) ?? { label:id, recognized:false };
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, authorship, icons: dimensionalIcons,
-        modelShareReading: assessmentFactories.modelShareReading, usageSummary: assessmentFactories.usageSummary, modelName: assessmentFactories.modelName,
+        modelShareReading: assessmentFactories.modelShareReading, usageSummary: assessmentFactories.usageSummary, modelName: screenModelName,
         createLink(kind, row) {
             const changes = Object.hasOwn(row, "nativeFilter") ? row.nativeFilter
                 : kind === "outcomes" ? workspaceState.scope.layer === "code-reference" ? { widget: "all" } : { result: row.id }
@@ -2650,9 +2651,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
         questionControls: assessmentFactories.questionControls,
-        root: $("trendsView"), api, time, ux, authorship, modelName: assessmentFactories.modelName,
+        root: $("trendsView"), api, time, ux, authorship, modelName: screenModelName,
         hiddenInteraction: id => hiddenCards.has(id),
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
+            modelNames: workspaceState.evidence?.modelNames,
             entry: trendOrigin(underlyingRoute())?.entry ?? null, get hasMicrosoftSource() { return hasMicrosoftSource(); },
             section: trendSection(underlyingRoute()),
             routeScope: trendRouteScope(underlyingRoute()),
@@ -2713,6 +2715,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
+        modelNameNode,
         hiddenInteraction: id => hiddenCards.has(id),
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, ux, search: localSearch, categories, results,
         projection: createActivityProjection(time, recordedCategories, resultKeys),
@@ -6304,7 +6307,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     // Display names only on screen; the recorded ID is one hover or focus away and stays the identity.
     function modelNameNode(id) {
         // Source details show an unrecognized ID exactly; its reading says WIRE has no display name for it.
-        const name = assessmentFactories.modelName(id), node = el("span", "model-name", name.recognized ? name.label : id);
+        const name = screenModelName(id), node = el("span", "model-name", name.label);
+        node.dataset.recordedModel = id;
         node.tabIndex = 0;
         ux.tooltip(node, name.recognized ? `${name.label}\nRecorded as ${id}` : `${name.label}\nWIRE has no display name for this recorded ID.`, { tone: "chart" });
         return node;
@@ -6821,7 +6825,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             updateRequestReportActions(); return;
         }
         const renderKey = JSON.stringify([requestIdentity(), workspaceState.evidence.revision, workspaceState.evidence.nativeRead?.revision, workspaceState.evidence.assessment?.basis, workspaceState.scope, workspaceState.route.withinServices,
-            nativeContextDateBasis(workspaceState.route.request)]);
+            nativeContextDateBasis(workspaceState.route.request), workspaceState.evidence.modelNames]);
         if (requestRenderKey === renderKey) { updateRequestReportActions(); return; }
         requestRenderKey = renderKey;
         captureReading();
@@ -6925,7 +6929,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
         const selectedOrdinals = requestContext.actionOrdinals(selectedScenario);
         assessmentFactories.usageReading(el, usageSection.body, selectedScenario, at => time.formatTime(at, workspaceState.scope.timeContext),
-            call => results.callLabel(selectedOrdinals.get(call)));
+            call => results.callLabel(selectedOrdinals.get(call)), screenModelName);
         for (const node of usageSection.body.querySelectorAll(".model-name[data-recorded-model]")) {
             node.tabIndex = 0;
             ux.tooltip(node, `${node.dataset.modelName}\nRecorded as ${node.dataset.recordedModel}`, { tone: "chart" });

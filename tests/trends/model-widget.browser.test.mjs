@@ -8,7 +8,6 @@ import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 import { privateFixture, chooseTheme, selectActivityOption, restoreLegacySearch, openAnalyzeFilters, closeAnalyzeFilters } from "../support/helpers.mjs";
 import { modelRecords, modelNames } from "./model-widget-fixture.mjs";
-import { modelDisplayName } from "../../lib/model-names.mjs";
 import { createPercentageCharts } from "../../lib/percentage-charts.mjs";
 
 const proof = process.env.WIRE_MODEL_PROOFS;
@@ -82,8 +81,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
         })));
         assert.deepEqual(Object.fromEntries(rows.map(row => [row.model, row.count])), counts);
         for (const row of rows) {
-            const name = modelDisplayName(row.model);
-            assert.equal(row.label, name.recognized ? name.label : name.label + row.model, "Screen label, never a merged or invented name");
+            assert.equal(row.label, row.model, "Without a catalog, show the recorded ID once");
             assert.equal(row.value, `${createPercentageCharts().percent(row.count, total)} (${row.count})`);
             assert.equal(row.fraction, row.count / total);
             assert.ok(Math.abs(parseFloat(row.width) - row.count / total * 100) < .0001);

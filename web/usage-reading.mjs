@@ -43,7 +43,7 @@ function toolTokenFields(call) {
     return [["Tool operation tokens",usage], ["Returned text", Number.isSafeInteger(call.returnedTextBytes) && call.returnedTextBytes >= 0
         ? textSize(call.returnedTextBytes) : "Size unavailable"]];
 }
-function usageReading(el, host, scenario, formatTime, callLabel) {
+function usageReading(el, host, scenario, formatTime, callLabel, resolveName = modelName) {
     const u = scenario?.usage;
     const tools = scenario.toolCalls ?? [], sized = tools.filter(c => c.usageContextLinked && Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0);
     if (!u) {
@@ -79,7 +79,7 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
         ...sized.map(c => ({ at: c.completedAt, label: `${callLabel(c)} · ${c.tool}`, detail: `${textSize(c.returnedTextBytes)} of returned text` }))];
     const timeline = el("ol", "usage-timeline");
     for (const step of steps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
-        const row = el("li"), label = step.model ? modelLabel(el, "strong", step.label) : el("strong", "", step.label), detail = el("span", "", step.detail);
+        const row = el("li"), label = step.model ? modelLabel(el, "strong", step.label, resolveName) : el("strong", "", step.label), detail = el("span", "", step.detail);
         const clock = el("time", "muted", formatTime(step.at)); clock.dateTime = step.at;
         row.append(label, detail, clock); timeline.append(row);
     }
@@ -95,14 +95,12 @@ function renderModelCounts(el, host, u) {
     }
     host.append(table);
 }
-// Screen display name; unrecognized IDs stay visible so unlike IDs never merge.
-function modelLabel(el, tag, id) {
-    const name = modelName ? modelName(id) : { label: id, recognized: true }, node = el(tag, "model-name", name.label);
-    if (!name.recognized) node.append(" ", el("span", "model-id", id));
+function modelLabel(el, tag, id, resolveName) {
+    const name = resolveName ? resolveName(id) : { label:id }, node = el(tag, "model-name", name.label);
     node.dataset.recordedModel = id; node.dataset.modelName = name.label;
     return node;
 }
-function modelShareReading(el, host, s, nativeCount, linkForModel) {
+function modelShareReading(el, host, s, nativeCount, linkForModel, resolveName = modelName) {
     if (!s.models.length) {
         host.append(el("p","percentage-empty",s.eligible+nativeCount ? "No model token counts available." : "No matching interactions."));
         return;
@@ -116,7 +114,7 @@ function modelShareReading(el, host, s, nativeCount, linkForModel) {
         else value.textContent = `${number(row.total)} tokens`;
         const label = linkForModel?.(row.model) ?? el("span");
         label.classList.add("percentage-label");
-        const name = modelLabel(el, "span", row.model);
+        const name = modelLabel(el, "span", row.model, resolveName);
         label.replaceChildren(...name.childNodes); label.dataset.recordedModel = row.model; label.dataset.modelName = name.dataset.modelName;
         if (linkForModel) {
             label.dataset.viewKey = `percentage:metered-model:${row.model}`;

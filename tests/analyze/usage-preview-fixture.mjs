@@ -9,7 +9,7 @@ import { createCopilotRuntimeAccess } from "../../lib/runtime-access.mjs";
 import { createProfileSource } from "../collection/source-profile-fixture.mjs";
 
 // One source installation and one independent WIRE store; all text is invented.
-export async function usagePreview(t, frontend = "react", {offline = false, paginated = false, sparse = false, measuredZero = false} = {}) {
+export async function usagePreview(t, frontend = "react", {offline = false, paginated = false, sparse = false, measuredZero = false, catalogModels = false} = {}) {
     const root = await mkdtemp(path.join(tmpdir(), "wire-token-preview-"));
     t.after(() => rm(root, {recursive:true,force:true}));
     const config = { appDbPath: path.join(root,"data.db"), sessionRoot: path.join(root,"session-state") };
@@ -30,7 +30,17 @@ export async function usagePreview(t, frontend = "react", {offline = false, pagi
         ["Review calendar",1,"user",["fetch","ask"],"gpt-4.1",[[1500,160000,38000,500]],[300,40]],
         ["Recent question",20,"user",["ask"],null,[],[80]]);
     if (measuredZero) examples.push(["Zero reading",19,"user",["fetch"],"gpt-4.1",[[0,0,0,0]],[0]]);
+    if (catalogModels) {
+        ["gpt-6-astra","gpt-6.1-sol","gpt-6.2-sol","gpt-5.6-sol","deployment-z9","no-entry","no-entry","gpt-6.2-sol"]
+            .forEach((id,i)=>{examples[i][4]=id;});
+    }
     try {
+        db.prepare("INSERT INTO app_state(key,value) VALUES(?,?)").run("copilot-available-models-v2",JSON.stringify({
+            accountId:"default",models:[{id:"gpt-6-astra",name:"Wrong account name"}],
+            scopedModels:{workspace:[{id:"gpt-6-astra",name:"GPT-6 Astra"},{id:"gpt-6.1-sol",name:"GPT-6.1 Sol"},
+                {id:"gpt-6.2-sol",name:"GPT-6.2 Sol"},{id:"gpt-5.6-sol",name:"GPT-5.6 Sol"},
+                {id:"unused-entry",name:"Unused catalog entry"},{id:"claude-sonnet-5-5",name:"Claude Sonnet 5.5"}]},
+        }));
         db.exec("UPDATE accounts SET settings_json='{}'");
         for (const [index,[title, day, actor, tools, model, calls, sizes]] of examples.entries()) {
             const id=randomUUID(), messageId=randomUUID(), interactionId=randomUUID(), receipts=[], events=[];
@@ -79,5 +89,5 @@ export async function usagePreview(t, frontend = "react", {offline = false, pagi
         githubProfile:{fetch(){throw Error("No network profile requests in the usage fixture.");}},
         evaluation:{evaluatorFactory(){throw Error("No providers in the usage fixture.");}}});
     t.after(()=>runtime.close());
-    return {context,runtime};
+    return {context,runtime,config};
 }
