@@ -185,10 +185,11 @@ path in `lib/update-runtime-docs.json` so changes to that document qualify. An
 incompatible store, launcher or canvas change must update the compatibility
 contract rather than silently treating older readers as compatible.
 
-#### Maintaining the protocol-1 canvas
+#### Maintaining the Copilot bridge
 
-The personal shim imports the checkout's real `extension.mjs`. That entry uses
-`canvas-v1/`, the frozen native source graph from
+`copilot-bridge/` supports the optional Copilot extension that connects to the
+running WIRE server. It is not a second application. The installed extension
+loads `extension.mjs`, which imports the protocol-1 modules frozen at
 `83a6040065072acdf5e8984d8450bd3b4b8cf42e`. Browser, server and collector
 changes belong in `web/` and `lib/`, **not** in these generated copies. Keeping
 the adapter at the same directory depth as `lib/` preserves its source root and

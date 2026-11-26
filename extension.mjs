@@ -1,10 +1,10 @@
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
-import { BOARD_ID } from "./canvas-v1/evidence.mjs";
-import { ANALYTICS_SCHEMA, TIME_CONTEXT_SCHEMA } from "./canvas-v1/analytics-input.mjs";
-import { createRuntimeClient } from "./canvas-v1/runtime-client.mjs";
-import { DEFAULT_RUNTIME_PORT } from "./canvas-v1/runtime-endpoint.mjs";
-import { PRODUCT_NAME, PRODUCT_DESCRIPTION } from "./canvas-v1/branding.mjs";
-import { createCopilotAccountBridge } from "./canvas-v1/copilot-account-snapshot.mjs";
+import { BOARD_ID } from "./copilot-bridge/evidence.mjs";
+import { ANALYTICS_SCHEMA, TIME_CONTEXT_SCHEMA } from "./copilot-bridge/analytics-input.mjs";
+import { createRuntimeClient } from "./copilot-bridge/runtime-client.mjs";
+import { DEFAULT_RUNTIME_PORT } from "./copilot-bridge/runtime-endpoint.mjs";
+import { PRODUCT_NAME, PRODUCT_DESCRIPTION } from "./copilot-bridge/branding.mjs";
+import { createCopilotAccountBridge } from "./copilot-bridge/copilot-account-snapshot.mjs";
 
 const panels = new Map();
 let joinedSession;

@@ -102,7 +102,7 @@ test("full WIRE clone updates on the original address and reopens the same saved
         await git(origin, "merge", "--ff-only", adapterBase);
     } else {
         const tracked = (await git(project, "ls-files", "-z", "--cached")).split("\0").filter(Boolean);
-        for (const name of tracked.filter(name => /^(?:lib|scripts|assets|web|canvas-v1)\//.test(name)
+        for (const name of tracked.filter(name => /^(?:lib|scripts|assets|web|copilot-bridge)\//.test(name)
             || [".gitignore","package.json","package-lock.json","vite.config.mjs","tsconfig.json","extension.mjs"].includes(name))) {
             const target = path.join(origin, name);
             await mkdir(path.dirname(target), { recursive: true }); await copyFile(path.join(project, name), target);
