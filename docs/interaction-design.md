@@ -407,6 +407,8 @@ Only the explicit maximize and restore controls change chart size.
 The supporting-call sheet has one scrolling body, with its title and Close
 outside that body.
 
+- Selecting a chart point keeps its tooltip clear of the **View calls** action
+  for that reading.
 - Opening a call scrubs the list, but keeps its exact identity and position
   within the authorized scope.
 - The existing contextual reader returns to the stable View evidence control.

@@ -80,14 +80,14 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         return scene.chartType === "lines" || point.column < 0
             ? scene.points.filter(other => other.index === point.index && other.amount === point.amount && other.x === point.x) : [];
     }
-    function show(point) {
+    function show(point, { pinned = false } = {}) {
         if (!canInspect() || !scene || !point || root.hidden || !root.checkVisibility()) return;
         const day = scene.data.days[point.index], value = point.value;
         const key = `${day.date}:${point.id}`;
         if (dismissed === key) return;
         dismissed = null;
         clearTimeout(closeTimer);
-        if (active?.identity === key) return;
+        if (active?.identity === key && !pinned) return;
         active?.point.node.removeAttribute("aria-describedby");
         onInspect();
         active = { identity: key, point };
@@ -489,8 +489,10 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (!point || !canInspect()) return;
         scene.lastPin = point;
         rove(point.node); point.node.focus({ preventScroll: true });
-        dismissed = null; show(point);
+        dismissed = null;
         onSelect(scene.data.days[point.index].date, point.id);
+        // Selection can reveal or resize the evidence button, even for an already-hovered point.
+        if (point.node.isConnected) show(point, { pinned: true });
     }
     root.addEventListener("click", event => {
         const point = event.detail === 0 && event.target.dataset.trendMark !== undefined ? scene?.points[Number(event.target.dataset.trendMark)] : hit(event.clientX, event.clientY, true);
