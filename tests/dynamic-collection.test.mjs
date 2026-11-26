@@ -257,6 +257,46 @@ test("history compatibility: with its own approval, an older journal without rec
     await collector.collectNow();
     assert.equal((await read()).usage?.total, 18450, "An index WIRE cannot read never clears a total it already verified");
 });
+test("history compatibility: Copilot's token records never replace a total the journal verified", async t => {
+    const app = await installation(t), id = app.session(), start = call("journal-fetch"), model = "gpt-4.1";
+    const text = "Compare the invented launch notes.", later = "Now list the invented owners.";
+    const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId: "run-a", inputTokens: 2000, outputTokens: 200 } });
+    start.data.turnId = "a1";
+    const first = [event("user.message", { messageId: "prompt-a", interactionId: "run-a", content: text, delivery: "idle" }),
+        event("assistant.turn_start", { turnId: "a1" }),
+        event("assistant.message", { apiCallId: "a-one", turnId: "a1", model, originatingMessageId: "prompt-a", toolRequests: [{ toolCallId: "journal-fetch" }] }), start,
+        event("tool.execution_complete", { toolCallId: "journal-fetch", success: true, result: { content: "INVENTED" } }), receipt("a-one"),
+        event("assistant.turn_end", { turnId: "a1" }), event("assistant.turn_start", { turnId: "a2" }),
+        event("assistant.message", { apiCallId: "a-two", turnId: "a2", model, originatingMessageId: "prompt-a", phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+        receipt("a-two"), event("assistant.turn_end", { turnId: "a2" })];
+    const base = Date.now() - 60000;
+    first.forEach((e, n) => { e.timestamp = new Date(base + n * 100).toISOString(); });
+    const file = await logFor(app, id, first);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.find(s => s.userPrompt?.text === text);
+    assert.equal((await read()).usage?.total, 4400);
+    const index = new DatabaseSync(path.join(app.root, "session-store.db"));
+    index.exec(`CREATE TABLE turns (session_id TEXT, turn_index INTEGER, user_message TEXT, assistant_response TEXT);
+            CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY, session_id TEXT, turn_index INTEGER, agent_id TEXT, model TEXT,
+                input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, created_at TEXT);`);
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?),(?,1,?,NULL)").run(id, text, "Invented answer", id, later);
+    for (const turn of ["a1", "a2"]) index.prepare("INSERT INTO assistant_usage_events (session_id,turn_index,agent_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at) VALUES (?,0,NULL,?,9000,900,0,0,?)")
+        .run(id, model, new Date(Date.parse(first.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString());
+    index.close();
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5, usageRecords: true,
+        expectedConfigVersion: (await collector.status()).configVersion });
+    const second = [event("assistant.message", { content: "x".repeat(1100 * 1024) }),
+        event("user.message", { messageId: "prompt-b", content: later, delivery: "idle" }), call("later-fetch")];
+    second.forEach((e, n) => { e.timestamp = new Date(base + 5000 + n * 100).toISOString(); });
+    await appendFile(file, second.map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const record = await read();
+    assert.equal(record.usage?.total, 4400);
+    assert.equal(record.usageBasis, undefined);
+});
 test("history compatibility: a pasted image inside an exchange does not hide its exact receipts, but an unreadable entry still does", async t => {
     for (const [kind, total] of [["session.binary_asset", 4400], ["assistant.message", null]]) {
         const app = await installation(t), id = app.session(), start = call("image-fetch");
