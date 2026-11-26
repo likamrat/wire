@@ -41,6 +41,7 @@ export const uxIconSources = Object.freeze({
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", tree: "list-tree", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",
+    "diagnostic-bundle": "package", "work-item-link": "external-link",
     "navigation-documentation": "book-open-text", "doc-link": "link", "doc-external": "external-link", "doc-image-off": "image-off",
     "doc-note": "info", "doc-tip": "lightbulb", "doc-important": "circle-alert", "doc-warning": "triangle-alert", "doc-caution": "octagon-alert",
     "doc-commit": "git-commit-horizontal", "doc-branch": "git-branch", "doc-offline": "wifi-off", "doc-copy": "copy", "doc-copied": "check", "doc-contents": "list-tree",

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 82 82" role="img" aria-labelledby="title desc" style="--wire-brand-low:#c6398d;--wire-brand-high:#d97cb4;--wire-brand-dark-low:#c6398d;--wire-brand-dark-high:#d97cb4">
+  <title id="title">WIRE</title>
+  <desc id="desc">Magenta Human Path symbol.</desc>
+  <defs>
+    <linearGradient id="human-path-upper" gradientUnits="userSpaceOnUse" x1="2301.16955" y1="-361.5106" x2="-104.23405" y2="16.375025">
+      <stop class="brand-low" stop-color="#c6398d"/>
+      <stop class="brand-high" offset="1" stop-color="#d97cb4"/>
+    </linearGradient>
+    <linearGradient id="human-path-lower" gradientUnits="userSpaceOnUse" x1="47.52265" y1="-106.886225" x2="-2859.970475" y2="6432.5408">
+      <stop class="brand-low" stop-color="#c6398d"/>
+      <stop class="brand-high" offset="1" stop-color="#d97cb4"/>
+    </linearGradient>
+    <clipPath id="human-path-boundary"><path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" clip-rule="evenodd"/></clipPath>
+  </defs>
+  <g transform="translate(0 0.61654135) scale(0.61654135)">
+    <path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" fill="url(#human-path-upper)" fill-rule="evenodd"/>
+    <path d="M109 24 C115 37 128 44 133 60 V131 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 Z" fill="url(#human-path-lower)" clip-path="url(#human-path-boundary)" fill-rule="evenodd"/>
+  </g>
+</svg>

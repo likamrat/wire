@@ -290,3 +290,47 @@ test("synthetic: privacy summary validates counts but discloses no category name
     assert.doesNotMatch(md, /PRIVATE_/);
     assert.throws(() => renderHtmlReport([], { privacy: { categories: { bad: "PRIVATE_VALUE" } } }), TypeError);
 });
+
+test("synthetic: diagnostic calls reconcile with Analyze and project only retained failure metadata", async () => {
+    const { buildDiagnosticCalls } = await import("../lib/analytics.mjs");
+    const records = [
+        scenario("legacy", [call("a", { toolSucceeded: false })], { isLegacy: true }),
+        scenario("history", [
+            call("a", { startedAt: "2026-11-02T10:00:00Z", durationMs: 40 }),
+            call("b", { startedAt: "2026-11-02T11:00:00Z", toolSucceeded: false, reportedOutcome: "failed",
+                requestArgs: { entityUrls: ["/me/messages/AAMkSECRET"], query: "private words" },
+                failureEvidence: { version: 1, reason: "error-code-recorded", code: "accessDenied", messageStatus: "text-excluded", messageSignal: "access-denial",
+                    diagnostic: { code: "accessDenied", message: "Access is denied." } },
+                resultEvidence: { statusCode: 403 } }),
+            call("c", { startedAt: "2026-11-03T09:00:00Z", apiResults: [{ statusCode: 200 }, { statusCode: 404, errorCode: "itemNotFound" }] }),
+            call("d", { tool: "workiq-ask", startedAt: "2026-11-05T09:00:00Z", toolSucceeded: null, reportedOutcome: "unknown" }),
+        ]),
+    ];
+    const all = buildDiagnosticCalls(records);
+    assert.equal(all.totals.calls, buildAnalytics(records, { filters: { scope: "all" } }).totals.count);
+    assert.deepEqual(all.totals, { calls: 4, hostFailures: 1, unknown: 1 });
+    assert.equal(all.coverage.complete, true);
+    const failed = all.records.find(record => record.call_id === "b");
+    assert.equal(failed.outcome, "fail");
+    assert.deepEqual(failed.error, { code: "accessDenied", subcode: "access-denial", statusCode: 403, message: "Access is denied." });
+    assert.doesNotMatch(JSON.stringify(all.records), /private words|AAMkSECRET/);
+    assert.deepEqual(all.records.find(record => record.call_id === "c").result, { results: [{ statusCode: 200 }, { statusCode: 404, error: { code: "itemNotFound" } }] });
+    const window = buildDiagnosticCalls(records, { from: "2026-11-02T00:00:00Z", to: "2026-11-04T00:00:00Z" });
+    assert.deepEqual(window.records.map(record => record.call_id), ["a", "b", "c"]);
+});
+
+test("synthetic: diagnostic causes split one generic code by its screened reason, without changing retained signals", async () => {
+    const { buildDiagnosticCalls } = await import("../lib/analytics.mjs");
+    const failed = (id, message, extras = {}) => call(id, { startedAt: "2026-11-02T10:00:00Z", toolSucceeded: false, reportedOutcome: "failed",
+        failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded", diagnostic: { code: "failure", message }, ...extras } });
+    const records = [scenario("history", [
+        failed("a", "MCP tool catalog changed before tool could be invoked: MCP OAuth challenge required (HTTP 401)"),
+        failed("b", "MCP request failed: Transport send error: error sending request for url ([redacted])"),
+        failed("c", "Something unrecognised"),
+        failed("d", "MCP error -32001: Request timed out", { messageSignal: "access-denial" }),
+    ])];
+    const causes = Object.fromEntries(buildDiagnosticCalls(records).records.map(record => [record.call_id, record.error.subcode ?? null]));
+    assert.deepEqual(causes, { a: "sign-in-required", b: "connection-error", c: null, d: "access-denial" });
+    assert.equal(records[0].toolCalls[0].failureEvidence.messageSignal, undefined);
+});
+

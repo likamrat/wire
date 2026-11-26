@@ -540,6 +540,34 @@ name. Older comparisons between saved reports stay readable there, even if a
 source report is later deleted. Compare works on retained activity periods; it
 doesn't compare two saved report files.
 
+## Diagnostic bundles
+
+When Analyze shows Work IQ tool failures, **Package these failures** in
+**Tool call results** prepares an MCP diagnostic bundle for the current dates,
+tools and chat. Other Analyze filters don't narrow it; the preview names any
+that are set. The preview lists calls, failures and each failure group with
+its tool, API path, error code, HTTP status and recorded reason, then what the
+bundle can't show. Nothing is written until **Save bundle**.
+
+**Complete** scope is offered only when WIRE includes every call in the view;
+otherwise the bundle is a **Sample**. Either way WIRE states counts, not a
+failure rate, because it doesn't keep the replies of successful calls.
+**Internal** (the default) keeps identifiers useful for matching calls on the
+server; **External** removes more of them, which isn't approval to share.
+Save writes a zip and its `report.md` to the `diagnostics` folder in WIRE's
+data folder. Nothing is sent or uploaded.
+
+Saved bundles appear under **Diagnostic bundles** in **Saved library**. Opening
+one first checks that the zip and `report.md` are unchanged since Save and
+refuses them otherwise. The reader shows the counts, failure groups,
+limitations and `report.md`. Audits happen in chat; when one records a
+verdict or work item for a group, the reader shows it beside that group.
+**Delete bundle** removes the zip, `report.md` and recorded audit results
+after a confirmation, and leaves saved reports, drafts and activity alone.
+Bundles saved by earlier WIRE plugin builds stay in a `diagnostics` folder
+beside the data folder; WIRE doesn't list them, but the agent can still check
+them by path.
+
 ## Remove a saved copy
 
 Open **Saved library** and choose **Delete report** or **Delete saved

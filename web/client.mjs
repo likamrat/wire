@@ -614,7 +614,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return fresh.nativeReceived(fresh.snapshot().token, receipt);
     }
     const sessionJourney = createSessionJourney();
-    let reportEntry = null, reportJourney, savedArtifactUI, artifactRefreshRequired = false, contextReturnKey, savedReportView, preparedReportReader, preparedFileInspection;
+    let reportEntry = null, reportJourney, savedArtifactUI, diagnosticBundlesUI, artifactRefreshRequired = false, contextReturnKey, savedReportView, preparedReportReader, preparedFileInspection;
     let savedListOwner;
     let pendingReportReading = null;
     let periodReport = null, periodReportInvalid = false;
@@ -5685,6 +5685,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             + (chartType === "time" ? native?.timeSeries.points.length ?? 0 : native?.grouping.groups.length ?? 0);
         $("chartDataTitle").textContent = `${$("chartTitle").textContent} (${count(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
         percentages.update(workspaceState.analytics, { ...workspaceState.scope, search: Boolean(search), withinServices: workspaceState.route.withinServices?.split(",") || [] }, slice.scenarios, native);
+        publishDiagnosticPackage(layer, native);
         const breakdown = percentages.referenceModel();
         const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
         const calendar = usageCalendar(), usageHost = $("analyzeUsageContent");
@@ -5698,6 +5699,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : summary.eligible ? `No verified token totals for the ${count(summary.eligible)} matching ${summary.eligible===1?"interaction":"interactions"}.` : "No matching interactions."));
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
+    }
+    // Diagnostic bundles use the dates, tools and chat of this view; other restrictions are named, not applied.
+    function publishDiagnosticPackage(layer, native) {
+        const filters = workspaceState.scope.filters, failures = workspaceState.analytics.resultFacet?.totals?.failure ?? 0;
+        const github = !filters.sources?.length || filters.sources.includes("github-copilot");
+        if (layer !== "tool" || !github || workspaceState.stale || !failures) { diagnosticBundlesUI?.analyze(null); return; }
+        const narrowedBy = [
+            filters.projectIds?.length && "project", filters.workloads?.length && "category", filters.services?.length && "service",
+            filters.outcomes?.length && "outcome", filters.promptAuthors?.length && "prompt author", filters.endpoints?.length && "path",
+            (search.trim() || semanticQuery !== null) && "search", native && "Microsoft activity",
+        ].filter(Boolean);
+        diagnosticBundlesUI?.analyze({ failures, timeContext: workspaceState.scope.timeContext, narrowedBy,
+            filters: Object.fromEntries(Object.entries({ from: filters.from, to: filters.to, tools: filters.tools, sourceSessionIds: filters.sourceSessionIds })
+                .filter(([, value]) => value !== undefined && !(Array.isArray(value) && !value.length))) });
     }
     function renderTime() {
         const series = workspaceState.analytics.timeSeries;
@@ -8448,6 +8463,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (!active && savedListOwner) retireSavedList();
         if (library) $("reportCreatePanel").hidden = true;
+        diagnosticBundlesUI?.library(library && !$("savedReportsPanel").hidden && Boolean(api.publicationToken()));
     }
     function hasReportDraftChoices() {
         return reportPreset || selected.size || periodReport || reportBaseExplicit || reportRebuildFrom
@@ -11834,6 +11850,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return load({ background: true });
         },
     });
+    diagnosticBundlesUI = assessmentFactories.createDiagnosticBundles({
+        api, ux, time, viewerTime: () => viewerTime, savedFilePreview: assessmentFactories.savedFilePreview,
+        openLibrary: bundleId => {
+            navigate(routeFor("reports", { task: "library", order: undefined, request: undefined }));
+            requestAnimationFrame(() => { if (workspaceState.route.view === "reports" && workspaceState.route.task === "library") diagnosticBundlesUI.openBundle(bundleId); });
+        },
+    });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
     assessmentFactories.bindPageDefaults(pageDefaults, () => selectControls?.sync());
     const optionFinders = {
@@ -11952,7 +11975,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     ];
     function accessOwners() {
         return [...(frontendActivity ? [frontendActivity] : []), firstConnection, liveSearchUI, chartReferenceUI, periodComparisonUI, trendsUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
-            draft, reportJourney, reportExperience, reportSaveWarning, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
+            draft, reportJourney, reportExperience, reportSaveWarning, deletionUI, recollectionUI, savedArtifactUI, ...(diagnosticBundlesUI ? [diagnosticBundlesUI] : []), collectionSettings, sourceSettings, recorderUI,
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {

@@ -180,6 +180,10 @@ On an Analyze card:
 Open the reader for the full retained wording, code and status. A missing
 completion doesn't establish that anyone cancelled the call.
 
+When the view includes failed calls, **Package these failures** below the
+Tool call results donut previews and saves a local diagnostic bundle. See
+[Diagnostic bundles](reporting.md#diagnostic-bundles).
+
 ### Filters and dates
 
 Analyze Filters, Trends, Reports and Compare share the same date choices.
@@ -732,7 +736,8 @@ In **Reports**, choose a report under **New report** to open its preview.
 **Token usage** follows **Errors & failures**. Use **Custom report** to change
 the setup first, or open a name in **Drafts** and choose **Prepare preview**.
 Preparing does not save files. Read the finding and its examples before choosing
-**Save report**. Open an existing report by name in **Saved library**.
+**Save report**. Open an existing report by name in **Saved library**. Diagnostic bundles saved from Analyze
+are listed there too, below the reports.
 
 [Create and read reports](reporting.md) covers scope, text masking, file
 inspection, and what happens when you delete a draft or a saved copy.

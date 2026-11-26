@@ -838,6 +838,13 @@ in visual and keyboard order. Privacy and file actions keep their separate
 meaning. Rows share column widths; narrow layouts stack identity/dates, text
 treatment and actions without shortening their contents.
 
+Saved library lists diagnostic bundles in their own section below the reports,
+with window, tools, calls and failures (percentage first) and saved time.
+Opening one reads it in place after the same verify-or-refuse check; **Back to
+saved reports** returns focus to its row. In Analyze, **Package these
+failures** sits in Tool call results and opens a modal preview; Save is the
+only write.
+
 ### Returning to an unfinished report
 
 Distinguish named drafts from prepared previews. A named draft keeps a

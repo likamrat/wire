@@ -341,3 +341,46 @@ test("repository extension retains one existing joined handle and exposes an emp
     }
     assert.equal(fixture.calls.length, calls);
 });
+
+test("plugin extension retains one existing joined handle and exposes empty-input read tools without opening WIRE", async t => {
+    const fixture = host();
+    fixture.session.sessionId = "synthetic-existing-session";
+    const invocation = { sessionId: fixture.session.sessionId };
+    let config, joins = 0;
+    const key = "__wireSyntheticPluginSnapshotSdk";
+    globalThis[key] = {
+        joinSession: async value => { config = value; joins++; return fixture.session; },
+        createCanvas: value => value,
+        CanvasError: class extends Error { constructor(code, message) { super(message); this.code = code; } },
+    };
+    const module = `const sdk = globalThis.${key}; export const joinSession = sdk.joinSession, createCanvas = sdk.createCanvas, CanvasError = sdk.CanvasError;`;
+    const hooks = registerHooks({ resolve(specifier, context, next) {
+        if (specifier === "@github/copilot-sdk/extension") return { url: `data:text/javascript,${encodeURIComponent(module)}`, shortCircuit: true };
+        return next(specifier, context);
+    } });
+    t.after(() => { hooks.deregister(); delete globalThis[key]; });
+    await import("../lib/copilot-extension.mjs?snapshot-test");
+    assert.equal(joins, 1);
+    assert.equal(config.requestedEnvironmentVariables, undefined);
+    assert.equal(fixture.calls.length, 0, "No metadata read merely from extension initialization");
+    const actions = config.canvases.definitions[0].actions;
+    assert.deepEqual(config.tools.definitions.map(value => value.name).sort(),
+        ["wire_analytics", "wire_diagnostic_bundle", "wire_diagnostic_bundles", "wire_diagnostic_calls", "wire_github_account_snapshot", "wire_inspect_bundle",
+            "wire_record_audit_result", "wire_search", "wire_status"]);
+    const tool = config.tools.definitions.find(value => value.name === "wire_github_account_snapshot");
+    assert.ok(tool);
+    assert.equal(actions.some(value => value.name === "get_state"), true);
+    assert.deepEqual(tool.parameters.properties, {});
+    for (const value of [undefined, {}, { sessionId: "synthetic-wrong-session" }]) {
+        assert.equal((await tool.handler({}, value)).resultType, "rejected");
+    }
+    assert.equal(fixture.calls.length, 0);
+    const result = await tool.handler({}, invocation);
+    assert.equal(result.resultType, "success");
+    assert.equal(JSON.parse(result.textResultForLlm).state, "observed");
+    const calls = fixture.calls.length;
+    for (const input of [null, undefined, { sessionId: "different" }, { login: "arbitrary" }, { url: "http://127.0.0.1" }, [], "bad"]) {
+        assert.equal((await tool.handler(input, invocation)).resultType, "rejected");
+    }
+    assert.equal(fixture.calls.length, calls);
+});

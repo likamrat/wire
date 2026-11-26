@@ -19,6 +19,6 @@ export {
     LuMessagesSquare, LuMinimize2, LuMinus, LuMoon, LuNetwork, LuNotebook, LuPalette, LuPanelLeft,
     LuPanelRightClose, LuPanelRightOpen, LuPanelsTopLeft, LuPlug, LuPlus, LuRefreshCw, LuRotateCcw,
     LuScale, LuSearch, LuSettings, LuShield, LuSlidersHorizontal, LuSun, LuTriangleAlert,
-    LuUnfoldVertical, LuUnplug, LuUserRound, LuUsersRound, LuWorkflow, LuWrench, LuX,
+    LuUnfoldVertical, LuUnplug, LuPackage, LuUserRound, LuUsersRound, LuWorkflow, LuWrench, LuX,
     LuBookOpenText, LuExternalLink, LuImageOff, LuLightbulb, LuCircleAlert, LuOctagonAlert, LuGitBranch, LuGitCommitHorizontal, LuWifiOff,
 } from "react-icons/lu";

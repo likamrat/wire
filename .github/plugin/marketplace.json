@@ -1,0 +1,17 @@
+{
+  "name": "wire",
+  "owner": {
+    "name": "likamrat"
+  },
+  "metadata": {
+    "description": "Install WIRE in the GitHub Copilot app."
+  },
+  "plugins": [
+    {
+      "name": "wire",
+      "version": "0.1.0",
+      "description": "WIRE (Work IQ Request Explorer): inspect recorded Work IQ activity and prepare reviewed product feedback reports.",
+      "source": "./plugin"
+    }
+  ]
+}

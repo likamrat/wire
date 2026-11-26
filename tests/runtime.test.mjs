@@ -377,3 +377,56 @@ test("network loss is classified consistently at the first read, renewal and ren
         } finally { globalThis.fetch = nativeFetch; }
     }
 });
+
+test("plugin canvas binds its selected contributor runtime; no implicit actions, retargeting or fallback", async t => {
+    const { createCopilotRuntimeAccess } = await import("../lib/runtime-access.mjs");
+    const dir = await mkdtemp(path.join(os.tmpdir(), "wire-canvas-owned-")), ctx = { dataDir: dir };
+    let access;
+    const runtime = await startServer(ctx, createExportController(ctx), { port: 0, collector: { timers: false },
+        createAccess: async () => access = await createCopilotRuntimeAccess(ctx) });
+    t.after(async () => { await runtime.close(); await access.close(); await rm(dir, { recursive: true, force: true }); });
+    const origin = new URL(runtime.url).origin, port = Number(new URL(origin).port), key = `wireCanvasFixture_${randomUUID()}`;
+    const sdk = `export class CanvasError extends Error {
+        constructor(code, message) { super(message); this.code = code; }
+    }
+    export const createCanvas = value => value;
+    export const joinSession = async value => { globalThis[${JSON.stringify(key)}] = value; return {}; };`;
+    const entry = new URL("../lib/copilot-extension.mjs", import.meta.url);
+    const hooks = registerHooks({
+        resolve(specifier, context, next) {
+            if (context.parentURL?.startsWith(entry.href)) {
+                const source = specifier === "@github/copilot-sdk/extension" ? sdk : null;
+                if (source) return { url: "data:text/javascript," + encodeURIComponent(source), shortCircuit: true };
+            }
+            return next(specifier, context);
+        },
+    });
+    t.after(() => { hooks.deregister(); delete globalThis[key]; });
+    await import(entry.href + "?fixture=" + randomUUID());
+    const canvas = globalThis[key].canvases.definitions[0];
+    const calls = [];
+    t.mock.method(globalThis, "fetch", (url, options) => {
+        assert.equal(new URL(url).origin, origin, "No request may reach the default or another store");
+        calls.push(new URL(url).pathname);
+        return nativeFetch(url, options);
+    });
+    const input = { boardId: "workiq-evidence-board-v1", runtimePort: port };
+    const opened = await canvas.open({ instanceId: "registered-fixture", input });
+    assert.equal(opened.url, runtime.url);
+    assert.equal((await canvas.open({ instanceId: "registered-fixture" })).url, runtime.url);
+    const summary = canvas.actions.find(action => action.name === "get_summary");
+    await summary.handler({ instanceId: "registered-fixture", actionName: "get_summary", input: {} });
+    await assert.rejects(canvas.open({ instanceId: "registered-fixture", input: { ...input, runtimePort: port === 50001 ? 50002 : 50001 } }),
+        { code: "runtime_changed" });
+    await canvas.onClose({ instanceId: "registered-fixture" });
+    await assert.rejects(summary.handler({ instanceId: "registered-fixture", actionName: "get_summary", input: {} }), /open/i);
+    // Each open first probes for the runtime it will use; the panel binding then reads health again.
+    assert.deepEqual(calls, ["/health", "/health", "/api/session", "/health", "/health", "/api/canvas", "/api/session/release"]);
+    assert.equal(canvas.actions.some(action => ["refresh_history", "record_graph_metadata"].includes(action.name)), false);
+    t.mock.method(globalThis, "fetch", (url, options) => url === origin + "/api/session"
+        ? Promise.resolve(Response.json({ code: "WIRE_CLIENT_UPDATE_REQUIRED",
+            error: "Update and reload the WIRE canvas extension. No panel was opened." }, { status: 409 }))
+        : nativeFetch(url, options));
+    await assert.rejects(canvas.open({ instanceId: "incompatible-fixture", input }),
+        error => error.code === "runtime_update_required" && /update and reload/i.test(error.message));
+});

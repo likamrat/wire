@@ -1,8 +1,9 @@
 # Development
 
-WIRE runs as a local Node server with a browser interface. Start with the
-[README](../README.md#getting-started) to clone and install it. This guide covers working
-on the source, checking a change and troubleshooting a local installation.
+WIRE runs as a local Node server with a browser interface. Most people install
+it as a GitHub Copilot app plugin; see the [README](../README.md#getting-started).
+This guide covers working on the source, building the plugin, checking a change
+and troubleshooting a local installation.
 
 **Contents**
 
@@ -39,6 +40,10 @@ Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
 that terminal to stop WIRE; closing the browser tab leaves it running.
 
 ### Updating WIRE
+
+If you installed the Copilot app plugin, run `copilot plugin update wire`, then
+reload extensions or start a new chat. The rest of this section applies to a
+standalone `npm start` installation.
 
 On Windows or WSL, in-app updates need a clean standalone clone of the official
 WIRE repository on `main`, with the updater already included. Use `npm start`
@@ -443,6 +448,44 @@ To check **a pushed branch** before merging:
    branch preview doesn't install code. The installed guides change when you
    [update WIRE](#when-wire-offers-an-update) to a build that includes the edit.
 
+## Build the Copilot app plugin
+
+The plugin in `plugin/` is generated and committed, because plugin installs copy
+the repository folder as is. It contains one bundled `extension.mjs` (esbuild),
+the built browser client, PDF.js files, assets and the `wire` skill. Runtime
+dependencies are bundled; Playwright is contributor-only and never shipped.
+
+```text
+npm run build:plugin   # regenerate plugin/ and .github/plugin/marketplace.json
+npm run check:plugin   # fail if the committed plugin is out of date
+```
+
+Run `npm run build:plugin` and commit the result with any change to `lib/`,
+`web/`, `assets/` or `plugin/skills/`. To try it locally, run
+`copilot plugin marketplace add .` and `copilot plugin install wire@wire` in
+this checkout; it loads live from `plugin/`, so rebuild and reload extensions
+after each change.
+
+Inside the app, WIRE runs in the extension process on the app's embedded Node.
+The first canvas open or WIRE tool call connects to a compatible WIRE on port
+4000, or starts one with the normal Copilot-only startup and data folder. Other
+Copilot sessions reuse that runtime; it stops when its owning session's
+extension stops. The embedded runtime can't fork Node children, so Search
+reports saved PDF text as unavailable there. When the plugin is updated, the
+extension that started WIRE stops it within about 15 seconds and from then on
+only connects to a WIRE started by an updated extension. Reload extensions or
+start a new chat to load the new version.
+
+The `wire-diagnostics` and `wire-failure-audit` skills use the MCP diagnostic
+engine in `lib/mcp-diagnostics/`, a dependency-free port of the Python
+`mcp-diagnostic-bundle` and `mcp-failure-audit` scripts. Cluster IDs,
+redaction and bundle bytes match the Python reference;
+`tests/mcp-diagnostics-parity.test.mjs` checks this when `python3` and those
+skills are installed. `get_diagnostic_calls` projects only retained,
+sanitized call metadata. `lib/diagnostic-bundles.mjs` owns saved bundles for
+both the canvas and the agent tools: preview, save, list, verified open,
+delete and audit results, in `diagnostics/` inside the WIRE data folder.
+
 ## Check a change
 
 Run the syntax check and the tests for the behavior you changed. For example,
@@ -657,16 +700,12 @@ installation or browser checks. `npm test` doesn't include it.
 
 ## PDF and browser tools
 
-PDF generation uses the pinned Playwright runtime dependency and a local
-Chromium browser:
-
-```text
-npx playwright install chromium
-```
-
-This is an optional browser download. HTML, JSON and Markdown don't need it. If
-Chromium is unavailable, install it, or deselect PDF and prepare the report
-again.
+PDF generation uses the installed Microsoft Edge or Google Chrome, run headless
+with page scripts and all network requests blocked. Set `WIRE_PDF_BROWSER` to
+choose a specific Chromium-based executable. Without one, a contributor checkout
+falls back to Playwright's Chromium (`npx playwright install chromium`).
+HTML, JSON and Markdown do not need a browser. If none is available, install one
+or deselect PDF and prepare the report again.
 
 Saved-PDF reading uses PDF.js locally and doesn't need Chromium. It reads the
 text layer, not OCR; no remote conversion service is used.

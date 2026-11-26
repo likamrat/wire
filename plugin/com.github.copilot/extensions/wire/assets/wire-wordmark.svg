@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 62 500 158" role="img" aria-labelledby="title desc">
+  <title id="title">WIRE - Work IQ Request Explorer</title>
+  <desc id="desc">The red cable forms W, passes behind I and through R, and completes the tilted E's middle bar with exposed copper tips.</desc>
+  <defs>
+    <clipPath id="r-emergence"><rect x="319" y="62" width="220" height="165"/></clipPath>
+    
+  </defs>
+  <g id="mark" fill="none" stroke-linecap="butt" stroke-linejoin="round">
+    <path d="M47 80 L74 180 C79 198 89 199 97 181 L124 117 C128 108 133 108 137 118 L164 183 C171 201 182 198 187 180 L214 96 C220 78 231 84 241 103 C250 122 263 128 283 122 C298 117 307 116 322 120 C345 126 350 151 370 159 C395 169 410 137.55 437.818 140.475 L468.549 143.705" stroke="var(--outline, #292b29)" stroke-width="25"/>
+    <path d="M47 80 L74 180 C79 198 89 199 97 181 L124 117 C128 108 133 108 137 118 L164 183 C171 201 182 198 187 180 L214 96 C220 78 231 84 241 103 C250 122 263 128 283 122 C298 117 307 116 322 120 C345 126 350 151 370 159 C395 169 410 137.55 437.818 140.475 L468.549 143.705" stroke="var(--cable, #e64e44)" stroke-width="19"/>
+  </g>
+  <path id="flat-end" transform="translate(47 80) rotate(-15.109575)" d="M-12.5 0 H12.5 V2.6 H-12.5 Z" fill="var(--outline, #292b29)"/>
+  <g id="lettering" fill="none" stroke="var(--wordmark-ink, #1b2d45)" stroke-width="24" stroke-linecap="butt" stroke-linejoin="round">
+    <path id="letter-i" d="M260 78 V201"/>
+    <path id="letter-r" d="M305 201 V90 H346 C368 90 382 101 382 122 C382 143 368 156 346 156 H305 M346 156 L378 194"/>
+  </g>
+  <g id="r-front" clip-path="url(#r-emergence)" fill="none" stroke-linecap="butt" stroke-linejoin="round">
+    <path d="M214 96 C220 78 231 84 241 103 C250 122 263 128 283 122 C298 117 307 116 322 120 C345 126 350 151 370 159 C395 169 410 137.55 437.818 140.475 L468.549 143.705" stroke="var(--outline, #292b29)" stroke-width="25"/>
+    <path d="M214 96 C220 78 231 84 241 103 C250 122 263 128 283 122 C298 117 307 116 322 120 C345 126 350 151 370 159 C395 169 410 137.55 437.818 140.475 L468.549 143.705" stroke="var(--cable, #e64e44)" stroke-width="19"/>
+  </g>
+  <g fill="none" stroke="var(--wordmark-ink, #1b2d45)" stroke-width="24" stroke-linecap="butt" stroke-linejoin="round">
+    <path id="letter-e" transform="translate(12 0) rotate(6 450 140)" d="M426 201 V90 H489 M426 189 H489"/>
+  </g>
+  <g id="right-exposed-end" transform="translate(468.549 143.705) rotate(96)">
+    <ellipse rx="12" ry="4.5" fill="var(--cable, #e64e44)" stroke="var(--edge, #292b29)" stroke-width="1.8"/>
+    <ellipse rx="8.5" ry="2.8" fill="var(--edge, #292b29)"/>
+    <g transform="scale(1 .65)" stroke-linecap="butt">
+      <path d="M-5 -20 L-6.1 -27.5 M0 -27 L-.3 -34 M5 -23 L5.5 -29.5" fill="none" stroke="var(--copper, #bb7950)" stroke-width="3"/>
+      <path d="M-5.8 -20 L-6.8 -27.5 M-4.2 -20 L-5.2 -27 M-.8 -27 L-1.1 -34 M.8 -27 L.5 -33.4 M4.2 -23 L4.7 -29.5 M5.8 -23 L6.3 -29"
+        fill="none" stroke="var(--strand, #704936)" stroke-width=".45"/>
+      <path d="M-5 1 C-5 -7 -4 -13 -5 -20" fill="none" stroke="var(--edge, #292b29)" stroke-width="5.8"/>
+      <path d="M-5 1 C-5 -7 -4 -13 -5 -20" fill="none" stroke="var(--green, #639979)" stroke-width="4.2"/>
+      <path d="M0 0 C1 -11 -.2 -18 0 -27" fill="none" stroke="var(--edge, #292b29)" stroke-width="5.8"/>
+      <path d="M0 0 C1 -11 -.2 -18 0 -27" fill="none" stroke="var(--ivory, #f1efe5)" stroke-width="4.2"/>
+      <path d="M5 1 C6 -8 4.7 -16 5 -23" fill="none" stroke="var(--edge, #292b29)" stroke-width="5.8"/>
+      <path d="M5 1 C6 -8 4.7 -16 5 -23" fill="none" stroke="var(--gold, #dfb94e)" stroke-width="4.2"/>
+    </g>
+    <path d="M-11.5 .8 C-8 6.2 8 6.2 11.5 .8" fill="none" stroke="var(--edge, #292b29)" stroke-width="2"/>
+  </g>
+</svg>
