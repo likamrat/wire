@@ -127,6 +127,8 @@ The time chart, tool results, token usage, four breakdowns and Interactions can
 each move in **Settings > Analyze**. The original layout is the default.
 
 - Follow the chosen order in both the painted layout and keyboard navigation.
+- In a custom layout, wide screens keep each breakdown in the left or right
+  column shown in the preview. Narrow screens stack them in the same order.
 - The time chart, tool results, token usage and Interactions each occupy a full
   row, even after reordering.
 - In the Settings editor, pairing or separating charts changes the miniature

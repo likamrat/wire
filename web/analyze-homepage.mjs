@@ -114,7 +114,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
         if (signature === applied) return;
         for (const { node, marker } of slots.values()) {
             move(marker.parentNode, node, marker);
-            marker.remove(); node.removeAttribute("data-home-section"); node.removeAttribute("data-full-row");
+            marker.remove(); node.removeAttribute("data-home-section"); node.style.removeProperty("--home-column");
         }
         slots.clear(); grid.remove(); delete dashboard.dataset.customOrder;
         if (signature && !custom) {
@@ -134,9 +134,9 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
                 node.dataset.homeSection = key;
             }
             dashboard.append(grid); dashboard.dataset.customOrder = "";
-            for (const row of rowsFor(order)) for (const key of row) {
+            for (const row of rowsFor(order)) for (const [column, key] of row.entries()) {
                 const { node } = slots.get(key);
-                node.toggleAttribute("data-full-row", row.length === 1);
+                node.style.setProperty("--home-column", row.length === 1 ? "1 / -1" : String(column + 1));
                 move(grid, node);
             }
         }

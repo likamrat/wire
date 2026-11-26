@@ -61,13 +61,15 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard[data-custom-order]:not([hidden]) {display:block!important}
 .analyze-dashboard[data-custom-order]>.analyze-chart-grid,.analyze-dashboard[data-custom-order]>#percentageCharts {display:none!important}
 .analyze-ordered-widgets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
-.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto;min-width:0;margin:0}
+.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:var(--home-column);grid-row:auto;min-width:0;margin:0}
 #homeView .analyze-ordered-widgets>#activityView {margin:0}
 .analyze-ordered-widgets[data-dashboard-layout=packed],#frontendBreakdowns .percentage-panels[data-dashboard-layout=packed] {grid-auto-rows:1px;row-gap:0}
-.analyze-dashboard .analyze-ordered-widgets>[data-full-row] {grid-column:1/-1}
 .analyze-dashboard .analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary,.percentage-card) {border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
 .analyze-ordered-widgets>.percentage-card:not(.analyze-usage) {padding:var(--widget-heading-inset) 16px 16px;background:var(--paper);container:breakdown-card / inline-size}
-@container analyze-view (max-width:60rem){.analyze-ordered-widgets {grid-template-columns:minmax(0,1fr)}}
+@container analyze-view (max-width:60rem){
+ .analyze-ordered-widgets {grid-template-columns:minmax(0,1fr)}
+ .analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:1}
+}
 @media(hover:hover) and (pointer:fine) {
     body.analyze-reading #activityView #activityList .activity-card:hover {background:color-mix(in srgb,var(--accent) 6%,var(--paper))}
 }
