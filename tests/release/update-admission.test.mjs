@@ -1,14 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { request } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { privateFixture } from "../support/helpers.mjs";
+import { createCopilotRuntimeAccess } from "../../lib/runtime-access.mjs";
+import { createProfileSource } from "../collection/source-profile-fixture.mjs";
 
-async function managedFixture(t, options) {
-    const { context } = await privateFixture(t);
+async function managedFixture(t, { copilotOnly = false, ...options } = {}) {
+    const { context, root } = await privateFixture(t);
     const channel = Object.assign(new EventEmitter(), { connected: true,
         env: { WIRE_UPDATE_LAUNCHER: "1", WIRE_UPDATE_BUILD: "0".repeat(40) } });
     let final, calls = [];
@@ -17,9 +19,10 @@ async function managedFixture(t, options) {
             calls.push(msg.request);
             const value = msg.request.action === "status" ? { phase: "available", installed: "0".repeat(40), candidate: "1".repeat(40) } : { phase: "preparing" };
             queueMicrotask(() => channel.emit("message", { type: "wire-update-response", id: msg.id, value }));
-        } else final = msg;
+        } else { final = msg; channel.emit("launcher-reply", msg); }
     };
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, updateChannel: channel, ...options });
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, updateChannel: channel,
+        ...(copilotOnly ? { createAccess: () => createCopilotRuntimeAccess(context) } : {}), ...options });
     t.after(async () => { const stopped = runtime.close(); runtime.server.closeIdleConnections(); await stopped; });
     const origin = new URL(runtime.url).origin;
     const page = async () => {
@@ -32,8 +35,34 @@ async function managedFixture(t, options) {
     }, body: JSON.stringify(body) });
     const apply = cap => post("/api/app-update", { action: "apply", candidate: "1".repeat(40) }, cap);
     const prepare = () => { channel.emit("message", { type: "wire-update-quiesce", id: "fixture" }); return final; };
-    return { page, post, apply, prepare, calls, origin, runtime, channel };
+    return { page, post, apply, prepare, calls, origin, runtime, channel, root };
 }
+
+for (const read of [true, false]) test(`final update handoff ${read ? "drains a finishing authorized status read" : "refuses an active authorized collection change"}`, { timeout: 10000 }, async t => {
+    const { page, post, apply, prepare, runtime, channel, root } = await managedFixture(t, { copilotOnly: true });
+    const { db, appDbPath, sessionRoot } = await createProfileSource(root); db.close();
+    const cap = await page();
+    const config = await post("/api/collection/configure", { appDbPath, sessionRoot, approved: true, enabled: false, windowDays: 30, pollSeconds: 30 }, cap);
+    assert.equal(config.status, 200);
+    const applying = await apply(cap);
+    assert.equal(applying.status, 200); assert.equal((await applying.json()).phase, "preparing");
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    const method = read ? "status" : "setEnabled", original = runtime.collector[method];
+    t.mock.method(runtime.collector, method, async function (...args) {
+        entered.resolve(); await release.promise; return original.apply(this, args);
+    }, { times: 1 });
+    const pending = read ? post("/api/collection/status", {}, cap) : post("/api/collection/enabled", { enabled: true }, cap);
+    try {
+        await Promise.race([entered.promise, pending.then(response => assert.fail(`Collection request returned ${response.status} before entering the collector`))]);
+        const answer = once(channel, "launcher-reply");
+        prepare();
+        if (read) release.resolve();
+        const [decision] = await answer;
+        assert.equal(decision.ok, read);
+        if (!read) assert.equal(decision.reason, "collection-change");
+    } finally { release.resolve(); assert.equal((await pending).status, 200); }
+    assert.equal((await fetch(new URL("/reports", runtime.url))).status, read ? 409 : 200);
+});
 
 test("expiry withdraws data access without retiring a suspended browser's update blocker", { timeout: 18000 }, async t => {
     const { page, post, apply } = await managedFixture(t, { sessionTtlMs: 100 });
