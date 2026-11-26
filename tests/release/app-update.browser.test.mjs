@@ -478,8 +478,10 @@ test("the offer glides above the account without moving General or taking focus;
 test("unfinished settings and report selection block activation from the normal React shell", async t => {
     const { page, actions, releases } = await workspace(t);
     const apply = page.locator("#appUpdateApply");
-    await page.locator('#settingsCategoryNav [data-category="source-access"]').click();
-    await page.locator("#reviewSource,#editSource").filter({ visible: true }).first().click();
+    await page.locator('#settingsCategoryNav [data-category="connection"]').click();
+    // An unsaved source edit is the unfinished Settings change.
+    const sessions = page.locator("#sourceSessions");
+    await sessions.fill(await sessions.inputValue() + "-unsaved");
     await apply.click();
     await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
     await expect(page.locator("#appUpdateDetail")).toContainText("Settings changes");
@@ -765,8 +767,9 @@ test("expired original permission on bfcache restore cannot release an unverifie
 
 test("a suspended draft is not certified clean by later status or by a reset of the visible editor", async t => {
     const { page, releases, actions } = await workspace(t);
-    await page.locator('#settingsCategoryNav [data-category="source-access"]').click();
-    await page.locator("#editSource").click();
+    await page.locator('#settingsCategoryNav [data-category="connection"]').click();
+    const sessions = page.locator("#sourceSessions");
+    await sessions.fill(await sessions.inputValue() + "-unsaved");
     await page.evaluate(() => {
         window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
         window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));

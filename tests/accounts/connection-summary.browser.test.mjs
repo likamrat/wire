@@ -60,8 +60,8 @@ async function setup(t, approved = true) {
 test("ordinary Connection shows source approval and history controls without exposing source paths", async t => {
     const { page, config } = await setup(t);
     await expect(page.locator("#approvedConnection")).toBeVisible();
-    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
-    await expect(page.locator("#editSource")).toBeHidden();
+    await expect(page.locator("#connectionSourceSummary")).toHaveText("WIRE can read this");
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await expect(page.locator("#collectionWindow-control")).toBeVisible();
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
     assert.equal(await page.locator(".permission-boundary").count(), 0);
@@ -76,9 +76,9 @@ test("ordinary Connection shows source approval and history controls without exp
     }
     await page.setViewportSize({ width: 375, height: 900 });
     await page.evaluate(() => document.documentElement.style.fontSize = "200%");
-    await navigateSettings(page, "source-access");
-    await expect(page.locator("#approvedDatabase")).toHaveText(config.appDbPath);
-    assert.ok((await page.locator("#editSource").boundingBox()).height >= 44);
+    await navigateSettings(page, "connection");
+    await expect(page.locator("#sourceDatabase")).toHaveValue(config.appDbPath);
+    assert.ok((await page.locator("#connectionSourceToggle").boundingBox()).height >= 44);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await capture(page, "ordinary-dark-375-200");
     if (proofs) await writeFile(path.join(proofs, "ordinary-reading-order.json"), JSON.stringify({
@@ -249,20 +249,22 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
 test("unapproved setup still requires review and explicit approval after path inspection links", async t => {
     const { page, runtime } = await setup(t, false);
     await expect(page.locator("#connectionStatus")).toHaveText("Not connected");
-    await expect(page.locator("#collectionSourceEntry")).toBeVisible();
-    await expect(page.locator("#viewApprovedSource")).toBeHidden();
+    await expect(page.locator("#connectionSourceSummary")).toHaveText("WIRE can't read this yet");
+    await expect(page.locator("#sourceCommitTitle")).toHaveText("What approving allows");
+    await expect(page.locator("#approvedConnection")).toBeHidden();
     await page.goto(runtime.url + "#settings?section=connection&setting=source-paths"); await ready(page);
-    await expect(page.locator("#reviewSource")).toBeFocused();
-    await page.locator("#reviewSource").click();
     await expect(page.locator("#sourceDatabase")).toBeFocused();
     await page.locator("#sourceDatabase").fill("C:\\invented-not-approved\\data.db");
     await page.locator("#sourceSessions").fill("C:\\invented-not-approved\\session-state");
     await page.locator("#sourceSessions").press("Enter");
     await selectActivityOption(page, "collectionWindow", "7");
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
-    await expect(page.locator("#approvalScope")).toContainText("original prompts");
+    await expect(page.locator("#approvalScope")).toContainText("Prompts are saved on this device");
+    await expect(page.locator("#approvalScope")).toContainText("Last 7 days");
+    await expect(page.locator("#connectCollection")).toHaveText("Approve source and start collection");
     await capture(page, "unapproved-source-review");
     await page.locator("#cancelSource").click();
-    await expect(page.locator("#reviewSource")).toBeFocused();
-    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await expect(page.locator("#sourceDatabase")).toBeFocused();
+    await expect(page.locator("#sourceDatabase")).not.toHaveValue("C:\\invented-not-approved\\data.db");
+    await expect(page.locator("#collectionWindow")).toHaveValue("30");
 });

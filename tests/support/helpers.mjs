@@ -100,7 +100,7 @@ export async function restoreLegacySearch(page, search) {
 }
 
 export async function navigateSettings(page, category) {
-    category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy", display: "themes" }[category] || category;
+    category = { collection: "connection", history: "connection", "source-access": "connection", data: "privacy", evidence: "privacy", display: "themes" }[category] || category;
     if (category === "troubleshooting") {
         if (!await page.locator("#openEvidenceHelp").isVisible()) await page.locator("#navigationToggle").click();
         await page.locator("#openEvidenceHelp").click();
@@ -114,9 +114,12 @@ export async function navigateSettings(page, category) {
     await page.locator(`[data-settings-section=${category}]`).waitFor({ state: "visible" });
 }
 
+// The source editor is always present on Sources; this only ensures that section is showing.
 export async function openSourceEditor(page) {
-    if (!await page.locator('[data-settings-section="source-access"]').isVisible()) await navigateSettings(page, "source-access");
-    await page.locator("#editSource").click();
+    if (!await page.locator('[data-settings-section="connection"]').isVisible()) await navigateSettings(page, "connection");
+    const toggle = page.locator("#connectionSourceToggle");
+    if (await toggle.isVisible() && await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+    await page.locator("#sourceEditor").waitFor({ state: "visible" });
 }
 
 // Compatibility helper: Analyze already renders matching interactions directly.

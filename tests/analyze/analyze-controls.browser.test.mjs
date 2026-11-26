@@ -43,7 +43,7 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "connection");
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     const preference = await page.locator("#collectionWindow").elementHandle();
     const controls = await page.evaluateHandle(() => ["comparePeriods"].map(id => document.getElementById(id)));
     await page.setViewportSize({ width, height: 1000 });
@@ -96,7 +96,7 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "connection");
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     await controls.dispose();
 });
 

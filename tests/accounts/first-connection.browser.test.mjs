@@ -210,7 +210,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await expect(page.locator("#activityView details#coverage")).toHaveCount(0);
     await navigateMain(page, "settings");
     await navigateSettings(page, "connection");
-    await page.getByRole("link", { name: "View collection status", exact: true }).click(); await ready(page);
+    await page.getByRole("link", { name: "Collection status", exact: true }).click(); await ready(page);
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Evidence scope");
     await expect(page.locator("#coverageBody")).toContainText("2 interactions");
     await page.locator("#wireAccountTrigger").click(); await page.locator("#wireAccountGate").click();
@@ -239,8 +239,11 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     await expect(page.locator("#firstConnectionWelcome")).toBeHidden();
     await page.locator("#firstConnectionReview").click();
     await expect(page.locator("#sourceEditor")).toBeVisible();
-    await expect(page.locator("#sourceReviewSummary")).toBeVisible();
-    await expect(page.locator("#sourcePathFields")).toBeHidden();
+    await expect(page.locator("#connectionSourceToggle")).toBeFocused();
+    await expect(page.locator("#connectionSourceToggle")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#sourcePathFields")).toBeVisible();
+    await expect(page.locator("#sourceCommitTitle")).toHaveText("What approving allows");
+    await expect(page.locator("#approvalScope")).toContainText("Read your Copilot chats");
     await expect(page.locator("#firstCollectionWait")).toBeVisible();
     assert.equal(mutations.length, 0, "Opening review does not grant source permission.");
     await capture(page, "source-review-desktop", true);
@@ -255,8 +258,8 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     await page.locator("#cancelSource").click();
     await expect(page.locator("#firstConnectionReview")).toBeFocused();
     await page.locator("#firstConnectionReview").click();
-    await page.locator("#changeReviewedPaths").click();
-    await expect(page.locator("#sourceDatabase")).toBeFocused();
+    await expect(page.locator("#connectionSourceToggle")).toBeFocused();
+    await expect(page.locator("#sourceDatabase")).toBeEditable();
     const release = Promise.withResolvers(), dispatched = Promise.withResolvers();
     t.after(() => release.resolve());
     await page.route("**/api/collection/configure", async route => { dispatched.resolve(); await release.promise; await route.continue(); });
@@ -376,7 +379,8 @@ test("unknown access, explicit Settings entry and unavailable preference storage
     await expect(page.locator("#firstConnectionStorageNotice")).toContainText("could not be read");
     await expect(page.locator("#firstConnectionReview")).toBeEnabled();
     await page.goto(runtime.url + "#settings?section=connection&setting=source"); await ready(page);
-    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await expect(page.locator("#connectionSourceSummary")).toHaveText("WIRE can't read this yet");
+    await expect(page.locator("#firstConnectionWelcome")).toBeHidden();
     assert.equal(mutations.length, 0);
     await page.goto(runtime.url); await ready(page);
     await page.locator("#firstConnectionReview").click();
@@ -384,15 +388,17 @@ test("unknown access, explicit Settings entry and unavailable preference storage
     assert.equal(mutations.length, 0);
     await page.evaluate(() => {
         window.sourceReviewText = [];
-        for (const id of ["reviewDatabase", "reviewSessions"]) {
+        for (const id of ["sourceUsageRecordsFile"]) {
             const walker = document.createTreeWalker(document.getElementById(id), NodeFilter.SHOW_TEXT);
             while (walker.nextNode()) window.sourceReviewText.push(walker.currentNode);
         }
     });
+    assert.equal(await page.evaluate(() => window.sourceReviewText.length), 1, "The source path is painted before access is withdrawn");
     await page.locator("#wireAccountTrigger").click();
     await page.locator("#wireAccountGate").click();
     await expect(page.locator("#accessShell")).toBeVisible();
-    assert.deepEqual(await page.evaluate(() => window.sourceReviewText.map(node => node.data)), ["", ""]);
+    assert.deepEqual(await page.evaluate(() => window.sourceReviewText.map(node => node.data)), [""]);
+    await expect(page.locator("#sourceDatabase")).toHaveValue("");
 });
 
 test("an interrupted first approval stays in Settings for read-current recovery without a second approval", { timeout: 30000 }, async t => {
@@ -410,7 +416,7 @@ test("an interrupted first approval stays in Settings for read-current recovery 
         const { page, runtime, mutations } = await setup(t, { frontend: "react" });
         await page.goto(runtime.url); await ready(page);
         await page.locator("#welcomeReviewSource").click();
-        await page.locator("#changeReviewedPaths").click();
+        await expect(page.locator("#connectionSourceToggle")).toBeFocused();
         const database = page.locator("#sourceDatabase"), selected = await database.inputValue();
         await database.fill(path.join(path.dirname(selected), "absent", "data.db"));
         await page.locator("#connectCollection").click();
@@ -492,14 +498,16 @@ async function tokenRecordChat(t) {
 
 test("Copilot's token records stay unread until turned on in source review; turning them off stops the reads and keeps counted totals", { timeout: 90000 }, async t => {
     const { page, runtime, mutations, home, indexed, usage, reply, later, tokens, activityEvents } = await tokenRecordChat(t);
-    const swtch = page.getByRole("switch", { name: "Read Copilot's token records" }), configures = () => mutations.filter(m => m.path === "/api/collection/configure");
+    const swtch = page.getByRole("switch", { name: "Token records", exact: true }), configures = () => mutations.filter(m => m.path === "/api/collection/configure");
     await page.goto(runtime.url); await ready(page);
     await page.locator("#welcomeReviewSource").click();
     await expect(swtch).not.toBeChecked();
     await expect(page.locator("#approvalScope")).not.toContainText("token records");
     const recordsFile = path.join(home, "session-store.db");
-    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(`Reads ${recordsFile}`);
-    await expect(page.locator("#sourceUsageRecordsHelp")).toContainText("reads the prompt text only to match calls to prompts and doesn't save it");
+    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(recordsFile);
+    await expect(page.locator("#sourceUsageRecordsHelp")).toHaveText("Fills in token counts for older chats whose logs don't record them.");
+    await expect(page.locator("#sourceUsageRecordsFacts")).toContainText("Matched to calls, not saved");
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
     for (const theme of ["light", "dark"]) { await chooseTheme(page, theme); await page.locator("#sourceUsageRecordsRow").scrollIntoViewIfNeeded(); await capture(page, `token-records-off-${theme}`); }
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
@@ -508,14 +516,16 @@ test("Copilot's token records stay unread until turned on in source review; turn
     assert.doesNotMatch(unread, /11,400|Counted from/);
 
     await navigateMain(page, "settings"); await openSourceEditor(page);
+    const beforeTokenApproval = configures().length;
     await swtch.focus(); await page.keyboard.press("Space");
     await expect(swtch).toBeChecked();
-    await expect(page.locator("#approvalScope")).toContainText("including Copilot's token records");
+    await expect(page.locator("#approvalScope")).toContainText("Read token records · Reads more");
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Changed");
     await expect(page.locator("#connectCollection")).toHaveText("Approve token records");
     const database = page.locator("#sourceDatabase"), approvedPath = await database.inputValue();
     await database.fill(path.join(home, "other", "data.db"));
     await expect(swtch).not.toBeChecked();
-    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(`Reads ${path.join(home, "other", "session-store.db")}`);
+    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(path.join(home, "other", "session-store.db"));
     await database.fill(approvedPath); await swtch.check();
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme); await page.locator("#sourceSessions").focus(); await page.keyboard.press("Tab");
@@ -523,10 +533,14 @@ test("Copilot's token records stay unread until turned on in source review; turn
         assert.equal(await page.locator("#sourceUsageRecordsRow .switch-track").evaluate(n => getComputedStyle(n).outlineStyle), "solid", "Keyboard focus paints the switch ring");
         await capture(page, `token-records-on-focus-${theme}`);
     }
-    await page.locator("#connectCollection").click();
+    assert.equal(configures().length, beforeTokenApproval, "Editing the token grant must not send a configuration change");
+    await page.getByRole("button", { name: "Approve token records", exact: true }).click();
     await expect(page.locator("#settingsMessage")).toHaveText("Token records approved.");
+    assert.equal(configures().length, beforeTokenApproval + 1);
     assert.equal(configures().at(-1).body.usageRecords, true);
-    await expect(page.locator("#approvedUsageRecords")).toHaveText(recordsFile);
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("On");
+    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(recordsFile);
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     assert.equal(await tokens("Unavailable"), unread, "A chat WIRE already read is not recounted until it changes");
 
     await later(20000);
@@ -537,10 +551,12 @@ test("Copilot's token records stay unread until turned on in source review; turn
     await navigateMain(page, "settings"); await openSourceEditor(page);
     await swtch.click(); await expect(swtch).not.toBeChecked();
     await expect(page.locator("#connectCollection")).toHaveText("Stop reading token records");
+    await expect(page.locator("#approvalScope")).toContainText("Stop reading token records · Reads less");
+    await expect(page.locator("#approvalScope")).toContainText("Counted totals stay.");
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Token records turned off.");
     assert.equal(configures().at(-1).body.usageRecords, false);
-    await expect(page.locator("#approvedUsageRecords")).toHaveText("Not read");
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
     indexed(index => usage(index, 0, 7000, 50, 6000, 0, reply(activityEvents, "b")));
     await later(30000);
     const kept = await tokens(/11,400/);
@@ -555,7 +571,7 @@ test("Count tokens in chats already read checks first, counts only after a separ
     const row = page.locator("#usageCountRow"), action = page.locator("#countUsageRecords"), dialog = page.locator("#usageCountDialog");
     const records = async on => {
         await navigateMain(page, "settings"); await openSourceEditor(page);
-        const swtch = page.getByRole("switch", { name: "Read Copilot's token records" });
+        const swtch = page.getByRole("switch", { name: "Token records", exact: true });
         if (on) await swtch.check(); else await swtch.uncheck();
         await page.locator("#connectCollection").click();
         await expect(page.locator("#settingsMessage")).toHaveText(on ? "Token records approved." : "Token records turned off.");
@@ -593,7 +609,7 @@ test("Count tokens in chats already read checks first, counts only after a separ
     assert.equal(confirms.length, 0, "Checking and Cancel save nothing");
     assert.doesNotMatch(await tokens("Unavailable"), /11,400/, "Cancel leaves the interaction unmeasured");
 
-    await navigateMain(page, "settings"); await navigateSettings(page, "source-access");
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     const checked = response("/api/usage-records/preview");
     await action.click(); await checked;
     await expect(page.locator("#usageCountSummary")).toContainText("11,400 tokens");
@@ -633,7 +649,7 @@ test("Count tokens in chats already read checks first, counts only after a separ
     assert.equal(confirms.length, 2);
 
     await page.reload(); await ready(page);
-    await navigateMain(page, "settings"); await navigateSettings(page, "source-access");
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     await expect(action).toHaveText("Check result");
     await expect(page.locator("#usageCountNotice")).toContainText("wasn't confirmed");
     await action.click();

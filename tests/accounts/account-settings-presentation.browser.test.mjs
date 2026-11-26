@@ -97,7 +97,7 @@ test("unqualified real-shell presentation is neutral and all account operations 
 test("documented lifecycle fixtures cannot activate commands or replace Settings drafts", async t => {
     const { page } = await setup(t);
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     const draft = await page.locator("#collectionWindow").elementHandle();
     await receive(page, presentationFixture("disconnected", verifiedGitHubProfile));
     await expect(page.locator("#wireMicrosoftConnection")).not.toContainText("After sign-in");
@@ -114,7 +114,7 @@ test("documented lifecycle fixtures cannot activate commands or replace Settings
         await expect(page.locator("#wireAccountGate")).toBeDisabled();
         await expect(page.locator("#wireAccountMenu")).toBeFocused();
         assert.equal(await draft.evaluate(node => node === document.getElementById("collectionWindow") && node.value === "7"), true);
-        await expect(page.locator("#saveCollection")).toBeEnabled();
+        await expect(page.locator("#connectCollection")).toBeEnabled();
     }
     await page.keyboard.press("Escape");
     const paused = presentationFixture("connected", verifiedGitHubProfile);
@@ -133,9 +133,8 @@ test("documented lifecycle fixtures cannot activate commands or replace Settings
     assert.deepEqual(await page.evaluate(() => window.fixtureWrites), []);
 });
 
-test("account presentation updates preserve an unsaved draft on Source access", async t => {
-    const { page } = await setup(t, {}, "source-access");
-    await page.locator("#editSource").click();
+test("account presentation updates preserve an unsaved draft on Sources", async t => {
+    const { page } = await setup(t);
     await page.locator("#sourceDatabase").fill("C:\\synthetic\\edited.db");
     const sourceDraft = await page.locator("#sourceDatabase").elementHandle();
     await receive(page, presentationFixture("reconnect-required"));

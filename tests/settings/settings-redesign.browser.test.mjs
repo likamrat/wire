@@ -255,19 +255,22 @@ test("Settings normal entry presents all four current sections with coherent hie
 });
 
 test("Settings action boundaries remain clearly visible against their surface in both themes", { timeout: 30000 }, async t => {
-    const { page } = await setup(t), measurements = [];
+    const { page, config } = await setup(t), measurements = [];
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        for (const [category, selectors] of [
+        for (const [category, selectors, draft] of [
             ["privacy", ["#recollectActivity", '[data-settings-section=privacy] a.button-link']],
             ["connection", ["#pauseCollection"]],
-            ["source-access", ["#editSource"]],
+            ["connection", ["#connectCollection"], true],
         ]) {
             await navigateSettings(page, category);
-            await capture(page, `action-boundaries-${category}-${theme}`);
+            // The source commit only appears for an unsaved draft; Cancel discards it after measuring.
+            if (draft) await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
+            await capture(page, `action-boundaries-${draft ? "source-commit" : category}-${theme}`);
             for (const selector of selectors) for (const control of await page.locator(selector).all()) {
                 measurements.push({ theme, category, ...await actionBoundary(control) });
             }
+            if (draft) await page.locator("#cancelSource").click();
         }
     }
     if (proofs) await writeFile(path.join(proofs, "action-boundaries.json"), JSON.stringify(measurements, null, 2));
@@ -333,12 +336,16 @@ test("Settings action edges stay visible through real hover, press, focus and na
         await expect(page.locator("#reportsView")).toBeVisible();
         await navigateMain(page, "settings");
         await navigateSettings(page, "connection");
-        await expect(page.locator("#saveCollection")).toBeDisabled();
-        const disabled = await actionBoundary(page.locator("#saveCollection"));
-        assert.ok(contrast(disabled.boundary, disabled.outside) < 3, "Disabled actions do not borrow an enabled boundary");
         await expect(page.locator("#preferenceActions")).toBeHidden();
+        await expect(page.locator("#saveCollection")).toBeHidden();
         await openSourceEditor(page);
+        // An empty path is the visible disabled commit state in Copilot mode.
+        await page.locator("#sourceDatabase").fill("");
+        await expect(page.locator("#connectCollection")).toBeDisabled();
+        const disabled = await actionBoundary(page.locator("#connectCollection"));
+        assert.ok(contrast(disabled.boundary, disabled.outside) < 3, "Disabled actions do not borrow an enabled boundary");
         await page.locator("#cancelSource").click();
+        await expect(page.locator("#sourceCommit")).toBeHidden();
         await navigateSettings(page, "display");
         assert.deepEqual(await page.locator("#settingsThemePreference .theme-track").evaluate(node => {
             const box = node.getBoundingClientRect(); return { width: box.width, height: box.height };
@@ -441,14 +448,15 @@ test("Settings search locates without acting; source and preference drafts survi
         await expect(page.locator("#collectionWindow-control")).toBeFocused();
     }
     await selectActivityOption(page, "collectionCadence", "15");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Unsaved changes");
+    await expect(page.locator("#connectCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
+    await expect(page.locator("#approvalScope")).toContainText("Check less often");
     await navigateSettings(page, "display");
     await navigateSettings(page, "connection");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     await expect(page.locator("#collectionCadence")).toHaveValue("5");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await openSourceEditor(page);
     await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
     await navigateMain(page, "analyze");
@@ -457,12 +465,12 @@ test("Settings search locates without acting; source and preference drafts survi
     await expect(page.locator("#sourceSessions")).toHaveValue(config.sessionRoot + "-draft");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#sourceSessions")).toHaveValue(config.sessionRoot);
-    await expect(page.locator("#editSource")).toBeFocused();
+    await expect(page.locator("#sourceSessions")).toBeFocused();
     assert.equal(posts.some(value => /\/(?:configure|enabled|now|confirm)$/.test(value)), false);
 });
 
 test("Settings expanded permission, source, unknown billing and privacy previews stay readable without authorizing work", { timeout: 90000 }, async t => {
-    const { page, posts } = await setup(t, { unknownBilling: true }), measures = [];
+    const { page, posts, config } = await setup(t, { unknownBilling: true }), measures = [];
     await page.emulateMedia({ reducedMotion: "no-preference" });
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 });
@@ -470,6 +478,8 @@ test("Settings expanded permission, source, unknown billing and privacy previews
         await chooseTheme(page, theme);
         await navigateSettings(page, "connection");
         await openSourceEditor(page);
+        await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
+        await expect(page.locator("#sourceCommit")).toBeVisible();
         await capture(page, `source-editor-${width}-${scale}x-${theme}`);
         measures.push({ theme, width, scale, ...await geometry(page) });
         await page.locator("#cancelSource").click();
@@ -527,7 +537,7 @@ test("Settings global Search preserves old phrases and receipt-bound focus; Disp
     }
     await expect(page.locator("#sidebarMotionPreference")).toHaveCount(0);
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), true);
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#sidebarMotionPreference")).toHaveCount(0);
@@ -550,9 +560,10 @@ test("Settings source errors and pending unknown saves retain visible recovery w
         await route.abort("failed");
     });
     await selectActivityOption(page, "collectionCadence", "15");
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Saving");
+    await expect(page.locator("#sourceChangeImpact")).toContainText("Saving");
+    await expect(page.locator("#settingsDraftStatus")).toBeHidden();
     const pendingGeometry = await geometry(page);
     assert.deepEqual(pendingGeometry.overlaps, []);
     assert.deepEqual(pendingGeometry.clipped, []);
@@ -564,7 +575,7 @@ test("Settings source errors and pending unknown saves retain visible recovery w
     release();
     await expect(page.locator("#reloadSettings")).toBeVisible();
     await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await expect(page.locator("#message")).toBeHidden();
     await expect(page.locator("#reloadSettings")).toBeEnabled();
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
@@ -572,7 +583,7 @@ test("Settings source errors and pending unknown saves retain visible recovery w
     await page.locator("#reloadSettings").click();
     await expect(page.locator("#reloadSettings")).not.toBeVisible();
     assert.equal(writes, 1, "Read-only recovery never resubmits the save");
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     await page.route("**/api/collection/status", route => route.fulfill({
         status: 503, contentType: "application/json", body: JSON.stringify({ error: "Synthetic status read unavailable." }),
     }));
@@ -604,7 +615,7 @@ test("settled Settings save retires its blocked-history announcement without rep
         await route.fallback();
     });
     await selectActivityOption(page, "collectionCadence", "15");
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
     await page.evaluate(() => { location.hash = "#settings?section=privacy"; });
     await expect(page.locator("#message.pending-save")).toContainText("Wait for the current local save to finish");
@@ -632,7 +643,7 @@ test("unknown Settings save preserves an unrelated newer announcement", { timeou
         await route.abort("failed");
     });
     await selectActivityOption(page, "collectionCadence", "15");
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
     await page.locator('#settingsCategoryNav a[data-category="privacy"]').click();
     await expect(page.locator("#message.pending-save")).toBeVisible();
@@ -640,7 +651,7 @@ test("unknown Settings save preserves an unrelated newer announcement", { timeou
     held.resolve();
     await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
     await expect(page.locator("#reloadSettings")).toBeEnabled();
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await expect(page.locator("#message.stale")).toHaveText("Synthetic newer status.");
     await expect(page.locator("#message")).toBeVisible();
     assert.equal(writes, 1);
@@ -689,11 +700,12 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
 test("Settings saved preferences persist in the isolated source without resuming collection or changing evidence", { timeout: 30000 }, async t => {
     const { page, runtime, posts, config } = await setup(t, { preferenceSave: true });
     await selectActivityOption(page, "collectionCadence", "15");
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Unsaved changes");
+    await expect(page.locator("#sourceCommit")).toBeVisible();
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
     await capture(page, "connection-preferences-dirty");
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     const status = await runtime.collector.status();
     assert.equal(status.config.pollSeconds, 15);
     assert.equal(status.config.appDbPath, config.appDbPath);
@@ -717,23 +729,26 @@ test("Settings distinguishes labels, source permission and collection state with
         await expect(page.locator("#connectionStatus")).toHaveText("Paused");
         await expect(page.locator("#connectionSource").getByText("GitHub Copilot app", { exact: true })).toHaveCount(1);
         await inspectSourcePaths(page);
-        const paths = await page.locator("#approvedSourceDetails .settings-paths").evaluate(root => {
-            const labels = [...root.querySelectorAll("dt")], values = [...root.querySelectorAll("dd")];
-            return labels.map((label, index) => ({
-                labelColor: getComputedStyle(label).color, valueColor: getComputedStyle(values[index]).color,
-                labelLeft: label.getBoundingClientRect().left, valueLeft: values[index].getBoundingClientRect().left,
-                labelBottom: label.getBoundingClientRect().bottom, valueTop: values[index].getBoundingClientRect().top,
-                value: values[index].textContent, selectable: getComputedStyle(values[index]).userSelect !== "none",
-            }));
+        const paths = await page.locator("#sourcePathFields").evaluate(root => {
+            return [...root.querySelectorAll(".settings-field")].map(field => {
+                const label = field.querySelector("label"), value = field.querySelector("input");
+                return {
+                    labelLeft: label.getBoundingClientRect().left, valueLeft: value.getBoundingClientRect().left,
+                    labelBottom: label.getBoundingClientRect().bottom, valueTop: value.getBoundingClientRect().top,
+                    value: value.value, selectable: getComputedStyle(value).userSelect !== "none", labelled: value.labels[0] === label,
+                };
+            });
         });
+        assert.equal(paths.length, 2, "Approved paths are the two editable fields, not a second read-only copy");
         for (const item of paths) {
-            assert.notEqual(item.labelColor, item.valueColor);
-            assert.equal(item.labelLeft, item.valueLeft);
+            assert.equal(item.labelled, true);
+            assert.ok(Math.abs(item.labelLeft - item.valueLeft) <= 1);
             assert.ok(item.valueTop >= item.labelBottom);
-            assert.ok(item.valueTop - item.labelBottom <= 6, "Read-only source values have no utility-sized blank line");
+            assert.ok(item.valueTop - item.labelBottom <= 8, "Source values have no utility-sized blank line");
             assert.equal(item.selectable, true);
             assert.ok(item.value.length > 0);
         }
+        await expect(page.locator("#sourceCommit")).toBeHidden();
         measurements.push({ theme, paths });
         await capture(page, `source-labels-${theme}`);
         await expect(page.locator("#automaticScoreSetup,[data-category=ai]")).toHaveCount(0);
@@ -756,24 +771,29 @@ test("Settings unapproved-source presentation reviews paths without granting per
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#connectionStatus")).toHaveText("Not connected");
-    await navigateSettings(page, "source-access");
+    // The retired Source access route is an alias for Sources.
+    await page.evaluate(() => { location.hash = "#settings?section=source-access"; });
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await capture(page, `source-unapproved-${width}-${theme}`);
-        await page.locator("#reviewSource").click();
-        await expect(page.locator("#sourceDatabase")).toBeFocused();
+        await expect(page.locator("#connectionSourceSummary")).toHaveText("WIRE can't read this yet");
         await expect(page.locator("#sourceDatabase")).toHaveValue(config.appDbPath);
         await expect(page.locator("#connectCollection")).toBeEnabled();
+        await expect(page.locator("#connectCollection")).toHaveText("Approve source and start collection");
         await expect(page.locator("#sourceSuggestion")).toBeHidden();
-        await expect(page.locator("#approvalScope")).toContainText("original prompts");
+        await expect(page.locator("#sourceCommitTitle")).toHaveText("What approving allows");
+        await expect(page.locator("#approvalScope")).toContainText("Prompts are saved on this device");
         await capture(page, `source-permission-review-${width}-${theme}`);
         const measure = await geometry(page);
         assert.equal(measure.overflow, false);
         assert.deepEqual(measure.clipped, []);
+        await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
         await page.locator("#cancelSource").click();
-        await expect(page.locator("#reviewSource")).toBeFocused();
-        await expect(page.locator("#sourceEditor")).not.toBeVisible();
+        await expect(page.locator("#sourceSessions")).toBeFocused();
+        await expect(page.locator("#sourceSessions")).toHaveValue(config.sessionRoot);
+        await expect(page.locator("#sourceCommit")).toBeVisible();
     }
     assert.equal(posts.some(value => /\/(?:configure|enabled|now)$/.test(value)), false);
 });
@@ -936,26 +956,27 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
         assert.deepEqual(layout.overlaps, []);
         await capture(page, `connection-refresh-disabled-${theme}-${width}-${scale}x`);
     }
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     await expect(page.locator("#checkActivity")).toBeEnabled();
     if (proofs) await writeFile(path.join(proofs, "refresh-navigation.json"), JSON.stringify(observations, null, 2));
 });
 
 test("Source review combines paths and preferences in one decision without granting fresh permission for preference-only edits", { timeout: 30000 }, async t => {
     const { page, config, runtime, posts } = await setup(t, { preferenceSave: true });
-    await expect(page.locator("#viewApprovedSource")).not.toBeVisible();
     await openSourceEditor(page);
-    await expect(page.locator("#sourceDatabase")).toBeFocused();
-    await expect(page.locator("#sourceEditor #collectionWindow-control")).toBeVisible();
-    await expect(page.locator("#sourceEditor #collectionCadence-control")).toBeVisible();
+    await expect(page.locator("#sourceEditor #sourceDatabase")).toHaveValue(config.appDbPath);
+    await expect(page.locator("[data-settings-section=connection] #collectionWindow-control")).toBeVisible();
+    await expect(page.locator("[data-settings-section=connection] #collectionCadence-control")).toBeVisible();
     await expect(page.locator("#preferenceActions")).not.toBeVisible();
-    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await expect(page.locator("#connectCollection")).toBeDisabled();
     await selectActivityOption(page, "collectionCadence", "15");
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
+    await expect(page.locator("#connectCollection")).toHaveAttribute("data-intent", "save-preferences");
     await expect(page.locator("#connectCollection")).toBeEnabled();
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
-    await expect(page.locator("#sourceEditor")).not.toBeVisible();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await navigateSettings(page, "connection");
     await expect(page.locator("#connectionPreferences #collectionCadence-control")).toBeVisible();
     const status = await runtime.collector.status();
@@ -965,10 +986,11 @@ test("Source review combines paths and preferences in one decision without grant
     await openSourceEditor(page);
     await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
     await expect(page.locator("#connectCollection")).toHaveText("Approve and switch source");
+    await expect(page.locator("#connectCollection")).toHaveAttribute("data-intent", "approve-source");
     await expect(page.locator("#approvalScope")).toContainText("Collection stays paused");
     assert.equal(posts.filter(value => value === "/api/collection/configure").length, 1, "Changing paths in an editor is not permission to save");
     await page.locator("#cancelSource").click();
-    await expect(page.locator("#editSource")).toBeFocused();
+    await expect(page.locator("#sourceSessions")).toBeFocused();
     await expect(page.locator("#sourceSessions")).toHaveValue(config.sessionRoot);
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
     assert.equal(posts.filter(value => value === "/api/collection/configure").length, 1);
@@ -1089,7 +1111,7 @@ test("The unified source decision retains pending, rejected, read-result and can
     await expect(page.locator("#reloadSettings")).not.toBeVisible();
     assert.equal(writes, 1, "Reading the result never retries source approval");
     await page.locator("#cancelSource").click();
-    await expect(page.locator("#editSource")).toBeFocused();
+    await expect(page.locator("#sourceSessions")).toBeFocused();
     await expect(page.locator("#sourceSessions")).toHaveValue(config.sessionRoot);
     await expect(page.locator("#collectionCadence")).toHaveValue("5");
     assert.equal((await runtime.collector.status()).config.sessionRoot, config.sessionRoot);

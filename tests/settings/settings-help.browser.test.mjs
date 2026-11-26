@@ -80,10 +80,13 @@ test("benign Settings messages stay with their originating section while uncerta
     for (const changed of [false, true]) {
         await navigateSettings(page, "connection");
         await openSourceEditor(page);
-        if (changed) await page.locator("#sourceDatabase").fill("C:\\synthetic\\unsaved-data.db");
-        await page.locator("#cancelSource").click();
-        assert.equal(await page.locator("#sourceEditor").isVisible(), false);
-        assert.equal(await page.locator("#approvedDatabase").textContent(), state.status().config.appDbPath);
+        // Cancel only exists for a real edit; an untouched source has nothing to discard.
+        if (changed) {
+            await page.locator("#sourceDatabase").fill("C:\\synthetic\\unsaved-data.db");
+            await page.locator("#cancelSource").click();
+        }
+        assert.equal(await page.locator("#sourceCommit").isVisible(), false);
+        assert.equal(await page.locator("#sourceDatabase").inputValue(), state.status().config.appDbPath);
         await navigateSettings(page, "data");
         assert.equal(await page.locator("#settingsMessage").isVisible(), false);
         await navigateSettings(page, "display");
@@ -101,7 +104,7 @@ test("benign Settings messages stay with their originating section while uncerta
     await navigateSettings(page, "collection");
     await selectActivityOption(page, "collectionCadence", "15");
     state.hold();
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await page.waitForFunction(() => document.querySelector("#collectionCadence").disabled);
     const second = await page.context().newPage();
     await second.goto(page.url().split("#")[0] + "#settings?section=data");
@@ -117,14 +120,14 @@ test("benign Settings messages stay with their originating section while uncerta
     assert.equal(state.status().config.pollSeconds, 15);
     await navigateSettings(page, "collection");
     await selectActivityOption(page, "collectionCadence", "30");
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
     await navigateSettings(page, "data");
     assert.equal(await page.locator("#settingsMessage").isVisible(), false);
     await navigateSettings(page, "collection");
     await selectActivityOption(page, "collectionCadence", "30");
     state.fail();
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await page.locator("#reloadSettings").waitFor();
     await navigateSettings(page, "data");
     assert.equal(await page.locator("#settingsMessage").isVisible(), true);
@@ -140,7 +143,6 @@ async function target(page, id) {
 async function tooltip(page, id, text, mode = "hover") {
     const category = await control(page, id).evaluate(node => node.closest("[data-settings-section]")?.dataset.settingsSection);
     if (category && !await control(page, id).isVisible()) await navigateSettings(page, category);
-    if (id === "editSource" && await page.locator("#viewApprovedSource").isVisible()) await page.locator("#viewApprovedSource").click();
     await page.keyboard.press("Escape");
     await page.evaluate(() => document.activeElement.blur());
     await page.mouse.move(0, 0);
@@ -182,14 +184,14 @@ test("disabled collection actions explain the actual hold without authorizing an
     const state = await setup(t), { page, mutations } = state;
     await selectActivityOption(page, "collectionCadence", "15");
     for (const mode of ["hover", "keyboard"]) {
-        const trigger = await tooltip(page, "pauseCollection", "Save or cancel your changes.", mode);
+        const trigger = await tooltip(page, "pauseCollection", "Save or cancel your changes first.", mode);
         await page.getByRole("tooltip").hover();
         assert.equal(await page.getByRole("tooltip").isVisible(), true);
         await dismiss(page, trigger);
     }
     assert.deepEqual(mutations, []);
     state.hold();
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await tooltip(page, "pauseCollection", "Saving...", "keyboard");
     state.release(); await saved(page);
     assert.equal(state.status().config.pollSeconds, 15);
@@ -198,8 +200,7 @@ test("disabled collection actions explain the actual hold without authorizing an
 
 test("a source draft with a missing path explains why approval is unavailable", async t => {
     const { page, mutations, status } = await setup(t, false);
-    await navigateSettings(page, "source-access");
-    await page.locator("#reviewSource").click();
+    await navigateSettings(page, "connection");
     await page.locator("#sourceSessions").fill("");
     await tooltip(page, "connectCollection", "Enter both source paths.", "keyboard");
     assert.deepEqual(mutations, []);

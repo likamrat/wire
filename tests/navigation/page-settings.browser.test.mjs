@@ -90,7 +90,7 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     await page.goto(new URL("/settings", runtime.url).href);
     await expect(page.locator("#generalTitle")).toBeVisible();
     const nav = page.locator("#settingsCategoryNav");
-    await expect(nav.getByRole("link")).toHaveCount(10);
+    await expect(nav.getByRole("link")).toHaveText(["General", "Sources", "Themes", "Regional", "Privacy & saved data", "Analyze", "Trends", "Reports", "Compare"]);
     const group = nav.getByRole("group", { name: "WIRE defaults" });
     await expect(group.getByRole("link")).toHaveText(["Analyze", "Trends", "Reports", "Compare"]);
     await expect(nav.getByRole("link", { name: "Help" })).toHaveCount(0);

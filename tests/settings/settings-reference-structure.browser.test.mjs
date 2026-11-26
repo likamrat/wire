@@ -247,10 +247,9 @@ test("every registered setting and old route reaches its control or explains its
                 target = "connectionTitle";
             } else if (entry.id === "save-preferences") {
                 await expect(page.locator("#preferenceActions")).toBeHidden();
-                await expect(page.locator("#saveCollection")).toBeDisabled();
+                await expect(page.locator("#sourceCommit")).toBeHidden();
                 target = "connectionTitle";
-            } else if (entry.id === "source") target = "editSource";
-            else if (entry.id === "source-paths") target = "approvedSourceTitle";
+            }
         }
         if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
         const node = page.locator(`#${target}`);
@@ -315,19 +314,19 @@ test("category navigation preserves source and reply drafts, local search, cance
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
     await expect(page.locator("#approvalScope")).toContainText("Collection stays paused");
-    await category(page, "source-access");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\artificial\\data.db");
-    await expect(page.locator("#editSource")).toBeFocused();
+    await expect(page.locator("#sourceDatabase")).toBeFocused();
     await category(page, "connection");
     await selectActivityOption(page, "collectionCadence", "30");
     await category(page, "display");
     await category(page, "connection");
     await expect(page.locator("#collectionCadence")).toHaveValue("30");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
-    await page.locator("#cancelPreferences").click();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
+    await page.locator("#cancelSource").click();
     await expect(page.locator("#collectionCadence")).toHaveValue("5");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await expect(page.locator("#pauseCollection")).toHaveText("Resume collection");
 });
 
@@ -342,9 +341,9 @@ test("pending and uncertain settings results survive categories and only explici
     });
     await category(page, "connection");
     await selectActivityOption(page, "collectionCadence", "15");
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Saving...");
+    await expect(page.locator("#sourceChangeImpact")).toContainText("Saving...");
     await page.locator('#settingsCategoryNav [data-category="privacy"]').click();
     await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
     release();
@@ -356,14 +355,14 @@ test("pending and uncertain settings results survive categories and only explici
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await category(page, "connection");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await page.locator("#reloadSettings").click();
     await expect(page.locator("#reloadSettings")).toBeHidden();
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     assert.equal(packets.length, 1, "Recovery and rail navigation never replay the write");
     assert.equal(packets[0].enabled, false, "Preference changes preserve paused collection");
     assert.equal(packets[0].appDbPath, "C:\\artificial\\data.db");
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
 });
 
 test("source preferences, pause and replacement keep their own explicit save gates", { timeout: 30000 }, async t => {
@@ -386,7 +385,8 @@ test("source preferences, pause and replacement keep their own explicit save gat
     });
     await category(page, "connection");
     await selectActivityOption(page, "collectionCadence", "30");
-    await page.locator("#saveCollection").click();
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
+    await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved");
     assert.equal(writes.length, 1);
     assert.equal(writes[0].input.enabled, false);
@@ -442,12 +442,14 @@ test("reply-saving pending and uncertain state survives the rail without repeati
 test("unapproved source search stays read-only and stale AI status cannot restore retired controls", { timeout: 30000 }, async t => {
     const { page, automatic } = await setup(t, { approved: false });
     await category(page, "connection");
-    await expect(page.locator("#collectionSourceEntry")).toBeVisible();
+    await expect(page.locator("#connectionSourceSummary")).toHaveText("WIRE can't read this yet");
+    await expect(page.locator("#sourceCommitTitle")).toHaveText("What approving allows");
     await expect(page.locator("#checkActivity")).toHaveAccessibleName("Read stored activity");
     await page.locator("#settingsSearch").fill("source paths");
-    await page.locator('#settingsSearchResults a[data-setting="source-paths"]').click();
-    await expect(page.locator("#reviewSource")).toBeFocused();
-    await expect(page.locator("#sourceEditor")).toBeHidden();
+    const sourceResult = page.locator('#settingsSearchResults a[data-setting="source-paths"]');
+    await sourceResult.click();
+    await expect(page.locator("#sourceDatabase")).toBeFocused();
+    await expect(page.locator("#connectCollection")).toHaveText("Approve source and start collection");
     await page.locator("#settingsSearch").press("Escape");
     await category(page, "privacy");
     await expect(page.locator("#assessmentSetup")).toContainText("Connect a supported local Copilot source");

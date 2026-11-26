@@ -1779,10 +1779,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return checked?.parentElement.hidden ? "paletteQuery" : checked?.id ?? entry.target;
         }
         const approved = collection?.config?.approved;
-        if (nativeSettingUnavailable(entry.id)) return entry.section === "source-access" ? "sourceAccessTitle" : "connectionTitle";
-        if (entry.section === "connection" && !$("sourceEditor").hidden
-            && ["history-window", "cadence", "save-preferences"].includes(entry.id)) return "collectionSourceDraft";
-        if (sourceCollection.copilotOnly && !approved && ["history-window", "cadence", "save-preferences", "collection-state"].includes(entry.id)) return "collectionSourceEntry";
+        if (nativeSettingUnavailable(entry.id)) return "connectionTitle";
+        if (sourceCollection.copilotOnly && !approved && ["save-preferences", "collection-state"].includes(entry.id)) return "connectCollection";
         if (sourceCollection.active && entry.id === "microsoft-collection") return "sourceMicrosoftSurfaces";
         if (entry.id === "collection-state" && historyStatus.native(collection)) {
             return collectionSettings?.nativeConfigurationIntent?.() === "enable" ? "saveCollection" : "pauseCollection";
@@ -1790,9 +1788,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (entry.id === "microsoft-connection" && !$("wireMicrosoftConnection")?.checkVisibility()) return "connectionTitle";
         if (entry.id === "collect-now") return [$("storedViewRetry"), $("refreshBtn"), $("collectionRetry"), $("checkActivity")]
             .find(control => control?.checkVisibility())?.id || entry.target;
-        if (entry.id === "source") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "editSource" : "reviewSource";
-        if (entry.id === "source-paths") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "approvedSourceTitle" : "reviewSource";
-        if (!approved && ["source-paths", "collection-state"].includes(entry.id)) return "reviewSource";
         if (entry.id === "save-preferences" && $("preferenceActions").hidden) {
             return $("connectCollection").checkVisibility() && $("connectCollection").dataset.intent === "save-preferences"
                 ? "connectCollection" : "settingsDraftStatus";
@@ -1808,7 +1803,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (entry.id === "microsoft-connection") return !$("wireMicrosoftConnection") || $("microsoftConnectionHost").hidden
                 ? "Unavailable in this runtime" : $("wireMicrosoftStatus").textContent;
             if (!collection?.config?.approved && !historyStatus.native(collection)
-                && (["source-paths", "collection-state"].includes(entry.id) || id === "collectionSourceEntry" || id === "reviewSource" && entry.id !== "source")) return "Source approval needed";
+                && ["collection-state", "collect-now", "token-records"].includes(entry.id)) return "Source approval needed";
             if (control?.disabled) return "Action unavailable";
             return "";
         });
@@ -1951,6 +1946,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const resolved = settingsNavigation.resolve(workspaceState.route), entry = settingsNavigation.entries.find(entry => entry.id === resolved.setting);
         const heading = resolved.section === "release-notes" ? "releaseNotesHeading" : settingsNavigation.categories.find(category => category.id === resolved.section).heading;
         let target = $(entry ? settingsTarget(entry) : heading);
+        if (target && $("connectionSourceBody").contains(target)) collectionSettings?.expandSource();
         if (target?.tagName === "DETAILS") {
             target.open = true;
             presentation.setOpen(target.id, true);
@@ -1966,10 +1962,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function reviewFirstConnection() {
         const publication = api.publicationToken(), origin = { ...workspaceState.route };
         if (!publication || !sourceCollection.copilotOnly) return;
-        const update = navigate({ view: "settings", section: "source-access", setting: "source" });
+        const update = navigate({ view: "settings", section: "connection", setting: "source" });
         const navigation = workspaceState.navigationGeneration, intent = workspaceState.readingIntent;
         const destinationCurrent = () => api.isCurrent(publication) && navigation === workspaceState.navigationGeneration
-            && workspaceState.route.view === "settings" && workspaceState.route.section === "source-access" && workspaceState.route.setting === "source";
+            && workspaceState.route.view === "settings" && workspaceState.route.section === "connection" && workspaceState.route.setting === "source";
         const current = () => destinationCurrent() && intent === workspaceState.readingIntent;
         try {
             if (await Promise.resolve(update) === false || !current()) return;
@@ -1999,7 +1995,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             busy: workspaceState.loading || exportWriting || collectionBusy || collectionSettings?.hasDraft(),
             snapshotCurrent: collection?.revision === workspaceState.evidence.revision,
             paused: collection?.config?.enabled === false || source?.status?.global.state === "committed" && source.status.global.paused,
-            canConfigure: source?.actions.github.includes("configure") === true && !$("reviewSource").disabled,
+            canConfigure: source?.actions.github.includes("configure") === true && collectionSettings?.canReviewSource?.() === true,
             allowWelcome: !document.hidden && !pageInactive && !collectionSettings?.hasDraft(),
         });
     }
@@ -9732,7 +9728,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const attention = ["checking", "applying", "waiting"].includes(model.phase) || model.recovery || model.combined?.problem
             || refreshOwnsReadFailure() || !globalRecovery && (["error", "unconfirmed"].includes(model.phase) || collectionReadError || workspaceState.stale && !workspaceState.loading);
         host.hidden = !contextual || connection && !approved && sourceCollection.copilotOnly
-            && !$("sourceEditor").hidden && model.phase === "idle" && !attention;
+            && model.phase === "idle" && !attention;
         const reread = recollectionUI?.snapshot();
         const recollectionAttention = reread?.needsReceipt || reread?.viewNeedsRead || reread?.phase === "pending";
         const privacy = workspaceState.route.view === "settings" && settingsNavigation.resolve(workspaceState.route).section === "privacy";
@@ -10166,7 +10162,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const statusAction = $("collectionStatusAction");
         statusAction.hidden = !view.action;
         if (view.action) { setText(statusAction, view.action.label); statusAction.href = view.action.href; }
-        $("collectionSourceLink").hidden = Boolean(nativeControl) || view.action?.href === "/settings?section=source-access&setting=source";
+        $("collectionSourceLink").hidden = Boolean(nativeControl) || view.action?.href === "/settings?section=connection&setting=source";
         $("collectionHistoryLink").hidden = Boolean(nativeControl);
         for (const id of ["collectionTimes", "collectionCoverageCounts", "collectionIssues", "collectionSetup"]) $(id).hidden = Boolean(nativeControl);
         setText($("collectionChecked"), status.lastCheckedAt ? `Last checked ${freshness(status.lastCheckedAt)}` : "Not checked yet");
@@ -11915,7 +11911,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onDraftChange: changed => {
             retirePendingSaveMessage();
             $("settingsDraftNotice").hidden = workspaceState.route.view === "settings" || !changed;
-            $("settingsDraftNotice").querySelector("a").href = $("sourceEditor").hidden ? "/settings?section=connection&setting=history-window" : "/settings?section=connection&setting=source";
+            $("settingsDraftNotice").querySelector("a").href = "/settings?section=connection";
             renderSettingsSearch();
             renderFreshActivity();
         },
@@ -12187,7 +12183,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     $("accessRetry").addEventListener("click", () => api.startAccess());
     function showConnectionSettings(value) {
-        if (workspaceState.route.view !== "settings" || !["connection", "source-access"].includes(settingsNavigation.resolve(workspaceState.route).section)
+        if (workspaceState.route.view !== "settings" || settingsNavigation.resolve(workspaceState.route).section !== "connection"
             || value.mode !== "enforced" || value.state?.wire !== "signed-in"
             || !value.readable && value.reason !== "generation-changed") return false;
         for (const id of ["homeView", "activityView", "requestView", "reportsView", "wireHelpView", "collectionStatusView",

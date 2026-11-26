@@ -14,7 +14,7 @@ test("settings canonical routes preserve legacy display/history/issues and expli
     assert.ok(model.find("Midnight").some(result => result.id === "palette" && result.section === "themes"));
     assert.equal(model.resolve({ section: "history" }).setting, "history-window");
     assert.deepEqual(model.resolve({ section: "display", issues: "1" }), { view: "collection-status", section: undefined, setting: "issues", warning: "" });
-    assert.match(model.resolve({ section: "absent" }).warning, /Unknown.*Collection/);
+    assert.match(model.resolve({ section: "absent" }).warning, /Unknown.*Sources/);
     assert.equal(model.resolve({ section: "absent" }).section, "connection");
     assert.equal(model.resolve({ section: "display", setting: "cadence" }).section, "connection");
 });
@@ -51,7 +51,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
     assert.equal(model.resolve({ setting: "advanced" }).setting, "collection-details");
     assert.equal(model.find("missing history").find(entry => entry.id === "issues").view, "collection-status");
     assert.equal(model.find("status").find(entry => entry.id === "collection-details").category, "Collection status");
-    assert.deepEqual(model.categories.map(row => row.title), ["General", "Collection", "Source access", "Themes", "Regional", "Privacy & saved data", "Analyze", "Trends", "Reports", "Compare"]);
+    assert.deepEqual(model.categories.map(row => row.title), ["General", "Sources", "Themes", "Regional", "Privacy & saved data", "Analyze", "Trends", "Reports", "Compare"]);
     assert.deepEqual(model.find("automatic scores"), []);
     assert.equal(model.resolve({ section: "ai", setting: "automatic-scores" }).section, "connection");
     assert.match(model.resolve({ section: "ai", setting: "automatic-scores" }).warning, /Unknown/);
@@ -66,7 +66,9 @@ test("settings search finds control descriptions and synonyms across categories 
     assert.equal(model.find("").length, 0);
     assert.equal(model.find("not-a-real-setting <img>").length, 0);
     assert.equal(model.find("PRIVATE_SOURCE_PATH").length, 0);
-    assert.equal(model.find("cadence").find(entry => entry.id === "cadence").category, "Collection");
+    assert.equal(model.find("cadence").find(entry => entry.id === "cadence").category, "Sources");
+    assert.equal(model.find("source access").find(entry => entry.id === "source").category, "Sources");
+    assert.ok(model.find("token records").some(entry => entry.id === "token-records" && entry.target === "sourceUsageRecords"));
     assert.equal(model.find("display").find(entry => entry.id === "time-zone").category, "Regional");
 });
 
@@ -83,9 +85,9 @@ test("retained setting IDs and explicit category aliases keep their actual desti
     const old = {
         "assessment-evidence": ["privacy", "assessmentSetupTitle"],
         "delete-activity": ["privacy", "deleteActivity"], "recollect-activity": ["privacy", "recollectActivity"],
-        "time-zone": ["regional", "displayTimeZone"], source: ["source-access", "reviewSource"],
+        "time-zone": ["regional", "displayTimeZone"], source: ["connection", "sourceDatabase"],
         "collection-state": ["connection", "pauseCollection"], "collect-now": ["connection", "checkActivity"],
-        "source-paths": ["source-access", "approvedSourceDetails"], "history-window": ["connection", "collectionWindow"],
+        "source-paths": ["connection", "sourceDatabase"], "history-window": ["connection", "collectionWindow"],
         cadence: ["connection", "collectionCadence"], "save-preferences": ["connection", "saveCollection"],
         issues: ["collection-status", "collectionIssuesTitle"], "collection-details": ["collection-status", "collectionSetup"],
     };
@@ -97,6 +99,7 @@ test("retained setting IDs and explicit category aliases keep their actual desti
         assert.equal(resolved.setting, id);
         assert.equal(resolved.warning, "");
     }
+    assert.deepEqual(model.resolve({ section: "source-access", setting: "source-paths" }), { section: "connection", setting: "source-paths", warning: "" });
     for (const [section, expected] of Object.entries(model.sectionAliases)) {
         assert.deepEqual(model.resolve({ section }), { setting: undefined, ...expected, warning: "" });
     }

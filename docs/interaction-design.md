@@ -1052,8 +1052,8 @@ report.
 A fresh Copilot-only instance offers a short welcome after access, source status
 and retained activity are known.
 
-- **Review and connect** opens the existing source review in Settings. It doesn't
-  approve the source.
+- **Review and connect** opens **Settings > Sources** with the suggested source
+  ready to check. It doesn't approve the source.
 - **Not now**, Close and Escape dismiss the welcome and leave one **Not
   connected** prompt in Analyze.
 - Remember dismissal as a browser-local preference, not source permission.
@@ -1062,10 +1062,11 @@ The welcome sentence fits one line at ordinary desktop width and wraps naturally
 with narrow or enlarged text. Keep returning users, retained activity, Pause and
 explicit sign-out out of the welcome path. A missing profile doesn't block setup.
 
-Guided review shows the suggested paths, **Change paths**, and the existing
-history and frequency choices in one draft.
+Sources shows the suggested paths, token records and the schedule as one
+editable draft. **What approving allows** names what WIRE will read before
+**Approve source and start collection**.
 
-- Cancel returns to the originating Analyze entry. Ordinary Settings review keeps
+- Cancel returns to the originating Analyze entry. Ordinary Settings entry keeps
   its existing return behavior.
 - An uncertain approval stays in Settings for read-current recovery.
 
@@ -1124,11 +1125,24 @@ there.
 - Keep one focused pane. On narrow screens the same categories collapse into a
   chooser.
 
-The other categories are Collection, Source access, Themes, Regional, and Privacy
-& saved data.
+The other categories are Sources, Themes, Regional, and Privacy & saved data.
 
-- Source access owns approval and paths. Collection owns cadence, Pause and
-  one-time checks. Opening either area never approves a source.
+**Sources** owns collection state, each source's files and optional reads, and
+the shared schedule. Opening it never approves anything. Old Collection and
+Source access links open it.
+
+- Collection state comes first, on one line with Pause and **Collection
+  status**, followed by the one-time check.
+- Each source has its own block: provider mark, approval summary, file paths,
+  then optional reads such as token records with what they read. The schedule
+  follows the sources because it applies to all of them.
+- A source's name collapses or expands its block. One button on the **Local
+  sources** heading reads **Collapse all** or **Expand all** for the current
+  state. A collapsed source keeps its summary and any unsaved edit, marked
+  **Changed**.
+- Keep short status, labels and help on one line at desktop width; let them wrap
+  only when the column is too narrow.
+- Settings search expands the source that holds its result.
 - Search finds fixed setting metadata and navigates. It never clicks an action or
   reads private path values.
 
@@ -1241,15 +1255,23 @@ The expanded desktop rail resizes from its right edge.
 
 | Settings change | Commit boundary |
 | --- | --- |
-| Same-source paths/preferences draft | Save preferences |
+| Schedule only | Save preferences |
 | Changed source paths | Approve and switch source |
-| Read Copilot's token records, same paths | Approve token records (on) or Stop reading token records (off) |
+| Token records, same paths | Approve token records (on) or Stop reading token records (off) |
 | Count tokens in chats already read | Check chats, then a separate Count confirmation |
-| Cancel source review | Discard the draft |
+| Cancel in Sources | Discard the draft |
 | Display preference | Apply immediately, separately from permission |
 | Recorded replies | Its own draft and confirmation |
 
-Source review keeps paths and preferences in one draft.
+Sources keeps paths, token records and the schedule in one draft.
+
+- **What changes** appears only when the draft differs. It lists each effect,
+  with before and after values, and its button names the commit.
+- A change that lets WIRE read more uses `--disclosure-risk` ink, a shield icon
+  and the words **Reads more** on the panel, item and button. Reading less or
+  changing the schedule stays neutral.
+- Pause, Refresh and Count wait until the draft is saved or cancelled. Cancel
+  returns focus to the first changed control.
 
 ### Refresh and consequential actions
 

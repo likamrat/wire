@@ -2,8 +2,7 @@
 export function createSettingsNavigation(search, { updates = true } = {}) {
     const categories = [
         ...(updates ? [{ id: "general", title: "General", heading: "generalTitle" }] : []),
-        { id: "connection", title: "Collection", heading: "connectionTitle" },
-        { id: "source-access", title: "Source access", heading: "sourceAccessTitle" },
+        { id: "connection", title: "Sources", heading: "connectionTitle" },
         { id: "themes", title: "Themes", heading: "themesTitle" },
         { id: "regional", title: "Regional", heading: "regionalTitle" },
         { id: "privacy", title: "Privacy & saved data", heading: "dataManagementTitle" },
@@ -17,6 +16,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         display: { section: "themes" },
         theme: { section: "themes" },
         collection: { section: "connection", setting: "history-window" },
+        "source-access": { section: "connection" },
         history: { section: "connection", setting: "history-window" },
         data: { section: "privacy", setting: "delete-activity" },
         evidence: { section: "privacy", setting: "assessment-evidence" },
@@ -42,7 +42,8 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "theme", section: "themes", title: "Appearance mode", context: "Choose Light or Dark for this browser. No collection or report content changes.", synonyms: "display theme color light dark contrast", target: "settingsThemePreference" },
         { id: "palette", section: "themes", title: "Color palette", context: "Change screen and widget colors for this browser. Saved reports are unchanged.", synonyms: "display appearance theme colour petrol coral linen graphite blueprint field notes midnight", target: "palette-petrol" },
         { id: "time-zone", section: "regional", title: "Time zone", context: "Choose a city or Device default. Saved reports keep their original time zone.", synonyms: "display timezone local date clock browser reset", target: "displayTimeZone" },
-        { id: "source", section: "source-access", title: "Review local source & permission", context: "Review GitHub Copilot app metadata and chat log paths before deliberately approving a source.", synonyms: "connect change switch approval database data.db session-state privacy token records session-store.db usage", target: "reviewSource" },
+        { id: "source", section: "connection", title: "GitHub Copilot app source", context: "Choose the Copilot metadata database and chat history folder. Nothing changes until you approve.", synonyms: "source access connect change switch approval permission database data.db session-state privacy", target: "sourceDatabase" },
+        { id: "token-records", section: "connection", title: "Token records", context: "Optionally read Copilot's token records to count tokens in older chats. Turning this on needs approval.", synonyms: "usage session-store.db tokens count older chats permission", target: "sourceUsageRecords" },
         { id: "microsoft-connection", section: "connection", title: "Microsoft 365 connection", context: "Optional Chat and Cowork connection. Opening this setting does not sign in or change collection.", synonyms: "Microsoft 365 Chat Cowork connect cancel reconnect sign in expiry expired Edge work account", target: "wireMicrosoftConnection" },
         { id: "microsoft-collection", section: "connection", title: "Microsoft collection", context: "Choose Chat, Cowork and history, then explicitly enable collection or save preferences.", synonyms: "Microsoft enable save Chat Cowork sources history collection", target: "nativeCollectionSurfaces" },
         { id: "microsoft-collection-state", section: "connection", title: "Pause or resume Microsoft reads", context: "Change Microsoft reads without changing GitHub preferences or global policy.", synonyms: "Microsoft Chat Cowork stop start pause resume", target: "pauseMicrosoftCollection" },
@@ -50,10 +51,10 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "global-collection", section: "connection", title: "Collection across sources", context: "Deliberately pause or allow collection across sources. Manual GitHub Refresh remains separate.", synonyms: "global policy all sources pause resume unset", target: "globalCollectionTitle" },
         { id: "collection-state", section: "connection", title: "Pause or resume collection", context: "Pause or resume new reads without removing retained evidence.", synonyms: "stop start enabled disabled", target: "pauseCollection" },
         { id: "collect-now", section: "connection", title: "Refresh", context: "Update stored activity and check approved history without changing the pause state.", synonyms: "collect now refresh manual run check", target: "checkActivity" },
-        { id: "source-paths", section: "source-access", title: "Approved source paths", context: "Inspect approved paths or the open source draft. Opening this result changes no permission.", synonyms: "permission database folder directory data.db session-state", target: "approvedSourceDetails" },
-        { id: "history-window", section: "connection", title: "History to include", context: "Choose 7, 30 or 90 days of saved history to read. Previously collected evidence stays.", synonyms: "initial history window days range retention import backfill", target: "collectionWindow" },
-        { id: "cadence", section: "connection", title: "Check frequency", context: "Choose how often to read new local history entries. Discover chats every 30 seconds.", synonyms: "cadence interval frequency polling seconds events", target: "collectionCadence" },
-        { id: "save-preferences", section: "connection", title: "Save preferences", context: "Apply history window and check frequency without changing the source or pause state.", synonyms: "save cancel unsaved preferences cadence", target: "saveCollection" },
+        { id: "source-paths", section: "connection", title: "Approved source paths", context: "See which files WIRE reads. Opening this result changes no permission.", synonyms: "source access permission database folder directory data.db session-state", target: "sourceDatabase" },
+        { id: "history-window", section: "connection", title: "History to include", context: "Choose 7, 30 or 90 days of saved history to read. Previously collected evidence stays.", synonyms: "schedule initial history window days range retention import backfill", target: "collectionWindow" },
+        { id: "cadence", section: "connection", title: "Check frequency", context: "Choose how often to read new local history entries. Discover chats every 30 seconds.", synonyms: "schedule cadence interval frequency polling seconds events", target: "collectionCadence" },
+        { id: "save-preferences", section: "connection", title: "Save preferences", context: "Apply history window and check frequency without changing the source or pause state.", synonyms: "save cancel unsaved preferences cadence schedule", target: "saveCollection" },
         { id: "issues", view: "collection-status", title: "Affected Copilot chats", context: "Open Collection status to find missing, unreadable or limited saved chat history.", synonyms: "missing history gaps issues errors unavailable diagnostics coverage status", target: "collectionIssuesTitle" },
         { id: "collection-details", view: "collection-status", title: "Collection technical details", context: "Open Collection status for last check, source counts and explained reading limits.", synonyms: "diagnostics checked timestamp freshness technical status limits advanced", target: "collectionSetup" },
         { id: "collection-status", view: "collection-status", title: "Collection status", context: "Read current history coverage and connection issues. No source check is started.", synonyms: "troubleshooting health reading status", target: "pageTitle" },
@@ -80,7 +81,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         else if (setting) { setting = undefined; warning = "Unknown setting. Showing the category instead."; }
         if (!categories.some(category => category.id === section)) {
             section = "connection";
-            warning = "Unknown settings category. Showing Collection.";
+            warning = "Unknown settings category. Showing Sources.";
         }
         return { section, setting, warning };
     }

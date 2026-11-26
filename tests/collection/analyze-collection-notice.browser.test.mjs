@@ -56,7 +56,7 @@ for (const empty of [true, false]) test(`source notices on Analyze with ${empty 
     for (const [status, message, destination] of [
         [{}, null],
         [{ state: "paused", config: { ...current.config, enabled: false } }, null],
-        [{ state: "disconnected", config: null }, empty ? /Connect local Copilot chats/ : /Retained evidence is available/, "/settings?section=source-access&setting=source"],
+        [{ state: "disconnected", config: null }, empty ? /Connect local Copilot chats/ : /Retained evidence is available/, "/settings?section=connection&setting=source"],
         [{ state: "error", error: "Synthetic private source failure" }, /cannot check history/, "/collection-status"],
         [{ historyCoverage: { ...current.historyCoverage, unavailable: 10, readable: 0 } }, /History unavailable/, "/collection-status?setting=issues"],
         [{ state: "stopped" }, /Collection stopped/, "/collection-status"],

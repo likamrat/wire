@@ -177,13 +177,15 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
             }
         }
         if (group === "Settings") {
-            for (const section of ["general","connection","source-access","themes","regional","privacy"]) {
+            for (const section of ["general","connection","themes","regional","privacy"]) {
                 await go("/settings?section="+section);
                 await drag("Settings: "+section, `[data-settings-section="${section}"]`);
             }
             await go("/help"); await drag("WIRE Help", "#wireHelpView");
-            await go("/settings?section=source-access");
-            await page.locator("#editSource").click(); await drag("source review draft", "#sourceEditor");
+            await go("/settings?section=connection");
+            const sessions = page.locator("#sourceSessions");
+            await sessions.fill(await sessions.inputValue() + "-draft"); await drag("source review draft", "#sourceCommit");
+            await page.locator("#cancelSource").click();
             await go("/settings?section=privacy");
             await page.locator("#deleteActivity").click(); await blockedByModal(page,seen("#deleteDialog"));
             await page.locator("#recollectActivity").click(); await blockedByModal(page,seen("#recollectDialog"));

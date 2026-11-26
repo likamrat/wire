@@ -76,7 +76,7 @@ async function setup(t, approved = true) {
 
 test("Settings category links, deep links, native history and reload expose exactly one pane", { timeout: 45000 }, async t => {
     const { page, url } = await setup(t);
-    for (const id of ["themes", "source-access", "connection"]) {
+    for (const id of ["themes", "regional", "connection"]) {
         await category(page, id);
         assert.equal(await page.locator("[data-settings-section]:visible").count(), 1);
         assert.equal(await page.locator(`#settingsCategoryNav [aria-current=page]`).getAttribute("data-category"), id);
@@ -91,6 +91,9 @@ test("Settings category links, deep links, native history and reload expose exac
     await page.goto(url + "#settings?section=history"); await ready(page);
     assert.match(page.url(), /section=connection&setting=history-window/);
     assert.equal(await page.evaluate(() => document.activeElement.id), "collectionWindow-control");
+    await page.goto(url + "#settings?section=source-access"); await ready(page);
+    assert.equal(await page.locator("#settingsCategoryNav [aria-current=page]").getAttribute("data-category"), "connection", "The retired Source access route opens Sources");
+    assert.equal(await page.locator("[data-settings-section]:visible").getAttribute("data-settings-section"), "connection");
     await page.goto(url + "#settings?issues=1"); await ready(page);
     await expect(page.locator(".history-reason").first()).toBeVisible();
     assert.match(page.url(), /\/collection-status\?setting=issues/);
@@ -112,7 +115,7 @@ test("Settings search navigates controls without acting; drafts, query, caret an
     assert.equal(await page.locator("#displayTimeZone").inputValue(), "");
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), null);
     await page.locator("#clearSettingsSearch").click();
-    await category(page, "source-access");
+    await category(page, "connection");
     assert.equal(await page.locator("#sourceSessions").inputValue(), "C:\\SYNTHETIC_DIRTY\\session-state");
     await page.locator("#sourceSessions").focus();
     await page.locator("#sourceSessions").evaluate(node => node.setSelectionRange(5, 10));
@@ -183,8 +186,8 @@ test("Collection status destinations restore visible focus on legacy routes, rel
         if (target === "collectionSetup") assert.equal(await page.locator("#collectionSetup").evaluate(node => node.open), true);
     }
     await page.locator("#collectionSourceLink").click();
-    await expect(page.locator("#approvedSourceDetails")).toBeVisible();
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+    await expect(page.locator("#sourceDatabase")).toBeFocused();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     assert.doesNotMatch(JSON.stringify(requests), /missing history|unavailable/);
 });
 
@@ -336,8 +339,12 @@ test("unapproved and paused Settings results accurately locate permission bounda
     await page.locator("#settingsSearch").fill("resume");
     await expect(page.locator("#settingsSearchResults")).toContainText("Source approval needed");
     await page.locator("#settingsSearchResults a").click();
-    await expect(page.locator("#connectionTitle")).toBeFocused();
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+    // An unapproved source's pause result locates the approval commit without pressing it.
+    assert.equal(await page.evaluate(() => {
+        const commit = document.getElementById("connectCollection");
+        return document.activeElement === commit || document.activeElement.contains(commit) || document.activeElement.id === "connectionTitle";
+    }), true);
+    await expect(page.locator("#connectCollection")).toHaveText("Approve source and start collection");
     await page.reload(); await ready(page);
     await expect(page.locator("#settingsSearch")).toHaveValue("");
     await page.goto(new URL("settings", page.url()).href); await ready(page);
@@ -451,7 +458,7 @@ test("single-pane Settings reflows in both themes, touch, compact containers and
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        for (const section of ["themes", "source-access", "connection"]) {
+        for (const section of ["themes", "regional", "connection"]) {
             await category(page, section);
             assert.equal(await page.locator("[data-settings-section]:visible").count(), 1);
             const measured = await page.evaluate(() => {

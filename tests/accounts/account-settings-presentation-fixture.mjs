@@ -119,7 +119,7 @@ function createSyntheticPresentationApi() {
 
 // Uses the actual shell and Settings owner, with no production client, runtime or source.
 export function renderAccountSettingsFixture(section = "connection") {
-    if (!["connection", "source-access"].includes(section)) throw new TypeError("Unknown fixture Settings section.");
+    if (section !== "connection") throw new TypeError("Unknown fixture Settings section.");
     const nonce = "account-presentation-fixture";
     const shell = shellBundle();
     let html = shell.html;
@@ -142,7 +142,7 @@ const section = ${JSON.stringify(section)};
 for (const node of document.querySelectorAll("[data-settings-section]")) node.hidden = node.dataset.settingsSection !== section;
 const category = document.createElement("a");
 category.href = "#settings?section=" + section; category.setAttribute("aria-current", "page");
-category.textContent = section === "connection" ? "Collection" : "Source access";
+category.textContent = "Sources";
 $("settingsCategoryNav").replaceChildren(category);
 for (const link of document.querySelectorAll("nav [data-nav]")) link.prepend(ux.icon("navigation-" + link.dataset.nav));
 if ($("wireFeedback")) {

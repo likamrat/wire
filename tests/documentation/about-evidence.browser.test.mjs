@@ -90,7 +90,7 @@ test("Collection status holds distinct scope/check/scan meanings, canonical coun
     assert.equal(await page.locator("#coverageNotice").isVisible(), false, "No missing chat identity or unscanned Graph layer in this view");
     await page.locator('nav [data-nav="settings"]').click();
     await page.locator('#settingsCategoryNav [data-category="connection"]').click();
-    await page.getByRole("link", { name: "View collection status", exact: true }).click(); await ready(page);
+    await page.getByRole("link", { name: "Collection status", exact: true }).click(); await ready(page);
     if (!await page.locator("#collectionSetup").evaluate(n => n.open)) await page.locator("#collectionSetup>summary").click();
     await expect(page.locator("#collectionSetup")).toHaveAttribute("open", "");
     assert.equal(await page.locator("#collectionSetup>summary").evaluate(n => n === document.activeElement), true);

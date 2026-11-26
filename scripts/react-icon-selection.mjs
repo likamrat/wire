@@ -21,4 +21,5 @@ export {
     LuScale, LuSearch, LuSettings, LuShield, LuSlidersHorizontal, LuSun, LuTriangleAlert,
     LuUnfoldVertical, LuUnplug, LuUserRound, LuUsersRound, LuWorkflow, LuWrench, LuX,
     LuBookOpenText, LuExternalLink, LuImageOff, LuLightbulb, LuCircleAlert, LuOctagonAlert, LuGitBranch, LuGitCommitHorizontal, LuWifiOff,
+    LuGithub, LuShieldAlert,
 } from "react-icons/lu";

@@ -229,7 +229,9 @@ test("Time zone has one named heading, proportionate controls and vertically ord
         const visibility = await page.locator("[data-settings-section]").evaluateAll(panes => panes.map(pane => ({ section: pane.dataset.settingsSection, visible: pane.checkVisibility() })));
         assert.deepEqual(visibility.filter(pane => pane.visible).map(pane => pane.section), ["connection"]);
         await expect(trigger).toBeHidden();
-        await expect(page.getByRole("textbox", { name: "Copilot metadata database", exact: true })).toHaveCount(0);
+        // Sources lists the source paths first, then its Schedule fields beneath them.
+        const database = await page.getByRole("textbox", { name: "Metadata database", exact: true }).boundingBox();
+        assert.ok(database.y + database.height <= collection.fields[0].control.y, "Source paths precede the Schedule fields");
         if (config.narrow || config.width === 375) await expect(page.locator("#settingsCategorySummary")).toBeVisible();
         if (config.width === 2560 && !config.narrow && scale === 1) {
             const nav = await page.locator("#settingsCategories").boundingBox();

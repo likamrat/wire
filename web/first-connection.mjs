@@ -134,14 +134,14 @@ export function mountFirstConnection({ api, ux, reviewSource, collectionStatus }
             } else if (status.historyCoverage?.eligible === 0) {
                 title = "No eligible local chats found";
                 message = "Review the source location if you expected to find Copilot chats here.";
-                statusLabel = "Review source"; statusHref = "/settings?section=source-access&setting=source";
+                statusLabel = "Review source"; statusHref = "/settings?section=connection&setting=source";
             } else if (status.historyCoverage?.affected > 0) {
                 title = "History is incomplete";
                 message = "No Work IQ activity has been collected. Collection status explains the history gaps.";
             } else if (status.historyCoverage?.readable > 0 && status.lastCheckedAt) {
                 title = "No Work IQ activity found";
                 message = "No recorded Work IQ calls were found in the selected history. You can review the source and history window in Settings.";
-                statusLabel = "Review source and history window"; statusHref = "/settings?section=source-access&setting=source";
+                statusLabel = "Review source and history window"; statusHref = "/settings?section=connection&setting=source";
             } else {
                 title = "History status unavailable";
                 message = "Read the current collection status before checking for activity.";

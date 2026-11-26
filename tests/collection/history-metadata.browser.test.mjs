@@ -201,8 +201,9 @@ test("history metadata keeps independent statuses, live feedback and native oper
     const draft = await page.locator("#collectionWindow").elementHandle();
     await page.waitForTimeout(5500);
     assert.equal(await draft.evaluate(node => node === document.getElementById("collectionWindow") && node.value === "7"), true);
-    await expect(page.locator("#saveCollection")).toBeEnabled();
-    await expect(page.locator("#cancelPreferences")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
+    await expect(page.locator("#cancelSource")).toBeEnabled();
     assert.equal(app.requests.some(request => ["/api/collection/configure", "/api/collection/enabled"].includes(request.path)), false);
     if (proof) await writeFile(path.join(proof, "facts.json"), JSON.stringify(facts, null, 2));
 
@@ -210,7 +211,7 @@ test("history metadata keeps independent statuses, live feedback and native oper
     await expect(page.locator("#freshSourceSettings,#activityUpdateToggle")).toHaveCount(0);
     assert.match(visibleSummary, /2 Copilot chats unavailable/);
     await expect(page.locator("#collectionIssueCounts .history-status-count")).toHaveCount(2);
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     app.set({ coverage: undefined, approved: false });
     await page.reload(); await ready(page); await navigateMain(page, "analyze"); await revealStoredRefresh(page);
     await expect(page.locator("#checkActivity")).toHaveAccessibleName("Read stored activity");

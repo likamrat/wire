@@ -97,6 +97,8 @@ test("Collection, Privacy and Regional settings fit their controls without clipp
         await chooseTheme(page, theme);
         for (const category of categories) {
             await navigateSettings(page, category);
+            // Folding sources is how the merged Sources page fits one desktop screen.
+            if (category === "connection" && width === 1440 && await page.locator("#toggleAllSources").getAttribute("data-state") === "expanded") await page.locator("#toggleAllSources").click();
             const value = await geometry(page);
             await capture(page, `${category}-${width}-${theme}`);
             assert.equal(value.overflow, false);
@@ -108,7 +110,7 @@ test("Collection, Privacy and Regional settings fit their controls without clipp
             if (category === "privacy") assert.ok(value.peerGaps.length >= 2, "Expected adjacent privacy actions");
             for (const gap of value.peerGaps) assert.ok(Math.abs(gap) <= 1, `Adjacent task rows must meet at the divider: ${gap}px`);
             if (width === 1440) {
-                assert.ok(value.pane.bottom <= page.viewportSize().height, `${category}: the last row should fit on the desktop screen`);
+                assert.ok(value.pane.bottom <= page.viewportSize().height, `${category}: the last row should fit on the desktop screen (bottom ${Math.round(value.pane.bottom)}px)`);
             }
             measures.push({ theme, width, ...value });
         }
@@ -278,16 +280,17 @@ test("a failed connection status read labels last-known settings and recovers by
     await expect(page.locator("#settingsConnectionError")).toBeVisible();
     await expect(page.locator("#pauseCollection")).toBeDisabled();
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await capture(page, "connection-read-failure-draft");
     failing = false;
     await page.locator("#reloadSettings").click();
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
     await expect(page.locator("#reloadSettings")).toBeHidden();
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toHaveText("Save preferences");
     await expect(page.locator('#settingsView [role=alert]:visible')).toHaveCount(0);
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     await expect(page.locator("#collectionWindow")).toHaveValue("30");
     await expect(page.locator("#pauseCollection")).toBeEnabled();
 });

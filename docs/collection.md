@@ -37,7 +37,7 @@ sources you can enable in a normal installation.
 | Pause collection | Stops automatic acquisition; retained activity stays readable. |
 | Refresh | One bounded read of already-approved local history, including the deliberate GitHub manual exception under Pause. |
 | Read stored activity | Reads WIRE's saved view/status, without checking original history. |
-| Read Copilot's token records | Separately approves the displayed usage file for the identified Copilot account. Leave it off to read only the approved history. |
+| Token records | Separately approves the displayed usage file for the identified Copilot account. Leave it off to read only the approved history. |
 | [Count tokens in chats already read](#count-tokens-in-chats-already-read) | Checks eligible chats for missing totals. Only a separate confirmation saves the counts shown. |
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
@@ -97,7 +97,7 @@ The suggested source comes from `COPILOT_HOME`, otherwise `.copilot` in the
 home directory of the user running WIRE: `data.db` and `session-state`.
 
 - In WSL, these defaults don't automatically locate a Windows user's source.
-  Choose the actual paths in source review; WSL can qualify Windows drive paths
+  Enter the actual paths in **Settings > Sources**; WSL can qualify Windows drive paths
   or their mounted equivalents.
 - WIRE checks those named paths, not arbitrary home-directory contents.
 - Approval and schema validation come before any history read.
@@ -370,7 +370,7 @@ putting the raw opaque ID in new retained model metadata or in reports.
 Older Copilot journals have no per-call receipts. The Copilot app also keeps
 its own per-call accounting in `session-store.db` beside the approved chat
 database (`turns` and `assistant_usage_events`). Source approval doesn't
-cover it. **Read Copilot's token records** in the source review shows the exact
+cover it. **Token records** under the GitHub Copilot app in **Settings > Sources** shows the exact
 resolved file and records a separate approval (`usageRecords`), off by default and
 for existing approvals. The approval names that file and the Copilot account the
 app reports; WIRE refuses it when it can't identify that account. Only turning the
@@ -412,7 +412,7 @@ is needed.
 
 #### Count tokens in chats already read
 
-**Settings > Source access > Count tokens in chats already read** is a separate,
+**Settings > Sources > Count tokens in chats already read** is a separate,
 never automatic operation. It's offered only while token records are approved
 for the current file and account, the source is approved and collection isn't
 paused or signed out. Turning records off, a changed approval, Pause or sign-out

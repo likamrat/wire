@@ -88,12 +88,19 @@ async function assertNoAlpha(page) {
 
 test("withdrawal synchronously clears private source presentation but retains safe unsent preferences", async t => {
     const page = await setup(t);
+    await page.evaluate(() => {
+        const status = fixtureStatus("SECRET_ALPHA", 2);
+        Object.assign(status.config, { usageRecords: true, usageRecordsGrant: { account: "SECRET_ALPHA_OWNER" } });
+        fixtureUI.receive(status, fixtureApi.publicationToken());
+    });
+    await expect(page.locator("#sourceUsageRecords")).toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsAccount")).toContainText("SECRET_ALPHA_OWNER");
     await safeDraft(page);
     await page.locator("#themePreference").focus();
     await page.evaluate(() => {
-        fixtureSection("source-access","source-paths");
+        fixtureSection("connection","source-paths");
         fixtureUI.unavailable("SECRET_ALPHA_READ_ERROR", fixtureApi.publicationToken());
-        window.heldSourceText = ["approvedDatabase", "approvedSessions", "settingsConnectionError"].map(id => document.getElementById(id).firstChild);
+        window.heldSourceText = ["sourceUsageRecordsFile", "settingsConnectionError"].map(id => document.getElementById(id).firstChild);
         window.heldSourceBefore = heldSourceText.map(node => node.data);
         window.oldToken=fixtureApi.publicationToken();
         window.beforeEvents=fixtureEvents.length;
@@ -101,11 +108,14 @@ test("withdrawal synchronously clears private source presentation but retains sa
         fixtureRevoke();fixtureUI.withdrawAccess();
     });
     await assertNoAlpha(page);
-    assert.equal(await page.evaluate(() => heldSourceBefore.slice(0, 2).every(value => value.includes("SECRET_ALPHA"))), true);
-    assert.equal(await page.evaluate(() => heldSourceBefore[2]), "Collection settings could not be read.");
-    assert.deepEqual(await page.evaluate(() => heldSourceText.map(node => node.data)), ["", "", ""]);
+    assert.equal(await page.evaluate(() => heldSourceBefore.slice(0, 1).every(value => value.includes("SECRET_ALPHA"))), true);
+    assert.equal(await page.evaluate(() => heldSourceBefore[1]), "Collection settings could not be read.");
+    assert.deepEqual(await page.evaluate(() => heldSourceText.map(node => node.data)), ["", ""]);
     await expect(page.locator("#sourceDatabase")).toHaveValue("");
     await expect(page.locator("#sourceSessions")).toHaveValue("");
+    await expect(page.locator("#sourceUsageRecords")).not.toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("");
+    assert.equal(await page.locator("#sourceUsageRecordsState").getAttribute("data-state"), null);
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
     assert.deepEqual(await page.evaluate(() => ({
@@ -121,12 +131,12 @@ test("withdrawal synchronously clears private source presentation but retains sa
     // Another access cycle before any accepted status must not discard these safe drafts.
     await page.evaluate(() => { fixtureRevoke(); fixtureUI.withdrawAccess(); fixtureGrant(); });
     await fresh(page);
-    assert.deepEqual(await page.evaluate(() => heldSourceText.map(node => node.data)), ["", "", ""]);
+    assert.deepEqual(await page.evaluate(() => heldSourceText.map(node => node.data)), ["", ""]);
     await assertNoAlpha(page);
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\fixture\\SECRET_BETA\\data.db");
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     assert.equal(await page.evaluate(() => fixtureUI.hasDraft()), true);
 });
 
@@ -158,12 +168,12 @@ for (const result of ["success", "error"]) test(`old read ${result} and finalize
 for (const result of ["success", "error"]) test(`revoked write ${result} keeps original uncertainty and never repaints or replays`, async t => {
     const page = await setup(t);
     await safeDraft(page);
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await expect.poll(()=>page.evaluate(()=>fixtureWrites.length)).toBe(1);
     await page.evaluate(()=>{fixtureRevoke();fixtureGrant();});
     await fresh(page);
     await assertNoAlpha(page);
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await page.evaluate(result=>{
         window.eventsBeforeLate=fixtureEvents.length;window.focusBeforeLate=document.activeElement;
         if(result==="success")fixtureJobs[0].resolve(fixtureStatus("SECRET_ALPHA_COMMITTED",3));
@@ -176,12 +186,12 @@ for (const result of ["success", "error"]) test(`revoked write ${result} keeps o
     assert.equal(await page.evaluate(()=>fixtureUI.canRefresh()),false);
     await fresh(page);
     await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await expect(page.locator("#reloadSettings")).toBeEnabled();
     await page.locator("#reloadSettings").click();
     await expect.poll(()=>page.evaluate(()=>fixtureJobs.length)).toBe(2);
     await page.evaluate(()=>fixtureJobs[1].resolve(fixtureStatus("SECRET_BETA",2)));
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     assert.equal(await page.evaluate(()=>fixtureWrites.length),1);
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
@@ -191,29 +201,29 @@ test("revocation before write invocation is not dispatched and does not invent w
     const page = await setup(t);
     await safeDraft(page);
     await page.evaluate(()=>{fixtureRevokeOnInvalidate=true;});
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await assertNoAlpha(page);
     assert.equal(await page.evaluate(()=>fixtureWrites.length),0);
     assert.equal(await page.evaluate(()=>fixtureUI.isBusy()),false);
     await page.evaluate(()=>fixtureGrant());
     await fresh(page);
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     await expect(page.locator("#reloadSettings")).toBeHidden();
 });
 
 test("current-authority errors retain original recovery and deadlines block dispatch", async t => {
     const page = await setup(t);
     await safeDraft(page);
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await page.evaluate(()=>fixtureJobs[0].reject(new Error("Current fixture failure")));
     await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\fixture\\SECRET_ALPHA\\data.db");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await page.locator("#reloadSettings").click();
     await page.evaluate(()=>fixtureJobs[1].resolve(fixtureStatus()));
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     await page.evaluate(()=>{fixtureNow=5000;});
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     assert.equal(await page.evaluate(()=>fixtureWrites.length),1);
     await page.evaluate(()=>fixtureRevoke());
     await assertNoAlpha(page);
@@ -254,7 +264,7 @@ test("unqualified delivery is explicit and readiness alone restores no source da
     await page.evaluate(()=>fixtureGrant());
     await page.evaluate(()=>fixtureUI.setSection("connection"));
     await expect(page.locator("#sourceDatabase")).toHaveValue("");
-    await expect(page.locator("#approvedDatabase")).toBeEmpty();
+    await expect(page.locator("#sourceUsageRecordsFile")).toBeEmpty();
     await expect(page.locator("#collectionWindow")).toBeDisabled();
     await expect(page.locator("#sourceDatabase")).toBeDisabled();
     assert.equal(await page.evaluate(()=>fixtureUI.canRefresh()),false);
@@ -265,13 +275,12 @@ test("unqualified delivery is explicit and readiness alone restores no source da
 test("suggested and edited source paths are erased without retaining a private source draft", async t => {
     const page = await setup(t);
     await page.evaluate(()=>{
-        fixtureSection("source-access");
+        fixtureSection("connection");
         const status=fixtureStatus();
         status.suggestedSource={...status.config,error:"SECRET_ALPHA_SUGGESTION"};
         status.config=null;
         fixtureUI.receive(status,fixtureApi.publicationToken());
     });
-    await page.locator("#reviewSource").click();
     await page.locator("#sourceDatabase").fill("C:\\SECRET_ALPHA_EDITED\\data.db");
     await page.locator("#sourceDatabase").evaluate(node=>{node.defaultValue="SECRET_ALPHA_DEFAULT";node.title="SECRET_ALPHA_TITLE";});
     await page.evaluate(()=>{
@@ -287,14 +296,14 @@ test("suggested and edited source paths are erased without retaining a private s
     await fresh(page);
     assert.deepEqual(await page.evaluate(()=>sourceAttrs.map(attr=>attr.value)), ["", ""]);
     await assertNoAlpha(page);
-    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\fixture\\SECRET_BETA\\data.db");
 });
 
 test("revoked recovery read cannot settle the original uncertain write", async t => {
     const page = await setup(t);
     await safeDraft(page);
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await page.evaluate(()=>fixtureJobs[0].reject(new Error("Original write outcome unknown")));
     await expect(page.locator("#reloadSettings")).toBeEnabled();
     await page.locator("#reloadSettings").click();
@@ -304,18 +313,18 @@ test("revoked recovery read cannot settle the original uncertain write", async t
     await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0)));
     await assertNoAlpha(page);
     await fresh(page);
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
     await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
     await page.locator("#reloadSettings").click();
     await page.evaluate(()=>fixtureJobs[2].resolve(fixtureStatus("SECRET_BETA",2)));
-    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await expect(page.locator("#connectCollection")).toBeEnabled();
     assert.equal(await page.evaluate(()=>fixtureWrites.length),1);
 });
 
 test("current publication preserves normal preference save, pause state and completion focus", async t => {
     const page = await setup(t);
     await safeDraft(page);
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     assert.deepEqual(await page.evaluate(()=>fixtureWrites[0]), {
         endpoint:"/api/collection/configure",
         input:{appDbPath:"C:\\fixture\\SECRET_ALPHA\\data.db",sessionRoot:"C:\\fixture\\SECRET_ALPHA\\session-state",
@@ -328,8 +337,9 @@ test("current publication preserves normal preference save, pause state and comp
     });
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved");
     await expect(page.locator("#settingsMessage")).toBeFocused();
-    await expect(page.locator("#saveCollection")).toBeDisabled();
-    await expect(page.locator("#cancelPreferences")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toBeDisabled();
+    await expect(page.locator("#cancelSource")).toBeDisabled();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
     assert.equal(await page.evaluate(()=>fixtureUI.canRefresh()),true);
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
 });

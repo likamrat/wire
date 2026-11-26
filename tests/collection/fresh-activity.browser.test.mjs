@@ -205,9 +205,9 @@ test("Refresh proportions keep pending geometry and separate notices from adjace
                     assert.ok(measurement.manual.fontSize < measurement.freshHeading.fontSize, "The section heading outranks its status");
                     assert.ok(measurement.checked.fontSize <= measurement.manual.fontSize, "Timestamp stays secondary to its result");
                     assert.equal(measurement.trailingStatusSpinners, 0, "The action owns the spinner, without a duplicate after the status");
-                    assert.ok(measurement.fresh.rect.top >= measurement.preferences.rect.bottom, "Refresh stays below the history preferences");
-                    assert.ok(measurement.statusLink.visible && measurement.statusLink.rect.top >= measurement.fresh.rect.bottom,
-                        "The collection status link stays below the complete Refresh result");
+                    assert.ok(measurement.fresh.rect.bottom <= measurement.preferences.rect.top, "Refresh stays above the source list and its schedule");
+                    assert.ok(measurement.statusLink.visible && measurement.statusLink.rect.bottom <= measurement.fresh.rect.top,
+                        "The collection status link stays in the status row above the complete Refresh result");
                 }
                 if (measurement.notice.visible) assert.ok(measurement.followingHeading.top - measurement.notice.rect.bottom >= 16,
                     "A real notice retains space before the next heading");
@@ -797,7 +797,7 @@ test("first Analyze entry can approve one source, select a newly collected reque
     await page.goto(app.runtime().url); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("0");
     await page.locator("#collectionNoticeAction").click();
-    await page.locator("#reviewSource").click();
+    await expect(page.locator("#sourceDatabase")).toBeFocused();
     await page.locator("#sourceDatabase").fill(app.config.appDbPath);
     await page.locator("#sourceSessions").fill(app.config.sessionRoot);
     assert.equal((await app.runtime().collector.status()).config, null);
@@ -1071,7 +1071,7 @@ test("partial, bounded and failed checks retain coverage and the last accepted A
         assert.equal(await page.locator("#chart").innerHTML(), previous);
         assert.equal(await page.locator("#percentageCharts").innerHTML(), previousPercentages);
         assert.equal(await page.locator("#activityCount").innerText(), "2");
-        assert.equal(await page.locator("#freshIssues").getAttribute("href"), "/settings?section=source-access&setting=source-paths");
+        assert.equal(await page.locator("#freshIssues").getAttribute("href"), "/settings?section=connection&setting=source-paths");
         app.db.exec("PRAGMA user_version=156; ALTER TABLE sessions RENAME COLUMN removed_location TO execution_location");
         let oldSnapshot;
         await page.route("**/api/snapshot", async route => { const response = await route.fetch(); oldSnapshot = await response.json(); await route.fulfill({ response }); });
@@ -1111,9 +1111,10 @@ test("unapproved Refresh reads retained activity and leaves source review as a s
         assert.equal(await page.locator("#freshStatus").innerText(), "Stored activity refreshed.");
         assert.match(await page.locator("#freshContextMessage").innerText(), /No source history was checked/);
         assert.equal(await page.locator("#refreshBtn").isVisible(), false);
-        const review = page.locator("#collectionSourceEntry");
+        const review = page.locator("#connectCollection");
         await expect(review).toBeVisible();
-        await expect(review).toHaveAttribute("href", "/settings?section=source-access&setting=source");
+        await expect(review).toHaveText("Approve source and start collection");
+        await expect(page.locator("#sourceCommitTitle")).toHaveText("What approving allows");
         assert.deepEqual(app.writes, []);
         assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, 0);
 });
@@ -1392,10 +1393,11 @@ test("Refresh and its completion stay in Analyze and the source task, not unrela
     };
     await page.goto(app.runtime().url); await ready(page); await capture("analyze-idle");
     await navigateMain(page, "settings"); await ready(page);
-    assert.equal(await page.locator('[data-settings-section="connection"] #freshActivity').count(), 1, "Refresh belongs inside Connection & updates, below its source task");
+    assert.equal(await page.locator('[data-settings-section="connection"] #freshActivity').count(), 1, "Refresh belongs inside Sources, below the collection status row");
     const expectPlacement = async () => {
-        await expect(page.locator('[data-settings-section="connection"] > #connectionPreferences ~ #freshActivity + #settingsRefreshSlot ~ #settingsStatusLink')).toHaveCount(1);
-        await expect(page.locator('[data-settings-section="source-access"] #connectionSource')).toHaveCount(1);
+        await expect(page.locator('[data-settings-section="connection"] > .settings-collection-state #settingsStatusLink')).toHaveCount(1);
+        await expect(page.locator('[data-settings-section="connection"] > .settings-collection-state ~ #freshActivity + #settingsRefreshSlot ~ #connectionSource ~ #connectionPreferences')).toHaveCount(1);
+        await expect(page.locator('[data-settings-section="connection"] #connectionSource')).toHaveCount(1);
     };
     await expectPlacement();
     assert.equal(await page.locator("#checkActivity").isVisible(), true);

@@ -53,16 +53,17 @@ instead of showing a broader result.
 
 Choose **Review and connect** to check the source before WIRE reads your history.
 If you choose **Not now**, nothing connects. You can start later from Analyze
-or **Settings > Source access > Review source & connect**.
+or **Settings > Sources**.
 
 ![Connect your Copilot history, with Review and connect and Not now.](images/first-connection.png)
 
-1. Check that **Copilot metadata database** and **Chat history folder** point
-   to the local GitHub Copilot app you want to read. Use **Change paths** to
-   correct a suggested location. Leave **Read Copilot's token records** off
-   unless you want WIRE to read the extra file shown for that account.
-2. Set **History to include** and **Check frequency**. When the paths and
-   settings are right, choose **Approve source and start collection**.
+1. Under **GitHub Copilot app**, check that **Metadata database** and **Chat
+   history folder** point to the Copilot app you want to read. Edit a path if
+   the suggestion is wrong. Leave **Token records** off unless you want WIRE to
+   read the extra file shown there.
+2. Under **Schedule**, set **History to include** and **Check frequency**.
+   **What approving allows** lists what WIRE will read. When it's right, choose
+   **Approve source and start collection**.
 3. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
    read can take a few minutes.
 
@@ -883,10 +884,13 @@ applies only to the current panel.
 
 ## Collection, privacy and account
 
-**Settings > Source access** shows which paths WIRE can read.
+**Settings > Sources** shows collection state, each source WIRE reads with its
+optional token records, and the schedule. Collapse a source to keep the page
+short, or use **Collapse all** / **Expand all** on the **Local sources** heading.
 
-**Collection** sets the history window, check frequency and Pause. Edit a value
-to show **Save preferences** and **Cancel changes**.
+Edit anything and **What changes** lists the effect. Its button names what
+saving does, such as **Approve token records** or **Save preferences**, and
+**Cancel** puts everything back.
 
 - **Refresh** checks approved local history.
 - **Read stored activity** only rereads WIRE's retained view.

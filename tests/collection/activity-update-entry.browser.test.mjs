@@ -232,7 +232,7 @@ test("B actions preserve dirty Settings and a frozen report without dispatch", {
     await navigateMain(page, "analyze"); await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
     await capture(page, "entry-dirty-settings");
-    await navigateMain(page, "settings"); await navigateSettings(page, "source-access");
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     assert.equal(await page.locator("#sourceSessions").inputValue(), draft);
     await page.locator("#cancelSource").click();
     const frame = await prepareFrozenReport(page, 3);

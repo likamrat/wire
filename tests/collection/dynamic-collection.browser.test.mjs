@@ -56,7 +56,7 @@ test("synthetic UI: Refresh backfills an omitted request into Analyze and Search
     await expect(page.locator("#analyzeRefresh")).toBeVisible();
     assert.equal((await loadBoardState(context)).evidence?.length ?? 0, 0);
     await page.locator("#collectionNoticeAction").click();
-    await page.locator("#reviewSource").click();
+    await expect(page.locator("#sourceDatabase")).toBeFocused();
     await page.locator("#sourceDatabase").fill(appDbPath);
     await page.locator("#sourceSessions").fill(sessionRoot);
     await page.locator("#connectCollection").click();

@@ -190,7 +190,7 @@ for (const width of [1440, 390]) test(`persistent destinations retain report and
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "connection");
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toHaveText("Approve source and start collection");
     await revealNavigation(page); await page.locator("#comparePeriods").click(); await ready(page);
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
     await navigateMain(page, "reports"); await ready(page);
@@ -199,7 +199,7 @@ for (const width of [1440, 390]) test(`persistent destinations retain report and
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "connection");
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#connectCollection")).toHaveText("Approve source and start collection");
     await revealNavigation(page); await revealAnalyzeRecords(page); await ready(page);
     await expect(page.locator("#activityListSummary")).toBeFocused();
     await expect(page.locator("#settingsDraftNotice")).toBeVisible();

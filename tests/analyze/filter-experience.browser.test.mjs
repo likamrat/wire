@@ -341,7 +341,7 @@ test("failed filter reads keep the accepted population and Settings drafts still
     await page.keyboard.press("Escape");
     assert.equal(reads.length, before);
     await navigateMain(page, "settings"); await ready(page);
-    await page.locator("#cancelPreferences").click();
+    await page.locator("#cancelSource").click();
     await navigateMain(page, "analyze"); await ready(page);
     await expect(refresh).toBeEnabled();
 });
@@ -357,7 +357,7 @@ test("joined Search reaches current Display settings independently of filters", 
     assert.equal(await page.evaluate(() => document.activeElement.id), "displayTimeZone-control");
     await choose("displayTimeZone", "UTC");
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), "UTC");
-    assert.equal(await page.locator("#saveCollection").isDisabled(), true);
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false, "A browser display setting is not a collection change");
     await page.reload(); await ready(page);
     assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), reduced);

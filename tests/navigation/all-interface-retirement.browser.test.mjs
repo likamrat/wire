@@ -123,9 +123,10 @@ test("every current interface excludes retired reviews, including menus, dialogs
         const root = page.locator(`[data-settings-section="${category}"]`);
         await expand(root); await capture("settings-" + category, root, category === "privacy");
     }
-    await navigateSettings(page, "source-access");
-    await page.locator("#editSource").click();
-    await capture("source-permission-review", page.locator("#sourceEditor"));
+    await navigateSettings(page, "connection");
+    // A real path edit shows the source permission decision.
+    await page.locator("#sourceSessions").fill(await page.locator("#sourceSessions").inputValue() + "-draft");
+    await capture("source-permission-review", page.locator("#connectionSource"));
     await page.locator("#cancelSource").click();
     await navigateSettings(page, "privacy");
     await page.getByRole("switch", { name: "Save Copilot replies locally", exact: true }).check();
@@ -141,7 +142,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await capture("recollection-scope", page.locator("#recollectDialog"));
     await page.locator("#recollectClose").click();
     await navigateSettings(page, "connection");
-    await page.getByRole("link", { name: "View collection status", exact: true }).click();
+    await page.getByRole("link", { name: "Collection status", exact: true }).click();
     await expand(page.locator("#collectionStatusView"));
     await capture("collection-status", page.locator("#collectionStatusView"));
     await page.locator("#wireSearch").fill("AI reviews"); await page.locator("#wireSearch").click();

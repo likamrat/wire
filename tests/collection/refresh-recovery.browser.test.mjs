@@ -239,7 +239,7 @@ test("a real rejected source path offers one source repair, not an uncertain che
     assert.equal(await page.locator("#collectionNotice").isVisible(), false, "Paused fact belongs to this recovery, not a duplicate banner");
     assert.equal(await page.locator("#refreshBtn").isVisible(), false, "A successful stored read cannot repair source paths");
     assert.equal(await page.locator("#freshIssues").innerText(), "Review source");
-    assert.equal(await page.locator("#freshIssues").getAttribute("href"), "/settings?section=source-access&setting=source-paths");
+    assert.equal(await page.locator("#freshIssues").getAttribute("href"), "/settings?section=connection&setting=source-paths");
     assert.equal(await page.locator("#activityView").textContent(), activity);
     assert.deepEqual(await loadBoardState(app.context), app.before);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
@@ -247,8 +247,8 @@ test("a real rejected source path offers one source repair, not an uncertain che
     await page.locator("#freshIssues").focus();
     assert.equal(await page.locator("#freshIssues").evaluate(node => node === document.activeElement), true);
     await page.keyboard.press("Enter"); await ready(page);
-    assert.equal(await page.locator("#approvedSourceDetails").isVisible(), true);
-    assert.equal(await page.locator("#editSource").isVisible(), true);
+    assert.equal(await page.locator("#sourceDatabase").evaluate(node => node === document.activeElement), true, "Review source lands on the editable source path");
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false, "Opening the source repairs nothing by itself");
     await navigateSettings(page, "connection");
     assert.equal(await page.locator("#freshStatus").innerText(), "Source paths need attention.");
     await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter");

@@ -356,7 +356,7 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await expect(guide.locator("#workspace")).toHaveAttribute("aria-busy","false");
             await guide.locator("#collectionWindow-control").click();
             await guide.locator('.select-popup [role=option][data-value="7"]').click();
-            await expect(guide.locator("#cancelPreferences")).toBeVisible();
+            await expect(guide.locator("#cancelSource")).toBeVisible();
             await check.click();await expect(settings.locator("#appUpdateStatus")).toContainText("v1.1.2");
             await freezeGuide();
             try {
@@ -369,7 +369,7 @@ test("full WIRE clone updates on the original address and reopens the same saved
             } finally { await lifecycle.send("Page.setWebLifecycleState",{state:"active"}); }
             await guide.bringToFront();
             await expect(guide.locator("#collectionWindow")).toHaveValue("7");
-            await expect(guide.locator("#cancelPreferences")).toBeVisible();
+            await expect(guide.locator("#cancelSource")).toBeVisible();
             await verifyPreserved();
         }
         t.diagnostic(`Edge and Chromium: one docs-only release restart across three pages${sleepingGuide ? ", including a natively frozen Guide verified after wake" : ""}, same browser bundle, unchanged second instance and saved report.`);
@@ -695,8 +695,10 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await expect(extra.locator("#workspace")).toHaveAttribute("aria-busy", "false");
             await extra.close({ runBeforeUnload: true });
             await fetch(url + "settings").then(r => r.text()); // A document fetched but never mounted.
-            await other.locator('#settingsCategoryNav [data-category="source-access"]').click();
-            await other.locator("#reviewSource,#editSource").filter({ visible: true }).first().click();
+            await other.locator('#settingsCategoryNav [data-category="connection"]').click();
+            // An actual unsaved source edit is the Settings work that blocks the update.
+            const otherSessions = other.locator("#sourceSessions");
+            await otherSessions.fill(await otherSessions.inputValue() + "-unsaved");
             if (process.env.WIRE_APP_UPDATE_PROOFS) {
                 await mkdir(process.env.WIRE_APP_UPDATE_PROOFS, { recursive: true });
                 await page.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, "windows-settings-offer.png"), animations: "disabled" });

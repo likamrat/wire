@@ -202,7 +202,7 @@ test("Settings search groups all existing title, description and keyword matches
 test("Settings results reveal every available destination without changing data or executing an action", { timeout: 45000 }, async t => {
     const { page } = await setup(t);
     const targets = {
-        source: "editSource", "source-paths": "approvedSourceTitle", "microsoft-connection": "connectionTitle",
+        "microsoft-connection": "connectionTitle",
         "save-preferences": "connectionTitle", // No outstanding collection draft in this fixture.
     };
     for (const entry of navigation.entries.filter(entry => !unavailableHere.has(entry.id))) {
@@ -221,7 +221,7 @@ test("Settings results reveal every available destination without changing data 
         } else await expect(destination).toBeFocused();
         assert.equal(new URL(page.url()).searchParams.get("setting"), entry.id);
         await expect(page.locator("dialog[open]")).toHaveCount(0);
-        await expect(page.locator("#sourceEditor")).toBeHidden();
+        await expect(page.locator("#sourceCommit")).toBeHidden();
         if (entry.view !== "collection-status") {
             await expect(page.locator("#settingsSearch")).toHaveValue(entry.title);
             await expect(result).toHaveAttribute("aria-current", "location");

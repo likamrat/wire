@@ -845,8 +845,8 @@ test("first-account readiness waits for the actual source draft and reads after 
     await entered.promise;
     await expect(page.locator("#wireMicrosoftAction")).toHaveText("Cancel sign-in");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await navigateSettings(page, "source-access");
-    await page.locator("#reviewSource").click();
+    await navigateSettings(page, "connection");
+    await expect(page.locator("#sourceDatabase")).toBeEditable();
     const draftPath = "C:\\synthetic-held-source\\data.db";
     await page.locator("#sourceDatabase").fill(draftPath);
     const snapshots = app.calls.filter(call => call.path === "/api/snapshot").length;
@@ -862,7 +862,7 @@ test("first-account readiness waits for the actual source draft and reads after 
     await expect(page.locator("#saveMicrosoftCollection")).toBeEnabled();
     await expect(page.locator("#sourceMicrosoftStatus")).toHaveText("Not enabled");
     await expect(page.locator("#settingsConnectionError")).toBeHidden();
-    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await expect(page.locator("#sourceDatabase")).not.toHaveValue(draftPath);
     await page.waitForResponse(response => response.url().endsWith("/api/access/watch"));
     await page.waitForResponse(response => response.url().endsWith("/api/access/watch"));
     assert.equal(app.calls.filter(call => call.path === "/api/snapshot").length, snapshots + 1,

@@ -193,7 +193,7 @@ test("field explanation stays on its final line without covering the text across
     t.diagnostic(`Text to info circle: ${min.toFixed(2)}–${max.toFixed(2)} CSS px`);
 });
 
-test("help flips above a low glyph; Source access keeps its action's own tooltip anchor", async t => {
+test("help flips above a low glyph; Sources keeps its action's own tooltip anchor", async t => {
     const page = await setup(t), help = await openBatch(page);
     await resize(page, 375, 2); await help.scrollIntoViewIfNeeded();
     await help.evaluate(n => {
@@ -206,9 +206,8 @@ test("help flips above a low glyph; Source access keeps its action's own tooltip
     await capture(page, "bottom-edge");
     await page.keyboard.press("Escape"); await page.locator("#closeContextSidebar").click();
     await resize(page, 1200, 1);
-    await navigateMain(page, "settings"); await navigateSettings(page, "source-access");
-    const action = page.getByRole("button", { name: "Review source & connect", exact: true });
-    await action.press("Enter"); await page.getByLabel("Copilot metadata database", { exact: true }).fill("");
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
+    await page.getByLabel("Metadata database", { exact: true }).fill("");
     const approve = page.getByRole("button", { name: "Approve source and start collection", exact: true });
     await expect(approve).toBeDisabled();
     const why = page.getByRole("group", { name: "Approve source and start collection", exact: true });

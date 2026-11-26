@@ -46,10 +46,7 @@ for (const frontend of ["bundled", "react"]) test(`${frontend} navigation rows d
         if (!await sidebar.isVisible()) await page.locator("#navigationToggle").click();
         await sidebar.hover(); assert.equal((await sidebar.evaluate(paint)).line,"none");
         await page.goto(new URL("/settings?section=source-access",runtime.url).href);
-        await page.locator("#editSource").click();
-        await page.locator('#settingsCategoryNav [data-category=connection]').evaluate(a => a.click());
-        const prose=page.locator("#collectionSourceDraft a"); await prose.hover();
-        assert.equal((await prose.evaluate(paint)).line,"underline");
+        await expect(page.locator("#connectionTitle")).toHaveText("Sources");
     }
 });
 

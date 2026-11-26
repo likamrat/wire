@@ -78,22 +78,25 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     assert.equal(await page.locator("#connectionTitle").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('nav [data-nav=settings]').getAttribute("aria-current"), "page");
     assert.equal(await page.locator('nav [data-nav=settings] [data-lucide-icon=settings]').count(), 1);
-    assert.equal(await page.locator("#collectionSourceEntry").isVisible(), true);
     await expect(page.locator("#checkActivity")).toHaveAccessibleName("Read stored activity");
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
-    await page.locator("#collectionSourceEntry").click();
-    await page.locator("#reviewSource").click();
+    assert.equal(await page.locator("#sourceEditor").isVisible(), true, "Sources edits the source paths directly");
+    assert.equal(await page.locator("#connectionSourceSummary").innerText(), "WIRE can't read this yet");
+    assert.equal(await page.locator("#sourceCommitTitle").innerText(), "What approving allows");
+    assert.equal(await page.locator("#connectCollection").innerText(), "Approve source and start collection");
     await page.locator("#sourceDatabase").fill(a.appDbPath);
     await page.locator("#sourceSessions").fill(a.sessionRoot);
     await page.keyboard.press("Enter");
     assert.equal(posts.filter(row => row.path === "/api/collection/configure").length, 0, "Typing Enter in a path is not approval");
     await selectActivityOption(page, "collectionWindow", "7");
     await selectActivityOption(page, "collectionCadence", "15");
-    assert.match(await page.locator("#approvalScope").innerText(), /original prompts on this device/);
+    assert.match(await page.locator("#approvalScope").innerText(), /Read your Copilot chats[\s\S]*Prompts are saved on this device/);
     assert.equal(await page.locator("#collectionWindow").inputValue(), "7");
     assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
+    await navigateSettings(page, "themes");
     await navigateSettings(page, "connection");
-    await page.locator("#collectionSourceDraft a").click();
+    assert.equal(await page.locator("#sourceDatabase").inputValue(), a.appDbPath, "The source draft survives a category change");
+    assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
+    assert.equal(posts.filter(row => row.path === "/api/collection/configure").length, 0);
     await page.locator("#connectCollection").evaluate(node => { node.click(); node.click(); });
     await saved(page, "Source approved.");
     assert.equal(posts.filter(row => row.path === "/api/collection/configure").length, 1, "Duplicate click cannot repeat approval");
@@ -104,7 +107,8 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     assert.equal(status.config.pollSeconds, 15);
     await navigateSettings(page, "connection");
     assert.equal(await page.locator("#connectionStatus").innerText(), "Collection on");
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+    assert.equal(await page.locator("#connectionSourceSummary").innerText(), "WIRE can read this");
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false, "Nothing to commit once the approved source matches");
     assert.equal(await page.locator("#connectCollection").isVisible(), false);
     assert.equal(await page.locator("#approveCollection").count(), 0);
     assert.equal(await page.locator("#pauseCollection").isVisible(), true);
@@ -113,7 +117,11 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     await page.locator("#pauseCollection").click(); await saved(page, "Collection paused.");
     await selectActivityOption(page, "collectionWindow", "30");
     await selectActivityOption(page, "collectionCadence", "60");
-    await page.locator("#saveCollection").click(); await saved(page, "Preferences saved.");
+    assert.equal(await page.locator("#sourceCommitTitle").innerText(), "What changes");
+    assert.match(await page.locator("#approvalScope").innerText(), /Check less often[\s\S]*Collection stays paused/);
+    assert.equal(await page.locator("#connectCollection").innerText(), "Save preferences");
+    assert.equal(await page.locator("#saveCollection").isVisible(), false, "Copilot schedule changes share the Sources commit");
+    await page.locator("#connectCollection").click(); await saved(page, "Preferences saved.");
     status = await runtime.collector.status();
     assert.equal(status.config.enabled, false);
     assert.equal(status.config.pollSeconds, 60);
@@ -166,7 +174,32 @@ test("drafts retain exact inputs, focus and scroll through polling, routes and B
     await page.goForward(); await ready(page);
     assert.equal(await page.locator("#pageTitle").innerText(), "Analyze");
     await page.locator("#settingsDraftNotice a").click();
+    const toggle = page.locator("#connectionSourceToggle"), all = page.locator("#toggleAllSources");
+    assert.equal(await toggle.getAttribute("aria-expanded"), "true", "Sources start expanded");
+    assert.equal(await toggle.getAttribute("aria-controls"), "connectionSourceBody");
+    assert.equal(await page.locator("#sourceListTitle").innerText(), "Local sources");
+    assert.equal(await all.innerText(), "Collapse all");
+    assert.equal(await all.getAttribute("data-state"), "expanded");
+    await toggle.click();
+    assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+    await expect(toggle).toBeFocused();
+    assert.equal(await page.locator("#connectionSourceBody").isVisible(), false);
+    assert.equal(await page.locator("#connectionSourceSummary").innerText(), "WIRE can read this · Token records off · Changed", "A collapsed source still shows its unsaved edit");
+    assert.equal(await all.innerText(), "Expand all");
+    assert.equal(await all.getAttribute("data-state"), "collapsed");
     await page.locator("#cancelSource").click();
+    await expect(toggle, "Cancel returns to the collapsed source rather than a hidden field").toBeFocused();
+    assert.equal(await page.locator("#connectionSourceSummary").innerText(), "WIRE can read this · Token records off");
+    await all.click();
+    assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+    await expect(all, "The bulk toggle keeps focus").toBeFocused();
+    assert.equal(await all.isDisabled(), false);
+    assert.equal(await all.innerText(), "Collapse all");
+    assert.equal(await page.locator("#connectionSourceSummary").innerText(), "WIRE can read this");
+    await all.click();
+    assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+    await expect(all).toBeFocused();
+    await all.click();
     assert.equal(await page.locator("#sourceSessions").inputValue(), a.sessionRoot);
     assert.equal((await runtime.collector.status()).config.sessionRoot, a.sessionRoot);
     assert.equal(posts.filter(row => /collection\/(configure|enabled|now)/.test(row.path)).length, 0);
@@ -206,15 +239,15 @@ test("invalid writes, concurrent settings and uncertain responses remain explici
     await selectActivityOption(page, "collectionCadence", "15");
     // A separate, synthetic panel wins the write before this panel receives a poll.
     await runtime.collector.configure({ ...config, pollSeconds: 30, expectedConfigVersion: (await runtime.collector.status()).configVersion });
-    await page.locator("#saveCollection").click();
+    await page.locator("#connectCollection").click();
     await page.locator("#reloadSettings").waitFor();
     assert.match(await page.locator("#settingsMessage").innerText(), /changed in another panel/);
     assert.equal((await runtime.collector.status()).config.pollSeconds, 30);
     assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
     await page.locator("#reloadSettings").click();
     await page.locator("#reloadSettings").waitFor({ state: "hidden" });
-    assert.equal(await page.locator("#saveCollection").isDisabled(), true);
-    await page.locator("#cancelPreferences").click();
+    assert.equal(await page.locator("#connectCollection").isDisabled(), true);
+    await page.locator("#cancelSource").click();
     assert.equal(await page.locator("#collectionCadence").inputValue(), "30");
     await page.route("**/api/collection/configure", async route => { await route.fetch(); await route.abort("failed"); });
     await navigateSettings(page, "connection");
@@ -229,10 +262,10 @@ test("invalid writes, concurrent settings and uncertain responses remain explici
     assert.match(await page.locator("#settingsMessage").innerText(), /unconfirmed/);
     await page.locator("#reloadSettings").click();
     await page.locator("#reloadSettings").waitFor({ state: "hidden" });
-    assert.match(await page.locator("#sourceChangeImpact").innerText(), /Source settings changed/);
+    assert.match(await page.locator("#sourceChangeImpact").innerText(), /Settings changed\. Cancel edits to reload\./);
     await page.locator("#cancelSource").click();
-    assert.equal(await page.locator("#approvedDatabase").textContent(), b.appDbPath);
-    assert.notEqual(await page.locator("#approvedDatabase").textContent(), a.appDbPath);
+    assert.equal(await page.locator("#sourceDatabase").inputValue(), b.appDbPath);
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false);
 });
 
 test("Settings cannot grant report review or revive an invalidated frozen preview", { timeout: 60000 }, async t => {
@@ -244,7 +277,7 @@ test("Settings cannot grant report review or revive an invalidated frozen previe
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
     await navigateMain(page, "settings");
     await selectActivityOption(page, "collectionCadence", "15");
-    await page.locator("#saveCollection").click(); await saved(page, "Preferences saved.");
+    await page.locator("#connectCollection").click(); await saved(page, "Preferences saved.");
     await page.goBack(); await ready(page);
     await expect(page.getByRole("button", { name: "Save report", exact: true }).filter({ visible: true }).and(page.locator(":enabled"))).toHaveCount(0);
     assert.equal(posts.filter(row => row.path === "/api/preview").length, 1, "Back did not silently prepare another preview");
@@ -271,13 +304,15 @@ test("minimal settings and Home stay readable in light/dark at 375/820/1200 and 
         await screenshot(page, `home-${theme}-${width}.png`);
         await navigateMain(page, "settings");
         assert.equal(await page.locator("#filters").isVisible(), false);
-        assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+        assert.equal(await page.locator("#sourceCommit").isVisible(), false, "An approved source without edits shows no commit");
         assert.equal(await page.locator("#collectionSetup").getAttribute("open"), null);
         assert.equal(await page.locator("#settingsView").evaluate(node => getComputedStyle(node).fontSize), "14px", "Settings adopts the verified reference body role");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         for (const size of await page.locator("#settingsView button").evaluateAll(nodes => nodes.filter(n => n.checkVisibility()).map(n => n.getBoundingClientRect().height))) assert.ok(size >= 44);
         await screenshot(page, `settings-${theme}-${width}.png`);
         await openSourceEditor(page);
+        await page.locator("#sourceDatabase").fill(await page.locator("#sourceDatabase").inputValue() + "-draft");
+        await page.locator("#sourceCommit").waitFor();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         await screenshot(page, `source-review-${theme}-${width}.png`);
         await page.locator("#cancelSource").click();
@@ -291,7 +326,7 @@ test("minimal settings and Home stay readable in light/dark at 375/820/1200 and 
 });
 
 test("source presentation has one path pair with equal field geometry through focus and enlarged text", { timeout: 120000 }, async t => {
-    const { page, runtime, posts } = await setup(t, true, "source-a-\u00e9\u4f8b-space  pair-" + "long-folder-name-".repeat(2));
+    const { page, runtime, posts, a } = await setup(t, true, "source-a-\u00e9\u4f8b-space  pair-" + "long-folder-name-".repeat(2));
     const proofDir = process.env.WORKIQ_SOURCE_PROOFS;
     if (proofDir) await mkdir(proofDir, { recursive: true });
     await page.goto(runtime.url + "#settings?section=connection&setting=source-paths"); await ready(page);
@@ -301,7 +336,7 @@ test("source presentation has one path pair with equal field geometry through fo
         const viewport = page.viewportSize();
         await page.setViewportSize({ ...viewport, height: await page.evaluate(() => document.documentElement.scrollHeight) });
         await page.evaluate(() => scrollTo(0, 0));
-        await page.locator('[data-settings-section="source-access"]').screenshot({ path: path.join(proofDir, name) });
+        await page.locator('[data-settings-section="connection"]').screenshot({ path: path.join(proofDir, name) });
         await page.setViewportSize(viewport);
     }
     async function measure() {
@@ -322,21 +357,25 @@ test("source presentation has one path pair with equal field geometry through fo
         await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
         await page.evaluate(() => document.fonts.ready);
-        await page.locator("#approvedSourceDetails").scrollIntoViewIfNeeded();
+        await page.locator("#sourcePathFields").scrollIntoViewIfNeeded();
         await page.evaluate(() => document.activeElement.blur());
         await page.keyboard.press("Escape");
         await page.mouse.move(0, 0);
-        const readValues = await page.locator(".settings-paths dd").evaluateAll(nodes => nodes.map(node => {
+        // Approved paths are read in the fields themselves; the token records file is the only painted path.
+        const readValues = await page.locator("#sourceUsageRecordsFacts dd").evaluateAll(nodes => nodes.map(node => {
             const box = node.getBoundingClientRect(), range = document.createRange();
             range.selectNodeContents(node);
             const lines = [...range.getClientRects()];
-            return { id: node.id, lines: lines.length, fullValuePainted: lines.every(line =>
+            return { lines: lines.length, fullValuePainted: lines.every(line =>
                 line.left >= box.left - 1 && line.right <= box.right + 1 && line.top >= box.top - 1 && line.bottom <= box.bottom + 1),
-                noHorizontalClipping: node.scrollWidth <= node.clientWidth, whitespacePreserved: node.innerText === node.textContent };
+                noHorizontalClipping: node.scrollWidth <= node.clientWidth };
         }));
-        assert.ok(readValues.every(row => row.fullValuePainted && row.noHorizontalClipping && row.whitespacePreserved), `Full read paths are painted without hidden horizontal overflow: ${theme}/${width}/${size}`);
+        assert.ok(readValues.every(row => row.fullValuePainted && row.noHorizontalClipping), `Token records facts are painted without hidden horizontal overflow: ${theme}/${width}/${size}`);
+        assert.equal(await page.locator("#sourceDatabase").inputValue(), a.appDbPath, "The approved database path keeps its exact whitespace");
+        assert.equal(await page.locator("#sourceSessions").inputValue(), a.sessionRoot);
         await capture(`source-read-${theme}-${width}-${size}.png`);
         await openSourceEditor(page);
+        await page.locator("#sourceDatabase").focus();
         const databaseFocus = await measure();
         await capture(`source-focus-database-${theme}-${width}-${size}.png`);
         await page.locator("#sourceSessions").focus();
@@ -344,7 +383,8 @@ test("source presentation has one path pair with equal field geometry through fo
         await capture(`source-focus-history-${theme}-${width}-${size}.png`);
         await page.evaluate(() => document.activeElement.blur());
         const normal = await measure();
-        const duplicated = await page.locator("#approvedDatabase").isVisible();
+        const duplicated = await page.evaluate(paths => [...document.querySelectorAll('[data-settings-section="connection"] *')]
+            .some(node => node.childElementCount === 0 && node.checkVisibility() && paths.includes(node.textContent)), [a.appDbPath, a.sessionRoot]);
         measurements.push({ theme, width, size, duplicated, readValues, normal, databaseFocus, historyFocus });
         await capture(`source-edit-${theme}-${width}-${size}.png`);
         assert.deepEqual(geometry(normal[0]), geometry(normal[1]));
@@ -359,7 +399,6 @@ test("source presentation has one path pair with equal field geometry through fo
             assert.notEqual(row.radius, "999px", "Text fields are not action pills");
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-        await page.locator("#cancelSource").click();
     }
     if (proofDir) await writeFile(path.join(proofDir, "source-geometry.json"), JSON.stringify(measurements, null, 2));
     assert.ok(measurements.every(row => !row.duplicated), "Read-only approved paths must not be visible beside editable draft paths");
@@ -375,28 +414,24 @@ test("source read/edit targets retain drafts across search, categories, time zon
         Object.defineProperty(navigator, "clipboard", { value: { writeText() { window.clipboardWrites++; return Promise.resolve(); } } });
     });
     await page.goto(runtime.url + "#settings?section=connection&setting=source-paths"); await ready(page);
-    assert.equal(await page.locator("#approvedSourceTitle").evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
-    assert.equal(await page.locator("#approvedDatabase").textContent(), a.appDbPath);
-    for (const id of ["approvedDatabase", "approvedSessions"]) {
-        assert.equal(await page.locator("#" + id).evaluate(node => getComputedStyle(node).borderWidth), "0px");
-    }
+    assert.equal(await page.locator("#sourceDatabase").evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator("#sourceDatabase").inputValue(), a.appDbPath);
+    assert.equal(await page.locator("#sourceSessions").inputValue(), a.sessionRoot);
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false, "Opening approved paths offers no commit");
     await openSourceEditor(page);
-    assert.equal(await page.getByRole("textbox", { name: "Copilot metadata database", exact: true }).evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator("#editSource").isVisible(), false);
-    assert.equal(await page.locator("#approvedDatabase").isVisible(), false);
-    assert.equal(await page.locator("#approvedConnection").isVisible(), false, "Automatic reads are a separate task.");
-    assert.equal(await page.locator("#connectCollection").isDisabled(), true);
+    assert.equal(await page.getByRole("textbox", { name: "Metadata database", exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator("#pauseCollection").isDisabled(), false);
     assert.equal(await page.locator("#sourceChangeImpact").isVisible(), false);
-    assert.equal(await page.locator("#connectCollection").innerText(), "Save preferences");
     await page.keyboard.press("Tab");
     assert.equal(await page.getByRole("textbox", { name: "Chat history folder", exact: true }).evaluate(node => node === document.activeElement), true);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     await page.keyboard.press("Enter");
+    assert.equal(await page.locator("#pauseCollection").isDisabled(), true, "Automatic reads wait for the source draft");
+    assert.equal(await page.locator("#connectCollection").innerText(), "Approve and switch source");
     const field = await page.locator("#sourceDatabase").elementHandle();
+    await navigateSettings(page, "themes");
     await navigateSettings(page, "collection");
-    await page.locator("#collectionSourceDraft a").click();
     await selectActivityOption(page, "collectionCadence", "15");
     await navigateSettings(page, "regional");
     await selectActivityOption(page, "displayTimeZone", "UTC"); await ready(page);
@@ -407,7 +442,7 @@ test("source read/edit targets retain drafts across search, categories, time zon
         assert.equal(await field.evaluate(node => node.isConnected && node === document.activeElement), true);
         assert.equal(await page.locator("#sourceDatabase").inputValue(), b.appDbPath);
         assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
-        assert.equal(await page.locator("#approvedSourceDetails").isVisible(), false);
+        assert.equal(await page.locator("#connectionSourceBody").isVisible(), true);
     }
     await page.evaluate(() => { location.hash = "#settings?section=connection&setting=source-paths"; });
     await page.waitForFunction(() => document.activeElement?.id === "sourceDatabase");
@@ -428,14 +463,13 @@ test("source read/edit targets retain drafts across search, categories, time zon
     assert.equal(await page.locator("#sourceSessions").inputValue(), b.sessionRoot);
     assert.deepEqual(await readFile(configFile), original);
     await page.locator("#cancelSource").click();
-    assert.equal(await page.locator("#editSource").evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator("#approvedDatabase").textContent(), a.appDbPath);
+    assert.equal(await page.locator("#sourceDatabase").evaluate(node => node === document.activeElement), true, "Cancel returns to the first changed control");
     assert.equal(await page.locator("#sourceDatabase").inputValue(), a.appDbPath);
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+    assert.equal(await page.locator("#collectionCadence").inputValue(), "5");
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false);
     await openSourceEditor(page);
     await page.locator("#sourceSessions").focus();
     assert.equal(await page.locator("#sourceDatabase").evaluate(node => getComputedStyle(node).outlineStyle), "none", "Cancelled search highlights must not imitate a second focus ring");
-    await page.locator("#cancelSource").click();
     assert.equal(await page.evaluate(() => {
         const ids = [...document.querySelectorAll("[id]")].map(node => node.id);
         return ids.length === new Set(ids).size;
@@ -507,8 +541,8 @@ test("pending and rejected source replacements keep approved bytes, paused state
         await page.locator("#connectCollection").click();
         await page.waitForFunction(() => document.querySelector("#sourceDatabase").disabled);
         assert.equal(await page.locator("#cancelSource").isDisabled(), true);
-        assert.equal(await page.locator("#pauseCollection").isVisible(), false, "Pause is not a source-review action");
-        assert.equal(await page.locator("#approvedSourceDetails").isVisible(), false);
+        assert.equal(await page.locator("#pauseCollection").isDisabled(), true, "Resume waits for the pending source change");
+        assert.equal(await page.locator("#sourceChangeImpact").innerText(), "Saving...");
         assert.deepEqual(await geometry(), normal, "Pending disables both fields without changing their shape");
         if (normalMatrix) assert.deepEqual(await stateMatrix("pending"), normalMatrix);
         assert.deepEqual(await readFile(configFile), original);
@@ -541,11 +575,11 @@ test("pending and rejected source replacements keep approved bytes, paused state
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     await runtime.collector.configure({ appDbPath: a.appDbPath, sessionRoot: a.sessionRoot,
         approved: true, enabled: false, windowDays: 7, pollSeconds: 30, expectedConfigVersion: originalStatus.configVersion });
-    await page.waitForFunction(() => document.querySelector("#sourceChangeImpact").textContent.includes("Source settings changed"));
+    await page.waitForFunction(() => document.querySelector("#sourceChangeImpact").textContent.includes("Settings changed. Cancel edits to reload."));
     assert.equal(await page.locator("#sourceDatabase").inputValue(), b.appDbPath);
     assert.equal(await page.locator("#connectCollection").isDisabled(), true);
-    assert.equal(await page.locator("#pauseCollection").isVisible(), false, "A stale source review cannot expose another operation");
-    assert.equal(await page.locator("#approvedSourceDetails").isVisible(), false);
+    assert.equal(await page.locator("#pauseCollection").isDisabled(), true, "A stale source draft cannot expose another operation");
+    assert.equal(await page.locator("#collectNow").isEnabled(), false);
     await page.locator("#cancelSource").click();
     assert.equal(await page.locator("#collectionCadence").inputValue(), "30");
     await openSourceEditor(page);
@@ -558,8 +592,8 @@ test("pending and rejected source replacements keep approved bytes, paused state
     assert.equal(switched.config.windowDays, 7);
     assert.equal(switched.config.pollSeconds, 30);
     assert.notEqual(switched.configVersion, originalStatus.configVersion);
-    assert.equal(await page.locator("#approvedDatabase").textContent(), b.appDbPath);
-    assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+    assert.equal(await page.locator("#sourceDatabase").inputValue(), b.appDbPath);
+    assert.equal(await page.locator("#sourceCommit").isVisible(), false);
     assert.equal(await page.locator("#settingsMessage").evaluate(node => node === document.activeElement), true);
     assert.ok(!posts.some(row => /privacy-review|export|record|collection\/(enabled|now)/.test(row.path)));
     if (proofDir) await writeFile(path.join(proofDir, "source-state-geometry.json"), JSON.stringify(stateMeasurements, null, 2));

@@ -496,7 +496,8 @@ test("real shared watch erases idle Settings source drafts but preserves an unse
     await reader.goto(app.url + "settings?section=source-access");
     await gate(controller, "Sign in to WIRE");
     await expect(reader.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await reader.locator("#reviewSource").click();
+    await expect(reader.locator("[data-settings-section=connection]")).toBeVisible();
+    await expect(reader.locator("#sourceDatabase")).toBeEditable();
     const database = "C:\\synthetic-private-draft\\metadata.db", sessions = "C:\\synthetic-private-draft\\sessions";
     await reader.locator("#sourceDatabase").fill(database);
     await reader.locator("#sourceSessions").fill(sessions);

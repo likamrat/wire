@@ -78,7 +78,7 @@ async function effectivePaper(page, selector) {
         throw new Error("The source view has no rendered opaque surface.");
     });
 }
-async function heading(page, id = "approvedSourceTitle") {
+async function heading(page, id = "connectionSourceToggle") {
     await page.evaluate(() => document.fonts.ready);
     const measured = await page.locator("#" + id).evaluate(node => {
         const css = getComputedStyle(node), cue = getComputedStyle(node, "::before");
@@ -109,32 +109,37 @@ async function captureSource(page, name) {
     const viewport = page.viewportSize();
     await page.setViewportSize({ width: viewport.width, height: await page.evaluate(() => Math.max(innerHeight, document.documentElement.scrollHeight)) });
     await page.evaluate(() => scrollTo(0, 0));
-    await page.locator("[data-settings-section=source-access]").screenshot({ path: path.join(proofs, name + ".png") });
+    await page.locator("[data-settings-section=connection]").screenshot({ path: path.join(proofs, name + ".png") });
     await page.setViewportSize(viewport);
 }
 
 test("source path search restores the original destination without re-focusing it during polling", async t => {
     const { page } = await setup(t);
-    const title = page.locator("#approvedSourceTitle"), search = page.locator("#settingsSearch");
+    // The retired Source access route resolves to the Sources path field.
+    const title = page.locator("#sourceDatabase"), search = page.locator("#settingsSearch");
+    await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "connection");
+    await expect(page.locator("#connectionTitle")).toHaveText("Sources");
+    await expect(page.getByRole("switch", { name: "Token records", exact: true })).toBeVisible();
     await expect(title).toBeFocused();
     await navigateSettings(page, "regional");
     await search.fill("source paths");
     const hit = page.locator('#settingsSearchResults a[data-setting="source-paths"]');
     await keyboardActivate(page, hit);
     await expect(title).toBeFocused();
-    await expect(page.locator("#approvedDatabase")).toHaveText(paths.appDbPath);
+    await expect(page.locator("#sourceDatabase")).toHaveValue(paths.appDbPath);
     await page.goBack(); await expect(hit).toBeFocused();
     await hit.click(); await expect(title).toBeFocused();
     await search.click();
     await page.waitForResponse(r => r.url().endsWith("/api/collection/status"));
     await expect(search).toBeFocused();
-    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await expect(page.locator("#sourceCommit")).toBeHidden();
 });
 
 test("readonly source roles, exact long paths and control geometry remain coherent in both themes and text scales", { timeout: 120000 }, async t => {
     const { page, setPaths } = await setup(t), measurements = [];
     setPaths(longPaths); await page.reload(); await ready(page);
-    await page.locator("#approvedSourceDetails dt").first().evaluate(node => { node.textContent += " \u2014 synthetic unusually long descriptive role label"; });
+    const recordsFile = longPaths.appDbPath.replace(/[^\\/]*$/, "session-store.db");
+    await page.locator("#sourceUsageRecordsFacts dt").first().evaluate(node => { node.textContent += " \u2014 synthetic unusually long descriptive role label"; });
     const cases = [375, 820, 1200, 2560].map(width => ({ width, narrow: false })).concat({ width: 2560, narrow: true });
     for (const theme of ["light", "dark"]) for (const scale of [1, 2]) for (const config of cases) {
         await page.setViewportSize({ width: config.width, height: 1000 });
@@ -144,7 +149,10 @@ test("readonly source roles, exact long paths and control geometry remain cohere
             document.querySelector("#settingsView").style.width = narrow ? "375px" : "";
         }, { scale, narrow: config.narrow });
         const titleBefore = await heading(page);
-        const values = await page.locator("#approvedSourceDetails .settings-paths").evaluate(node => {
+        // Approved paths are read in their fields; the token records facts are the only read-only source values.
+        await expect(page.locator("#sourceDatabase")).toHaveValue(longPaths.appDbPath);
+        await expect(page.locator("#sourceSessions")).toHaveValue(longPaths.sessionRoot);
+        const values = await page.locator("#sourceUsageRecordsFacts").evaluate(node => {
             const style = getComputedStyle(node);
             return { family: style.fontFamily,
                 overflow: document.documentElement.scrollWidth > innerWidth,
@@ -152,34 +160,34 @@ test("readonly source roles, exact long paths and control geometry remain cohere
                     const css = getComputedStyle(field), box = field.getBoundingClientRect(), range = document.createRange();
                     range.selectNodeContents(field);
                     const rects = [...range.getClientRects()];
-                    return { id: field.id, tag: field.tagName, text: field.textContent, visibleText: field.innerText,
+                    return { tag: field.tagName, text: field.textContent, visibleText: field.innerText,
                         family: css.fontFamily, size: css.fontSize, weight: css.fontWeight, lineHeight: css.lineHeight,
-                        color: css.color, whiteSpace: css.whiteSpace, textOverflow: css.textOverflow,
+                        color: css.color, textOverflow: css.textOverflow,
                         clipped: field.scrollWidth > field.clientWidth || field.scrollHeight > field.clientHeight,
                         allGlyphsInside: rects.every(r => r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1),
                         lines: rects.length };
                 }) };
         });
-        values.paper = await effectivePaper(page, "#approvedSourceDetails .settings-paths");
+        values.paper = await effectivePaper(page, "#sourceUsageRecordsFacts");
         assert.equal(values.overflow, false, JSON.stringify({ theme, scale, ...config }));
-        assert.deepEqual(values.rows.filter(row => row.tag === "DD").map(row => row.text), [...Object.values(longPaths), "Not read"]);
+        assert.equal(values.rows.filter(row => row.tag === "DD").at(-1).text, recordsFile);
+        await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
+        await expect(page.locator("#sourceUsageRecordsFile")).toHaveCSS("white-space", "break-spaces");
+        const [label, value] = values.rows;
+        assert.notEqual(label.color, value.color, "Reference labels and reading values retain their distinct roles");
         for (const row of values.rows) {
-            assert.equal(row.size, `${(row.tag === "DT" ? 14 : 16) * scale}px`, "Reference labels and exact reading values retain their distinct roles");
             assert.equal(row.family, values.family);
             assert.ok(contrast(row.color, values.paper) >= 4.5);
-            assert.equal(row.clipped, false); assert.equal(row.allGlyphsInside, true);
+            assert.equal(row.clipped, false, JSON.stringify(row)); assert.equal(row.allGlyphsInside, true, JSON.stringify(row));
             if (row.tag === "DD") {
-                assert.equal(row.visibleText, row.text); assert.equal(row.whiteSpace, "break-spaces");
+                assert.equal(row.visibleText, row.text);
                 assert.notEqual(row.textOverflow, "ellipsis");
-                if (row.id === "approvedDatabase" || row.id === "approvedSessions") assert.ok(row.lines > 1);
             }
         }
-        await openSourceEditor(page);
-        await expect(page.locator("#approvedSourceDetails")).toBeHidden();
-        await expect(page.locator("#sourceDatabase")).toBeFocused();
+        await page.locator("#sourceDatabase").focus();
         await page.keyboard.press("Tab");
         await expect(page.locator("#sourceSessions")).toBeFocused();
-        const fields = await page.locator("#sourceEditor input").evaluateAll(nodes => nodes.map(node => {
+        const fields = await page.locator("#sourcePathFields input").evaluateAll(nodes => nodes.map(node => {
             const css = getComputedStyle(node), box = node.getBoundingClientRect();
             return { x: box.x, width: box.width, height: box.height, size: css.fontSize, weight: css.fontWeight,
                 family: css.fontFamily, lineHeight: css.lineHeight, padding: css.padding, radius: css.borderRadius,
@@ -192,8 +200,8 @@ test("readonly source roles, exact long paths and control geometry remain cohere
         assert.ok(contrast(fields[1].outlineColor, fields[1].background) >= 3);
         assert.ok(contrast(fields[1].borderColor, fields[1].background) >= 3);
         assert.ok(contrast(fields[1].color, fields[1].background) >= 4.5);
-        await page.locator("#cancelSource").click();
-        await expect(page.locator("#editSource")).toBeFocused();
+        await page.evaluate(() => document.activeElement.blur());
+        await expect(page.locator("#sourceCommit")).toBeHidden();
         const titleAfter = await heading(page);
         for (const key of ["size", "weight", "lineHeight", "family"]) assert.equal(titleAfter[key], titleBefore[key]);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -217,23 +225,25 @@ test("a source draft preserves the focused path and text selection through polli
     await navigateMain(page, "analyze"); await page.goBack(); await ready(page);
     await expect(input).toHaveValue(longPaths.sessionRoot);
     await page.locator("#cancelSource").click();
-    await expect(page.locator("#editSource")).toBeFocused();
-    await expect(page.locator("#approvedSessions")).toHaveText(paths.sessionRoot);
+    await expect(page.locator("#sourceSessions")).toBeFocused();
+    await expect(page.locator("#sourceSessions")).toHaveValue(paths.sessionRoot);
+    await expect(page.locator("#sourceCommit")).toBeHidden();
 });
 
 test("source values preserve repeated spaces inside their glyph bounds at variable path wrap boundaries", async t => {
     const { page } = await setup(t);
     await page.setViewportSize({ width: 2560, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    const failures = await page.locator("#approvedDatabase").evaluate(node => {
-        const failures = [];
+    // The token records file is the read-only path Sources paints; its value fills the facts cell.
+    const failures = await page.locator("#sourceUsageRecordsFile").evaluate(node => {
+        const failures = [], cell = node.closest("dd");
         for (let length = 0; length <= 160; length++) {
             node.textContent = `C:\\Synthetic\\${"w".repeat(length)}\\source-a-\u00e9\u4f8b-space  pair-long-folder-name-long-folder-name-\\data.db`;
-            const box = node.getBoundingClientRect(), range = document.createRange();
+            const box = cell.getBoundingClientRect(), range = document.createRange();
             range.selectNodeContents(node);
             const lines = [...range.getClientRects()];
             const outside = lines.filter(line => line.left < box.left - 1 || line.right > box.right + 1 || line.top < box.top - 1 || line.bottom > box.bottom + 1);
-            if (outside.length || node.scrollWidth > node.clientWidth || node.innerText !== node.textContent) {
+            if (outside.length || cell.scrollWidth > cell.clientWidth || node.innerText !== node.textContent) {
                 const outsideCharacters = [];
                 for (let index = 0; index < node.textContent.length; index++) {
                     range.setStart(node.firstChild, index); range.setEnd(node.firstChild, index + 1);

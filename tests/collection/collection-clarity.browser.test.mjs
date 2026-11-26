@@ -281,8 +281,8 @@ test("collection guidance distinguishes active, paused, unavailable, unchecked a
         }
         if (name === "not-connected") {
             await page.locator("#collectionStatusAction").click();
-            await expect(page.locator("#reviewSource")).toBeFocused();
-            await expect(page.locator("#sourceEditor")).toBeHidden();
+            await expect(page.locator("#sourceDatabase")).toBeFocused();
+            await expect(page.locator("#connectionSourceSummary")).toHaveText("WIRE can't read this yet");
             await expect(page.locator("#collectNow")).toBeHidden();
             await page.goBack();
         }
