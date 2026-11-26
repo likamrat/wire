@@ -493,9 +493,37 @@ async function readChatsWithoutTotals(t) {
     const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.find(s => s.userPrompt?.text === text);
     assert.equal((await read()).usage, null, "A chat WIRE already read stays unmeasured until it changes");
     const counting = createUsageRecordCountController(app.context);
-    return { app, id, file, index, usage, text, settings, counting, read, after: ms => new Date(Date.parse(unmatched.at(-1).timestamp) + ms).toISOString(),
+    return { app, id, other, unmatched, file, index, usage, text, settings, counting, read, after: ms => new Date(Date.parse(unmatched.at(-1).timestamp) + ms).toISOString(),
         collector: () => collector, restart: async () => { await collector.close(); collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close()); } };
 }
+test("history compatibility: a profile switch at publication opens no further chat's token records and saves nothing", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, counting, read, index, other, unmatched } = fixture;
+    const second = "Find the invented budget.", reply = turn => new Date(Date.parse(unmatched.find(e => e.data.turnId === turn && e.type === "assistant.message").timestamp) + 4).toISOString();
+    index.prepare("INSERT INTO turns VALUES (?,0,?,?)").run(other, second, "Invented answer");
+    for (const turn of ["a", "b"]) fixture.usage.run(other, 4000, 200, 3000, 0, reply(turn));
+    const before = await loadBoardState(app.context), preview = await counting.preview("panel");
+    assert.equal(preview.counts.chats, 2, "Two chats can be counted");
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync, db = path.join(app.root, "session-store.db");
+    let switched = false; const after = [];
+    // The selected histories are stat'ed synchronously only by the publication guard; switch the account at its first run.
+    fsSync.statSync = (target, ...rest) => {
+        const name = String(target);
+        if (!switched && (name.includes(fixture.id) || name.includes(other)) && name.endsWith(".jsonl")) {
+            switched = true; app.db.prepare("UPDATE projects SET github_account_id='default'").run();
+        } else if (switched && name.startsWith(db)) after.push(name.slice(db.length) || "main");
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await assert.rejects(counting.confirm("panel", { operationId: preview.operationId, confirmed: true }));
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.ok(switched, "The account changed during publication");
+    for (let n = 0; n < after.length; n += 2) assert.deepEqual(after.slice(n, n + 2), ["main", "-wal"], "Only the boundary pair is stat'ed; no chat's records are opened");
+    const saved = await loadBoardState(app.context);
+    assert.equal(saved.revision, before.revision);
+    assert.equal(saved.usageRecordCounts?.operations?.[preview.operationId], undefined);
+    assert.equal((await read()).usage, null);
+});
 test("history compatibility: a token-record row updated in the write-ahead log before publication refuses the count", async t => {
     const fixture = await readChatsWithoutTotals(t), { app, counting, read, index } = fixture;
     index.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;");
