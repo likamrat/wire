@@ -734,11 +734,11 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await expect(page.locator("[data-reader-section=activity]")).toContainText("2 returned entries");
     const usage=page.locator("[data-reader-section=usage]");
     await expect(usage).toContainText("12,000 tokens");
-    await expect(usage).toContainText("No returned-text size is available for this interaction.");
+    await expect(usage).toContainText("No returned-text size was saved for this interaction.");
     await page.keyboard.press("Escape");await expect(unsized).toBeFocused();
     const partial=cards.filter({hasText:"Search for notes"}).locator(".request-card-open").first();
     await partial.click();
-    await expect(usage).toContainText("1,028 bytes (~257 tokens) of text across 1 of 2 calls measured");
+    await expect(usage).toContainText("1,028 bytes (~257 tokens) of text. Measured for 1 of 2 calls.");
     await expect(page.locator("[data-reader-section=activity]")).toContainText("1004: Work IQ took too long to respond");
     await page.keyboard.press("Escape");await expect(partial).toBeFocused();
     await expect(page.locator("[data-percentage-card=models]").getByRole("list",{name:"Model token counts from 7 of 8 matching interactions"})).toBeVisible();
