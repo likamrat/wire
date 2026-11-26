@@ -58,6 +58,9 @@ actual origin only while its authority and reading intent stay current.
 - Later user input wins over delayed navigation, reads and motion callbacks.
 - Pointer presses must not trigger older scroll restoration that moves the
   targeted control before release.
+- Activity's Next and Previous controls stay at the same viewport position
+  when the new page height permits. At either end, focus stays on the enabled
+  direction.
 - When filtering changes a long result list to an empty one, keep the workspace
   aligned. The viewport scrollbar and the Filters count must not move
   neighbouring controls; the Refresh action keeps its space when its label

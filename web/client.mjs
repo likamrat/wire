@@ -4421,6 +4421,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (reportSetup && workspaceState.route.view === "reports" && workspaceState.route.task === "create") reportJourney.go(2);
         };
         if (update instanceof Promise) update.then(finishNavigation);
+        // The dashboard's mutation observer packs the new rows before we restore the pager's scroll position.
+        else if (paging) queueMicrotask(finishNavigation);
         else finishNavigation();
         mounted = true;
         return update;
