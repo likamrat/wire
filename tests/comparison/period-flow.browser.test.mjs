@@ -227,6 +227,7 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
     await page.locator("#createSessionReport").click();
     await expect(page.locator("#reportDeskDates")).toHaveAccessibleName("Dates: All retained dates");
     assert.equal(posts.some(row => row.path === "/api/preview"), false);
+    await page.locator("#reportCustomSetup").click();
     const response = page.waitForResponse(r => r.url().endsWith("/api/preview"));
     await page.getByRole("button", { name: "Prepare preview", exact: true }).click();
     const res = await response, preview = await res.json();

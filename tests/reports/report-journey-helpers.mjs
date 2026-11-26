@@ -6,7 +6,8 @@ export async function selectReportFocus(page, preset) {
     await page.locator(`.select-popup [role=option][data-value="${preset}"]`).click();
 }
 
-export function prepareReportPreview(page) {
+export async function prepareReportPreview(page) {
+    if (await page.locator("#reportCustomSetup").isVisible()) await page.locator("#reportCustomSetup").click();
     return page.locator("#prepareReportPreview").click();
 }
 

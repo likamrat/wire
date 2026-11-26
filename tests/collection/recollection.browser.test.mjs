@@ -112,6 +112,7 @@ test("deleted source activity stays absent until an explicit source-backed recol
     const picker = page.getByRole("dialog", { name: "Choose activity" });
     await picker.getByRole("radio", { name: /^All collected activity/ }).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.locator("#reportCustomSetup").click();
     await page.locator(".report-before-prepare input[value=original]").check();
     const [response] = await Promise.all([
         page.waitForResponse(r => r.url().endsWith("/api/preview")), prepareLandingReport(page, "all"),

@@ -9,7 +9,6 @@ import { openDatePicker } from "../analyze/analytics-date-picker.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-const params = url => new URLSearchParams(url.split("?")[1]);
 
 async function setup(t) {
     const cleanup = [], { records } = periodFixture();
@@ -60,14 +59,17 @@ async function analyzeLink(page) {
     return link;
 }
 
-function ordinaryScope(url) {
-    const query = params(url);
-    assert.equal(query.get("compare"), null);
-    assert.equal(query.get("from"), "2026-03-07");
-    assert.equal(query.get("to"), "2026-03-07");
-    assert.equal(query.get("services"), "Files");
-    assert.equal(query.get("includeMissingService"), "true");
+function ordinaryAddress(url) {
+    const target = new URL(url, "http://localhost");
+    assert.equal(target.pathname, "/");
+    for (const key of ["compare", "from", "to", "services", "includeMissingService"]) assert.equal(target.searchParams.has(key), false);
     assert.doesNotMatch(url, new RegExp(periodQuery));
+}
+async function ordinaryScope(page) {
+    ordinaryAddress(page.url());
+    await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Mar 7, 2026)");
+    await expect(page.locator("#serviceAssociationFilter")).toHaveValue("Files");
+    await expect(page.locator("#serviceFocusScope")).toContainText("Files + calls with missing service details");
 }
 
 for (const activation of ["click", "keyboard"]) test(`Analyze restores its own filters and Back restores the independent comparison (${activation})`, { timeout: 30000 }, async t => {
@@ -79,13 +81,13 @@ for (const activation of ["click", "keyboard"]) test(`Analyze restores its own f
         await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     }
     const link = await analyzeLink(page);
-    ordinaryScope(await link.getAttribute("href"));
+    ordinaryAddress(await link.getAttribute("href"));
     if (activation === "keyboard") { await link.focus(); await link.press("Enter"); }
     else await link.click();
     await ready(page);
     await expect(page.locator("#periodComparisonSetup")).not.toBeVisible();
     await expect(page.locator("#activityView")).toBeVisible();
-    ordinaryScope(page.url());
+    await ordinaryScope(page);
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), originalIds);
     assert.ok(await page.evaluate(() => document.activeElement !== document.body && document.activeElement.checkVisibility()),
@@ -96,15 +98,17 @@ for (const activation of ["click", "keyboard"]) test(`Analyze restores its own f
     await expect(page.locator("#activitySearch")).toHaveValue("");
 });
 
-test("opening Analyze in another tab restores its filters without putting the private phrase in the link", { timeout: 30000 }, async t => {
+test("the sidebar opens a fresh Analyze tab without transferring the private comparison origin", { timeout: 30000 }, async t => {
     const { page } = await setup(t), comparison = page.url(), link = await analyzeLink(page);
-    ordinaryScope(await link.getAttribute("href"));
-    await expect(link).toHaveAttribute("href", /privateView=required/);
+    ordinaryAddress(await link.getAttribute("href"));
+    await expect(link).toHaveAttribute("href", "/");
     const [opened] = await Promise.all([page.context().waitForEvent("page"), link.click({ modifiers: ["Control"] })]);
     await ready(opened);
-    ordinaryScope(opened.url());
+    ordinaryAddress(opened.url());
     await expect(opened.locator("#periodComparisonSetup")).not.toBeVisible();
-    await expect(opened.locator("#activitySearch")).toHaveValue(periodQuery);
+    await expect(opened.locator("#activitySearch")).toHaveValue("");
+    await expect(opened.locator("#serviceAssociationFilter")).toHaveValue("all");
+    await expect(opened.locator("#periodResult")).toContainText("All dates");
     const direct = await page.context().newPage();
     await direct.goto(opened.url()); await ready(direct);
     await expect(direct.locator("#activitySearch")).toHaveValue("");
@@ -122,11 +126,11 @@ test("Analyze from a comparison record uses the same ordinary origin rather than
     await page.locator("#comparisonExactRecordsB a.text-link").first().click();
     await expect(page.locator("#contextSidebar")).toBeVisible();
     const link = await analyzeLink(page);
-    ordinaryScope(await link.getAttribute("href"));
+    ordinaryAddress(await link.getAttribute("href"));
     await link.click(); await ready(page);
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#periodComparisonSetup")).not.toBeVisible();
-    ordinaryScope(page.url());
+    await ordinaryScope(page);
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), originalIds);
     await expect(page.locator("#resultsLink")).toHaveCount(0);

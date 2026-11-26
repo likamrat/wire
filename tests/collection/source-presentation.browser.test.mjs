@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { isPagePath } from "../../lib/page-path.mjs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../../lib/render.mjs";
@@ -29,6 +29,10 @@ async function setup(t) {
             return res.end(renderHtmlShell("a".repeat(64), "source-presentation-proof", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
+        if (req.method === "GET" && req.url === "/assets/marked.mjs") {
+            res.setHeader("Content-Type", "text/javascript");
+            return res.end(await readFile(new URL("../../node_modules/marked/lib/marked.esm.js", import.meta.url)));
+        }
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         const collection = {
@@ -148,7 +152,7 @@ test("readonly source roles, exact long paths and control geometry remain cohere
                     const css = getComputedStyle(field), box = field.getBoundingClientRect(), range = document.createRange();
                     range.selectNodeContents(field);
                     const rects = [...range.getClientRects()];
-                    return { tag: field.tagName, text: field.textContent, visibleText: field.innerText,
+                    return { id: field.id, tag: field.tagName, text: field.textContent, visibleText: field.innerText,
                         family: css.fontFamily, size: css.fontSize, weight: css.fontWeight, lineHeight: css.lineHeight,
                         color: css.color, whiteSpace: css.whiteSpace, textOverflow: css.textOverflow,
                         clipped: field.scrollWidth > field.clientWidth || field.scrollHeight > field.clientHeight,
@@ -158,7 +162,7 @@ test("readonly source roles, exact long paths and control geometry remain cohere
         });
         values.paper = await effectivePaper(page, "#approvedSourceDetails .settings-paths");
         assert.equal(values.overflow, false, JSON.stringify({ theme, scale, ...config }));
-        assert.deepEqual(values.rows.filter(row => row.tag === "DD").map(row => row.text), Object.values(longPaths));
+        assert.deepEqual(values.rows.filter(row => row.tag === "DD").map(row => row.text), [...Object.values(longPaths), "Not read"]);
         for (const row of values.rows) {
             assert.equal(row.size, `${(row.tag === "DT" ? 14 : 16) * scale}px`, "Reference labels and exact reading values retain their distinct roles");
             assert.equal(row.family, values.family);
@@ -166,7 +170,8 @@ test("readonly source roles, exact long paths and control geometry remain cohere
             assert.equal(row.clipped, false); assert.equal(row.allGlyphsInside, true);
             if (row.tag === "DD") {
                 assert.equal(row.visibleText, row.text); assert.equal(row.whiteSpace, "break-spaces");
-                assert.notEqual(row.textOverflow, "ellipsis"); assert.ok(row.lines > 1);
+                assert.notEqual(row.textOverflow, "ellipsis");
+                if (row.id === "approvedDatabase" || row.id === "approvedSessions") assert.ok(row.lines > 1);
             }
         }
         await openSourceEditor(page);

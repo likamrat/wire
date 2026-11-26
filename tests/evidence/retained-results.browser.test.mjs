@@ -79,12 +79,15 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
             await expect(call.locator(".reader-call-summary .result-cause")).toBeHidden();
         }
         if (["application-error", "mixed", "capped"].includes(example.name)) {
-            const text = await call.textContent(), width = await page.locator("#contextSidebar").evaluate(node => node.getBoundingClientRect().width);
+            const evidence = () => call.locator(".reader-entry-label,.reader-tool-name,.reader-call-duration,.card-outcome-label,.result-cause,.returned-coverage,.technical-detail,.api-result-entry")
+                .evaluateAll(nodes => nodes.map(n => [n.className, n.textContent]).sort(([a],[b]) => a.localeCompare(b)));
+            const facts = await evidence(), text = await call.textContent();
+            const width = await page.locator("#contextSidebar").evaluate(node => node.getBoundingClientRect().width);
             await page.locator("#widenInteraction").click();
             await page.locator("#expandInteraction").click();
             await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "expanded");
             await expect(toggle).toHaveAttribute("aria-expanded", "true");
-            assert.equal(await call.textContent(), text);
+            assert.deepEqual(await evidence(), facts);
             await page.locator("#expandInteraction").click();
             assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getBoundingClientRect().width), width + 32);
             assert.equal(await call.textContent(), text);

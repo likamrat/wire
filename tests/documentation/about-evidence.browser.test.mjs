@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../../lib/render.mjs";
 import { buildActivityAnalytics } from "../../lib/activity-analytics.mjs";
@@ -34,6 +35,10 @@ async function setup(t, source = records, sourceCoverage = coverage) {
     const server = createServer(async (req, res) => {
         if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "about-fixture", UNBOUND_FIXTURE_BOOTSTRAP)); }
         if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url?.split("?")[0])) return res.writeHead(204).end();
+        if (req.method === "GET" && req.url === "/assets/marked.mjs") {
+            res.setHeader("Content-Type", "text/javascript");
+            return res.end(await readFile(new URL("../../node_modules/marked/lib/marked.esm.js", import.meta.url)));
+        }
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         res.setHeader("Content-Type", "application/json");

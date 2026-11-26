@@ -343,7 +343,10 @@ test("owner resolves only the accepted pair and selected roster without focus, s
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     assert.equal(await pair(page), null);
     const params = new URL(page.url()).searchParams;
-    assert.deepEqual(["from", "to", "services", "includeMissingService"].map(k => params.get(k)), [...a, "Files", "true"]);
+    assert.ok(["from", "to", "services", "includeMissingService"].every(k => !params.has(k)));
+    await expect(page.locator("#periodResult")).toContainText("(Mar 7, 2026)");
+    await expect(page.locator("#serviceAssociationFilter")).toHaveValue("Files");
+    await expect(page.locator("#serviceFocusScope")).toContainText("Files + calls with missing service details");
     assert.ok(reads.every(r => !("from" in r.options.filters) && !("to" in r.options.filters)));
 });
 
