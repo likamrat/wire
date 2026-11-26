@@ -118,11 +118,11 @@ export const settingsMarkup = `
         <h4 id="approvedSourceTitle" tabindex="-1">Approved source paths</h4>
         <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd><dt>Token records</dt><dd id="approvedUsageRecords"></dd></dl>
       </div>
+      <div id="sourceEditAction" class="settings-actions" hidden><button id="editSource" type="button">Review source</button></div>
       <div id="usageCountRow" class="settings-task-row" hidden><div class="settings-row-copy"><h3>Count tokens in chats already read</h3>
         <p id="usageCountHelp" class="settings-help">Check which saved interactions Copilot's records can count. Nothing changes until you confirm.</p>
         <p id="usageCountNotice" class="settings-help" role="status" hidden></p></div>
         <button id="countUsageRecords" type="button" aria-describedby="usageCountHelp usageCountNotice">Check chats</button></div>
-      <div id="sourceEditAction" class="settings-actions" hidden><button id="editSource" type="button">Review source</button></div>
       <div id="sourceEditor" class="source-editor" hidden>
         <h4 id="sourceEditorTitle" class="visually-hidden">Review this source</h4>
         <p id="sourceChangeImpact" class="settings-help" role="status"></p>
@@ -133,7 +133,7 @@ export const settingsMarkup = `
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         </div>
         <div class="settings-task-row" id="sourceUsageRecordsRow"><div class="settings-row-copy"><h3><label for="sourceUsageRecords">Read Copilot's token records</label></h3>
-          <p id="sourceUsageRecordsHelp" class="settings-help">Counts tokens for older chats whose logs don't record them. WIRE reads each call's model, token counts, time and sub-agent marker. It reads the prompt text only to match calls to prompts and doesn't save it. Chats already read count when they next change. Turning this off stops the reads; counted totals stay.</p>
+          <p id="sourceUsageRecordsHelp" class="settings-help">Counts tokens for older chats whose logs don't record them. WIRE reads each call's model, token counts, time and sub-agent marker. It reads the prompt text only to match calls to prompts and doesn't save it. Chats already read count when they next change, or when you count them from Source access. Turning this off stops the reads; counted totals stay.</p>
           <p id="sourceUsageRecordsFile" class="settings-help"></p></div>
           <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsFile approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
         </div>

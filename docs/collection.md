@@ -384,7 +384,8 @@ read-only for the same approved chat.
   of prompt text is a failed read: the reader says so and an existing total
   stays. A chat is never read in part.
 - Approval applies when collection next reads a chat. Chats WIRE already read
-  in full aren't recounted until they change.
+  in full aren't recounted until they change, unless you
+  [count them explicitly](#count-tokens-in-chats-already-read).
 - Turning it off stops every read of the file. Totals already counted stay
   until the journal extends that exchange.
 - A stored indexed total is retired when the app changes that turn's calls,
@@ -404,6 +405,34 @@ read-only for the same approved chat.
 
 These optional fields use the existing evidence snapshot; no store conversion
 is needed.
+
+#### Count tokens in chats already read
+
+**Settings > Source access > Count tokens in chats already read** is a separate,
+never automatic operation. It's offered only while token records are approved
+for the current file and account, the source is approved and collection isn't
+paused or signed out. Turning records off, a changed approval, Pause or sign-out
+hides it and retires an open check.
+
+1. **Check chats** writes nothing. It considers approved local chats in the
+   approved window whose retained interactions have tool calls and no total;
+   a total already on a record is never touched. For each chat (up to 128, 32 MiB
+   of reading, the last 64 MiB per file and 20,000 interactions) it rereads the
+   original journal, rechecks the approval, reads only that chat's index rows and
+   applies the same qualification as ordinary collection. It shows how many
+   interactions in how many chats can be counted, their tokens, and how many
+   can't, by reason.
+2. Confirming within two minutes rereads the same chats and refuses, with
+   **Nothing was saved**, if the stored activity, configuration, approval,
+   account, journal stamps, row digests or previewed totals changed. Records
+   written to other chats in Copilot's file don't refuse by themselves. The
+   single writer then adds only `usageCalls` (the ordinary indexed shape) and
+   clears `usageGap` on exactly the previewed interactions, with one receipt
+   (operation, counted interactions and chats, refused count, tokens). Collector
+   checkpoints aren't rewritten; ordinary collection keeps these totals by the
+   existing rules.
+3. A lost response offers **Check result**, also after reload. It reads the
+   original receipt and never confirms again.
 
 When a response explicitly identifies a retained Work IQ run, its request-only
 receipt can survive a collection restart before the final boundary arrives.

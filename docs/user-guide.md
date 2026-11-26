@@ -61,7 +61,9 @@ or **Settings > Source access > Review source & connect**.
    to the local GitHub Copilot app you want to read. Use **Change paths** to
    correct a suggested location. **Read Copilot's token records** is off by
    default. Turn it on to count tokens for older chats whose logs don't record
-   them; it names the extra file WIRE will read.
+   them; it names the extra file WIRE will read. Chats WIRE already read count
+   when they next change, or after you check and confirm **Count tokens in chats
+   already read** in Source access.
 2. Set **History to include** and **Check frequency**. When the paths and
    settings are right, choose **Approve source and start collection**.
 3. Choose **View activity**. Analyze shows calls as WIRE saves them. The first

@@ -579,6 +579,21 @@ test("history compatibility: counting tokens in chats already read refuses befor
     await fixture.collector().configure({ ...fixture.settings, enabled: false, usageRecords: true, expectedConfigVersion: (await fixture.collector().status()).configVersion });
     await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" }, "Pause blocks the operation");
 });
+test("history compatibility: counting tokens checks the approval immediately before each chat's records are opened", async t => {
+    const { app, counting } = await readChatsWithoutTotals(t);
+    const { default: fsSync } = await import("node:fs"), original = fsSync.statSync;
+    let opened = 0;
+    fsSync.statSync = (target, ...rest) => {
+        // The Copilot account changes right after the first chat's records are opened.
+        if (String(target).endsWith("session-store.db") && ++opened === 1) app.db.prepare("UPDATE projects SET github_account_id='default'").run();
+        return original(target, ...rest);
+    };
+    syncBuiltinESMExports();
+    t.after(() => { fsSync.statSync = original; syncBuiltinESMExports(); });
+    await assert.rejects(counting.preview("panel"), { code: "USAGE_COUNT_UNAVAILABLE" });
+    fsSync.statSync = original; syncBuiltinESMExports();
+    assert.equal(opened, 1, "The next chat's records are never opened under the replaced account");
+});
 test("history compatibility: a pasted image inside an exchange does not hide its exact receipts, but an unreadable entry still does", async t => {
     for (const [kind, total] of [["session.binary_asset", 4400], ["assistant.message", null]]) {
         const app = await installation(t), id = app.session(), start = call("image-fetch");

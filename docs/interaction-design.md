@@ -1230,6 +1230,7 @@ The expanded desktop rail resizes from its right edge.
 | Same-source paths/preferences draft | Save preferences |
 | Changed source paths | Approve and switch source |
 | Read Copilot's token records, same paths | Approve token records (on) or Stop reading token records (off) |
+| Count tokens in chats already read | Check chats, then a separate Count confirmation |
 | Cancel source review | Discard the draft |
 | Display preference | Apply immediately, separately from permission |
 | Recorded replies | Its own draft and confirmation |
@@ -1246,8 +1247,8 @@ and its real pending state.
   complete history.
 - Don't promise that retry recreates a missing file or removes a read limit.
 
-Deletion and recollection dialogs keep the question, a body-only scroller and
-fixed actions.
+Deletion, recollection and token-count dialogs keep the question, a body-only
+scroller and fixed actions.
 
 - Preview and actual confirmation are different stages. Cancel receives safe
   initial focus.
