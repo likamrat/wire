@@ -1145,7 +1145,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             $(id).value = "";
             clearAttribute($(id), "value"); clearAttribute($(id), "title");
         }
-        for (const id of ["approvedDatabase", "approvedSessions", "reviewDatabase", "reviewSessions", "settingsMessage", "settingsConnectionError",
+        // The token-records path and switch describe the withdrawn account's grant.
+        $("sourceUsageRecords").checked = false;
+        for (const id of ["approvedDatabase", "approvedSessions", "approvedUsageRecords", "sourceUsageRecordsFile", "reviewDatabase", "reviewSessions", "settingsMessage", "settingsConnectionError",
             "sourceChangeImpact", "sourceSuggestion", "approvalScope", "settingsDraftStatus", "connectionStatus",
             "connectionSourceTitle", "connectionSourceHelp", "pauseCollection"]) {
             clearText($(id)); $(id).replaceChildren();
