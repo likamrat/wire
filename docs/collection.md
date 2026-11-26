@@ -454,6 +454,21 @@ the verified run can link its tool ID to one exact start. WIRE can then include
 that call's returned text size without changing prompt authorship. Older
 receipts without that link aren't rewritten.
 
+The separate offline `maintain-returned-text.mjs` policy can fill three missing
+sizes for two successful retrieves and one successful fetch in one explicitly
+linked, four-call interaction. It never measures the fourth, failed ask. The
+sealed review pins the signed-in account and chat mapping, source events, exact
+byte counts, and both sides of each change in the saved call and its checkpoint.
+It refuses an incomplete source, an existing size, or changed inputs. No body,
+token count, result entry, diagnostic or saved report is rewritten.
+
+Prepare does not apply the review. Apply requires the reviewed seal and a stopped
+instance. If interrupted after the write fence, normal collection refuses to
+start; only a separate `resume` of the same verified journal can reconcile the
+known file states. An uncertain dispatch stays stopped. Success restores the
+original collector index. Installing this code does not run the policy or
+authorize a correction.
+
 #### Tool operation tokens
 
 For a separately metered tool, the [Copilot completion contract](https://github.com/github/copilot-sdk/blob/03056de9b9f21203c14037536097c0e1a8774822/nodejs/src/generated/session-events.ts#L10775-L10781)
