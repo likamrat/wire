@@ -90,10 +90,16 @@ release-aware installation is not evidence of a successful legacy migration.
 
 Fetch official `main` and choose its exact commit. Run
 `npm run release:prepare -- --commit FULL_SHA` to print the proposed next patch
-version and notes. For the first release, also supply `--baseline PREVIOUSLY_DELIVERED_SHA`;
-use `--version vX.Y.Z` to override the proposed version. The baseline is excluded
-from the release range. Check the selected revision, or reuse checks of that same
-revision. `main` can continue advancing.
+version and notes after a stable release exists. To prepare the **first** public
+release, also pass `--baseline PREVIOUSLY_DELIVERED_SHA --version vX.Y.Z`.
+The baseline starts the notes range (exclusive); its development package version
+does not set a minimum for the first public release. The chosen commit's
+`package.json` version and both root versions in `package-lock.json` must match
+the first tag without the `v`. This keeps Settings consistent even before a
+published release is discovered. Subsequent cuts must be newer than the latest
+published stable release, including explicit `--version` overrides. Check the
+selected revision, or reuse checks of that same revision. `main` can continue
+advancing.
 
 Add `--draft` only when you intend to create a draft in `likamrat/wire` with
 the signed-in GitHub CLI account. Review the version, target and wording on

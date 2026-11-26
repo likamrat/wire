@@ -64,7 +64,7 @@ export async function startServer({dataDir}, controller, options) {
     }};
 }`;
 
-async function fixture(t, host) {
+async function fixture(t, host, releaseFeed = false) {
     const base = await mkdtemp(path.join(tmpdir(), "wire-lch-"));
     const origin = path.join(base, "origin"), root = path.join(base, "user clone"), store = path.join(base, "store");
     const children = new Set();
@@ -108,9 +108,14 @@ async function fixture(t, host) {
     const sourceURL = pathToFileURL(path.join(root, "lib", "update-source.mjs")).href;
     const stageLog = path.join(base, "stage-operations");
     const source = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
-        import {appendFile} from "node:fs/promises";
+        import {appendFile,readFile} from "node:fs/promises";
         const implementation=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:"main"});
-        export const {checkMain,inspectInstallation,channel}=implementation;
+        export const {inspectInstallation}=implementation;
+        export const channel=${JSON.stringify(releaseFeed ? "release" : "main")};
+        export const checkMain=${releaseFeed ? `async (root, running) => {
+            const release=JSON.parse(await readFile(${JSON.stringify(path.join(base,"offer.json"))},"utf8"));
+            return {installed:running,candidate:running===release.commit?null:release.commit,release,channel,fingerprint:"1".repeat(64)};
+        }` : "implementation.checkMain"};
         export async function stageMain(...args) {
             const record=event=>appendFile(${JSON.stringify(stageLog)},event+"\\n");
             await record("stageMain: fetching, verifying, installing and building");
@@ -159,7 +164,8 @@ async function fixture(t, host) {
         return git(origin, "rev-parse", "HEAD");
     }
     const events = async () => (await readFile(path.join(store, "events"), "utf8")).trim().split("\n").map(JSON.parse);
-    return { original, root, store, origin, commit, launch, events, git, stageLog };
+    return { original, root, store, origin, commit, launch, events, git, stageLog,
+        offer: (commit,tag) => writeFile(path.join(base,"offer.json"),JSON.stringify({ commit,tag,notes:"Test baseline.",url:`https://github.com/likamrat/wire/releases/tag/${tag}` })) };
 }
 async function request(url, action, args) {
     // Status polling can abandon one read. A real check/apply may be waiting on
@@ -190,6 +196,28 @@ async function assertRefused(app, reason) {
     assert.equal(app.exit?.code, 1, app.stdout + app.stderr);
     assert.match(app.stderr, reason);
 }
+
+activationTest("first public identity uses the checked commit, then a lower or reused public version cannot replace it", async t => {
+    const f = await fixture(t, undefined, true), app = f.launch(), url = await app.ready();
+    await f.offer(f.original, "v0.1.0");
+    const first = await request(url, "check");
+    assert.equal(first.candidate, null);
+    assert.equal(first.installedRelease.tag, "v0.1.0");
+    const next = await f.commit("newer-source");
+    for (const tag of ["v0.0.9", "v0.1.0"]) {
+        await f.offer(next, tag);
+        const check = await request(url, "check");
+        assert.equal(check.phase, "error"); assert.match(check.message, /not newer than.*v0\.1\.0/);
+        assert.equal(check.installedRelease.commit, f.original);
+        assert.ok((await request(url, "apply", {candidate:next})).error);
+    }
+    await f.offer(next, "v0.1.2");
+    const forward = await request(url, "check");
+    assert.equal(forward.candidate, next);
+    assert.equal(forward.availableRelease.tag, "v0.1.2");
+    assert.equal((await f.events()).length, 1, "no restart");
+    await stop(app);
+});
 
 activationTest("special modes cannot bypass an active slot or an unresolved original child", { timeout: 90000 }, async t => {
     const args = ["--verified-record-recovery"];

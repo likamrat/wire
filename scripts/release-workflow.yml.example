@@ -9,6 +9,9 @@ on:
       baseline:
         description: Previous delivered commit (first release only)
         required: false
+      version:
+        description: Stable version tag (required for first release, optional override thereafter)
+        required: false
 permissions:
   contents: read
 jobs:
@@ -54,8 +57,10 @@ jobs:
         env:
           TARGET: ${{ inputs.commit }}
           BASELINE: ${{ inputs.baseline }}
+          VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           args=(--commit "$TARGET" --draft)
           if [[ -n "$BASELINE" ]]; then args+=(--baseline "$BASELINE"); fi
+          if [[ -n "$VERSION" ]]; then args+=(--version "$VERSION"); fi
           node scripts/prepare-release.mjs "${args[@]}"

@@ -97,6 +97,24 @@ test("What's new opens the offered version's notes in WIRE without installing or
     await expect(page.locator("#availableReleaseNotes")).toBeVisible();
 });
 
+test("a first public release can follow a higher development package label without reinstalling the same commit", async t => {
+    const {page,state,actions} = await workspace(t, { offer:null });
+    const release = { tag:"v0.1.0", commit:next, notes:"## What's new in v0.1.0\n\nTest baseline.",
+        url:"https://github.com/likamrat/wire/releases/tag/v0.1.0" };
+    Object.assign(state, { packageVersion:"1.0.1", phase:"available", candidate:next, availableRelease:release });
+    await page.getByRole("button",{name:"Check for updates",exact:true}).click();
+    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v1.0.1");
+    await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE v0.1.0 is available");
+    Object.assign(state, { packageVersion:"0.1.0", installed:next, candidate:null, phase:"current", availableRelease:null, installedRelease:release });
+    await page.reload();
+    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v0.1.0");
+    await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+    await page.locator("#installedReleaseNotes").click();
+    await expect(page.locator("#releaseReaderVersion")).toHaveText("v0.1.0");
+    await expect(page.locator("#releaseReaderGitHub")).toHaveAttribute("href",release.url);
+    assert.equal(actions.some(r=>r.action==="apply"),false);
+});
+
 test("React Settings checks, opts in and out, dismisses only this build, and schedules checks without applying", async t => {
     const { page, state, actions } = await workspace(t, { offer: null });
     const auto = page.getByRole("switch", { name: "Automatically check for updates" });

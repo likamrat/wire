@@ -1,18 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
-import { latestRelease, releaseTag } from "../lib/wire-release.mjs";
+import { latestRelease, newerRelease, releaseTag } from "../lib/wire-release.mjs";
 
 const repository = "likamrat/wire";
 const remote = `https://github.com/${repository}.git`;
 const oid = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", windowsHide: true }).trim();
 const gh = (...args) => execFileSync("gh", args, { encoding: "utf8", windowsHide: true }).trim();
-const parts = tag => tag.slice(1).split(".").map(Number);
-function greater(tag, previous) {
-    const a = parts(tag), b = parts(previous);
-    return a.some((n, i) => n > b[i] && a.slice(0, i).every((v, j) => v === b[j]));
-}
 export function prepareNotes(from, target, tag) {
     if (!oid.test(from) || !oid.test(target) || !releaseTag.test(tag)) throw Error("Supply full commit IDs and a vMAJOR.MINOR.PATCH version.");
     git("merge-base", "--is-ancestor", from, target);
@@ -20,6 +15,21 @@ export function prepareNotes(from, target, tag) {
     const changes = git("log", "--no-merges", "--reverse", "--format=%s", `${from}..${target}`).split("\n").filter(Boolean);
     if (!changes.length) throw Error("No change summaries found; review the release range.");
     return `## What's new in ${tag}\n\n### Changed\n\n${changes.map(s => `- ${s}`).join("\n")}\n`;
+}
+function versionFor(target, requested, latest) {
+    if (latest) {
+        const [major, minor, patch] = latest.tag.slice(1).split(".").map(Number);
+        const tag = requested ?? `v${major}.${minor}.${patch + 1}`;
+        if (!newerRelease(tag, latest.tag)) throw Error(`Choose a version newer than ${latest.tag}.`);
+        return tag;
+    }
+    if (!requested || !releaseTag.test(requested)) throw Error("The first release needs an explicit --version vMAJOR.MINOR.PATCH.");
+    const pkg = JSON.parse(git("show", `${target}:package.json`));
+    const lock = JSON.parse(git("show", `${target}:package-lock.json`));
+    if (![pkg.version, lock.version, lock.packages?.[""]?.version].every(version => version === requested.slice(1))) {
+        throw Error(`The first release ${requested} must match package.json and both root package-lock.json versions at the selected commit.`);
+    }
+    return requested;
 }
 async function run() {
     const { values } = parseArgs({ options: { commit:{type:"string"}, version:{type:"string"}, baseline:{type:"string"}, draft:{type:"boolean"} } });
@@ -30,6 +40,7 @@ async function run() {
     git("merge-base", "--is-ancestor", target, main);
     const latest = await latestRelease();
     if (latest && values.baseline) throw Error("--baseline is only for the first release.");
+    const tag = versionFor(target, values.version, latest);
     let from = values.baseline;
     if (latest) {
         const ref = `refs/tags/${latest.tag}`;
@@ -37,11 +48,6 @@ async function run() {
         from = refs.get(`${ref}^{}`) ?? refs.get(ref);
     }
     if (!oid.test(from ?? "")) throw Error("The first release needs --baseline FULL_SHA (last previously delivered commit).");
-    const prior = latest?.tag ?? `v${JSON.parse(git("show", `${from}:package.json`)).version}`;
-    if (!releaseTag.test(prior)) throw Error("The prior stable version is not usable.");
-    const [major, minor, patch] = parts(prior);
-    const tag = values.version ?? `v${major}.${minor}.${patch + 1}`;
-    if (!releaseTag.test(tag) || !greater(tag, prior)) throw Error(`Choose a version newer than ${prior}.`);
     const body = prepareNotes(from, target, tag);
     console.log(`${tag} · ${target}\nChanges after ${from}\n\n${body}`);
     if (!values.draft) return;
