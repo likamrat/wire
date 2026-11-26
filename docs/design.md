@@ -222,6 +222,8 @@ below the last painted row, track or axis label, including both model readings.
   than equating CSS padding alone.
 - Use the established Services card as a peer. Don't stretch short cards or
   change plot scales to manufacture symmetry.
+- In Response models, keep the measure switch in the heading, apart from the
+  model rows. Give it its own line when the card is too narrow for the actions.
 - The same rule applies to Trends' overview, chart and comparison-introduction
   cards.
 - Settings forms, contextual dialogs and frozen report output keep their own

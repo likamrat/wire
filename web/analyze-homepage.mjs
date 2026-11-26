@@ -63,7 +63,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
                 toggle.addEventListener("click", () => updateFolds([key], !collapsed.has(key), toggle));
             }
             const bodies = [...shell.children].filter(node => node !== header && node.id !== "activityTitle");
-            bodies.push(...header.querySelectorAll(":scope > .percentage-denominator,:scope > .usage-sort,:scope > .activity-list-scope"));
+            bodies.push(...header.querySelectorAll(":scope > .percentage-denominator,:scope > .usage-sort,:scope > .usage-switch,:scope > .activity-list-scope"));
             const closed = active && collapsed.has(key);
             card.classList.add("analyze-widget"); header.classList.add("analyze-widget-heading");
             card.dataset.collapsed = String(closed);

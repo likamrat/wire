@@ -39,7 +39,7 @@ export const analyzeLayoutStyles = `
 @media(pointer:coarse){.token-day-date a {min-height:44px}}
 #analyzeUsageContent>p {margin:10px 0 0;text-box:trim-end cap alphabetic}
 .usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.usage-switch {margin-block:6px}
+.usage-switch {grid-column:1/-1;grid-row:3;gap:var(--space-sm)}
 .usage-sort {justify-self:end}.usage-sort.select-field {display:inline-flex;flex-direction:row;align-items:center;gap:8px}
 @media(min-width:761px){
  #activityView>#activityListContext:has(.usage-sort){grid-template-columns:minmax(0,1fr) auto auto;align-items:center}
@@ -212,6 +212,14 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
 #percentageCharts .percentage-card-heading {margin-bottom:4px;min-height:0}
 #percentageCharts .percentage-card {container:breakdown-card / inline-size}
 #percentageCharts .percentage-legend {gap:4px}
+:is(#percentageCharts,.analyze-ordered-widgets) [data-breakdown=models]:not([data-collapsed=true]) .percentage-card-heading {margin-block-end:var(--space-lg)}
+@container breakdown-card (min-width:36rem) {
+ .analyze-widget-heading:has(>.usage-switch) {padding-block-start:var(--space-sm)}
+ [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch) {grid-template-columns:minmax(0,1fr) auto auto auto}
+ .analyze-widget-heading>.usage-switch {grid-area:1/2;margin-inline-end:var(--space-md)}
+ [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch)>.analyze-trend-link {grid-area:1/3}
+ [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch)>.analyze-widget-toggle {grid-area:1/4}
+}
 :is(#outcomeChart,#percentageCharts,.analyze-ordered-widgets) .percentage-legend-row {position:relative;border-radius:var(--radius-small)}
 :is(#outcomeChart,#percentageCharts,.analyze-ordered-widgets) .percentage-legend-row .percentage-label[href]::after {content:"";position:absolute;inset:0;z-index:1}
 :is(#outcomeChart,#percentageCharts,.analyze-ordered-widgets) .percentage-content:not(.outcome-hybrid) .percentage-legend:not(.percentage-tool-list) .percentage-legend-row {
@@ -311,6 +319,7 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
  ${pairs} .percentage-value {justify-self:start}
  ${pairs} .percentage-bar-track {grid-area:2/1/3/-1;height:6px}
 }
+:is(#percentageCharts,.analyze-ordered-widgets) [data-breakdown=models] .percentage-legend.percentage-tool-list {row-gap:var(--space-lg)}
 @container breakdown-card (min-width:16rem) and (max-width:29.999rem) {
  :is(#percentageCharts,.analyze-ordered-widgets) .percentage-legend-row {grid-template-columns:24px minmax(0,1fr) max-content}
  :is(#percentageCharts,.analyze-ordered-widgets) .percentage-tool-list .percentage-legend-row {grid-template-columns:minmax(0,1fr) max-content}
