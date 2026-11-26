@@ -512,6 +512,11 @@ contributor share only from frozen positive ranked rows and the recorded total.
 Unmeasured and measured-zero cohorts have no concentration percentage. This
 overview leads in each saved format; earlier readings keep their interpretation.
 
+In activity reports, a usage question about an author, tool or model also leads.
+Otherwise the optional token breakdown follows the activity evidence, before the closing WIRE signature.
+When counts are included but none were recorded, the breakdown says so; turning
+counts off omits the section.
+
 JSON-only overviews require a reader that supports version 2. Older readers
 refuse that structured view rather than silently omitting its finding and author
 totals. For portable reading, explicitly include HTML or PDF and open that saved

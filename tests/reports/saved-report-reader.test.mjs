@@ -375,8 +375,12 @@ test("activity, period and comparison reports preview and download their actual 
                 const frame = preview.frameLocator("iframe");
                 assert.equal(await frame.locator(".report-brand .brand-logo").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).length), 1,
                     "Exactly one original wordmark is visible; no duplicate logo is inserted");
-                if (name === "activity") assert.equal(await frame.getByText("Not shown for one sample", { exact: true })
-                    .evaluate(node => getComputedStyle(node).textAlign), "left", "Text-only timing states align left, not like numeric measurements");
+                if (name === "activity") {
+                    await expect(frame.locator("#usage-selected")).toContainText("No recorded token total.");
+                    await expect(frame.locator("main > .report-footer:last-child")).toHaveText(PRODUCT_TITLE);
+                    assert.equal(await frame.getByText("Not shown for one sample", { exact: true }).evaluate(node =>
+                        getComputedStyle(node).textAlign), "left", "Text-only timing states align left, not like numeric measurements");
+                }
                 if (name === "saved-comparison") assert.equal(await frame.locator("td .comparison-meta").evaluateAll(nodes =>
                     nodes.length > 0 && nodes.every(node => getComputedStyle(node).textAlign === "left")), true, "Coverage descriptions align left");
             }
@@ -385,8 +389,10 @@ test("activity, period and comparison reports preview and download their actual 
                 assert.equal(await preview.locator(".saved-report-mark .brand-logo").count(), 2);
                 assert.deepEqual(await preview.locator(".saved-report-mark .brand-logo").evaluateAll(nodes =>
                     nodes.filter(node => node.checkVisibility()).map(node => node.dataset.brandTheme)), ["dark"]);
-                if (name === "activity") assert.equal(await preview.getByText("Not shown for one sample", { exact: true })
-                    .evaluate(node => getComputedStyle(node).textAlign), "left");
+                if (name === "activity") {
+                    await expect(preview.locator(".saved-markdown")).toContainText("No recorded token total.");
+                    assert.equal(await preview.getByText("Not shown for one sample", { exact: true }).evaluate(node => getComputedStyle(node).textAlign), "left");
+                }
                 if (name === "saved-comparison") assert.equal(await preview.getByText("Unchanged", { exact: true }).evaluateAll(nodes =>
                     nodes.length > 0 && nodes.every(node => getComputedStyle(node).textAlign === "left")), true);
                 if (name === "period-comparison") assert.equal(await preview.getByText("Not measured", { exact: true }).evaluateAll(nodes =>
