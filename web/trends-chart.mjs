@@ -39,6 +39,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             erase(tooltip); delete tooltip.dataset.chart;
         }
         root.querySelector(".trends-mark-focus")?.replaceChildren();
+        root.querySelector("[data-trend-reading]")?.removeAttribute("data-trend-reading");
         emphasize(null);
         if (!preserveDismissed) dismissed = null;
     }
@@ -49,7 +50,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (scene) scene.emphasized = id;
         for (const node of nodes) {
             node.style.opacity = id && node.dataset.series !== id ? ".22" : "1";
-            if (node.hasAttribute("data-trend-line")) node.style.strokeWidth = id && node.dataset.series === id ? "3" : "2";
+            if (node.hasAttribute("data-trend-line")) node.style.strokeWidth = id && node.dataset.series === id ? "3.25" : "2.5";
         }
     }
     function outline(point, stroke, weight) {
@@ -129,7 +130,11 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             if (scene.mode === "reach") detail.append(element("div", "trends-tip-caption", "Tools can reach the same interaction."));
         } else if (scene.family === "authors") facts(detail, [["Calls in these interactions", value.calls]]);
         else if (scene.family === "services") facts(detail, [["Also involve another service", value.also]]);
-        else if (scene.family === "models") facts(detail, [["Interactions without a verified model", value.missing], ["Also use another model", value.also]]);
+        else if (scene.family === "models") {
+            facts(detail, [["Interactions without a verified model", value.missing], ["Also use another model", value.also]]);
+            if (value.recordedAs) detail.append(element("div", "trends-tip-caption", `Recorded as ${value.recordedAs}`));
+            else if (value.unrecognized) detail.append(element("div", "trends-tip-caption", "WIRE has no display name for this recorded ID."));
+        }
         else if (scene.family === "problems") facts(detail, [["Failed tool calls", value.failedCalls], ["Calls with API errors", value.apiErrorCalls]]);
         else if (scene.family === "timing") {
             if (day.timedCalls) facts(detail, [[point.id === "p95" ? "Median" : "95th percentile",
@@ -140,7 +145,11 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (detail.childElementCount) point.node.setAttribute("aria-describedby", detail.id);
         const at = new DOMPoint(point.x, point.y).matrixTransform(point.node.getScreenCTM());
         const overlay = root.querySelector(".trends-mark-focus");
-        overlay?.replaceChildren(outline(point, "var(--ink)", 1.5));
+        const plot = scene.plot();
+        overlay?.replaceChildren(...point.rect ? [] : [svgNode("line", { class: "trends-day-guide", x1: point.x, x2: point.x, y1: plot.top, y2: plot.bottom })],
+            outline(point, "var(--ink)", 1.5));
+        root.querySelector("[data-trend-reading]")?.removeAttribute("data-trend-reading");
+        point.node.dataset.trendReading = "";
         emphasize(point.id);
         const left = Math.max(8, doc.getElementById("main").getBoundingClientRect().left + 8);
         const scale = parseFloat(getComputedStyle(doc.documentElement).fontSize) / 16;
@@ -226,7 +235,8 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const minimumWidth = data.days.length * dayWidth + left + 12 * scale, top = 26 * scale;
         let width = Math.max(root.clientWidth, minimumWidth), height = Math.max(1, root.clientHeight - 18);
         let bottom = height - 42 * scale, pitch = (width - left - 12 * scale) / data.days.length;
-        scene = { data, family, mode, hidden, chartType, indexed, options, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null };
+        scene = { data, family, mode, hidden, chartType, indexed, options, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null,
+            plot: () => ({ top, bottom }) };
         scene.maximum = max;
         if (!series.length) {
             // Keep the reading position for re-enabling a series; no axes or
@@ -328,7 +338,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                 if (!bars && amount !== null) {
                     const from = last.get(id);
                     if (from && !weekStarts.has(index)) {
-                        paths.append(place(svgNode("line", { stroke: ink, "stroke-width": 2, "data-series": id, "data-trend-line": "",
+                        paths.append(place(svgNode("line", { stroke: ink, "stroke-width": 2.5, "stroke-linecap": "round", "data-series": id, "data-trend-line": "",
                             ...(pair && value.secondary ? { "stroke-dasharray": "6 4" } : {}) }),
                             () => ({ x1: from.x, y1: from.y, x2: point.x, y2: point.y })));
                         scene.segments.push({ from, to: point });
@@ -339,7 +349,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                         : pair && value.secondary
                         ? place(svgNode("rect", { width: 6 * scale, height: 6 * scale, fill: "var(--paper)", stroke: ink, "stroke-width": 2 }),
                             () => ({ x: point.x - 3 * scale, y: point.y - 3 * scale }))
-                        : place(svgNode("circle", { r: 3 * scale, fill: "var(--paper)", stroke: ink, "stroke-width": 2 }),
+                        : place(svgNode("circle", { r: 3 * scale, fill: "var(--paper)", stroke: ink, "stroke-width": 2, "data-trend-point": "" }),
                             () => ({ cx: point.x, cy: point.y })));
                 }
                 if (!bars) last.set(id, amount === null ? null : point);
@@ -369,6 +379,9 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                 }
             }
         }
+        // A line marks only where a run ends or stands alone; reading a day reveals its own point.
+        const continues = new Set(scene.segments.map(segment => segment.from));
+        for (const point of scene.points) if (!point.rect && point.amount !== null && !continues.has(point)) point.node.dataset.trendEnd = "";
         for (const [index, day] of data.days.entries())
             svg.append(place(svgNode("text", { "text-anchor": "middle", "data-date-tick": day.date }, labels[index]),
                 () => ({ x: x(index), y: bottom + 32 * scale,

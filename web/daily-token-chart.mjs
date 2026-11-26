@@ -51,7 +51,7 @@ export function renderDailyTokenChart(el, host, calendar, summary, { columns, fo
                 continue;
             }
             mark("rect",{x:x(n),y:y(d.total),height:`${height(d.total)}%`,
-                width:columns.width,class:"token-column","data-measured-day":date},series);
+                width:columns.mark ?? columns.width,rx:3,class:"token-column","data-measured-day":date},series);
         }
         earlier.disabled=first===0;later.disabled=first+count>span;
     }

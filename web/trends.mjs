@@ -1,4 +1,4 @@
-export function mountTrends({ root, api, time, ux, authorship, questionControls, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, onUsageReport, hiddenInteraction = () => false }) {
+export function mountTrends({ root, api, time, ux, authorship, modelName, questionControls, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, onUsageReport, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models", "usage"];
     const modelDetails = [
@@ -59,12 +59,12 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     const colors = new Map(), tools = ["fetch", "retrieve", "ask", "get_schema", "call_function", "do_action",
         "search_paths", "fetch_blob", "create_entity", "update_entity", "delete_entity", "list_agents"];
     function color(id, family) {
-        if (family === "usage" && id === "usage") return "var(--accent)";
+        if (family === "usage" && id === "usage") return "var(--outcome-quantity)";
         if (family === "usage" && id.startsWith("author:")) return authorColors[({"Human":"user","Agent":"agent","Sender unclear":"unknown"})[id.slice(7)]];
         if (family === "authors") return authorColors[id];
         if (family === "services") return `var(--chart-service-${id.toLowerCase()}-label)`;
-        if (family === "problems") return "var(--chart-mark-high)";
-        if (family === "rhythm") return "var(--trends-series-1)";
+        if (family === "problems") return "var(--tool-negative-mark)";
+        if (family === "rhythm") return "var(--outcome-quantity)";
         if (family === "timing") return id === "timing" ? "var(--trends-series-1)" : "var(--trends-series-3)";
         const key = `${family}:${id}`;
         if (!colors.has(key)) {
@@ -77,6 +77,19 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             colors.set(key, slot);
         }
         return `var(--trends-series-${colors.get(key) + 1})`;
+    }
+    // Screen names only. Series IDs, filters and exports keep the recorded model ID.
+    function screenModelNames(value) {
+        if (typeof modelName !== "function" || !value?.definitions?.models) return value;
+        const relabel = series => {
+            const name = modelName(series.id);
+            // An unrecognized series keeps its exact recorded ID; its reading says no display name exists.
+            return name.recognized ? { ...series, label: name.label, recordedAs: series.id } : { ...series, unrecognized: true };
+        };
+        const values = values => values?.models ? { ...values, models: values.models.map(relabel) } : values;
+        return { ...value, definitions: { ...value.definitions, models: value.definitions.models.map(relabel) },
+            totals: { ...value.totals, values: values(value.totals.values) },
+            days: value.days.map(day => ({ ...day, values: values(day.values) })) };
     }
     function authorIcon(id) {
         const node = ux.icon("author-" + id);
@@ -622,7 +635,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             if (dialog.open) { dialogOrigin = null; dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
             const changedRange = !range || range.from !== next.range.from || range.to !== next.range.to || offset !== request.offset;
             const changedPopulation = changedRange || JSON.stringify(filters) !== JSON.stringify(next.filters) || lastRevision !== context.revision;
-            data = value; bound = token; range = next.range; period = next.period; filters = { ...next.filters }; offset = request.offset;
+            data = screenModelNames(value); bound = token; range = next.range; period = next.period; filters = { ...next.filters }; offset = request.offset;
             // These are two encodings of server-qualified samples, not browser-side aggregation.
             const durationValues = values => ({ ...values, timing: [
                 { ...values.timing[0], label: "Median" }, { ...values.timing[0], id: "p95", label: "95th percentile" },
@@ -821,6 +834,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                     paintStable(card);
                 });
                 label.append(check, sample(definition.id, id), el("span", "trends-series-label", definition.label));
+                if (definition.recordedAs) ux.tooltip(label, `${definition.label}\nRecorded as ${definition.recordedAs}`, { tone: "chart" });
                 const value = el("span", "trends-legend-value"), track = el("span", "trends-value-track"), fill = el("span", "trends-value-fill");
                 fill.style.background = color(definition.id, id); track.append(fill); row.append(label, value, track);
                 row.addEventListener("pointerenter", () => card.chart.emphasize(definition.id));
@@ -1471,7 +1485,12 @@ export const trendsStyles = `
 @media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}}
 @media(max-width:440px){.trends-dialog{width:calc(100dvw - 24px);max-width:calc(100dvw - 24px);padding:16px}.trends-dialog-heading{margin-bottom:12px}}
 @media(max-width:600px){.trends-value-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}.trends-value-row>.trends-value-track{grid-column:1/-1;grid-row:2;margin-bottom:8px}.trends-value{grid-row:1;grid-column:2}}
-@media(prefers-reduced-motion:reduce){.trends-tooltip{transition:none}}
+[data-trend-point]{opacity:0;transition:opacity .12s ease-out}
+[data-trend-mark]:is([data-trend-end],[data-trend-reading],:focus-visible,[aria-pressed=true]) [data-trend-point]{opacity:1}
+.trends-day-guide{stroke:var(--control);stroke-width:1;stroke-dasharray:3 4;vector-effect:non-scaling-stroke}
+[data-trend-bar]{rx:2px}
+@media(prefers-reduced-motion:reduce){.trends-tooltip,[data-trend-point]{transition:none}}
+@media(forced-colors:active){[data-trend-point]{opacity:1}.trends-day-guide{stroke:CanvasText}}
 .trends-workspace{min-width:0;display:grid;grid-template-columns:clamp(10rem,16%,13rem) minmax(0,1fr);gap:clamp(12px,2vw,28px);align-items:start}
 .trends-primary-column{min-width:0}.trends-measure-index{display:grid;gap:2px;align-content:start;padding-inline-end:12px;border-inline-end:1px solid var(--surface-divider)}
 .trends-measure-index .trends-measure{display:flex;align-items:center;text-align:start;justify-content:flex-start;background:transparent;color:var(--ink);border:0;box-shadow:none;border-radius:var(--radius-small);min-height:44px;padding:6px 12px;width:100%;font:inherit;text-decoration:none}

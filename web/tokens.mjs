@@ -1,4 +1,5 @@
 import { uiFontStack } from "../lib/typeface.mjs";
+import { harborOutcomeCss } from "./outcome-paint.mjs";
 
 export const typographyTokens = `
  --font:${uiFontStack};
@@ -83,7 +84,7 @@ export const screenLight = `
  --accent-hover:var(--hover);--accent-pressed:#dbe6e4;--pill-pressed:var(--accent-pressed);
  --primary-hover:#28454e;--primary-pressed:#15252c;
  --success:#006677;--danger:#af3e37;--warning:#7e6116;--unknown:#536171;
- --tool-positive:#175739;--tool-negative:#9b3334;
+ ${harborOutcomeCss({ masked: "#235eaa", negative: "#9b3334", returned: "#893f21" }, "light")}
  --screen-returned-issue:#893f21;--disclosure-risk:#9b354b;--disclosure-masked:#235eaa;
  --delete-fill:var(--danger);--delete-ink:#ffffff;
  --performance-red:var(--danger);--performance-orange:#8c5518;--performance-gold:var(--warning);--performance-teal:var(--success);
@@ -119,7 +120,7 @@ export const screenDark = `
  --accent-hover:var(--hover);--accent-pressed:#314345;--pill-pressed:var(--accent-pressed);
  --primary-hover:#d3eaee;--primary-pressed:#c0d9df;
  --success:#75c6d3;--danger:#f0a097;--warning:#dcc080;--unknown:#b4c0cf;
- --tool-positive:#a0d7a3;--tool-negative:#ffa791;
+ ${harborOutcomeCss({ masked: "#79b6ff", negative: "#ffa791", returned: "#f6b08c" }, "dark")}
  --screen-returned-issue:#f6b08c;--disclosure-risk:#ffacb1;--disclosure-masked:#79b6ff;
  --delete-fill:var(--danger);--delete-ink:#281210;
  --performance-red:var(--danger);--performance-orange:#e1ac74;--performance-gold:var(--warning);--performance-teal:var(--success);

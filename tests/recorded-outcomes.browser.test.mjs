@@ -265,7 +265,7 @@ for (const frontend of ["bundled","react"]) test(`${frontend}: outcome scope, ho
     for (const [index,category] of ["success","failure","unknown"].entries()) {
         const wedge = root.locator(`.percentage-slice[data-category="${category}"]`);
         const item = root.locator(`li[data-category="${category}"]`), name = item.locator(".percentage-label");
-        const expected = `${await name.textContent()}: ${await item.getAttribute("data-percentage")} (${await item.getAttribute("data-count")} of 239 tool calls).`;
+        const expected = `${await name.textContent()}\n${await item.getAttribute("data-percentage")} (${await item.getAttribute("data-count")} of 239 tool calls).`;
         await wedge.scrollIntoViewIfNeeded();
         const point = await wedge.evaluate(n=>{
             const angle=(+n.dataset.start + +n.dataset.end)*Math.PI + Math.PI/2;

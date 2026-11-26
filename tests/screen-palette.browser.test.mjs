@@ -107,10 +107,10 @@ test("tool, returned issue and disclosure inks follow the evidence through each 
         await paint(completed,"--tool-positive");
         await page.locator("#closeContextSidebar").click();
         await page.goto(app.runtime.url+"trends?section=overview");
-        await paint(page.locator("#trendsOverviewPlot [data-trend-line]").first(),"--chart-mark-high","stroke");
+        await paint(page.locator("#trendsOverviewPlot [data-trend-line]").first(),"--tool-negative-mark","stroke");
         await page.goto(app.runtime.url+"compare?aFrom=2026-11-10&aTo=2026-11-12&bFrom=2026-11-14&bTo=2026-11-16");
-        await paint(page.locator(".compare-outcome-paint.compare-mark-success").first(),"--tool-positive","backgroundColor");
-        await paint(page.locator(".compare-outcome-paint.compare-mark-failure").first(),"--tool-negative","backgroundColor");
+        await paint(page.locator(".compare-outcome-paint.compare-mark-success").first(),"--tool-positive-mark","backgroundColor");
+        await paint(page.locator(".compare-outcome-paint.compare-mark-failure").first(),"--tool-negative-mark","backgroundColor");
         await page.locator("#viewComparisonCalls").click();
         await paint(page.locator(".compare-record-failure:visible").first(),"--tool-negative");
         await navigateMain(page,"reports");

@@ -158,19 +158,19 @@ test("screen identity and completeness share core qualification without changing
         [recordedInteractionModels([prompt, a, missing, end(missing)], record),
             "model-a", ["missing-response-models"]],
         [recordedInteractionModels([prompt, a, { ...b, timestamp: a.timestamp }, end(a)], record),
-            "model-a, model-b (order not recorded)", ["unverified-final-boundary"]],
+            "model-a, model-b (order not recorded)", ["unverified-final-boundary"], ["model-a", "model-b"], false],
         [recordedInteractionModels([prompt, a, b, again, end(again)], record),
-            "model-a then model-b then model-a", []],
+            "model-a then model-b then model-a", [], ["model-a", "model-b", "model-a"]],
         [recordedInteractionModels([prompt, literal, end(literal)], record),
             "model (partial record)", []],
     ];
-    for (const [evidence, identity, completeness] of cases) {
+    for (const [evidence, identity, completeness, sequence = [identity], ordered = true] of cases) {
         const value = { ...record, originalModelEvidence: evidence }, before = JSON.stringify(value);
         const core = JSON.stringify(interactionModelFact(value));
         const { presentation, models, ...projectedCore } = projectInteractionModels([value])[0].originalModel;
         assert.equal(JSON.stringify(projectedCore), core);
-        assert.deepEqual(presentation, { identity, completeness });
-        assert.deepEqual(Object.keys(presentation), ["identity", "completeness"]);
+        assert.deepEqual(presentation, { identity, sequence, ordered, completeness });
+        assert.deepEqual(Object.keys(presentation), ["identity", "sequence", "ordered", "completeness"]);
         assert.doesNotMatch(JSON.stringify(presentation), /api-a|message-one|source-one|promptEventId|responses|256/);
         assert.equal(JSON.stringify(value), before);
     }

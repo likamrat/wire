@@ -330,7 +330,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, authorship, icons: dimensionalIcons,
-        modelShareReading: assessmentFactories.modelShareReading, usageSummary: assessmentFactories.usageSummary,
+        modelShareReading: assessmentFactories.modelShareReading, usageSummary: assessmentFactories.usageSummary, modelName: assessmentFactories.modelName,
         createLink(kind, row) {
             const changes = Object.hasOwn(row, "nativeFilter") ? row.nativeFilter
                 : kind === "outcomes" ? workspaceState.scope.layer === "code-reference" ? { widget: "all" } : { result: row.id }
@@ -2651,7 +2651,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
         questionControls: assessmentFactories.questionControls,
-        root: $("trendsView"), api, time, ux, authorship,
+        root: $("trendsView"), api, time, ux, authorship, modelName: assessmentFactories.modelName,
         hiddenInteraction: id => hiddenCards.has(id),
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
             entry: trendOrigin(underlyingRoute())?.entry ?? null, get hasMicrosoftSource() { return hasMicrosoftSource(); },
@@ -6299,6 +6299,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         value.value = String(milliseconds);
         return value;
     }
+    // Display names only on screen; the recorded ID is one hover or focus away and stays the identity.
+    function modelNameNode(id) {
+        // Source details show an unrecognized ID exactly; its reading says WIRE has no display name for it.
+        const name = assessmentFactories.modelName(id), node = el("span", "model-name", name.recognized ? name.label : id);
+        node.tabIndex = 0;
+        ux.tooltip(node, name.recognized ? `${name.label}\nRecorded as ${id}` : `${name.label}\nWIRE has no display name for this recorded ID.`, { tone: "chart" });
+        return node;
+    }
     function originalModelFact(scenario, { callContext = false } = {}) {
         const model = scenario.originalModel;
         const valid = model && ["Model", "Models"].includes(model.label) && typeof model.value === "string" && model.value.trim();
@@ -6311,8 +6319,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const validPresentation = valid && ["recorded", "partial"].includes(model.status)
             && typeof presentation?.identity === "string" && presentation.identity.trim()
             && Array.isArray(presentation.completeness) && presentation.completeness.every(reason => Object.hasOwn(explanations, reason));
-        const value = el("span", "model-identity", presentation && !validPresentation ? "Not verified (invalid model presentation)"
+        const sequence = validPresentation && typeof assessmentFactories.modelName === "function" && Array.isArray(presentation.sequence)
+            && presentation.sequence.length && presentation.sequence.every(id => typeof id === "string" && id.trim()) ? presentation.sequence : null;
+        const value = el("span", "model-identity", sequence ? undefined : presentation && !validPresentation ? "Not verified (invalid model presentation)"
             : validPresentation ? presentation.identity : valid ? model.value : model ? "Not verified (invalid model metadata)" : "Not recorded");
+        if (sequence) {
+            sequence.forEach((id, index) => {
+                if (index) value.append(presentation.ordered === false ? ", " : " then ");
+                value.append(modelNameNode(id));
+            });
+            if (presentation.ordered === false) value.append(" (order not recorded)");
+        }
         const row = cardFact(callContext ? "Interaction model" : valid ? model.label : "Model", value);
         if (validPresentation && presentation.completeness.length) {
             const reasons = presentation.completeness;
@@ -6907,6 +6924,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedOrdinals = requestContext.actionOrdinals(selectedScenario);
         assessmentFactories.usageReading(el, usageSection.body, selectedScenario, at => time.formatTime(at, workspaceState.scope.timeContext),
             call => results.callLabel(selectedOrdinals.get(call)));
+        for (const node of usageSection.body.querySelectorAll(".model-name[data-recorded-model]")) {
+            node.tabIndex = 0;
+            ux.tooltip(node, `${node.dataset.modelName}\nRecorded as ${node.dataset.recordedModel}`, { tone: "chart" });
+        }
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         const jumps = el("nav", "wire-section-nav reader-section-jumps");

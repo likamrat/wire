@@ -511,7 +511,10 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: daily columns sc
         if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.png`) });
         await expect(tip).toContainText("3 Work IQ tool calls", { timeout: 1200 });
         await expect(tip).toBeVisible();
-        await expect(total.locator(".time-stack")).toHaveCSS("outline-style", "solid");
+        // Reading a day keeps its column at full strength and lets the other days recede; no outline is painted.
+        await expect(total.locator(".time-stack")).toHaveCSS("opacity", "1");
+        await expect(total.locator(".time-stack")).toHaveCSS("outline-style", "none");
+        await expect.poll(() => slots.locator(".time-stack").evaluateAll(nodes => nodes.filter(node => +getComputedStyle(node).opacity < .5).length)).toBeGreaterThan(0);
         await segment.scrollIntoViewIfNeeded(); await ready(page);
         const painted = await segment.boundingBox();
         await page.mouse.move(1, 1);
@@ -577,7 +580,7 @@ function assertChart(geometry, expected) {
         assert.equal(mark.encodedHeight, expected[index] / Math.max(...expected) * mark.extent);
         assert.ok(Math.abs(mark.height - mark.total / Math.max(...expected) * geometry.plotExtent) < 1 / 32,
             "Actual paint remains linear within layout rounding");
-        assert.equal(mark.width, 84);
+        assert.equal(mark.width, 40, "Each painted column sits inside its unchanged 84px lane");
         assert.ok(mark.x >= geometry.plot.x && mark.right <= geometry.plot.right);
         assert.ok(Math.abs(mark.bottom - geometry.marks[0].bottom) < 1 / 32, "Columns share the zero baseline");
     }

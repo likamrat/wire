@@ -1680,9 +1680,9 @@ export const periodComparisonStyles = `
 .compare-outcome-row{min-width:0}
 .compare-bar-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
 .compare-outcome-bar{height:12px;display:flex;background:var(--canvas);border-radius:2px;overflow:hidden;margin-top:6px}
-.compare-outcomes[data-result-layer=tool],.compare-evidence[data-result-layer=tool]{--compare-success:var(--tool-positive);--compare-failure:var(--tool-negative)}
-.compare-outcomes[data-result-layer=reported-api],.compare-evidence[data-result-layer=reported-api]{--compare-failure:var(--screen-returned-issue)}
-.compare-mark-success{background:var(--compare-success,var(--chart-success))}.compare-mark-failure{background:var(--compare-failure,var(--chart-failure))}
+.compare-outcomes[data-result-layer=tool],.compare-evidence[data-result-layer=tool]{--compare-success:var(--tool-positive);--compare-failure:var(--tool-negative);--compare-success-mark:var(--tool-positive-mark);--compare-failure-mark:var(--tool-negative-mark)}
+.compare-outcomes[data-result-layer=reported-api],.compare-evidence[data-result-layer=reported-api]{--compare-failure:var(--screen-returned-issue);--compare-failure-mark:var(--outcome-returned-mark)}
+.compare-mark-success{background:var(--compare-success-mark,var(--compare-success,var(--chart-success)))}.compare-mark-failure{background:var(--compare-failure-mark,var(--compare-failure,var(--chart-failure)))}
 .compare-mark-partial{background:var(--chart-partial)}.compare-mark-unknown{background:var(--chart-unknown)}
 .compare-mark-other{background:var(--warning)}.compare-mark-transport{background:var(--danger)}
 .compare-values-table,.compare-whole-table{width:100%;table-layout:fixed;border-collapse:collapse;margin:14px 0 0;font-size:.875rem}
