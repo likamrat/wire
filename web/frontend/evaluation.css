@@ -70,7 +70,8 @@
     background: var(--accent-soft);
 }
 .wire-frontend-react .analyze-dashboard { display: block; --day-label-gap: var(--space-sm); }
-.wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
+.wire-frontend-react #chart .flat-time-segment { fill: var(--chart-mark-high, var(--column-label)); }
+@media (forced-colors: active) { .wire-frontend-react #chart .flat-time-segment { fill: CanvasText; } }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
 .wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: var(--widget-heading-inset) 20px 16px; }
 .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate],.outcome-hybrid) {

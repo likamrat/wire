@@ -1,4 +1,4 @@
-export function createUsageReading({ firstUsageDays, tokenKinds, usageSummary, usageQuestions, usageThresholds, usageTools }) {
+export function createUsageReading({ firstUsageDays, tokenKinds, usageSummary, usageQuestions, usageThresholds, usageTools, modelName }) {
 const number = new Intl.NumberFormat().format;
 const names = { freshInput: "Uncached input", cacheRead: "Input reused from cache", cacheWrite: "Input saved to cache", output: "Generated output" };
 function questionControls(doc, prefix, change, { filters = false } = {}) {
@@ -74,11 +74,11 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
             : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
             : "Work IQ return size was not recorded."));
     }
-    const steps = [...(u?.steps ?? []).map(s => ({ at: s.at, label: s.model, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out` })),
+    const steps = [...(u?.steps ?? []).map(s => ({ at: s.at, label: s.model, model: true, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out` })),
         ...sized.map(c => ({ at: c.completedAt, label: `${callLabel(c)} · ${c.tool}`, detail: `${textSize(c.returnedTextBytes)} of returned text` }))];
     const timeline = el("ol", "usage-timeline");
     for (const step of steps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
-        const row = el("li"), label = el("strong", "", step.label), detail = el("span", "", step.detail);
+        const row = el("li"), label = step.model ? modelLabel(el, "strong", step.label) : el("strong", "", step.label), detail = el("span", "", step.detail);
         const clock = el("time", "muted", formatTime(step.at)); clock.dateTime = step.at;
         row.append(label, detail, clock); timeline.append(row);
     }
@@ -94,6 +94,13 @@ function renderModelCounts(el, host, u) {
     }
     host.append(table);
 }
+// Screen display name; unrecognized IDs stay visible so unlike IDs never merge.
+function modelLabel(el, tag, id) {
+    const name = modelName ? modelName(id) : { label: id, recognized: true }, node = el(tag, "model-name", name.label);
+    if (!name.recognized) node.append(" ", el("span", "model-id", id));
+    node.dataset.recordedModel = id; node.dataset.modelName = name.label;
+    return node;
+}
 function modelShareReading(el, host, s, nativeCount, linkForModel) {
     if (!s.models.length) {
         host.append(el("p","percentage-empty",s.eligible+nativeCount ? "No model token counts available." : "No matching interactions."));
@@ -108,10 +115,11 @@ function modelShareReading(el, host, s, nativeCount, linkForModel) {
         else value.textContent = `${number(row.total)} tokens`;
         const label = linkForModel?.(row.model) ?? el("span");
         label.classList.add("percentage-label");
-        label.textContent = row.model;
+        const name = modelLabel(el, "span", row.model);
+        label.replaceChildren(...name.childNodes); label.dataset.recordedModel = row.model; label.dataset.modelName = name.dataset.modelName;
         if (linkForModel) {
             label.dataset.viewKey = `percentage:metered-model:${row.model}`;
-            label.setAttribute("aria-label", `${row.model}: ${value.textContent}. View ${number(row.interactions)} metered ${row.interactions === 1 ? "interaction" : "interactions"}.`);
+            label.setAttribute("aria-label", `${name.dataset.modelName}${name.dataset.modelName === row.model ? "" : ` (${row.model})`}: ${value.textContent}. View ${number(row.interactions)} metered ${row.interactions === 1 ? "interaction" : "interactions"}.`);
         }
         block.append(label, value);
         if (compareShares) {

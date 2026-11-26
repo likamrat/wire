@@ -75,16 +75,17 @@ ${dimensionalColumnStyles}
 .flat-time-plot {position:relative;min-width:100%;--time-height:80px}
 .flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0;padding:0;border:0;border-bottom:1px solid var(--control)}
 .flat-time-plot .time-slot {position:relative;display:block;height:100%;min-width:0}
-.flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:84px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;pointer-events:none}
-.flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none}
+.flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);min-width:0;min-height:0;padding:0;border:0;border-radius:4px 4px 0 0;background:transparent;pointer-events:none;filter:drop-shadow(0 3px 5px color-mix(in srgb,var(--tool-positive-mark,var(--accent)) 24%,transparent))}
+.flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none;clip-path:inset(0 round 4px 4px 0 0);transition:opacity .12s ease-out}
+.flat-time-plot .time-chart:has(.time-slot:is(:hover,:has(:focus-visible))) .time-slot:not(:hover,:has(:focus-visible)) .time-stack {opacity:.32}
 .flat-time-column {display:block;max-width:none;overflow:visible;pointer-events:none}
 .flat-time-plot .time-stack>.flat-time-column {width:100%;height:100%}
 .flat-time-segment {fill-opacity:1;stroke:none;pointer-events:visibleFill}
+.flat-time-separator {stroke:var(--paper);stroke-width:1.5px;vector-effect:non-scaling-stroke;pointer-events:none}
 .flat-time-column [data-ux-tooltip]:hover {fill-opacity:1}
 .flat-time-plot .time-column:hover .time-stack {filter:none;outline:0}
-.flat-time-plot .time-column:is(:hover,:focus-visible) .time-stack {outline:2px solid var(--focus);outline-offset:1px}
+.flat-time-plot .time-column:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
 .flat-time-plot .time-column:hover .dimensional-count,.flat-time-plot .time-zero[href]:hover .dimensional-count {background:var(--hover)}
-.flat-time-plot .time-column:focus-visible {outline:0}
 .flat-time-plot .dimensional-count {font-size:1rem;min-width:44px}
 .flat-time-plot .dimensional-count::before {content:"";position:absolute;inset:0 0 -8px;pointer-events:auto}
 .flat-time-plot .time-zero {position:absolute;bottom:0;left:50%;transform:translateX(-50%);height:0;background:none}
@@ -93,10 +94,10 @@ ${dimensionalColumnStyles}
 .time-zero[href] .dimensional-count {pointer-events:auto;color:var(--accent)}
 .time-zero[href]:focus-visible .dimensional-count {outline:2px solid var(--focus)}
 .time-segment-link {position:absolute;left:50%;transform:translateX(-50%)}
-.time-segment-link:is(:hover,:focus-visible) {outline:2px solid var(--focus);outline-offset:1px;z-index:1}
+.time-segment-link:focus-visible {outline:2px solid var(--focus);outline-offset:1px;z-index:1}
 .flat-time-plot .dimensional-time-labels {grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));grid-auto-flow:row;grid-auto-columns:auto;padding:12px 0 0;font-size:var(--type-small);min-height:44px}
 #chart:has(.flat-time-plot)+#chartFooter {justify-content:flex-start;gap:8px 24px}
 #chart:has(.flat-time-plot)+#chartFooter>span {white-space:normal;min-width:0}
-@media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}}
-@media(prefers-reduced-motion:reduce) {.flat-time-column,.flat-time-plot .time-column {animation:none;transition:none}}
+@media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}.flat-time-plot .time-chart .time-column .time-stack {opacity:1}.flat-time-plot .time-column:focus-visible {outline-color:Highlight}}
+@media(prefers-reduced-motion:reduce) {.flat-time-column,.flat-time-plot :is(.time-column,.time-stack) {animation:none;transition:none}}
 `;

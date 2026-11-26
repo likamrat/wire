@@ -18,7 +18,7 @@ test("the Analyze donut opens readable exact calls with paging and an independen
     const page = await browser.newPage({viewport:{width:1150,height:900}, reducedMotion:"reduce"});
     await page.goto(app.runtime.url);
     const center = page.locator("#outcomeChart .percentage-total-link");
-    await expect(center).toHaveText("11"); await center.press("Enter");
+    await expect(center.locator(".percentage-total-value")).toHaveText("11"); await center.press("Enter");
     const rows = page.locator("#activityList .widget-record"), position = page.locator("#activityPagePosition");
     await expect(page.locator("#activityListSummary")).toHaveText("Recorded activity: 11 matching tool calls");
     await expect(position).toHaveText("1-8 of 11 Work IQ tool calls");

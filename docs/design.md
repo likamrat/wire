@@ -119,7 +119,7 @@ Outcome and **Problem** area:
   explanation down or sideways.
 - A code-only failure that repeats its entry's code need not repeat it on the
   card; the reader keeps both records. Missing reasons are plain text.
-- Green/check indicates recorded tool completion; red/cross marks failed calls.
+- Blue/check indicates recorded tool completion; coral/cross marks failed calls.
   Neither is a verdict on the prompt or the task. Returned issues keep a
   separate link.
 
@@ -240,9 +240,14 @@ result service and their separate duration evidence keep their own meanings.
 
 Outcome words and icons accompany color.
 
-- Card, reader and Analyze tool outcomes use green for recorded completion and
-  red for failure. Partial states keep a separate gold warning role, and missing
-  evidence stays neutral.
+- Card, reader, Analyze, Compare and Trends tool outcomes use a calm blue for
+  recorded completion and a softened coral for failure. No result is a hatched
+  neutral. Partial states keep a separate gold warning role, and missing evidence
+  stays neutral.
+- Every palette derives these from its own blue and failure hues in
+  [`web/outcome-paint.mjs`](../web/outcome-paint.mjs): a deeper text shade for
+  labels and a lighter mark shade for rings, strips and bars. Token counts and
+  breakdown bars use one quiet quantity ink.
 - Completion doesn't establish answer quality.
 - Service colors identify services, not health.
 - Agent and user authorship use their own roles, not service or quality colors.
@@ -252,7 +257,8 @@ Carry the role with the fact, not the page:
 
 | Fact | Role |
 | --- | --- |
-| Recorded **tool completion** / **tool failure** | `--tool-positive` / `--tool-negative`, in the chart, card, search result and reader |
+| Recorded **tool completion** / **tool failure** | Text: `--tool-positive` / `--tool-negative`. Marks: `--tool-positive-mark` / `--tool-negative-mark` |
+| Token counts and breakdown bars | `--outcome-quantity` |
 | A **returned API issue** | `--screen-returned-issue`, even when its parent call completed |
 | Partial or unconfirmed | `--warning` |
 | Unknown | `--unknown` |
@@ -293,7 +299,7 @@ widgets and readers distinct reading surfaces.
 - Test an outcome's text **on its fill**, and its fill and edge **against the
   actual card or reader**. A passing text ratio doesn't mean a layer is
   visible.
-- Palette-specific green and red still mean tool completion and failure; keep
+- Each palette's blue and coral still mean tool completion and failure; keep
   the check, cross and count.
 
 Petrol & coral stays the default and the fallback. Settings > Themes separately
@@ -483,7 +489,7 @@ A reply-saving draft previews the requested choice:
 - Number fields size to their page digits rather than taking a wide fixed slot.
 - A direct page jump keeps its native validation, Enter behavior and visible Go
   to page action. PDF paging keeps its existing commit behavior.
-- Checkboxes and switches use the setting-state color, not outcome green.
+- Checkboxes and switches use the setting-state color, not outcome colors.
 - On painted choice rows, leave the same 12px inside the leading and trailing
   edges as in filter menus. Dense chart legends use the smaller 8px inset and
   keep their value tracks separate.
@@ -549,6 +555,23 @@ historical report inputs.
 | Overlapping service associations | Bars, not a 100% composition |
 | Exclusive recorded outcomes | May use a ring |
 | Tiny mark | Exact counts and accessible table links remain usable |
+
+### Hover and readings
+
+Every chart mark, legend row, value and bar uses one reading on the shared
+floating surface: the name first, then the share with its count of the true
+denominator, then what the row means.
+
+- Reading a mark keeps its exact geometry. Other marks in the same chart recede;
+  never add a stroke, brightness change, scale or plate.
+- A reading never covers the figures it explains or a neighbouring control. Rows
+  with a bar read above the bar.
+- The ring's total is part of the ring: a circular target in the hole with an
+  ink change and a hairline circle, never a tile behind the figures.
+- Paper gaps separate ring slices and stacked segments without widening them.
+- Trends lines mark only where a run ends or stands alone; the day being read
+  gains its point and a dashed guide.
+- Readings fade in briefly; reduced motion shows them at once.
 
 [Analyze Guide](interaction-design.md#chart-guide) connects values to definitions
 and exact evidence. Trends has its own [Chart guide](interaction-design.md#trends).
@@ -629,6 +652,11 @@ largest bar.
 
 - Response models use all matching interactions, including missing model names.
   Models and services can overlap.
+- Model rows show a display name formatted only from a fully recognized recorded
+  ID (for example GPT-5.1 or Claude Sonnet 4.5). An unrecognized ID is shown
+  exactly and never merged or renamed; Analyze labels it Unrecognized model, and
+  its reading says WIRE has no display name. The recorded ID appears on hover and
+  keyboard focus; filters, saved reports and attribution keep it unchanged.
 - Live period outcomes keep their pre-outcome-filter denominator and comparison
   precision.
 - Time-bucket totals, standalone totals, durations, unavailable or incompatible
@@ -661,7 +689,7 @@ immediately instead of keeping an exit animation.
 | Interaction state | Treatment |
 | --- | --- |
 | Hover, persistent selection/current page, keyboard focus | Visually distinct meanings |
-| Tooltip | One dismissible, hoverable owner; no obscured action |
+| Tooltip | One dismissible, hoverable owner on the floating surface; no obscured action |
 | Activation | Dismiss old help without stealing focus |
 | Long text | Labels/values wrap; code may scroll locally |
 

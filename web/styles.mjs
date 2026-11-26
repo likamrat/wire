@@ -765,11 +765,11 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 :is([data-result-layer=tool] .result-tone-failure,.wire-search-outcome[data-result-layer=tool].result-tone-failure) {--cue-color:var(--tool-negative)}
 :is([data-result-layer=reported-api] .result-tone-failure,.wire-search-outcome[data-result-layer=reported-api].result-tone-failure) {--cue-color:var(--screen-returned-issue)}
 #homeView[data-result-layer=tool],#percentageCharts[data-layer=tool] {
- --chart-teal-label:var(--tool-positive);--chart-teal-top:var(--tool-positive);--chart-teal-mid:var(--tool-positive);--chart-teal-base:var(--tool-positive);--chart-teal-side:var(--tool-positive);--chart-teal-cap:var(--tool-positive);
- --chart-pink-label:var(--tool-negative);--chart-pink-top:var(--tool-negative);--chart-pink-mid:var(--tool-negative);--chart-pink-base:var(--tool-negative);--chart-pink-side:var(--tool-negative);--chart-pink-cap:var(--tool-negative);
+ --chart-teal-label:var(--tool-positive);--chart-teal-top:var(--tool-positive-mark);--chart-teal-mid:var(--tool-positive-mark);--chart-teal-base:var(--tool-positive-mark);--chart-teal-side:var(--tool-positive-mark);--chart-teal-cap:var(--tool-positive-mark);
+ --chart-pink-label:var(--tool-negative);--chart-pink-top:var(--tool-negative-mark);--chart-pink-mid:var(--tool-negative-mark);--chart-pink-base:var(--tool-negative-mark);--chart-pink-side:var(--tool-negative-mark);--chart-pink-cap:var(--tool-negative-mark);
 }
 #homeView[data-result-layer=reported-api],#percentageCharts[data-layer=reported-api] {
- --chart-pink-label:var(--screen-returned-issue);--chart-pink-top:var(--screen-returned-issue);--chart-pink-mid:var(--screen-returned-issue);--chart-pink-base:var(--screen-returned-issue);--chart-pink-side:var(--screen-returned-issue);--chart-pink-cap:var(--screen-returned-issue);
+ --chart-pink-label:var(--screen-returned-issue);--chart-pink-top:var(--outcome-returned-mark);--chart-pink-mid:var(--outcome-returned-mark);--chart-pink-base:var(--outcome-returned-mark);--chart-pink-side:var(--outcome-returned-mark);--chart-pink-cap:var(--outcome-returned-mark);
 }
 #requestContent .reader-call-summary>.wire-icon {inline-size:1em;block-size:1em;vertical-align:-.13em}
 .card-metadata [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}

@@ -21,17 +21,17 @@ export const analyzeLayoutStyles = `
 .token-history-plot svg {width:100%;height:100%;display:block;overflow:visible}
 .token-history-scroll:has(.usage-date-slider:focus-visible) {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
 .token-grid {stroke:var(--screen-grid);stroke-width:1}.token-axis {stroke:var(--control);stroke-width:1}
-.token-column {fill:var(--accent);transform-box:fill-box;transform:translateX(-50%)}
-.token-zero {fill:var(--accent)}
-.token-hover-point {fill:var(--paper);stroke:var(--accent);stroke-width:2;opacity:0}
+.token-column {fill:var(--outcome-quantity);transform-box:fill-box;transform:translateX(-50%)}
+.token-zero {fill:var(--outcome-quantity)}
+.token-hover-point {fill:var(--paper);stroke:var(--outcome-quantity);stroke-width:2;opacity:0}
 .token-history[data-inspecting] .token-hover-point {opacity:1}
 .usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
 .token-history-dates {display:grid;grid-template-columns:repeat(var(--days),minmax(max-content,1fr));color:var(--accent)}
 .token-history-dates time {min-width:max(3.75em,calc(var(--day-column-width) + var(--space-sm)));padding:4px 4px 0;box-sizing:border-box;text-align:center;white-space:nowrap}
 .token-history-pages {grid-column:1/-1;display:flex;justify-content:space-between}
-.token-day-reading,#evidence-tooltip[data-tone=chart] {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
+.token-day-reading {padding:6px var(--space-md);background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:var(--radius-small);box-shadow:var(--surface-shadow);font-size:var(--type-small);font-weight:var(--weight-regular)}
 .token-day-reading {position:absolute;grid-column:2;z-index:var(--layer-tooltip);display:grid;gap:2px;width:max-content;max-width:min(18rem,100%);box-sizing:border-box;overflow-wrap:anywhere;opacity:0;pointer-events:none}
-#evidence-tooltip[data-tone=chart] {--tooltip-gap:var(--space-md);max-width:min(18rem,calc(100% - 2 * var(--tooltip-gap)));white-space:pre-line}
+#evidence-tooltip[data-tone=chart] {--tooltip-gap:var(--space-md);max-width:min(18rem,calc(100% - 2 * var(--tooltip-gap)))}
 #evidence-tooltip[data-tone=chart]::first-line {color:var(--accent)}
 .token-history[data-inspecting] .token-day-reading {opacity:1}
 .token-history[data-day-actionable] .token-day-reading a {pointer-events:auto}
@@ -473,8 +473,19 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 :is(#outcomeChart,.native-outcome-chart) .percentage-visual {position:relative}
 .percentage-total {position:absolute;inset:0 0 auto;aspect-ratio:1;display:flex;align-items:center;justify-content:center;flex-direction:column;pointer-events:none;gap:2px}
 .percentage-total-value {font-size:1.875rem;line-height:1.1;font-variant-numeric:tabular-nums;font-weight:var(--weight-strong)}
-.percentage-total-link {pointer-events:auto;display:grid;place-items:center;min-width:44px;min-height:44px;border-radius:var(--radius-small);color:var(--ink);text-decoration:none}
-.percentage-total-link:is(:hover,:focus-visible) {color:var(--accent);background:var(--hover)}
+/* The total belongs to the ring: a circular target in the hole, never a plate behind the figures. */
+.percentage-total-link {pointer-events:auto;position:relative;display:grid;place-content:center;justify-items:center;gap:inherit;min-width:44px;min-height:44px;border-radius:50%;color:var(--ink);text-decoration:none;-webkit-tap-highlight-color:transparent}
+.percentage-total:not([data-length=wide]) .percentage-total-link {width:calc(100% * 156 / 240);aspect-ratio:1}
+.percentage-total-link::after {content:"";position:absolute;inset:3px;border-radius:inherit;border:1px solid transparent;pointer-events:none;transition:border-color .12s ease-out}
+.percentage-total[data-length=wide] .percentage-total-link {border-radius:var(--radius-small);padding-inline:8px}
+.percentage-total-link :is(.percentage-total-value,.percentage-total-unit) {transition:color .12s ease-out}
+.percentage-total-link:hover .percentage-total-value {color:var(--accent)}
+.percentage-total-link:hover::after {border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.percentage-total-link:active .percentage-total-value {color:var(--ink)}
+.percentage-total-link:active::after {border-color:var(--accent)}
+.percentage-total-link:focus-visible {outline:none}
+.percentage-total-link:focus-visible::after {border:2px solid var(--focus)}
+@media(prefers-reduced-motion:reduce) {.percentage-total-link::after,.percentage-total-link :is(.percentage-total-value,.percentage-total-unit) {transition:none}}
 .percentage-total-unit {font-size:var(--type-small);line-height:var(--leading-caption);color:var(--muted)}
 .percentage-total[data-length=long] .percentage-total-value {font-size:1.25rem}
 .percentage-total[data-length=wide] {position:static;aspect-ratio:auto}
@@ -493,10 +504,17 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
 #outcomeChart .outcome-hybrid .percentage-total[data-length=wide] .percentage-total-value {font-size:var(--type-data-value)}
 #outcomeChart .outcome-hybrid .percentage-total-unit {font-size:clamp(.875rem,1.1cqi,1.1rem);line-height:1.2}
 .outcome-distribution {min-width:0}
-.outcome-share-strip {display:flex;height:clamp(18px,1.8cqi,32px);margin-block-end:var(--space-md)}
-.outcome-share-strip>* {flex-basis:0;min-width:0;background:var(--column-label)}
-.outcome-share-strip>.percentage-active {outline:2px solid var(--ink);outline-offset:-2px}
-.outcome-hybrid .percentage-face.percentage-active {stroke:var(--ink);stroke-width:1.5px;vector-effect:non-scaling-stroke;paint-order:stroke fill}
+.outcome-share-strip {display:flex;height:14px;margin-block-end:var(--space-md);border-radius:3px}
+.outcome-share-strip>* {position:relative;flex-basis:0;min-width:0;background:var(--chart-mark-high,var(--column-label));transition:opacity .12s ease-out}
+.outcome-share-strip>*+* {box-shadow:inset 1.5px 0 0 var(--paper)}
+.outcome-share-strip>:first-child {border-start-start-radius:3px;border-end-start-radius:3px}
+.outcome-share-strip>:last-child {border-start-end-radius:3px;border-end-end-radius:3px}
+.outcome-share-strip>[data-category=unknown] {background:repeating-linear-gradient(135deg,var(--chart-mark-high) 0 3px,color-mix(in srgb,var(--chart-mark-high) 50%,var(--paper)) 3px 5px)}
+/* A thin strip keeps a comfortable pointer target above and below its painted height. */
+.outcome-share-strip>::before {content:"";position:absolute;inset:-10px 0}
+.outcome-share-strip:has(.percentage-active)>:not(.percentage-active) {opacity:.32}
+.outcome-hybrid :is(.percentage-face,.outcome-share-strip>*) {filter:drop-shadow(0 3px 5px color-mix(in srgb,var(--chart-mark-high) 26%,transparent))}
+@media(prefers-reduced-motion:reduce) {.outcome-share-strip>* {transition:none}}
 .outcome-hybrid .percentage-legend-row.percentage-active .percentage-label[href] {background:var(--hover)}
 .outcome-hybrid .percentage-legend-row.percentage-active .percentage-label[href]:active {background:var(--pill-pressed)}
 #outcomeChart .outcome-hybrid .percentage-legend {display:flex;flex-wrap:wrap;gap:4px clamp(20px,4cqi,64px)}
@@ -519,7 +537,7 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
  #outcomeChart .outcome-hybrid .percentage-value>span {font-size:.9em}
  #outcomeChart .outcome-hybrid .percentage-total-value {font-size:1.7rem}
  #outcomeChart .outcome-hybrid .percentage-total-unit {font-size:.875rem}
- .outcome-share-strip {height:14px;margin-block-end:4px}
+ .outcome-share-strip {margin-block-end:4px}
 }
 @container outcome-card (max-width:28rem) {
  .analyze-outcome-summary #outcomeChart .percentage-content.outcome-hybrid {--hybrid-wheel:11rem;grid-template-columns:minmax(0,1fr);gap:var(--space-sm);padding-block-end:0}
@@ -541,7 +559,15 @@ ${breakdownContent}:has(>.percentage-tool-list):not(:has(.percentage-bar-track))
  #analyzeTools .analyze-tool-action {max-width:none}
 }
 @media(forced-colors:active) {
- .outcome-share-strip>.percentage-active,.outcome-hybrid .percentage-face.percentage-active {outline-color:Highlight;stroke:Highlight}
+ .token-column,.token-zero {fill:CanvasText}
+ .outcome-share-strip>* {forced-color-adjust:none;background:CanvasText}
+ .outcome-share-strip>*+* {box-shadow:inset 1.5px 0 0 Canvas}
+ .outcome-share-strip>[data-category=unknown] {background:repeating-linear-gradient(135deg,CanvasText 0 3px,Canvas 3px 5px)}
+ .outcome-share-strip>.percentage-active {background:Highlight}
+ .outcome-share-strip:has(.percentage-active)>:not(.percentage-active) {opacity:1}
+ .outcome-hybrid :is(.percentage-face,.outcome-share-strip>*) {filter:none}
+ .percentage-total-link:hover::after {border-color:LinkText}
+ .percentage-total-link:focus-visible::after {border-color:Highlight}
  .analyze-filter-dialog,.analyze-scope-summary,.analyze-tools,.analyze-view-controls {border-color:CanvasText;box-shadow:none}
 }
 `;
