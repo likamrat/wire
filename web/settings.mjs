@@ -136,8 +136,8 @@ export const settingsMarkup = `
           <div id="sourceUsageRecordsRow" class="source-records">
             <div class="source-records-heading"><div class="source-records-title"><h4><label for="sourceUsageRecords">Token records</label></h4><span id="sourceUsageRecordsState" class="source-records-state"></span></div>
               <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsFacts approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label></div>
-            <p id="sourceUsageRecordsHelp" class="settings-help">Fills in token counts for older chats whose logs don't record them.</p>
-            <dl id="sourceUsageRecordsFacts" class="source-records-facts"><dt>Reads</dt><dd>Each call's model, tokens, time and sub-agent marker</dd><dt>Prompts</dt><dd>Matched to calls, not saved</dd><dt>File</dt><dd><span id="sourceUsageRecordsFile"></span><span id="sourceUsageRecordsAccount"></span></dd></dl>
+            <p id="sourceUsageRecordsHelp" class="settings-help">WIRE can fill gaps in older chats using token counts Copilot already recorded. Reading these counts doesn't generate new tokens or cost you anything.</p>
+            <dl id="sourceUsageRecordsFacts" class="source-records-facts"><dt>Reads</dt><dd>Each call's model, token count, time and whether it came from a sub-agent</dd><dt>Prompts</dt><dd>WIRE uses prompts from this file to match calls but doesn't save them.</dd><dt>File</dt><dd><span id="sourceUsageRecordsFile"></span><span id="sourceUsageRecordsAccount"></span></dd></dl>
             <div id="usageCountRow" class="source-records-count" hidden><div class="settings-row-copy"><h4>Count tokens in chats already read</h4>
               <p id="usageCountHelp" class="settings-help">Nothing is saved until you confirm.</p>
               <p id="usageCountNotice" class="settings-help" role="status" hidden></p></div>
@@ -654,7 +654,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function changeItems(approved, pathsChanged, recordsChanged) {
         const next = values(), saved = baseline?.config ?? {}, items = [];
         const records = () => ({ risk: "widen", title: "Read token records", tag: "Reads more",
-            text: `${usageRecordsFile(next.appDbPath)}. Prompts are matched, not saved. Chats already read aren't recounted until they change.` });
+            text: `${usageRecordsFile(next.appDbPath)}. WIRE won't save prompts from this file. It won't recount unchanged chats unless you choose to count them.` });
         if (!approved) {
             items.push({ risk: "widen", title: "Read your Copilot chats", tag: "Reads more", text: "Prompts are saved on this device. Replies stay off." });
             if (next.usageRecords) items.push(records());

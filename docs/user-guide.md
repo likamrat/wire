@@ -72,8 +72,9 @@ make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
 Copilot replies is off by default and has its own control under **Settings >
 Privacy & saved data > Recorded replies**.
 
-If older chats have no token counts in their logs, the optional token records
-can fill some gaps. Approval applies the next time collection reads a changed
+If older chats have no token counts in their logs, WIRE can use counts Copilot
+already recorded. Reading them doesn't run a model or add to your bill.
+Approval applies the next time collection reads a changed
 chat. For chats already read, [check which totals WIRE can count](collection.md#count-tokens-in-chats-already-read)
 before deciding whether to save them.
 

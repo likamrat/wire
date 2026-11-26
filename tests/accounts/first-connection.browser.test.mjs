@@ -505,10 +505,19 @@ test("Copilot's token records stay unread until turned on in source review; turn
     await expect(page.locator("#approvalScope")).not.toContainText("token records");
     const recordsFile = path.join(home, "session-store.db");
     await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(recordsFile);
-    await expect(page.locator("#sourceUsageRecordsHelp")).toHaveText("Fills in token counts for older chats whose logs don't record them.");
-    await expect(page.locator("#sourceUsageRecordsFacts")).toContainText("Matched to calls, not saved");
+    const help = page.locator("#sourceUsageRecordsHelp");
+    await expect(help).toBeVisible();
+    await expect(help).toContainText("token counts Copilot already recorded");
+    await expect(swtch).toHaveAccessibleDescription(/doesn't generate new tokens or cost you anything/);
+    await expect(page.locator("#sourceUsageRecordsFacts")).toContainText("match calls but doesn't save them");
     await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
-    for (const theme of ["light", "dark"]) { await chooseTheme(page, theme); await page.locator("#sourceUsageRecordsRow").scrollIntoViewIfNeeded(); await capture(page, `token-records-off-${theme}`); }
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await swtch.hover();
+        await expect(page.locator("#sourceUsageRecordsRow .switch-track")).toHaveCSS("outline-style", "solid");
+        await expect(swtch).not.toBeChecked();
+        await capture(page, `token-records-off-${theme}`);
+    }
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
     assert.equal(Object.hasOwn(configures()[0].body, "usageRecords"), false, "First approval leaves token records out");
