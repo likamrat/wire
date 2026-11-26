@@ -119,6 +119,26 @@ async function privateContentAbsent(page) {
     await expect(page.locator("#analyzeTools")).toBeHidden();
 }
 
+test("the loading Collection breadcrumb opens Analyze without starting a second document", async t => {
+    const { page, url } = await setup(t, { signedIn: true, frontend: "react" });
+    const resume = Promise.withResolvers(), documents = [];
+    page.on("request", r => {
+        if (r.isNavigationRequest() && r.frame() === page.mainFrame()) documents.push(r.url());
+    });
+    await page.route("**/api/snapshot", async route => {
+        const reply = await route.fetch();
+        await resume.promise; await route.fulfill({ response: reply });
+    }, { times: 1 });
+    const settings = url + "settings?section=connection";
+    try {
+        await Promise.all([page.waitForRequest("**/api/snapshot"), page.goto(settings)]);
+        await page.locator("#breadcrumbs").getByRole("link", { name: "Analyze", exact: true }).click();
+    } finally { resume.resolve(); }
+    await expect(page).toHaveURL(url);
+    await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    assert.deepEqual(documents, [settings]);
+});
+
 test("normal refresh preserves an actionable nonprivate shell through access checks and cross-tab WIRE logout", { timeout: 45000 }, async t => {
     const app = await setup(t, { signedIn: true }), { page } = app;
     const first = Promise.withResolvers(), later = Promise.withResolvers(), settingsFirst = Promise.withResolvers();
