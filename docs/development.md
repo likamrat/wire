@@ -144,6 +144,15 @@ What it never does:
 If it can't verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
 
+An accepted **Update and restart** first prepares the candidate while the old
+build runs. Before stopping, the launcher checks the views, in-flight work,
+report reviews and collector again. If only authorized Copilot collection-status
+reads are in flight, it gives them up to one second to finish before rechecking
+every guard. A write is never interrupted. A refused handoff leaves the old
+build running. Updated launchers name the target and the reason they received;
+an older launcher's “busy or access changed” message does not identify a cause.
+Finish the named work or check its original result before a fresh attempt.
+
 Store read/write protocol 2 includes the explicit agent-authored origin. The
 managed updater refuses a protocol-1/protocol-2 transition before stopping the
 current writer. Qualify both the primary and fallback for the new retained and
