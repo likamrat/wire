@@ -49,6 +49,8 @@ hover or keyboard focus, including the compact mark and narrow drawer.
 
 Keep existing route, reading-position and focus owners. A return restores the
 actual origin only while its authority and reading intent stay current.
+A stored refresh keeps an unchanged Cowork card under an in-progress press.
+If the conversation or its authorized revision changes, release does not open it.
 
 - A press on a Microsoft activity card can finish through a refresh if the same
   authorized row stays in place. Replacing its target or withdrawing access

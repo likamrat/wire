@@ -14,7 +14,7 @@ import { committedNativeReportFixture } from "../reports/native-report-controlle
 import { createNativeRetainedViews } from "../../lib/native-retained-views.mjs";
 import { chatFixture, coworkFixture } from "./native-read-model-fixtures.mjs";
 import { currentStatePayload } from "../../lib/server.mjs";
-import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
+import { loadBoardState, replaceEvidence, updateBoardState } from "../../lib/store.mjs";
 import { createDimensionalCharts } from "../../lib/dimensional-charts.mjs";
 import { createPercentageCharts } from "../../lib/percentage-charts.mjs";
 import { createRecordedResults } from "../../web/recorded-results.mjs";
@@ -193,8 +193,47 @@ async function setup(t, { mainClient = false, github = false, timed = false, ret
     const snapshot = firstSnapshot ? await (await firstSnapshot).json() : null;
     if (!mainClient) await expect(page.locator("body")).toHaveAttribute("data-ready", "true");
     else await expect(page.locator("#activityList [data-source-id^='microsoft-365-']")).toHaveCount(Math.min(snapshot.nativeRead.page.limit, 2 + extraConversations));
-    return { page, calls, snapshot };
+    return { page, calls, snapshot, context: app.context };
 }
+
+test("a press on a retained conversation does not open a different revision", async t => {
+    const {page, calls, context} = await setup(t, {mainClient:true});
+    const narrowed = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
+        && response.request().postDataJSON().filters?.sources?.includes("microsoft-365-cowork"));
+    await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork");
+    const {nativeRead: before} = await (await narrowed).json();
+    const card = page.locator("#activityList .request-card-open");
+    await expect(card).toHaveCount(1);
+    await closeAnalyzeFilters(page);
+    await updateBoardState(context, () => {});
+    const arrived = Promise.withResolvers(), deliver = Promise.withResolvers();
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch();
+        arrived.resolve(response);
+        await deliver.promise;
+        await route.fulfill({response});
+    }, {times:1});
+    try {
+        await page.getByRole("button", {name:"Refresh", exact:true}).click();
+        const {nativeRead: after} = await (await arrived.promise).json();
+        assert.equal(after.page.items[0].id, before.page.items[0].id);
+        assert.equal(after.sourceRevision, before.sourceRevision);
+        assert.ok(after.revision > before.revision);
+        await card.hover(); await page.mouse.down();
+        deliver.resolve();
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy","false");
+        await page.mouse.up();
+        await expect(page.locator("#contextSidebar")).toBeHidden();
+        assert.ok(!calls.some(c => c.method === "detail"), "The old press must not request the new reader");
+        const current = page.waitForResponse(response => response.url().endsWith("/api/retained/microsoft/detail")
+            && response.request().postDataJSON().section === "calls");
+        await card.click();
+        const opened = await (await current).json();
+        assert.equal(opened.conversationId, after.page.items[0].id);
+        assert.equal(opened.revision, after.revision);
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+    } finally { deliver.resolve(); }
+});
 
 test("compiled workspace keeps the bounded completed selector private and restores its link on Back", async t => {
     const {page,calls} = await setup(t,{mainClient:true,extraSuccesses:11});
@@ -567,6 +606,7 @@ test("opening and cancelling a native filter reads only its dimension and exact 
             .toEqual(callIds);
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
+        await expect(page.locator("#activityList .request-card-open")).toBeFocused();
         const searched = page.waitForResponse(response => response.url().endsWith("/api/retained/microsoft/search")
             && response.request().postDataJSON().query === "Read");
         await page.locator("#wireSearch").fill("Read");

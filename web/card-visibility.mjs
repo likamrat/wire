@@ -3,8 +3,8 @@ export function createCardVisibility(host, changed) {
     const prefix = "wire.hidden-card.v1.";
     let snapshot, owner, refs = new Map(), hidden = new Map(), revision = 0, storageError = "";
     const keyFor = ref => `${prefix}${owner}.${ref}`;
-    function read() {
-        const next = new Map();
+    function read(bindingChanged = false) {
+        const next = new Map(), previousError = storageError;
         storageError = "";
         if (snapshot) try {
             const admitted = new Set(refs.values());
@@ -23,7 +23,11 @@ export function createCardVisibility(host, changed) {
             if (error.name !== "SecurityError") throw error;
             storageError = "Browser storage is unavailable. WIRE cannot check which interaction cards are hidden.";
         }
-        hidden = next; revision++;
+        if (bindingChanged || storageError !== previousError || next.size !== hidden.size || [...next.values()].some(entry => {
+            const previous = hidden.get(entry.ref);
+            return !previous || entry.order !== previous.order || entry.at !== previous.at;
+        })) revision++;
+        hidden = next;
     }
     host.addEventListener("storage", event => {
         if (!snapshot || event.key !== null && !event.key?.startsWith(prefix)) return;
@@ -32,13 +36,14 @@ export function createCardVisibility(host, changed) {
     return {
         bind(next) {
             if (next === snapshot) return;
+            const previousOwner = owner, previousRefs = refs;
             snapshot = next; owner = next?.namedDrafts?.source; refs = new Map();
             for (const item of next?.scenarios ?? []) if (/^card-[a-f0-9]{32}$/.test(item.cardVisibilityRef)) refs.set(item.scenarioId, item.cardVisibilityRef);
             for (const r of next?.exportCatalog?.requests ?? []) {
                 const ref = refs.get(r.scenarioId);
                 if (ref) for (const alias of r.aliases) refs.set(alias, ref);
             }
-            read();
+            read(owner !== previousOwner || refs.size !== previousRefs.size || [...refs].some(([id, ref]) => previousRefs.get(id) !== ref));
         },
         version: () => revision,
         available: id => Boolean(owner && !storageError && refs.has(id)),
