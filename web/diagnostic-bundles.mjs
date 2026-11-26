@@ -2,6 +2,12 @@
 // this view previews, saves, lists, opens and deletes through WIRE's diagnostic-bundle routes.
 export function createDiagnosticBundles({ api, ux, time, viewerTime, savedFilePreview, openLibrary }) {
     const doc = document, $ = id => doc.getElementById(id);
+    const causeLabels = { "sign-in-required": "Work IQ needed sign-in", "workiq-sign-in-required": "Work IQ needed sign-in",
+        "request-timeout": "timed out", "rate-limited": "rate limited", "connection-error": "couldn't reach Work IQ",
+        "access-denied": "access denied", "access-denial": "access denied", "unsupported-path": "path not supported",
+        "not-found": "not found", "tool-list-changed": "Work IQ's tool list changed during the call",
+        "response-processing-error": "Work IQ couldn't process the response", "mcp-server-path-not-found": "path not found",
+        "retrieval-stopped-error": "retrieval stopped" };
     const el = (tag, className, text) => {
         const node = doc.createElement(tag);
         if (className) node.className = className;
@@ -70,10 +76,13 @@ export function createDiagnosticBundles({ api, ux, time, viewerTime, savedFilePr
             name.append(el("span", "diagnostic-tool", cluster.tool));
             if (cluster.paths.length) name.append(doc.createTextNode(" on "), el("code", "", cluster.paths.join(", ")));
             head.append(name, countShare(cluster.count, failures));
-            const codes = [...cluster.statusCodes.map(code => "HTTP " + code), ...cluster.errorCodes.filter(code => code !== cluster.statusCodes[0])];
+            const causes = cluster.errorCodes.filter(code => Object.hasOwn(causeLabels, code));
+            const codes = [...cluster.statusCodes.map(code => "HTTP " + code),
+                ...cluster.errorCodes.filter(code => code !== cluster.statusCodes[0] && !causes.includes(code))];
             item.append(head);
             const outcome = el("p", "diagnostic-cluster-outcome");
-            outcome.append(withIcon(el("span", "diagnostic-outcome", "Failed"), "result-failure-compact"));
+            outcome.append(withIcon(el("span", "diagnostic-outcome", causes.length ? "Failed: " + causes.map(code => causeLabels[code]).join(", ") : "Failed"),
+                "result-failure-compact"));
             if (codes.length) outcome.append(el("code", "", codes.join(" · ")));
             item.append(outcome);
             if (cluster.reasons.length > 1) {

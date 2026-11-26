@@ -1,0 +1,1 @@
+import{t as e}from"./browser-runtime-D6g-fUSN.js";e({},`bundled`,import.meta.url);

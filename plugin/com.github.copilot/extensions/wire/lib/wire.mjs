@@ -12597,6 +12597,10 @@ function buildAnalytics(scenarios, options = {}) {
     denominatorNote: layer === "reported-api" ? "Returned metadata units only; not all requested paths or tool executions." : layer === "http" ? "Unique owned recorder records, including explicitly separate no-response attempts." : "Unique source chat + toolCallId (or start-event fallback); owned HTTP is separate."
   };
 }
+function diagnosticCause(text6) {
+  if (typeof text6 !== "string" || !text6) return null;
+  return FAILURE_CAUSES.find(([, pattern2]) => pattern2.test(text6))?.[0] ?? null;
+}
 function diagnosticError(failure5, status4) {
   const recorded4 = failure5.diagnostic, detail = (value) => ({
     ...value.code ? { code: value.code } : {},
@@ -12605,7 +12609,7 @@ function diagnosticError(failure5, status4) {
   });
   return {
     ...failure5.code ?? recorded4?.code ? { code: failure5.code ?? recorded4.code } : {},
-    ...failure5.messageSignal ? { subcode: failure5.messageSignal } : {},
+    ...failure5.messageSignal ?? diagnosticCause(recorded4?.message) ? { subcode: failure5.messageSignal ?? diagnosticCause(recorded4.message) } : {},
     ...status4 ?? (validStatus(recorded4?.statusCode) ? recorded4.statusCode : null) ? { statusCode: status4 ?? recorded4.statusCode } : {},
     ...recorded4?.message ? { message: recorded4.message } : {},
     ...recorded4?.details?.length ? { details: recorded4.details.map(detail) } : {}
@@ -12673,7 +12677,7 @@ function buildDiagnosticCalls(scenarios, { from, to, tools: tools2, sourceSessio
     records: records.slice(0, DIAGNOSTIC_LIMIT)
   };
 }
-var OUTCOMES, TOOLS, METHODS2, VERSIONS, SEGMENTS2, ENTITY_COLLECTIONS, FUNCTIONS, QUERY_KEYS3, PARAMETERS, recognizedOperations, key, present2, validStatus, duration, compare, DIAGNOSTIC_LIMIT, hostOutcome;
+var OUTCOMES, TOOLS, METHODS2, VERSIONS, SEGMENTS2, ENTITY_COLLECTIONS, FUNCTIONS, QUERY_KEYS3, PARAMETERS, recognizedOperations, key, present2, validStatus, duration, compare, DIAGNOSTIC_LIMIT, hostOutcome, FAILURE_CAUSES;
 var init_analytics = __esm({
   "lib/analytics.mjs"() {
     "use strict";
@@ -12699,6 +12703,16 @@ var init_analytics = __esm({
     compare = (a3, b) => a3 < b ? -1 : a3 > b ? 1 : 0;
     DIAGNOSTIC_LIMIT = 5e3;
     hostOutcome = (tc) => tc.toolSucceeded === true || tc.reportedOutcome === "succeeded" ? "ok" : tc.toolSucceeded === false || tc.reportedOutcome === "failed" ? "fail" : "unknown";
+    FAILURE_CAUSES = [
+      ["sign-in-required", /requires authentication|oauth challenge|\bhttp 401\b|sign in/i],
+      ["request-timeout", /timed out|\btimeout\b|-32001/i],
+      ["rate-limited", /too ?many ?requests|throttl|\b429\b|concurrency limit/i],
+      ["connection-error", /transport send error|error sending request|connection (?:refused|reset|closed)|econn|network error/i],
+      ["access-denied", /access (?:is )?denied|forbidden|do not have permission|\b403\b/i],
+      ["unsupported-path", /no '\w+' operation for path|path not found|unsupported path/i],
+      ["not-found", /not found|no longer exists|\b404\b/i],
+      ["tool-list-changed", /tool catalog changed/i]
+    ];
   }
 });
 
@@ -68241,6 +68255,21 @@ var deletionStyles = `
 // web/diagnostic-bundles.mjs
 function createDiagnosticBundles({ api, ux, time: time2, viewerTime, savedFilePreview, openLibrary }) {
   const doc = document, $2 = (id5) => doc.getElementById(id5);
+  const causeLabels2 = {
+    "sign-in-required": "Work IQ needed sign-in",
+    "workiq-sign-in-required": "Work IQ needed sign-in",
+    "request-timeout": "timed out",
+    "rate-limited": "rate limited",
+    "connection-error": "couldn't reach Work IQ",
+    "access-denied": "access denied",
+    "access-denial": "access denied",
+    "unsupported-path": "path not supported",
+    "not-found": "not found",
+    "tool-list-changed": "Work IQ's tool list changed during the call",
+    "response-processing-error": "Work IQ couldn't process the response",
+    "mcp-server-path-not-found": "path not found",
+    "retrieval-stopped-error": "retrieval stopped"
+  };
   const el = (tag, className, text6) => {
     const node = doc.createElement(tag);
     if (className) node.className = className;
@@ -68318,10 +68347,17 @@ function createDiagnosticBundles({ api, ux, time: time2, viewerTime, savedFilePr
       name.append(el("span", "diagnostic-tool", cluster2.tool));
       if (cluster2.paths.length) name.append(doc.createTextNode(" on "), el("code", "", cluster2.paths.join(", ")));
       head.append(name, countShare(cluster2.count, failures));
-      const codes2 = [...cluster2.statusCodes.map((code2) => "HTTP " + code2), ...cluster2.errorCodes.filter((code2) => code2 !== cluster2.statusCodes[0])];
+      const causes = cluster2.errorCodes.filter((code2) => Object.hasOwn(causeLabels2, code2));
+      const codes2 = [
+        ...cluster2.statusCodes.map((code2) => "HTTP " + code2),
+        ...cluster2.errorCodes.filter((code2) => code2 !== cluster2.statusCodes[0] && !causes.includes(code2))
+      ];
       item.append(head);
       const outcome5 = el("p", "diagnostic-cluster-outcome");
-      outcome5.append(withIcon(el("span", "diagnostic-outcome", "Failed"), "result-failure-compact"));
+      outcome5.append(withIcon(
+        el("span", "diagnostic-outcome", causes.length ? "Failed: " + causes.map((code2) => causeLabels2[code2]).join(", ") : "Failed"),
+        "result-failure-compact"
+      ));
       if (codes2.length) outcome5.append(el("code", "", codes2.join(" \xB7 ")));
       item.append(outcome5);
       if (cluster2.reasons.length > 1) {
