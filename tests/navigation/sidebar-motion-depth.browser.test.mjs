@@ -140,12 +140,15 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         };
         for (const phase of ["open", "close"]) {
             sample(phase);
-            let owners;
-            const observer = new MutationObserver(() => {
+            let owners, startedBeforePaint;
+            const observer = new MutationObserver(async () => {
                 const reader = panel.getAnimations()[0];
-                if (reader?.startTime == null) return;
+                if (!reader) return;
                 observer.disconnect();
-                owners = [reader, ...main.getAnimations()].map(animation => ({
+                const effects = [reader, ...main.getAnimations()];
+                startedBeforePaint = effects.some(animation => animation.startTime !== null);
+                await Promise.all(effects.map(animation => animation.ready));
+                owners = effects.map(animation => ({
                     animation, start: animation.startTime, rate: animation.playbackRate, state: animation.playState,
                 }));
                 for (const { animation } of owners) animation.pause();
@@ -155,6 +158,7 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
             for (let i = 0; i < 120 && !owners; i++) await frame();
             observer.disconnect();
             if (!owners) throw Error(`${phase} never started a docked glide`);
+            if (startedBeforePaint) throw Error(`${phase} consumed its clock before the reader could be painted`);
             if (owners.some(owner => owner.start == null || owner.rate <= 0 || owner.state !== "running"))
                 throw Error(`${phase} did not start playing on the document timeline`);
             const [reader] = owners;

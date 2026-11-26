@@ -1061,10 +1061,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 { width: columnWidth(occupied), overflowAnchor: "none" },
                 { width: columnWidth(entering ? width : 0), overflowAnchor: "none" },
             ], sidebar.timing);
-            // Both edges share one clock; the width still follows a simultaneously moving left rail.
-            const start = document.timeline.currentTime;
-            animation.startTime = start;
-            sidebarColumnAnimation.startTime = start;
+            // Both effects start on the next paint. Backdating them to the last frame
+            // spends the glide rendering the reader before the first movement is visible.
             sidebarColumnAnchor = { anchor, top, navigation, intent };
             retainSidebarColumnAnchor();
         }
