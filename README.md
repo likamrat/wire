@@ -122,7 +122,7 @@ Follow changes in daily tool use, errors or timing. Select a day to inspect
 the calls behind it, or compare two measures over the same dates.
 See [Trends](docs/user-guide.md#trends) for the eight measures and what each counts.
 
-[![Trends Overview showing daily interactions with errors and the option to compare two measures.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+[![Trends shows a day with one interaction and no recorded errors.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
 ## Reports
 
@@ -144,7 +144,7 @@ Compare a selected period with a baseline, including call results and token
 usage. Open either period's count to see the calls it includes. See
 [Compare two periods](docs/reporting.md#compare).
 
-[![Compare with call results, what changed and token usage for the baseline and selected periods.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+[![Compare with call results for each period: 1 of 4 baseline calls failed, versus 5 of 19 selected calls.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
 ## Guides
 

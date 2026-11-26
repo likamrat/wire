@@ -37,6 +37,8 @@ sources you can enable in a normal installation.
 | Pause collection | Stops automatic acquisition; retained activity stays readable. |
 | Refresh | One bounded read of already-approved local history, including the deliberate GitHub manual exception under Pause. |
 | Read stored activity | Reads WIRE's saved view/status, without checking original history. |
+| Read Copilot's token records | Separately approves the displayed usage file for the identified Copilot account. Leave it off to read only the approved history. |
+| [Count tokens in chats already read](#count-tokens-in-chats-already-read) | Checks eligible chats for missing totals. Only a separate confirmation saves the counts shown. |
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
 | Read history again | Preview missing, nondeleted activity in selected approved chats and dates. Confirm separately to save it. |
@@ -360,6 +362,8 @@ putting the raw opaque ID in new retained model metadata or in reports.
   elsewhere in the chat doesn't. Withheld prompt text keeps its run and message
   identity, so it can still contest ownership.
 - A gap is missing evidence. It never clears a total that was already verified.
+
+<a id="older-journals-without-receipts"></a>
 
 #### The Copilot app's usage index
 

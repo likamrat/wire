@@ -59,11 +59,8 @@ or **Settings > Source access > Review source & connect**.
 
 1. Check that **Copilot metadata database** and **Chat history folder** point
    to the local GitHub Copilot app you want to read. Use **Change paths** to
-   correct a suggested location. **Read Copilot's token records** is off by
-   default. Turn it on to count tokens for older chats whose logs don't record
-   them; it names the extra file WIRE will read. Chats WIRE already read count
-   when they next change, or after you check and confirm **Count tokens in chats
-   already read** in Source access.
+   correct a suggested location. Leave **Read Copilot's token records** off
+   unless you want WIRE to read the extra file shown for that account.
 2. Set **History to include** and **Check frequency**. When the paths and
    settings are right, choose **Approve source and start collection**.
 3. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
@@ -73,6 +70,11 @@ Approval covers this instance and these local files. WIRE doesn't rerun prompts,
 make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
 Copilot replies is off by default and has its own control under **Settings >
 Privacy & saved data > Recorded replies**.
+
+If older chats have no token counts in their logs, the optional token records
+can fill some gaps. Approval applies the next time collection reads a changed
+chat. For chats already read, [check which totals WIRE can count](collection.md#count-tokens-in-chats-already-read)
+before deciding whether to save them.
 
 If something looks wrong:
 
@@ -97,34 +99,31 @@ list follows the same filters.
 Open **Filters** to narrow the view by Dates, Tool, Service involved, Outcome or
 Prompt author. **More filters** holds the additional choices.
 
-![Nine days of tool calls above the results for all 23 calls: 17 completed and 6 failed. The bottom chart counts model tokens by day.](images/analyze.png)
+![Analyze shows 23 tool calls over nine days: 16 completed, 6 failed and 1 had no recorded result. The reading for Tool failed shows 26.1% (6 of 23 tool calls).](images/analyze.png)
 
 ### Read the charts
 
 When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
 
-Read a date for its daily count, or **Tool call results** for the whole period.
-In the example, November 19 had four calls. The six failures in the donut
-come from the full nine days.
+Read the number above a daily column for that day's calls. In the example,
+November 19 had four. The ring and strip under **Tool call results** cover
+all nine days.
 
-In **Tool call results**:
+Hover over **Tool failed**, or focus the label with the keyboard. Its reading
+shows **6 of 23 tool calls**. The blue segment counts completed calls; the
+coral segment counts failures. The striped segment means **No result
+recorded**. Even when a segment is tiny, its label gives the exact count.
 
-- The donut shows the total. The strip shows how the calls split across
-  outcomes; each label gives the percentage and exact count, even for a share
-  too small to see.
-- Choose the donut total to list the matching calls, eight per page. Open a
-  call by its tool or path.
-- A call's outcome describes the tool execution. Returned entries keep their
-  own statuses in the call reader.
-- **Show all matching activity** returns to the interaction list.
+Select an outcome to inspect its calls, or the total in the ring to list them
+all, eight per page. Open a call by its tool or path. Returned entries keep
+their own statuses. **Show all matching activity** takes you back to the
+interaction list.
 
 In the charts:
 
-- Hover or focus a chart row to see what it means.
 - Select a model or author to see its matching interactions.
-- Select an outcome, or a segment of a dated bar, for that result. The number
-  above a bar includes all results for the interval.
+- Select a segment of a dated bar to see that result for the interval.
 - Selecting a zero opens the chart definition instead of a list of records.
 
 An interaction groups a prompt with its recorded calls. One interaction can
@@ -135,7 +134,9 @@ shares can overlap. When you read the numbers:
   correct.
 - Returned API entries, Graph call sites and HTTP recorder captures have their
   own units. Don't add them to tool-call totals.
-- A missing model name means no name was recorded, not zero usage.
+- In **Response models**, hover or focus a row to read the original model ID.
+  **Unrecognized model** means an ID was recorded but WIRE can't format its
+  name. A missing model name doesn't mean zero usage.
 - Breakdowns show the percentage first, with the count in parentheses. On wide
   tool and model cards, read each pair from left to right, then down.
 - Model percentages use all matching interactions, including those without
@@ -506,8 +507,12 @@ What hiding changes:
 Choose **Trends** in the sidebar. **Overview** opens first and shows how many
 interactions had a recorded error or failure each day.
 
-- A cross at zero means no matching dated calls.
-- A circle at zero means there was activity but no recorded error.
+Hover or focus a day on the line. A dashed guide lines it up with the date.
+In the example, November 23 shows **0 of 1 interaction**: there was activity,
+but no recorded error. A cross at zero on November 25 means there were no
+matching dated calls.
+
+![Trends reading for November 23: one interaction, no failed tool calls and no calls with API errors.](images/trends-overview.png)
 
 **Charts** lists eight measures. **Chart guide** explains their units.
 
@@ -530,8 +535,6 @@ On Analyze, choose **View trend** on a widget to open its measure here:
 - From **Tool call results**, WIRE asks before showing **Errors & failures**,
   because that chart counts affected interactions, not call outcomes.
 - **Back to Analyze** restores the original widget.
-
-![Trends Overview showing daily interactions with errors and the choice to compare two measures.](images/trends-overview.png)
 
 ### Choose the period and activity
 
@@ -744,7 +747,7 @@ Submit step.
 - A phrase matches that exact sequence, not scattered words, inferred intent or
   synonyms.
 
-![Search for POWER returning two interaction matches and a matching excerpt from a saved report.](images/literal-search.png)
+![Search for POWER finds PowerPoint in two saved workshop prompts.](images/literal-search.png)
 
 Choose where to search:
 
@@ -786,7 +789,7 @@ categories. Search includes setting descriptions and keywords: `record` finds
 reply saving, deletion, rereading history and the network diagnostic; `city`
 finds Time zone.
 
-![Settings search groups record-related destinations under Privacy & saved data and Collection status.](images/settings-search.png)
+![Settings results for record include saved replies, source permissions and the network diagnostic.](images/settings-search.png)
 
 Select a result, or use Tab and Enter, to reveal and focus the setting. Its
 help and consequences stay beside the control.

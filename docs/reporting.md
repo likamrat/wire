@@ -109,7 +109,7 @@ exact calls and returned results.
    draft** in the confirmation. Nothing is prepared or saved, and unfinished
    work in another tab stays there.
 
-![Creating a named draft from the open interaction without leaving Analyze.](images/report-draft.png)
+![Report drafts with Workshop follow-up entered as the draft name, ready for Create draft and add.](images/report-draft.png)
 
 To remove an interaction from one draft, reopen the picker and choose that
 draft's **Remove** row. Other drafts and the recorded interaction are unchanged.
@@ -456,7 +456,11 @@ Baseline covers the seven days before that. A fresh comparison uses all
 eligible retained activity. Change its starting period in **Settings >
 Compare**.
 
-![Compare with call results, what changed and token usage for the baseline and selected periods.](images/compare-periods.png)
+![Compare shows 1 of 4 calls failed in Baseline and 5 of 19 in Selected.](images/compare-periods.png)
+
+In this example, the failure count rose from 1 to 5, but there were also more
+calls. Read each count against its own period: 25% of baseline calls failed
+versus 26.32% of selected calls, a rise of 1.32 percentage points.
 
 ### Choose the periods
 
