@@ -17,6 +17,7 @@ function decode(value) {
         || ![value.installed, value.candidate, value.dismissed].every(id => id === null || sha(id))
         || value.lastChecked !== null && (!Number.isFinite(value.lastChecked) || !Number.isFinite(new Date(value.lastChecked).getTime()))
         || value.packageVersion !== undefined && typeof value.packageVersion !== "string"
+        || value.statusRevision !== undefined && (!Number.isSafeInteger(value.statusRevision) || value.statusRevision < 0)
         || !validRelease(value.availableRelease,value.candidate) || !validRelease(value.installedRelease,value.installed)
         || value.refusal !== undefined && (!uuid(value.refusal?.operation) || typeof value.refusal.message !== "string")
         || value.clientEntry !== undefined && !asset(value.clientEntry)) throw new Error("WIRE returned an unreadable update status.");
@@ -33,7 +34,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "";
     let manualChecking = false, endCheckFeedback, openingStatusOnly = false, changingPreferences = false;
     let notesTag = null, notesText;
-    let coordination = false, peerWatch, peerTimer;
+    let coordination = false, peerWatch, peerTimer, peerStatus;
     let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
     let parked = false, presenceSequence = 0, checkingWake = false, wakeTimer;
     function receipt(value) {
@@ -192,6 +193,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             busy = false;
             if (restoring) { restoring = false; state = null; void run("status"); }
             else if (generation === lifetime) {
+                showPeerStatus();
                 render(); schedule();
                 if (!expected && returnFocus && document.activeElement === document.body) {
                     const target = manual.hidden ? $("settingsAppUpdate") : manual;
@@ -225,6 +227,18 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const hold = reason();
         if (hold) return hold.kind;
         return !storageAvailable || unfinishedAtSuspension || changingPreferences ? "operation" : "";
+    }
+    function showPeerStatus() {
+        if (!peerStatus || busy) return;
+        const next = peerStatus;
+        peerStatus = undefined;
+        if (!panelVerified || !state || expected || parked || next.installed !== state.installed
+            || next.statusRevision <= (state.statusRevision ?? 0)) return;
+        const changedPreference = next.automatic !== state.automatic;
+        if (next.candidate !== state.candidate) success = result = feedback = "";
+        state = next;
+        render();
+        if (changedPreference) schedule();
     }
     const presence = sequence => fetch("/api/app-update/presence", { ...fixed, method: "POST", keepalive: true,
         headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
@@ -280,7 +294,17 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         peerWatch = controller;
         let wait = 0;
         try {
-            const { candidate, operation, probe } = await peerRequest("watch", {}, AbortSignal.any([controller.signal, AbortSignal.timeout(26000)]));
+            const statusRevision = peerStatus?.statusRevision ?? state?.statusRevision;
+            const { candidate, operation, probe, status } = await peerRequest("watch",
+                statusRevision === undefined ? {} : { statusRevision }, AbortSignal.any([controller.signal, AbortSignal.timeout(26000)]));
+            if (status && !candidate && !probe && !expected && generation === lifetime && !controller.signal.aborted) {
+                const next = decode(status);
+                if (next.statusRevision > statusRevision && next.supported && next.installed === state?.installed) {
+                    peerStatus = next;
+                    showPeerStatus();
+                }
+                return;
+            }
             if (uuid(probe) && !candidate && !expected && generation === lifetime && !controller.signal.aborted) {
                 await peerRequest("readiness", { probe, hold: readinessHold() }, AbortSignal.timeout(5000));
                 return;
@@ -429,6 +453,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     window.addEventListener("pagehide", event => {
         const opening = lifetime === 0 && openingStatusOnly && !panelVerified;
         lifetime++;
+        peerStatus = undefined;
         endCheckFeedback?.();
         peerWatch?.abort(); clearTimeout(peerTimer); peerTimer = undefined;
         clearTimeout(scheduleTimer);

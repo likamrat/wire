@@ -813,6 +813,10 @@ On [supported installations](development.md#updating-wire), automatic checks
 are on by default. You can turn them off and still choose **Check for updates**
 in **General**. The button shows **Checking** while it looks for an update.
 
+When one tab finds an update, other connected tabs on the same WIRE instance
+show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
+the notice hides it across those tabs; the update remains available in General.
+
 To install an update:
 
 1. Choose **Update and restart** in General or in the update notification.
@@ -839,7 +843,6 @@ reloading or starting an update. On an older build, if that tab says **Update
 status could not be confirmed**, save your work there, then choose **Check for
 updates** in that same tab's General settings. A new tab can't answer for it.
 
-- Dismissing the notification leaves the update available in General.
 - If installation fails, General shows **Update not installed** and the
   reason. Away from General, the notification shows the same message.
 - If your copy can't check for updates, General links to **Update
