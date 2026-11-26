@@ -128,7 +128,8 @@ test("Analyze section strip and result commands align with the widgets at every 
         } else check(false, "Filters has a visible text label, not just a floating funnel");
         await expect(page.locator("#openAnalysisSearch")).toHaveCount(0);
         await expect(page.locator("#wireSearchHome")).toBeVisible();
-        await expect(page.locator("#activityListContext button:not([hidden])")).toHaveCount(0);
+        assert.deepEqual(await page.locator("#activityListContext button:not([hidden])").evaluateAll(nodes => nodes.map(n => n.id)),
+            ["activityUsageSort-control", "analyzeCollapse-interactions"]);
     }
     if (proof) await writeFile(path.join(proof, "geometry.json"), JSON.stringify(measurements, null, 2));
     assert.deepEqual(failures, []);

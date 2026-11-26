@@ -79,8 +79,7 @@ for (const frontend of ["react", "bundled"]) test(`card visibility keeps the rea
     let previewReads = 0;
     if (prepared) {
         await prepared.goto(new URL("/reports", runtime.url).href);
-        await prepared.getByRole("combobox", { name: "Report draft", exact: true }).click();
-        await prepared.getByRole("option", { name: "Case review", exact: true }).click();
+        await prepared.locator("#reportDraftsPanel").getByRole("button", { name: /^Case review\b/ }).click();
         prepared.on("request", request => { if (new URL(request.url()).pathname === "/api/preview") previewReads++; });
         await prepared.locator("#prepareReportPreview").click();
         await expect(prepared.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
@@ -114,8 +113,7 @@ for (const frontend of ["react", "bundled"]) test(`card visibility keeps the rea
     assert.equal(page.url(), original);
     await expect(page.locator("#requestContent")).not.toContainText("physician");
     await navigateMain(page, "reports");
-    await page.getByRole("combobox", { name: "Report draft", exact: true }).click();
-    await page.getByRole("option", { name: "Case review", exact: true }).click();
+    await page.locator("#reportDraftsPanel").getByRole("button", { name: /^Case review\b/ }).click();
     await expect(page.locator("#prepareReportPreview")).toBeDisabled();
     await expect(page.locator("#prepareReportPreview")).toHaveAccessibleDescription(/hidden card/i);
     await page.goto(new URL(`/reports?bundle=${bundles[0].bundleId}`, runtime.url).href);

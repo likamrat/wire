@@ -96,7 +96,8 @@ test("legacy entries preserve their filter scope; the exact call and report reta
         await expect(page.locator("#activityCount")).toHaveText("5");
         await expect(page.locator("#serviceFocusScope")).toContainText("Files only");
     }
-    await page.goto(runtime.url); await ready(page);
+    await openAnalyzeFilters(page);
+    await page.locator("#resetView").click(); await ready(page); await closeAnalyzeFilters(page);
     await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page); await closeAnalyzeFilters(page);
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     const link = page.getByRole("link", { name: "workiq-ask: open call", exact: true });
@@ -110,6 +111,7 @@ test("legacy entries preserve their filter scope; the exact call and report reta
     await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
     await expect(page.locator("#reportDeskDates")).toContainText(/All (retained )?dates/i);
+    await page.locator("#reportCustomSetup").click();
     app.preview();
     const preparing = page.waitForResponse(r => r.url().endsWith("/api/preview"));
     await page.getByRole("button", { name: "Prepare preview", exact: true }).click();

@@ -140,8 +140,8 @@ test("tool and target labels stay with their values without overlapping or clipp
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
         const card = interaction(page, "multiple"), facts = card.locator(".card-identities");
-        await expect(facts.getByRole("term")).toHaveText(["Tools", "Targets"]);
-        await expect(facts.getByRole("definition")).toHaveCount(2);
+        await expect(facts.getByRole("term")).toHaveText(["Tools", "Targets", "Model tokens"]);
+        await expect(facts.getByRole("definition")).toHaveCount(3);
         const targets = await facts.locator("[data-service]").evaluateAll(nodes => nodes.map(node => {
             const { left, top, bottom } = node.getBoundingClientRect();
             return { left, top, bottom };

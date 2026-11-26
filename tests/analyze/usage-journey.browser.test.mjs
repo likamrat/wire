@@ -357,6 +357,8 @@ for(const frontend of ["react","bundled"])test(`${frontend}: tapping a scrolled 
     await expect(slider).toHaveAttribute("max","96");await slider.press("End");
     for(const [date,index] of [["2026-11-21",93],["2026-10-14",55]]){
         if(index===55){await slider.press("End");await chart.getByRole("button",{name:"Earlier days"}).tap();}
+        await slider.press("Escape");
+        await expect(chart.locator(".token-day-reading")).toHaveAttribute("aria-hidden","true");
         const tick=chart.locator(`time[datetime="${date}"]`);
         await tick.evaluate(t=>t.scrollIntoView({block:"center",inline:"center"}));
         const before=await offset(),label=await tick.boundingBox(),plot=await slider.boundingBox();
@@ -815,8 +817,7 @@ test("save the same single interaction total seen on its card and reader", async
     await picker.getByRole("button",{name:"Create draft and add"}).click();
     await expect(card.locator(".report-draft-trigger")).toContainText("Launch notes review");
     await navigateMain(page,"reports");
-    await page.getByRole("combobox",{name:"Report draft",exact:true}).click();
-    await page.getByRole("option",{name:"Launch notes review",exact:true}).click();
+    await page.locator("#reportDraftsPanel").getByRole("button",{name:/^Launch notes review\b/}).click();
     const read=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
     await page.locator("#prepareReportPreview").click();
     const snapshot=(await (await read).json()).snapshot;

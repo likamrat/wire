@@ -113,6 +113,9 @@ test("enforced React activity caps the home preview while keeping the full reque
         start("time", "workiq-fetch", { entityUrls: ["/me/calendarView"] }), end("time", true, {}),
     ].map((event, i) => ({ ...event, timestamp: new Date(now + i * 1000).toISOString() }));
     const { page, runtime, mutations } = await setup(t, { frontend: "react", activityEvents });
+    await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: {
+        async writeText(value) { window.fixturePromptCopy = value; },
+    } }));
     await page.goto(runtime.url); await ready(page);
     await expect(page.locator("#welcomeReviewSource")).toBeVisible();
     await page.locator("#welcomeReviewSource").click(); await page.locator("#connectCollection").click();
@@ -169,12 +172,17 @@ test("enforced React activity caps the home preview while keeping the full reque
     await page.setViewportSize({ width: 1440, height: 1000 }); await page.evaluate(() => document.documentElement.style.fontSize = "");
     await fail.click(); await expect(page.locator(".reader-call-row:focus")).toContainText("workiq-retrieve");
     await page.locator(".reader-section-jumps").getByRole("button", { name: "Prompt" }).click();
-    assert.equal(await page.locator("#selectedContext .full-text-content").textContent(), prompt);
+    const reading = page.locator("#selectedContext .full-text-content");
+    const paragraphs = ["Compare the room booking with the invitation for the Willow workshop.",
+        "Monday: library Wednesday: west stairs", "Keep both original dates. Do not send an invitation."];
+    await expect(reading.locator("p")).toHaveText(paragraphs, { useInnerText: true });
+    await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
+    assert.equal(await page.evaluate(() => window.fixturePromptCopy), prompt);
     await page.locator("#closeContextSidebar").click(); await expect(fail).toBeFocused();
     await page.locator("#wireSearch").click();
     await page.locator("#wireSearch").fill("both original dates");
     await page.locator(".wire-search-hit").filter({ hasText: "both original dates" }).first().click();
-    await expect(page.locator("#selectedContext .full-text-content")).toHaveText(prompt);
+    await expect(reading.locator("p")).toHaveText(paragraphs, { useInnerText: true });
     await page.locator("#closeContextSidebar").click(); await expect(page.locator("#wireSearch")).toHaveValue("both original dates");
     await page.keyboard.press("Escape");
     await navigateMain(page, "reports");
@@ -184,12 +192,10 @@ test("enforced React activity caps the home preview while keeping the full reque
     const picker = page.locator("#reportActivityOptions .read-in-place").filter({ hasText: "Keep both original dates" });
     await expect(picker.locator(".card-identities")).toContainText("Mail");
     await expect(picker.locator(".card-identities")).not.toContainText("Calendar");
-    const quote = picker.locator(".card-quotation");
-    await quote.locator("summary").focus(); await page.keyboard.press("Enter");
-    await expect(quote).toHaveAttribute("open", ""); await expect(quote).toContainText("> Wednesday: west stairs");
+    await expect(picker.locator(".request-card-prompt")).toHaveText(paragraphs.join(" "), { useInnerText: true });
     const selected = await picker.locator("input[type=checkbox]").isChecked();
     await capture(page, "bound-picker");
-    await picker.locator(".request-card-open").click(); await expect(page.locator("#selectedContext")).toContainText(prompt);
+    await picker.locator(".request-card-open").click(); await expect(reading.locator("p")).toHaveText(paragraphs, { useInnerText: true });
     await page.getByRole("button", { name: /Back to (activity|report setup)/ }).click();
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
