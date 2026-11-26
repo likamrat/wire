@@ -961,7 +961,7 @@ test("EC92 final assembly keeps timing with its subject and only useful reading 
     const response = reader.locator('[data-reader-section="response"]');
     await expect(response.locator(".full-text-content")).toHaveText(exact);
     assert.deepEqual(await reader.locator(":scope > [data-reader-section]").evaluateAll(nodes => nodes.map(node => node.dataset.readerSection)),
-        ["prompt", "activity", "response", "source"]);
+        ["prompt", "activity", "usage", "response", "source"]);
     await expect(response.locator(".reader-section-toggle")).toHaveText("Copilot reply");
     await expect(reader.locator('[data-reader-section="source"] .reader-section-toggle')).toHaveText("Source details");
     await sourceToggle(page).click();

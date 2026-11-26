@@ -230,6 +230,7 @@ async function verifyCurrentPreview(page, ids, calls) {
     const picker = page.getByRole("dialog", { name: "Choose activity" });
     await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
     await picker.getByRole("button", { name: "Use activity" }).click();
+    await page.locator("#reportCustomSetup").click();
     const preparing = page.waitForResponse(r => r.url().endsWith("/api/preview"));
     await page.getByRole("button", { name: "Prepare preview" }).click();
     const response = await preparing, value = await response.json();

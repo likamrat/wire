@@ -99,6 +99,7 @@ test("chat scope preserves recorded text through outcome drilldown, report previ
     const reports = page.getByRole("region", { name: "Reports", exact: true });
     await expect(reports.locator(".report-entry-context")).toContainText(title);
     await expect(reports.getByRole("button", { name: "Activity source: Selected interactions" })).toBeVisible();
+    await page.locator("#reportCustomSetup").click();
     await expect(reports.getByRole("radio", { name: /^Mask detected details/ })).toBeChecked();
     await expect(reports.getByRole("radio", { name: "Keep chat details" })).not.toBeChecked();
     const response = page.waitForResponse(r => r.url() === new URL("/api/preview", url).href);

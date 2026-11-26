@@ -46,6 +46,10 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
             response.setHeader("Content-Type", "text/javascript");
             return response.end(await readFile(new URL("../../lib/assessment-contract.mjs", import.meta.url), "utf8"));
         }
+        if (request.method === "GET" && request.url === "/assets/marked.mjs") {
+            response.setHeader("Content-Type", "text/javascript");
+            return response.end(await readFile(new URL("../../node_modules/marked/lib/marked.esm.js", import.meta.url)));
+        }
         if (request.method === "GET" && request.url?.split("?")[0] === "/favicon.svg") return response.writeHead(204).end();
         let body = ""; for await (const chunk of request) body += chunk;
         const input = body ? JSON.parse(body) : {};
@@ -714,7 +718,8 @@ test("Help returns to unified Activity without losing scope, private query or se
         const params = new URL(page.url()).searchParams;
         assert.equal(params.has("project"), false);
         assert.equal(await page.locator("#projectFilter").inputValue(), "test-project");
-        assert.equal(params.get("layer"), "tool");
+        assert.equal(params.has("layer"), false);
+        await expect(page.locator("#layerFilter")).toHaveValue("tool");
         assert.equal(page.url().includes(query), false, "The private query stays out of the URL");
         await expect(page.locator("#activitySearch")).toHaveValue(query);
         await expect(selected).toHaveCount(1);

@@ -71,6 +71,7 @@ test("small counts are directly readable and reports are route-first without dup
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await navigateMain(page, "reports");
     await page.locator("#reportsView").waitFor({ state: "visible" });
+    await page.locator("#reportCustomSetup").click();
     await expect(page.getByRole("button", { name: "Prepare preview", exact: true })).toBeVisible();
     await expect(page.locator("#reportPreviewDrawer")).toBeHidden();
 });

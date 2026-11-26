@@ -121,8 +121,9 @@ for (const kind of ["off-page", "zero-matches"]) for (const [width, scale] of [[
     assert.ok(result.top >= result.headerBottom && result.bottom <= result.viewport);
     assert.equal(result.summary, count);
     await expect(page.locator("#activityListScope")).toHaveText(scopeBefore);
-    const returned = new URL(result.url).searchParams;
-    for (const [key, value] of new URLSearchParams(query)) assert.equal(returned.get(key), value);
+    for (const key of new URLSearchParams(query).keys()) assert.equal(new URL(result.url).searchParams.has(key), false);
+    if (kind === "off-page") await expect(page.locator("#activityPagePosition")).toContainText("9-10 of 10");
+    else await expect(page.locator("#periodResult")).toContainText("Jan 1–2, 2027");
 });
 
 test("an originating native card remains the first reader return target", async t => {

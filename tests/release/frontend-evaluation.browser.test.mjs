@@ -930,7 +930,7 @@ test("the normal-entry overview keeps a long total readable in both themes", { t
 
 test("the prompt leads and a separate evidence link names the scoped failure", async t => {
     const { page } = await setup(t);
-    await page.goto(page.url() + "&result=failure");
+    await selectActivityOption(page, "outcomeFilter", "failure"); await closeAnalyzeFilters(page);
     await ready(page);
     const geometry = await page.locator("#activityList .activity-card").first().evaluate(node => {
         const box = selector => node.querySelector(selector).getBoundingClientRect();

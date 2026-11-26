@@ -207,6 +207,7 @@ test("narrow Reports keeps presets available while editing custom dates", async 
     await expect(page.locator("#reportDateto")).toHaveValue("2026-03-10");
     await period.getByRole("button",{name:"Cancel",exact:true}).click();
     await expect(desk).toBeFocused();
+    await page.locator("#reportCustomSetup").click();
     const files=page.locator('[popovertarget="reportFileOptions"]');
     await files.click(); await expect(page.locator("#reportFileOptions:popover-open")).toBeVisible();
     assert.equal(await page.locator(":modal:visible").count(),0);
@@ -706,6 +707,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "150%"; });
     await page.evaluate(() => document.fonts.ready);
+    await page.locator("#reportCustomSetup").click();
     const formats = page.locator('[popovertarget="reportFileOptions"]');
     await formats.click();
     const panel = page.locator("#reportFileOptions:popover-open");
@@ -769,6 +771,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
 
 test("privacy choices have distinct readable state colors and labels in both themes", { timeout: 30000 }, async t => {
     const { page, requests, errors } = await setup(t);
+    await page.locator("#reportCustomSetup").click();
     const luminance = channels => channels.map(value => {
         const channel = value / 255;
         return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
@@ -1007,6 +1010,7 @@ test("Reports starts with the configured period and files; changing defaults doe
     await expect(page.getByRole("button", { name: "Formats: HTML", exact: true })).toBeVisible();
     await page.reload();
     await expect(range).toHaveText("Last 30 days");
+    await page.locator("#reportCustomSetup").click();
     await expect(page.getByRole("button", { name: "Formats: HTML", exact: true })).toBeVisible();
     assert.deepEqual(errors, []);
 });
@@ -1016,6 +1020,7 @@ test("Formats changes only the draft on landing and resumes the frozen populatio
     const chooser = page.getByRole("dialog", { name: "Formats", exact: true });
     const effects = () => requests.filter(({ path }) => ["/api/preview", "/api/export"].includes(path));
     await page.clock.install();
+    await page.locator("#reportCustomSetup").click();
     await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     await expect(chooser.locator("label")).toHaveText(["HTML", "PDF", "Markdown", "JSON"]);
     await expect(chooser.getByRole("button")).toHaveCount(0);

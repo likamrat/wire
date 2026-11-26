@@ -140,7 +140,7 @@ test("chart hover placement preserves neighboring count labels and native data",
     });
     assert.deepEqual(overlap, [], "Hover information must not cover the chart's count/date labels");
     assert.deepEqual(await page.locator(".dimensional-count").allTextContents(), counts);
-    assert.match(await page.getByRole("tooltip").innerText(), /Oct 1.*11 tool completed/i);
+    await expect(page.getByRole("tooltip")).toHaveText("Oct 1, 2026 Tool completed: 11 of 12 Work IQ tool calls");
 });
 
 test("Filters actions and choice highlights remain distinct without changing their 320ms outer glide", async t => {

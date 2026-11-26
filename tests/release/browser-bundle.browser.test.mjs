@@ -60,8 +60,8 @@ test(`reader controls stay compact with doubled text in both layouts (${frontend
 test(`losing an open bookmark releases the old Analyze cards without exposing a fallback (${frontend})`, async t => {
     const { page, runtime, context } = await setup(t, { frontend });
     await page.goto(runtime.url);
-    const bookmark = page.locator('#activityList .request-card-open[href*="record="]');
-    const card = page.locator("#activityList article").filter({ has: page.locator('a[href*="record="]') });
+    const card = page.locator('#activityList article[data-view-key="request:bundled-first"]');
+    const bookmark = card.locator('.request-card-open[href*="record="]');
     const excerpt = card.locator(".card-excerpt");
     await expect(excerpt).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     const priorText = await excerpt.evaluateHandle(node => node.firstChild);

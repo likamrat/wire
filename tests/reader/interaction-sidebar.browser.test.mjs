@@ -680,6 +680,7 @@ test("touch Copy activates once, uses a 44px target and reports clipboard denial
     await page.locator(".request-card-open").first().tap();
     const copy = page.locator('[data-reader-section="prompt"] .ux-copy');
     await page.waitForFunction(sidebarMotionSettled, { selector: "#contextSidebar" });
+    await copy.scrollIntoViewIfNeeded();
     const before = await copy.boundingBox();
     assert.ok(before.width >= 44 && before.height >= 44);
     await copy.tap();

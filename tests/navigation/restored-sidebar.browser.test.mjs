@@ -485,7 +485,7 @@ test("Calendar service drilldown and browser Back restore the original interacti
     const before = await order(), originalUrl = page.url();
     for (let cycle = 0; cycle < 2; cycle++) {
         await page.locator("#percentageCharts").getByRole("link", { name: /^Calendar:.*View matching records/ }).click(); await ready(page);
-        assert.match(page.url(), /withinServices=Calendar/);
+        assert.equal(new URL(page.url()).search, "");
         assert.deepEqual(await order(), ["request:navigation-order-calendar"]);
         await page.goBack(); await ready(page);
         assert.equal(page.url(), originalUrl);

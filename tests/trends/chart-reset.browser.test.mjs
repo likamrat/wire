@@ -76,7 +76,7 @@ test("inspecting a segment on a narrow screen does not steal keyboard focus", as
     await page.setViewportSize({ width:375,height:1000 });
     const success = page.locator("a.time-segment-link[data-segment=success]");
     await success.hover(); await page.mouse.wheel(0,1);
-    await expect(page.getByRole("tooltip")).toContainText("14 tool completed");
+    await expect(page.getByRole("tooltip")).toContainText("Tool completed: 14 of 17 Work IQ tool calls");
     await expect(success).not.toBeFocused();
     await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
 });

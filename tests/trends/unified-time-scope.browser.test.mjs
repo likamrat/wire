@@ -165,6 +165,7 @@ test("one visible calendar range changes every widget, headline, row and current
     const picker = page.getByRole("dialog", { name: "Choose activity" });
     await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.locator("#reportCustomSetup").click();
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#prepareReportPreview").click();
     assert.equal((await response).status(), 200);

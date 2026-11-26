@@ -63,7 +63,8 @@ test("legacy Calls opens Analyze with its scope but without the old call sort or
     await page.goto(runtime.url + "#calls?layer=tool&callSort=fastest&page=4&scope=all"); await ready(page);
     const address = new URL(page.url()), params = address.searchParams;
     assert.equal(address.pathname, "/"); assert.equal(address.hash, "");
-    assert.equal(params.get("scope"), "all");
+    assert.equal(params.has("scope"), false);
+    await expect(page.locator("#scopeFilter")).toHaveValue("all");
     for (const field of ["mode", "callSort", "page"]) assert.equal(params.has(field), false);
     await expect(page.locator("#pageTitle")).toHaveText("Analyze");
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 4 matching tool calls");
