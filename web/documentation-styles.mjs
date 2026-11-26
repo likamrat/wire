@@ -29,8 +29,8 @@ export const documentationStyles = `
 .docs-panel[open]{--docs-arrow:-90deg}
 .docs-left-toggle[data-docked=true],.docs-outline-inline[data-docked=true][open]{--docs-arrow:0deg}
 .docs-left-toggle[data-docked=true][open],.docs-outline-inline[data-docked=true]:not([open]){--docs-arrow:180deg}
-:is(.docs-left-toggle,.docs-outline-inline)>summary:hover{background:var(--hover)}
-:is(.docs-left-toggle,.docs-outline-inline)>summary:active{background:var(--pill-pressed)}
+.docs-panel>summary:hover>.disclosure-icon{border-radius:2px;background:var(--hover);box-shadow:0 0 0 var(--space-xs) var(--hover)}
+.docs-panel>summary:active>.disclosure-icon{border-radius:2px;background:var(--pill-pressed);box-shadow:0 0 0 var(--space-xs) var(--pill-pressed)}
 
 .docs-tree-group>h2,.docs-outline>h2{font-size:var(--type-section);line-height:var(--leading-section);font-weight:var(--weight-strong);color:var(--ink);margin:0 0 var(--space-xs);padding:0 10px}
 .docs-tree-group+.docs-tree-group{margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--docs-rule)}

@@ -312,6 +312,14 @@ test("Documentation panels independently give their space to the current guide",
     };
     for (const [toggle, pane, other, closeAngle, openAngle] of [[left, tree, outline, 180, 0], [right, outline, tree, 0, 180]]) {
         await direction(toggle, closeAngle);
+        await page.mouse.move(0, 0);
+        const paint = () => toggle.evaluate(row => [row, row.querySelector(".docs-panel-label"), row.querySelector(".disclosure-icon")]
+            .map(node => getComputedStyle(node).backgroundColor));
+        const resting = await paint();
+        await toggle.hover({ position: { x: 8, y: 16 } });
+        const hovered = await paint();
+        assert.deepEqual(hovered.slice(0, 2), resting.slice(0, 2), "hover leaves the row and label unpainted");
+        assert.notEqual(hovered[2], resting[2], "only the arrow picks up the hover tint");
         await toggle.press("Enter");
         await expect(pane).toBeHidden();
         await direction(toggle, openAngle);
