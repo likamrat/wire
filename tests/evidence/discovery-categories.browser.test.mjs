@@ -148,7 +148,8 @@ test("Discovery reads consistently across charts, filters and call details in bo
     await selectActivityOption(page, "serviceFilter", "Discovery"); await ready(page);
     await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent.startsWith("3 "));
     assert.match(await page.locator("#meaningMatched").textContent(), /^3 Work IQ tool calls$/);
-    assert.match(page.url(), /service=Discovery/);
+    await expect(page.locator("#serviceFilter")).toHaveValue("Discovery");
+    assert.equal(new URL(page.url()).search, "");
     await screenshot(page, "discovery-filtered-three");
     await selectActivityOption(page, "outcomeFilter", ["partial"]); await ready(page);
     await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent.startsWith("0 "));

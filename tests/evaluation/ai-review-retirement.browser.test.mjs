@@ -121,6 +121,7 @@ test("normal Analyze, reader, Settings and Search retain replies and reporting w
     await picker.locator("[name=reportScope][value=selected]").check();
     await picker.locator(`[data-report-request="${scenarioId}"]`).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.locator("#reportCustomSetup").click();
     await page.getByRole("button", { name: /^Formats:/ }).click();
     await page.locator("#formatOptions input[value=json]").check();
     await page.keyboard.press("Escape");

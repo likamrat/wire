@@ -61,7 +61,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
         const allowed = url.origin === new URL(runtime.url).origin && (
-            request.method() === "GET" && ["/", "/settings", "/favicon.svg", "/assets/assessment-contract.mjs"].includes(url.pathname)
+            request.method() === "GET" && ["/", "/settings", "/favicon.svg", "/assets/assessment-contract.mjs", "/assets/marked.mjs"].includes(url.pathname)
             || request.method() === "POST" && ["/api/session", "/api/snapshot", "/api/collection/status", "/api/evaluation/automatic/summary",
                 "/api/assessment/detail", "/api/assessment/overview", "/api/assessment/consent",
                 "/api/assessment/consent/set", "/api/assessment/evidence", "/api/assessment/mutation/status"].includes(url.pathname)

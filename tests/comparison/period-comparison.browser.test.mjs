@@ -90,6 +90,7 @@ async function setup(t, { extraLayers = false, returnedError = false, search } =
         ...["assessment-contract", "period-comparison-math", "report-outcome-comparison", "report-metric-comparison",
             "wire-report-metric-adapter", "report-result-contract"].map(name => [`/assets/${name}.mjs`, `../../lib/${name}.mjs`]),
         ["/web/recorded-results.mjs", "../../web/recorded-results.mjs"],
+        ["/assets/marked.mjs", "../../node_modules/marked/lib/marked.esm.js"],
     ].map(async ([url, file]) => [url, await readFile(new URL(file, import.meta.url), "utf8")])));
     const server = createServer(async (req, res) => {
         try {
@@ -103,7 +104,7 @@ async function setup(t, { extraLayers = false, returnedError = false, search } =
             let body = ""; for await (const chunk of req) body += chunk;
             const input = JSON.parse(body || "{}");
             requests.push({ route: req.url, input: req.url === "/api/search/query" ? { purpose: input.purpose } : input });
-            assert.equal(req.method, "POST");
+            assert.equal(req.method, "POST", `Unexpected ${req.method} ${req.url}`);
             let data;
             if (req.url === "/api/snapshot") {
                 data = await currentStatePayload({}, state, input);

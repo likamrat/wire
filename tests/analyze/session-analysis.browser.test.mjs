@@ -113,7 +113,9 @@ test("scope, history gaps, code-only and unavailable summaries never manufacture
         delete data.sessionAnalysis;
         await route.fulfill({ response, json: data });
     });
+    await page.goto(runtime.url + "settings"); await ready(page);
     await page.goto(runtime.url + "#analyze?session=session-a&scope=all"); await ready(page);
-    assert.match(await page.locator("#sessionAnalysis").innerText(), /result counts are unavailable/i);
+    await openAnalyzeFilters(page);
+    await expect(page.locator("#sessionAnalysis")).toContainText(/result counts are unavailable/i);
     assert.equal(await page.locator("#sessionAnalysis a.result-link").count(), 0);
 });

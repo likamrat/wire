@@ -188,7 +188,7 @@ test("the Analyze navigation link leaves period comparison", async t => {
 test("native chart selection and modified links lead to the same matching records and full reader", async t => {
     const { page } = await setup(t);
     const failure = page.locator('#outcomeChart [data-category="failure"] .percentage-label');
-    await expect(failure).toHaveAttribute("href", /result=failure/);
+    await expect(failure).toHaveAttribute("href", "/");
     const originalUrl = page.url();
     const popupPromise = page.context().waitForEvent("page");
     await failure.click({ modifiers: ["Control"] });
