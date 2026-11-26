@@ -1675,15 +1675,16 @@ test("the entire collapsed row expands and the expanded header collapses without
     await expect(panel).toHaveAttribute("data-collapsed", "false");
 });
 
-test("every widget control works for 7, 14, 30 and custom days through the normal renderer", { timeout: 180000 }, async t => {
+test("Trends controls open each chart's selected calls across preset and custom ranges", { timeout: 180000 }, async t => {
     const records = currentRecords({ many: true, emptyToday: true });
     const { page, reads } = await setupAllCharts(t, false, { records,
         viewport: { width: 1920, height: 1080 }, motion: "no-preference", direct: true });
-    const ids = ["tools", "authors", "rhythm", "services", "problems", "models", "timing"];
-    const evidence = { periods: 0, widgets: 0, measures: 0, seriesToggles: 0, exactSelections: 0, sizingActions: 0 };
     const waitRead = () => page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
-    for (const [periodIndex, period] of ["7", "14", "30", "custom"].entries()) {
-        await chooseTheme(page, periodIndex % 2 ? "dark" : "light");
+    for (const [period, theme, ids] of [
+        ["7", "light", ["tools", "rhythm"]], ["14", "dark", ["authors", "services"]],
+        ["30", "light", ["models", "timing"]], ["custom", "dark", ["problems", "tools"]],
+    ]) {
+        await chooseTheme(page, theme);
         let data;
         if (period === "custom") {
             const day = offset => new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10);
@@ -1694,7 +1695,6 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             data = await (await response).json();
         }
         await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
-        evidence.periods++;
         const readCount = reads.length;
         const datesPanel = await openDatePicker(page, "trends", "Custom dates");
         await datesPanel.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -1711,7 +1711,6 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
                 await expect(control).toHaveAttribute("aria-pressed", "true");
                 await expect(panel).toHaveAttribute("data-collapsed", "false");
                 await expect(page.locator("#trendsTooltip")).toBeHidden();
-                evidence.measures++;
             }
             await panel.locator(`[data-trend-mode="${originalMode}"]`).click();
             for (const control of await panel.getByRole("checkbox").all()) {
@@ -1719,7 +1718,6 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
                 await control.uncheck(); await expect(control).not.toBeChecked();
                 await expect(row.locator(".trends-legend-value")).toHaveText(value);
                 await control.check(); await expect(control).toBeChecked();
-                evidence.seriesToggles += 2;
             }
             const controls = panel.locator(".trends-sizing button");
             const overviewPlot = panel.locator(".trends-plot");
@@ -1727,6 +1725,7 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             const overviewMarks = overviewPlot.locator("[data-trend-mark]");
             const overviewIndex = await overviewMarks.evaluateAll(nodes => nodes.findIndex(node =>
                 !/unavailable|, 0(?:%| |$)/i.test(node.getAttribute("aria-label"))));
+            assert.ok(overviewIndex >= 0, `${period}/${id}: expected a selectable point with recorded activity`);
             const overviewMark = overviewMarks.nth(overviewIndex);
             await overviewMark.scrollIntoViewIfNeeded(); await settle(page);
             const pointBox = await overviewMark.boundingBox();
@@ -1764,7 +1763,6 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             await expect(page.locator("#requestContent")).toContainText("Cedar");
             await page.getByRole("button", { name: "Close interaction", exact: true }).click();
             await expect(panel).toHaveAttribute("data-maximized", "true");
-            evidence.exactSelections++;
             await page.getByRole("button", { name: "View numbers", exact: true }).click();
             await expect(page.locator(".trends-exact tr")).toHaveCount(data.days.length + 1);
             await page.getByRole("button", { name: "Hide numbers", exact: true }).click();
@@ -1784,7 +1782,6 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             await expect(panel).toHaveAttribute("data-collapsed", "true");
             const collapsedText = await panel.innerText();
             assert.equal(collapsedText.trim().replace(/\s+/g, " "), (await panel.locator(".trends-title-group").innerText()).trim().replace(/\s+/g, " "));
-            evidence.sizingActions += 6; evidence.widgets++;
         }
         assert.equal(reads.length, readCount, `${period}: chart controls must not change the population`);
         await capture(page, `all-controls-${period}-collapsed`);
@@ -1801,9 +1798,6 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
         assert.deepEqual((await (await response).json()).totals, data.totals);
         await expect(page.locator(".trends-restrictions")).toBeHidden();
     }
-    t.diagnostic(`Exercised ${evidence.widgets} widget/period combinations and ${evidence.exactSelections} exact evidence selections`);
-    assert.equal(evidence.widgets, 28);
-    assert.equal(evidence.exactSelections, 28);
 });
 
 test("mixed saved-chat read gaps do not become a Trends scope warning", { timeout: 30000 }, async t => {

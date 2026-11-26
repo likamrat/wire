@@ -180,11 +180,10 @@ test("flat outcome paint retains exact tiny/full circles, inert centers, local f
                 const start = +node.dataset.start, end = +node.dataset.end;
                 const angle = (start + (end - start) * .37) * Math.PI * 2 + Math.PI / 2;
                 const local = new DOMPoint(85 * Math.cos(angle), 85 * Math.sin(angle));
-                const point = local.matrixTransform(node.getScreenCTM());
                 const id = node.getAttribute("fill").match(/^url\(#(.+)\)$/)[1];
                 return { start, end, count: +node.dataset.count, exact: +node.dataset.exactFraction,
                     contains: node.isPointInFill(local), center: node.isPointInFill(new DOMPoint(0, 0)),
-                    localFill: Boolean(node.ownerSVGElement.querySelector(`[id="${id}"]`)), x: point.x, y: point.y };
+                    localFill: Boolean(node.ownerSVGElement.querySelector(`[id="${id}"]`)) };
             });
             assert.equal(measured.exact, measured.count / total);
             assert.ok(Math.abs(measured.end - measured.start - measured.exact) < 1e-14);
@@ -223,6 +222,7 @@ test("outcome emphasis keeps the read slice's geometry, recedes the others and r
     const slice = page.locator('.percentage-slice[data-category="failure"]');
     const other = page.locator('.percentage-slice[data-category="success"]');
     for (const os of ["light", "dark"]) for (const explicit of [null, "light", "dark"]) {
+        await label.blur();
         await page.emulateMedia({ colorScheme: os, forcedColors: "none", reducedMotion: "reduce" });
         await page.evaluate(theme => {
             if (theme) document.documentElement.dataset.evidenceTheme = theme;

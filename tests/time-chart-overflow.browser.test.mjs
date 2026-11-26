@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -48,11 +48,6 @@ async function setup(t, records = chartRecords(), options = {}) {
     const browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER, ignoreDefaultArgs: ["--hide-scrollbars"] });
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, timezoneId: options.timeZone ?? "UTC",
         locale: "en-US", reducedMotion: "reduce" });
-    const proof = options.trace && process.env.WIRE_OVERFLOW_PROOFS;
-    if (proof) {
-        await mkdir(proof, { recursive: true });
-        await page.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
-    }
     page.setDefaultTimeout(5000);
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
@@ -68,17 +63,8 @@ async function setup(t, records = chartRecords(), options = {}) {
     });
     t.after(async () => {
         try {
-            if (proof) await page.context().tracing.stop({ path: path.join(proof, options.trace + ".zip") });
             await browser.close(); await runtime.close();
             const after = await loadBoardState(context);
-            if (proof) {
-                const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-                await writeFile(path.join(proof, options.trace + "-receipt.json"), JSON.stringify({
-                    test: t.name, browser: browser.version(), frontend: options.frontend, url: runtime.url,
-                    fixture: hash(records), storedBefore: hash(stored), storedAfter: hash(after), errors, denied, stopped: true,
-                    build: JSON.parse(await readFile(new URL("../dist/client/wire-build.json", import.meta.url), "utf8")),
-                }, null, 2));
-            }
             for (const key of ["evidence", "cards", "exports", "personalEvaluation"]) assert.deepEqual(after[key], stored[key], key);
             assert.deepEqual(records, original); assert.deepEqual(errors, []); assert.deepEqual(denied, []);
         } finally { await access?.close(); for (const fn of cleanup) await fn(); }
@@ -92,10 +78,10 @@ async function setup(t, records = chartRecords(), options = {}) {
 test("normal Analyze shows seven daily populations totaling 244 rather than two implicit weekly sums", { timeout: 60000 }, async t => {
     const reads = [], snapshots = [], expected = [35, 35, 34, 34, 34, 34, 38];
     const page = await setup(t, reviewRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react",
-        route: "#analyze", reads, snapshots, trace: "daily-normal-path" });
+        route: "#analyze", reads, snapshots });
     await chooseTheme(page, "light"); await page.setViewportSize({ width: 1440, height: 1000 }); await ready(page);
     const initial = await measure(page);
-    await capture(page, process.env.WIRE_DAILY_BASELINE ? "daily-before" : "daily-after-desktop", initial);
+    await capture(page, "daily-desktop", initial);
     assert.equal(reads[0].bucket, "day");
     assert.deepEqual(initial.counts.map(row => parseInt(row.text.replaceAll(",", ""), 10)), expected);
     assert.equal(initial.marks.reduce((sum, row) => sum + row.total, 0), 244);
@@ -126,7 +112,7 @@ test("normal Analyze shows seven daily populations totaling 244 rather than two 
             });
             assert.ok(visible, "Keyboard focus reveals each dated action");
         }
-        await capture(page, `daily-after-${width}-text${scale}-${theme}`, await measure(page));
+        await capture(page, `daily-${width}-text${scale}-${theme}`);
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; }); await ready(page);
@@ -175,7 +161,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     await expect(page.locator(".time-zero").first()).toHaveAttribute("aria-label", /No qualifying records/);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator(".time-column").last().focus();
-    await capture(page, "daily-long-gap", await measure(page));
+    await capture(page, "daily-long-gap");
     await page.getByRole("button", { name: "First dates", exact: true }).click(); await ready(page);
     await expect(page.locator(".dimensional-time-labels > a").first()).toHaveText("Jan 1");
     await expect(page.locator("#activityCount")).toHaveText("3");
@@ -215,7 +201,7 @@ function anchorRecords() {
 test("removing missing-service context retires the old window without broadening Mail", { timeout: 30000 }, async t => {
     const reads = [], snapshots = [];
     const page = await setup(t, anchorRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react",
-        route: "#analyze?services=Mail&includeMissingService=true", reads, snapshots, trace: "anchor-refinement" });
+        route: "#analyze?services=Mail&includeMissingService=true", reads, snapshots });
     await chooseTheme(page, "light");
     await page.getByRole("button", { name: "First dates", exact: true }).click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("2");
@@ -225,7 +211,7 @@ test("removing missing-service context retires the old window without broadening
     await page.getByRole("button", { name: "Remove missing-service context", exact: true }).click(); await ready(page);
     const narrowed = await (await narrowedResponse).json();
     await closeAnalyzeFilters(page);
-    await capture(page, process.env.WIRE_DAILY_BASELINE ? "anchor-before" : "anchor-mail-light", { request: reads.at(-1) });
+    await capture(page, "anchor-mail-light", { request: reads.at(-1) });
     assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), null);
     assert.deepEqual(reads.at(-1).filters.services, ["Mail"]);
     assert.equal(reads.at(-1).filters.includeMissingService, false);
@@ -241,7 +227,7 @@ test("removing missing-service context retires the old window without broadening
     await expect(page.locator(".dimensional-time-labels > a")).toHaveText(["Nov 16"]);
     await page.setViewportSize({ width: 390, height: 844 }); await chooseTheme(page, "dark"); await ready(page);
     await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
-    await capture(page, "anchor-mail-narrow-dark", await measure(page));
+    await capture(page, "anchor-mail-narrow-dark");
     await page.locator("#openAnalyzeFilters").click();
     await page.locator("#addServiceContext").click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("2");
@@ -253,7 +239,7 @@ test("removing missing-service context retires the old window without broadening
 });
 
 test("out-of-range short and long timeline links retain keyboard recovery and Back", { timeout: 45000 }, async t => {
-    const page = await setup(t, anchorRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react", route: "#analyze", trace: "anchor-deep-links" });
+    const page = await setup(t, anchorRecords(), { frontend: process.env.WIRE_TEST_FRONTEND ?? "react", route: "#analyze" });
     const origin = new URL(page.url()).origin;
     for (const short of [true, false]) for (const timelineFrom of ["1900-01-01", "2030-01-01"]) {
         const bucket = short && timelineFrom === "2030-01-01" ? "month" : null;
@@ -282,7 +268,7 @@ test("out-of-range short and long timeline links retain keyboard recovery and Ba
         await expect(page.locator(".time-column")).toHaveCount(1);
         await expect(page.locator("#timeline-first")).toBeFocused();
         await expect(page.locator("#activityCount")).toHaveText(short ? "1" : "2");
-        if (short && timelineFrom === "1900-01-01") await capture(page, "anchor-short-recovered", await measure(page));
+        if (short && timelineFrom === "1900-01-01") await capture(page, "anchor-short-recovered");
         await page.goBack(); await ready(page);
         assert.equal(new URL(page.url()).searchParams.has("timelineFrom"), false);
         await expect(page.locator("#chart")).toContainText("No dated records in this window");
@@ -445,6 +431,7 @@ async function measure(page) {
 async function capture(page, name, geometry) {
     if (!process.env.WIRE_OVERFLOW_PROOFS) return;
     const directory = process.env.WIRE_OVERFLOW_PROOFS;
+    geometry ??= await measure(page);
     await mkdir(directory, { recursive: true });
     await page.locator(".analyze-chart-main").screenshot({ path: path.join(directory, `${name}-widget.png`) });
     await page.screenshot({ path: path.join(directory, `${name}-context.png`), fullPage: true });
@@ -511,7 +498,6 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: daily columns sc
         if (process.env.WIRE_OVERFLOW_PROOFS) await page.screenshot({ path:path.join(process.env.WIRE_OVERFLOW_PROOFS, `${frontend}-${width}-low.png`) });
         await expect(tip).toContainText("3 Work IQ tool calls", { timeout: 1200 });
         await expect(tip).toBeVisible();
-        // Reading a day keeps its column at full strength and lets the other days recede; no outline is painted.
         await expect(total.locator(".time-stack")).toHaveCSS("opacity", "1");
         await expect(total.locator(".time-stack")).toHaveCSS("outline-style", "none");
         await expect.poll(() => slots.locator(".time-stack").evaluateAll(nodes => nodes.filter(node => +getComputedStyle(node).opacity < .5).length)).toBeGreaterThan(0);
@@ -617,7 +603,7 @@ test("native overflow appears only when needed and resize keeps all date targets
             assert.ok(mark.x >= scroll.x && mark.x + mark.width <= scroll.x + scroll.width);
             assert.equal(await action.locator(".dimensional-count").evaluate(node => parseFloat(getComputedStyle(node).fontSize)), 16 * scale);
         }
-        if (width === 390 || width === 1440) await capture(page, `narrow-${theme}-${width}-text${scale}`, await measure(page));
+        if (width === 390 || width === 1440) await capture(page, `narrow-${theme}-${width}-text${scale}`);
     }
     const last = page.locator(".time-column").last();
     await last.focus(); await page.keyboard.press("Enter"); await ready(page);

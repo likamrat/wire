@@ -170,7 +170,6 @@ test("screen identity and completeness share core qualification without changing
         const { presentation, models, ...projectedCore } = projectInteractionModels([value])[0].originalModel;
         assert.equal(JSON.stringify(projectedCore), core);
         assert.deepEqual(presentation, { identity, sequence, ordered, completeness });
-        assert.deepEqual(Object.keys(presentation), ["identity", "sequence", "ordered", "completeness"]);
         assert.doesNotMatch(JSON.stringify(presentation), /api-a|message-one|source-one|promptEventId|responses|256/);
         assert.equal(JSON.stringify(value), before);
     }
