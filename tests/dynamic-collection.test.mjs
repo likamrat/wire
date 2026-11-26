@@ -496,6 +496,23 @@ async function readChatsWithoutTotals(t) {
     return { app, id, file, index, usage, text, settings, counting, read, after: ms => new Date(Date.parse(unmatched.at(-1).timestamp) + ms).toISOString(),
         collector: () => collector, restart: async () => { await collector.close(); collector = await createCollector(app.context, { timers: false }); app.cleanup.push(() => collector.close()); } };
 }
+test("history compatibility: Check result never reports nothing was saved while a count is still being confirmed", async t => {
+    const fixture = await readChatsWithoutTotals(t), { app, read } = fixture;
+    let release, held = new Promise(resolve => { release = resolve; });
+    const counting = createUsageRecordCountController(app.context, { coordinateRecorder: async work => { await held; return work(); } });
+    held = Promise.resolve(); const preview = await counting.preview("panel");
+    held = new Promise(resolve => { release = resolve; });
+    const confirming = counting.confirm("panel", { operationId: preview.operationId, confirmed: true });
+    const pending = await counting.status("panel", { operationId: preview.operationId, receiptToken: preview.receiptToken });
+    assert.equal(pending.phase, "verification-incomplete", "A confirm in flight is not reported as unsaved");
+    assert.equal((await counting.status("other-panel", { operationId: preview.operationId, receiptToken: preview.receiptToken })).phase, "verification-incomplete");
+    await assert.rejects(counting.status("other-panel", { operationId: preview.operationId, receiptToken: "0".repeat(64) }), { status: 403 });
+    assert.equal((await read()).usage, null);
+    release();
+    assert.equal((await confirming).phase, "complete");
+    assert.equal((await counting.status("panel", { operationId: preview.operationId, receiptToken: preview.receiptToken })).phase, "complete");
+    assert.equal((await read()).usage?.total, 11400);
+});
 test("history compatibility: counting tokens in chats already read writes only the previewed totals, keeps one receipt and survives restart and the next append", async t => {
     const fixture = await readChatsWithoutTotals(t), { app, counting, read } = fixture;
     const before = await loadBoardState(app.context), evidence = structuredClone(before.evidence);

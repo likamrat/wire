@@ -1024,6 +1024,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             forgetCount(); count.phase = "complete"; count.result = result; count.preview = null;
             countStatus(`Counted ${plural(result.counts.interactions, "interaction")} in ${plural(result.counts.chats, "chat")} · ${plural(result.counts.tokens, "token")}. Saved reports are unchanged.`);
             onCommitted?.();
+        } else if (result?.phase === "verification-incomplete") {
+            count.phase = "uncertain";
+            countStatus("WIRE is still counting. Check the result again in a moment; don't count again.", true);
         } else if (result?.phase === "not-started") {
             forgetCount(); count.phase = "not-saved"; count.preview = null;
             countStatus("No count was saved for that check. Check chats again to count them.", true);
