@@ -302,9 +302,19 @@ test("Documentation panels independently give their space to the current guide",
     const article = page.locator(".docs-article");
     const width = async () => (await article.boundingBox()).width;
     const initial = await width();
-    for (const [toggle, pane, other] of [[left, tree, outline], [right, outline, tree]]) {
+    const direction = async (toggle, degrees) => {
+        const arrow = toggle.locator(":scope > .disclosure-icon");
+        await expect(arrow).toBeVisible();
+        await expect.poll(() => arrow.evaluate(node => {
+            const { a, b } = new DOMMatrix(getComputedStyle(node).transform === "none" ? undefined : getComputedStyle(node).transform);
+            return (Math.round(Math.atan2(b, a) * 180 / Math.PI) + 360) % 360;
+        })).toBe(degrees);
+    };
+    for (const [toggle, pane, other, closeAngle, openAngle] of [[left, tree, outline, 180, 0], [right, outline, tree, 0, 180]]) {
+        await direction(toggle, closeAngle);
         await toggle.press("Enter");
         await expect(pane).toBeHidden();
+        await direction(toggle, openAngle);
         await expect(other).toBeVisible();
         await expect.poll(width).toBeGreaterThan(initial + 120);
         await expect(toggle).toBeFocused();
@@ -319,8 +329,10 @@ test("Documentation panels independently give their space to the current guide",
     await expect(page.locator("#guideSource-control")).toHaveAccessibleName("Documentation source: Installed version");
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(tree).toBeHidden(); await expect(outline).toBeHidden();
+    await direction(left, 90); await direction(right, 90);
     await left.press("Enter"); await expect(tree).toBeVisible();
     await right.press("Enter"); await expect(outline).toBeVisible();
+    await direction(left, 270); await direction(right, 270);
     await right.press("Space"); await left.press("Space");
     await page.setViewportSize({ width: 1536, height: 900 });
     await expect(tree).toBeHidden(); await expect(outline).toBeHidden();

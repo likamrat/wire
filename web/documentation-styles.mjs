@@ -21,10 +21,14 @@ export const documentationStyles = `
 .docs-panel>nav{max-block-size:calc(100dvh - var(--docs-sticky) - 52px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 2px 8px}
 .docs-left-toggle>summary,.docs-outline-inline>summary{display:flex;align-items:center;gap:var(--pill-gap);cursor:pointer;padding:6px 10px;font-size:var(--type-reading);font-weight:var(--weight-strong);min-block-size:44px;list-style:none;border-radius:var(--radius-small)}
 .docs-panel[data-docked=true]:not([open])>summary{justify-content:center;padding-inline:0}
-.docs-panel[data-docked=true]:not([open])>summary :is(.docs-panel-label,.disclosure-icon){display:none}
+.docs-panel[data-docked=true]:not([open])>summary :is(.docs-panel-label,.docs-icon){display:none}
+.docs-panel[data-docked=true]:not([open])>summary>.disclosure-icon{margin:0}
 .docs-panel>summary{margin-bottom:var(--space-xs)}
 .docs-left-toggle>summary::-webkit-details-marker,.docs-outline-inline>summary::-webkit-details-marker{display:none}
-:is(.docs-left-toggle,.docs-outline-inline)>summary>.disclosure-icon{margin-inline:auto 0}
+.docs-panel>summary>.disclosure-icon{margin-inline:auto 0;transform:rotate(var(--docs-arrow,90deg))}
+.docs-panel[open]{--docs-arrow:-90deg}
+.docs-left-toggle[data-docked=true],.docs-outline-inline[data-docked=true][open]{--docs-arrow:0deg}
+.docs-left-toggle[data-docked=true][open],.docs-outline-inline[data-docked=true]:not([open]){--docs-arrow:180deg}
 :is(.docs-left-toggle,.docs-outline-inline)>summary:hover{background:var(--hover)}
 :is(.docs-left-toggle,.docs-outline-inline)>summary:active{background:var(--pill-pressed)}
 

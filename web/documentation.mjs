@@ -302,7 +302,7 @@ export function mountDocumentation({ host, api, icon, ux, open, announce = () =>
             const chevron = glyph("disclosure").firstElementChild;
             chevron.classList.add("disclosure-icon");
             const summary = el("summary", { "aria-label": label, title: label },
-                glyph(side === "left" ? "navigation-collapse" : "activity-panel"), el("span", { class: "docs-panel-label" }, label), chevron);
+                glyph(side === "left" ? "navigation-collapse" : "doc-contents"), el("span", { class: "docs-panel-label" }, label), chevron);
             const docked = host.clientWidth > (side === "left" ? 880 : 1080);
             const details = el("details", { class: `docs-panel ${side === "left" ? "docs-left-toggle" : "docs-outline-inline"}`,
                 "data-docked": String(docked), open: docked && dockedOpen[side] }, summary, content);
