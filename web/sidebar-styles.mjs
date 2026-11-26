@@ -101,6 +101,8 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px);scrollbar-gu
 .primary-navigation a>.wire-icon {color:var(--muted);justify-self:center}
 .primary-navigation a:is([aria-current=page],:hover,:focus-visible)>.wire-icon {color:var(--ink)}
 body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--app-sidebar-width,196px);padding:24px 24px 64px;min-width:0;max-width:none}
+/* Horizontal rail motion must not let rewrapping content scroll the page vertically. */
+.app-sidebar[data-navigation-moving]~main {overflow-anchor:none}
 #workspace {min-width:0}
 #workspace>:not(#homeView,#trendsView),#homeView>.chart-actions,#homeView>.supporting {max-width:1384px}
 .navigation-toggle {display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;padding:10px}

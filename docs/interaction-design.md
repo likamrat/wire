@@ -56,6 +56,8 @@ actual origin only while its authority and reading intent stay current.
 - Activating Close from the keyboard during reader entry keeps the origin's place
   through the reversal. Scrolling the results cancels that compensation.
 - Later user input wins over delayed navigation, reads and motion callbacks.
+- Scrolling during a left rail glide sets the new page position. Toggling the
+  rail back must not undo that scroll as the workspace changes width.
 - Pointer presses must not trigger older scroll restoration that moves the
   targeted control before release.
 - Activity's Next and Previous controls stay at the same viewport position
