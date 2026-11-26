@@ -106,6 +106,7 @@ test("a lost bulk response survives panel reload, checks only its receipt and le
     const { page, context, requests, entries } = await setup(t, 7);
     const before = await loadBoardState(context), comparison = entries.at(-1);
     const frozen = await readFile(comparison.files["comparison-report.html"]);
+    await page.locator("#reportCustomSetup").click();
     await page.locator('[name=promptMode][value=original]').check();
     await openReportLibrary(page);
     await expect(page.locator(".saved-library-row")).toHaveCount(6);

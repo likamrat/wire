@@ -180,6 +180,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await expand(body, true); await capture("saved-current-comparison", body);
     await navigateMain(page, "reports");
     await capture("report-activity", page.locator("#reportsView"));
+    await page.locator("#reportCustomSetup").click();
     await page.getByRole("combobox", { name: "Show", exact: true }).click();
     await capture("report-author-filter", page.locator(".select-popup")); await page.keyboard.press("Escape");
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview") && response.request().method() === "POST");

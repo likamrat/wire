@@ -141,6 +141,7 @@ for (const statusFailure of [false, true]) test(`Copilot-only explicit Refresh a
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#activityList .request-card-open")).toContainText(/no result recorded/i);
     await navigateMain(page, "reports");
+    await page.locator("#reportCustomSetup").click();
     await page.getByRole("radio", { name: /Leave out prompts and replies/ }).check();
     const message = "The invented item cannot be edited.";
     await appendFile(file, lines([event("completion", "tool.execution_complete", {
@@ -568,6 +569,7 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         assert.deepEqual(mutations, [], "Read-only journeys must not infer source, account or report consent.");
 
         await page.getByRole("link", { name: "Overview", exact: true }).click();
+        await page.locator("#reportCustomSetup").click();
         await page.getByRole("radio", { name: /Leave out prompts and replies/ }).check();
         const reviewedPreview = await prepareFromDesk(page);
         assert.equal(reviewedPreview.snapshot.selectionScope.requestGroups, 1);

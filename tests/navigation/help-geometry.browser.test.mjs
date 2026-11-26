@@ -160,6 +160,7 @@ test("Formats keeps four separate keyboard and touch targets; inspecting the men
     const page = await setup(t);
     await navigateMain(page, "reports");
     const entry = page.getByRole("button", { name: "Formats: HTML", exact: true });
+    await page.locator("#reportCustomSetup").click();
     const choices = page.getByRole("group", { name: "Formats", exact: true });
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 1], [375, 1], [375, 2]]) {
         await resize(page, width, scale); await chooseTheme(page, theme);

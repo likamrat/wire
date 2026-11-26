@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../../lib/render.mjs";
@@ -36,6 +36,10 @@ async function setup(run, options = {}) {
             return res.end(renderHtmlShell("a".repeat(64), "help-proof", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (req.method === "GET" && req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && req.url === "/assets/marked.mjs") {
+            res.setHeader("Content-Type", "text/javascript");
+            return res.end(await readFile(new URL("../../node_modules/marked/lib/marked.esm.js", import.meta.url)));
+        }
         if (req.method === "POST" && req.url === "/api/evaluation/automatic/summary") {
             let body = ""; for await (const part of req) body += part;
             const input = JSON.parse(body);

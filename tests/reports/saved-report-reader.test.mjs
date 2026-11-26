@@ -873,6 +873,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await picker.getByRole("radio", { name: /^Selected interactions/ }).check();
     await picker.locator('[data-report-request="reader"]').check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.locator("#reportCustomSetup").click();
     await page.locator("[name=promptMode][value=none]").check();
     const [response] = await Promise.all([page.waitForResponse("**/api/preview"), prepareReportPreview(page)]);
     const draft = await response.json();

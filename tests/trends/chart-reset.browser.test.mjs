@@ -192,6 +192,7 @@ test("reset keeps an interaction selected for a report without publishing a late
         await page.getByRole("radio",{name:/^Selected interactions/}).check();
         await chosen.check();
         await page.keyboard.press("Escape");
+        await page.locator("#reportCustomSetup").click();
         await page.locator("#prepareReportPreview").click(); await enter.promise;
         await page.goBack(); await navigateMain(page,"analyze"); await ready(page);
         await reset(page);

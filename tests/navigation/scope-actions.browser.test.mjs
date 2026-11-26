@@ -123,6 +123,7 @@ for (const superseding of ["none", "user scroll", "meaningful focus", "navigatio
 
 test("Reports preparation defers background activity changes without cancelling or replacing the frozen copy", async t => {
     const { page, requests, status } = await setup(t, { route: "reports" });
+    await page.locator("#reportCustomSetup").click();
     await page.locator("#reportDeskActivity").click();
     await page.locator('[name=reportScope][value=selected]').check();
     await page.locator('[data-report-request="scope-action-0"]').check();
@@ -151,6 +152,7 @@ test("Reports preparation defers background activity changes without cancelling 
 test("reading saved activity and resetting filters preserve the chosen interaction and report text policy", async t => {
     const { page, requests } = await setup(t, { approved: false });
     await navigateMain(page, "reports");
+    await page.locator("#reportCustomSetup").click();
     const activity = page.getByRole("button", { name: /^Activity source:/ });
     const picker = page.getByRole("dialog", { name: "Choose activity" });
     const selected = picker.locator('input[data-report-request="scope-action-0"]');

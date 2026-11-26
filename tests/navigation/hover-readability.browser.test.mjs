@@ -17,6 +17,7 @@ test(`${name} stays readable under a stationary pointer through a keyboard theme
     await page.addInitScript({ content: `window.controlPaint = ${measureControlSurface};` });
         await page.goto(new URL(path, runtime.url).href);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        if (path === "/reports") await page.locator("#reportCustomSetup").click();
         await chooseTheme(page, "light");
         const target = page.getByRole("button", { name, exact: true });
         const toggle = page.getByRole("switch", { name: "Dark theme", exact: true });

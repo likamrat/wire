@@ -22,6 +22,7 @@ test("report outline actions keep pointer paint inside one face and retain keybo
         await chooseTheme(page, mode);
         await page.locator(`.palette-option:has(#palette-${palette})`).click();
         await page.locator("nav [data-nav=reports]").click(); await ready(page);
+        await page.locator("#reportCustomSetup").click();
         await expect(page.locator("html")).toHaveAttribute("data-evidence-palette", palette);
         for (const selector of ["#reportDeskDates", "#reportDeskActivity", "[popovertarget=reportFileOptions]"]) {
             const control = page.locator(selector);
@@ -56,6 +57,7 @@ test("the report primary, Settings commands and directional shortcut share a fac
     const browser = await chromium.launch(); t.after(() => browser.close());
     const page = await browser.newPage();
     await page.goto(app.runtime.url + "reports"); await ready(page);
+    await page.locator("#reportCustomSetup").click();
     const primary = page.getByRole("button", { name: "Prepare preview", exact: true });
     async function face(control) {
         return control.evaluate(node => {

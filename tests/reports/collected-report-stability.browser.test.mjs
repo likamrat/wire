@@ -59,6 +59,7 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         await page.goto(url);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await navigateMain(page, "reports");
+        await page.locator("#reportCustomSetup").click();
         await page.locator(`[name=promptMode][value=${recordedContext ? "original" : "none"}]`).check();
         await page.getByRole("button", { name: /^Formats:/ }).click();
         await page.locator("#formatOptions input[value=json]").check();
