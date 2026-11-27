@@ -39,8 +39,8 @@ export const settingsMarkup = `
     <h2 id="generalTitle" tabindex="-1">General</h2>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
-      <a id="availableReleaseNotes" hidden>What's new in this update</a>
-      <a id="installedReleaseNotes" hidden>Installed release notes</a>
+      <a id="availableReleaseNotes" class="navigation-action" hidden>What's new in this update ${uxIcons.forward}</a>
+      <a id="installedReleaseNotes" class="navigation-action" hidden>Installed release notes ${uxIcons.forward}</a>
       </div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled><span class="check-action-label">Check for updates</span><span class="check-action-pending" hidden><span class="update-spinner" aria-hidden="true"></span>Checking</span></button>
         <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
@@ -65,10 +65,10 @@ export const settingsMarkup = `
     </a>
   </section>
   <article class="settings-section release-reader" data-settings-section="release-notes" aria-labelledby="releaseNotesHeading" hidden>
-    <a class="release-back" href="/settings" data-settings-link>${uxIcons.back} General</a>
+    <a class="navigation-action" href="/settings" data-settings-link>${uxIcons.back} General</a>
     <header><img src="/favicon.svg" width="32" height="32" alt=""><h2 id="releaseNotesHeading" tabindex="-1">What's new in WIRE</h2></header>
     <div class="release-meta"><strong id="releaseReaderVersion"></strong><span id="releaseReaderStatus" role="status"></span>
-      <a id="releaseReaderGitHub" target="_blank" rel="noopener noreferrer" hidden>View on GitHub ${uxIcons["doc-external"]}</a></div>
+      <a id="releaseReaderGitHub" class="navigation-action" target="_blank" rel="noopener noreferrer" hidden>View on GitHub ${uxIcons["doc-external"]}</a></div>
     <div id="releaseNotesBody"></div>
     <button type="button" class="primary app-update-action" id="releaseReaderApply" hidden>Update and restart</button>
   </article>

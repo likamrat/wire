@@ -1104,6 +1104,9 @@ update result and the time of the last successful check when known.
 - The notification glides in without moving the page or taking focus. Dismiss
   hides only the notification. With reduced motion it appears and disappears
   without sliding.
+- **Installed release notes** and **What's new** are navigation actions. Use
+  the same arrows, hover tint and keyboard focus as other directional links.
+  In the reader, **General** points back and **View on GitHub** opens a new tab.
 - After the restarted page verifies the build, show one success-colored notice
   with a circled check, the confirmed version when available, and a dismiss
   button.

@@ -24,8 +24,9 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
 const discoveryOnly = process.env.WIRE_UPDATE_BROWSER === "release-discovery";
+const feedLimit = process.env.WIRE_UPDATE_BROWSER === "release-limit";
 const launcherRollout = process.env.WIRE_UPDATE_BROWSER === "launcher-rollout";
-const releaseJourney = sleepingGuide || discoveryOnly || process.env.WIRE_UPDATE_BROWSER === "release";
+const releaseJourney = sleepingGuide || discoveryOnly || feedLimit || process.env.WIRE_UPDATE_BROWSER === "release";
 const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
 const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
 const rolloutBase = "4d700dbf0d5efd16f4f1a78de0d4bc6c47d893da"; // v0.1.2
@@ -64,6 +65,7 @@ async function seedAdapterJournal({ appDbPath, sessionRoot }) {
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test(discoveryOnly ? "open WIRE tabs discover a stable release published after their first automatic check"
+    : feedLimit ? "a manual release check explains a shared GitHub limit until the next permitted check"
     : launcherRollout ? "a clean v0.1.2 installation starts its verified updated launcher without losing Automatic Off"
     : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
@@ -150,8 +152,10 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
         import {readFile,appendFile} from 'node:fs/promises';
         export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout?"release":"main")},
-        fetcher:async()=>{${discoveryOnly || launcherRollout ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(discoveryOnly ? "read\n" : installation + "\n")});` : ""}
-        try{return Response.json(JSON.parse(await readFile(${JSON.stringify(feed)},'utf8')))}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
+        fetcher:async()=>{${discoveryOnly || launcherRollout || feedLimit ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(launcherRollout ? installation + "\n" : "read\n")});` : ""}
+        try{const record=JSON.parse(await readFile(${JSON.stringify(feed)},'utf8'));
+        ${feedLimit ? "if(record.reset) return new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(record.reset)}});" : ""}
+        return Response.json(record)}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
         const hook = path.join(temp, name);
         await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
         if(c.parentURL===${JSON.stringify(pathToFileURL(path.join(installation, "lib", "update-launch.mjs")).href)}&&s==="./update-source.mjs")
@@ -298,11 +302,12 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await writeFile(path.join(temp,"release.json"),JSON.stringify({tag_name:tag,html_url:`https://github.com/likamrat/wire/releases/tag/${tag}`,
                 body,published_at:new Date().toISOString(),prerelease:false,draft:false}));
         };
-        if (discoveryOnly) {
+        if (discoveryOnly || feedLimit) {
             await publish("v1.0.0", base, "Installed fixture release.");
             const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
             try {
-                const settings = await browser.newPage(), peer = await browser.newPage();
+                const settings = await browser.newPage(feedLimit ? { timezoneId: "America/Los_Angeles", locale: "en-US" } : {}),
+                    peer = await browser.newPage();
                 const actions = [], navigations = [];
                 for (const page of [settings, peer]) page.on("request", r => {
                     if (r.url() === url + "api/app-update") actions.push(r.postDataJSON().action);
@@ -315,21 +320,46 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
                     await expect(page.locator("#appUpdateNotice")).toBeHidden();
                 }
                 assert.ok(actions.includes("auto-check"));
+                let retryAt;
+                if (feedLimit) {
+                    const last = (await update("status")).lastChecked;
+                    retryAt = (Math.floor(Date.now() / 1000) + 10) * 1000;
+                    await writeFile(path.join(temp, "release.json"), JSON.stringify({ reset: retryAt / 1000 }));
+                    const line = settings.locator("#appUpdateStatus");
+                    await settings.locator("#appUpdateCheck").click();
+                    await expect(line).toContainText(/GitHub.*release.*rate limit.*HTTP 403/i);
+                    await expect(line).toContainText(new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles",
+                        year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" }).format(retryAt));
+                    await expect(line).toContainText("Last successful check");
+                    const blocked = await update("status");
+                    assert.equal(blocked.lastChecked, last);
+                    assert.equal(blocked.retryAt, retryAt);
+                    assert.ok(blocked.nextAutoCheckAt >= retryAt && blocked.nextAutoCheckAt <= Date.now() + 300000);
+                    await peer.locator("#appUpdateCheck").click();
+                    await expect(peer.locator("#appUpdateStatus")).toContainText(/Last successful check/);
+                    assert.equal((await update("auto-check")).lastChecked, last);
+                    assert.equal(await readFile(path.join(temp, "feed-reads"), "utf8"), "read\nread\n");
+                }
                 await writeFile(path.join(origin, "docs", "README.md"), guideText("Next stable guide."));
                 await git(origin, "commit", "-qam", "Fixture guide change");
                 await publish("v1.0.1", await git(origin, "rev-parse", "HEAD"), "Revised release guidance.");
                 const published = performance.now();
+                if (feedLimit) {
+                    await delay(Math.max(0, retryAt - Date.now()));
+                    await settings.locator("#appUpdateCheck").click();
+                }
                 await expect(settings.locator("#appUpdateNotice")).toBeVisible({ timeout: 310000 });
                 for (const page of [settings, peer]) {
                     await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE v1.0.1 is available");
                     await expect(page.locator("#appUpdateStatus")).toHaveText("WIRE v1.0.1 is available.");
                     await expect(page.locator("#settingsAppUpdate")).toBeEnabled();
                 }
-                assert.ok(actions.every(action => action === "status" || action === "auto-check"));
+                assert.ok(actions.every(action => action === "status" || action === "auto-check" || feedLimit && action === "check"));
                 assert.equal(navigations.length, 2);
-                assert.equal(await readFile(path.join(temp, "feed-reads"), "utf8"), "read\nread\n", "tabs share one feed read per check");
+                assert.equal(await readFile(path.join(temp, "feed-reads"), "utf8"), "read\n".repeat(feedLimit ? 3 : 2), "tabs share one feed read per check");
                 assert.equal((await health()).runtimeId, original.runtimeId);
-                t.diagnostic(`Published after both tabs showed current; both showed the new release without input or navigation after ${Math.round(performance.now() - published)} ms.`);
+                t.diagnostic(feedLimit ? "One HTTP 403, no feed reads during backoff; the next manual check found the new stable release."
+                    : `Published after both tabs showed current; both showed the new release without input or navigation after ${Math.round(performance.now() - published)} ms.`);
             } finally { await browser.close(); }
             return;
         }

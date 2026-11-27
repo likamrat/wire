@@ -12331,7 +12331,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         pollTimer = setTimeout(pollCollection, 250);
     });
     api.startAccess();
-    const formatChecked = value => time.formatMoment(new Date(value).toISOString(), viewerTime);
+    const formatChecked = (value, exact = false) => (exact ? time.formatTime : time.formatMoment)(new Date(value).toISOString(), viewerTime);
     appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked, openNotes: tag => navigate({view:"settings", section:"release-notes", release:tag}), blocked() {
         const report = reportJourney?.snapshot();
         if (collectionSettings?.hasDraft() || sourceSettings?.hasDraft() || assessmentUI?.hasUnfinishedChange()) {
