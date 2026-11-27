@@ -115,10 +115,14 @@ test("Token usage preset leads with frozen contributors and authors through JSON
     const position=await reader.evaluate(node=>node.contentWindow.scrollY);
     await settings.press("Enter");
     await expect(page.getByRole("dialog",{name:"Report settings",exact:true})).toBeVisible();
+    const layout=page.locator(".report-preview-layout");
+    await expect.poll(()=>layout.evaluate(node=>node.getAnimations().length)).toBe(0);
+    assert.ok(await frame.locator("#reading-token-authors h3").evaluate(node=>node.getBoundingClientRect().top >= document.querySelector(".report-nav").getBoundingClientRect().bottom-1));
     if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-settings.png"),animations:"disabled"});
     await page.goBack();
     await expect(settings).toBeFocused();
-    assert.equal(await reader.evaluate(node=>node.contentWindow.scrollY),position);
+    await expect.poll(()=>layout.evaluate(node=>node.getAnimations().length)).toBe(0);
+    await expect.poll(()=>reader.evaluate(node=>node.contentWindow.scrollY)).toBe(position);
     const width=await reader.evaluate(node=>node.clientWidth);
     await page.getByRole("button",{name:"Maximize preview",exact:true}).click();
     await expect.poll(()=>reader.evaluate(node=>node.clientWidth)).toBeGreaterThan(width);

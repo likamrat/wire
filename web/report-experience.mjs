@@ -323,6 +323,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     toolbar.append(fallbackNav);
     previewStage.before(drawer); layout.append(previewStage, settings); drawer.append(drawerHeader, activityNotice, layout);
     let maximized = false, frameOpener = null, settingsHistory = null;
+    const withoutReader = (_kind, change) => change();
+    let fitReader = withoutReader;
     function fitSettings() {
         return drawer.clientWidth < 52 * parseFloat(doc.defaultView.getComputedStyle(doc.documentElement).fontSize);
     }
@@ -337,8 +339,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         if (!drawer.open || !current() || !read().prepared || previewStage.inert || read().locked || read().saved) return;
         if (!settings.open) {
             mountOptions(settings);
-            if (fitSettings()) settings.showModal(); else settings.show();
-            drawer.toggleAttribute("data-settings-beside", !settings.matches(":modal"));
+            fitReader("open", () => {
+                if (fitSettings()) settings.showModal(); else settings.show();
+                drawer.toggleAttribute("data-settings-beside", !settings.matches(":modal"));
+            });
         }
         paintOpeners();
         if (focus) settingsTitle.focus({ preventScroll: true });
@@ -353,7 +357,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     function hideSettings(restore = true) {
         if (!settings.open) return;
-        closeOptions(); settings.close(); drawer.removeAttribute("data-settings-beside");
+        closeOptions();
+        fitReader("close", () => { settings.close(); drawer.removeAttribute("data-settings-beside"); });
         mountOptions(drawer); paintOpeners();
         if (restore) (frameOpener?.isConnected && !fallbackNav.checkVisibility() ? frameOpener : fallback).focus({ preventScroll: true });
     }
@@ -384,18 +389,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     drawer.addEventListener("keydown", escapePreview);
     function sizePreview(next) {
-        const frame = previewStage.querySelector(".report-contained-frame:not([hidden])");
-        const source = frame?.contentDocument;
-        const navBottom = source?.querySelector(".report-nav")?.getBoundingClientRect().bottom ?? 0;
-        const anchor = source && [...source.querySelectorAll("h2,h3,summary,tr")].find(node => {
-            const rect = node.getBoundingClientRect(); return rect.height && rect.top >= navBottom && rect.top < frame.clientHeight;
-        });
-        const top = anchor?.getBoundingClientRect().top;
-        maximized = next; drawer.toggleAttribute("data-maximized", next);
+        fitReader("size", () => { maximized = next; drawer.toggleAttribute("data-maximized", next); });
         const label = next ? "Restore preview" : "Maximize preview";
         maximize.replaceChildren(ux.icon(next ? "reader-restore" : "reader-maximize"), el("span", "", next ? "Restore" : "Maximize"));
         maximize.setAttribute("aria-label", label); maximize.setAttribute("aria-pressed", String(next)); maximize.title = label;
-        if (anchor) frame.contentWindow.scrollBy(0, anchor.getBoundingClientRect().top - top);
     }
     sizePreview(false);
     function mountSectionNavigation(source, valid) {
@@ -434,11 +431,40 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const click = event => { event.preventDefault(); if (valid() && open.isConnected) enterSettings(); };
         open.addEventListener("click", click);
         frameOpener = open; paintOpeners(); markSection(); fallbackNav.hidden = byId("preparedReportView")?.value === "report";
+        const win = source.defaultView;
+        let frameTick = 0, origin = null;
+        function interrupt() { win.cancelAnimationFrame(frameTick); frameTick = 0; origin = null; }
+        function capture() {
+            const edge = nav.getBoundingClientRect().bottom;
+            const anchor = [...main.querySelectorAll("summary,h2,h3,tr,p")].find(node => {
+                const box = node.getBoundingClientRect();
+                return box.height && box.top >= edge - 1 && box.top < win.innerHeight;
+            });
+            return { anchor, inset: anchor && anchor.getBoundingClientRect().top - edge, y: win.scrollY, width: win.innerWidth };
+        }
+        fitReader = (kind, change) => {
+            win.cancelAnimationFrame(frameTick);
+            if (!valid() || !win.frameElement?.checkVisibility()) { origin = null; change(); return; }
+            const point = kind === "close" && origin ? origin : capture();
+            origin = kind === "open" ? point : null;
+            change();
+            function settle() {
+                if (!valid() || !win.frameElement?.checkVisibility()) return;
+                if (!point.y || point.width === win.innerWidth) win.scrollTo(win.scrollX, point.y);
+                else if (point.anchor?.checkVisibility()) win.scrollBy(0, point.anchor.getBoundingClientRect().top - nav.getBoundingClientRect().bottom - point.inset);
+                if (layout.getAnimations().some(a => a.playState === "running")) frameTick = win.requestAnimationFrame(settle);
+            }
+            settle();
+        };
+        const inputs = ["wheel", "pointerdown", "keydown", "touchstart"];
+        for (const type of inputs) source.addEventListener(type, interrupt, {capture:true, passive:true});
         source.addEventListener("scroll", markSection, { passive:true }); source.addEventListener("keydown", escapePreview);
         return () => {
+            interrupt();
+            for (const type of inputs) source.removeEventListener(type, interrupt, true);
             source.removeEventListener("scroll", markSection); source.removeEventListener("keydown", escapePreview);
             open.removeEventListener("click", click);
-            if (frameOpener === open) { frameOpener = null; fallbackNav.hidden = false; }
+            if (frameOpener === open) { frameOpener = null; fitReader = withoutReader; fallbackNav.hidden = false; }
         };
     }
     drawer.addEventListener("cancel", event => {
