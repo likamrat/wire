@@ -133,6 +133,28 @@ containing it is installed in that clone's active slot. If the old launcher
 cannot verify the update, do not start a different installation against its
 store or change the base under an active slot.
 
+In particular, a v0.1.1 launcher serving a v0.1.2 slot cannot take over an
+externally prepared release. A separate clean clone can verify and build the
+target without interrupting WIRE. Obtain that verifier independently, from
+the official repository at a separately reviewed full commit or an approved
+offline copy; an unpublished development branch is not a distributed tool.
+Preparation does **not** select a slot or authorize installation.
+
+The v0.1.2 writer records only its fork ID and `closed`. The running parent
+checks that ID when it stops its own child. The browser's runtime ID is
+different, and the two store leases disappear on clean exit. Neither a free
+port nor a post-stop journal read ties that close to the observed writer,
+store and port. Keep the existing installation available if the original
+launcher cannot reverify the release.
+
+A separate operator handoff would need the original service owner to witness
+the generation, or supervise a fresh ordinary start of the **unchanged**
+legacy slot using its independently verified startup configuration. That
+owner must keep custody across readiness, target-specific approval, fresh
+verification and clean close, without another launcher taking ownership in
+between. A later receipt assembled from paths and process IDs is not that
+witness. `--start-installed` and crash recovery do not perform this enrollment.
+
 #### Prepare a release without Actions
 
 Fetch official `main` and choose its exact commit. Run
@@ -344,6 +366,7 @@ address and verifies its bytes. It doesn't update your installation.
 | `release-limit` | A manual check encounters an exhausted GitHub quota. Two tabs show the reason and share the wait; after the reset, a manual check discovers the new release. No live GitHub requests. |
 | `release-resilience` | A failed recheck preserves the prior version and notes without offering installation. A withdrawal during staging keeps the old writer. A later verified release installs even when GitHub's REST API can't supply its notes. |
 | `launcher-rollout` | A managed v0.1.2 installation with automatic checks off installs the committed candidate, closes normally and starts its installed launcher on the same port. Verifies the saved preference, five-minute deadline, browser build and saved report. |
+| `legacy-handoff` | A genuine v0.1.1 launcher serving v0.1.2 cannot reverify v0.1.3. Independently builds the exact target in a disposable clone, checks the adapter, refuses unbound activation and reopens the unchanged report on the original instance. |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |
 | `1` | **Update and restart** in Settings, then verifies that the reloaded browser runs the new build. Needs Microsoft Edge Stable on Windows, or Playwright Chromium on WSL. |

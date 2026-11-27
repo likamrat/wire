@@ -27,10 +27,13 @@ const discoveryOnly = process.env.WIRE_UPDATE_BROWSER === "release-discovery";
 const feedLimit = process.env.WIRE_UPDATE_BROWSER === "release-limit";
 const resilience = process.env.WIRE_UPDATE_BROWSER === "release-resilience";
 const launcherRollout = process.env.WIRE_UPDATE_BROWSER === "launcher-rollout";
+const legacyHandoff = process.env.WIRE_UPDATE_BROWSER === "legacy-handoff";
 const releaseJourney = sleepingGuide || discoveryOnly || feedLimit || resilience || process.env.WIRE_UPDATE_BROWSER === "release";
 const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
 const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
 const rolloutBase = "4d700dbf0d5efd16f4f1a78de0d4bc6c47d893da"; // v0.1.2
+const legacyBase = "0529f452449f7eba74548905097f96733587b8e6"; // v0.1.1
+const publishedTarget = "a34036404d7dcc6e6041fc6e4abfb30a6f2faea6"; // v0.1.3
 
 // An oversized binary attachment is not a missing model round. The new journal
 // collector counts the two receipts; the old collector withheld the whole total.
@@ -69,6 +72,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
     : resilience ? "a failed recheck preserves verified notes; only a newly verified Latest release can be installed"
     : feedLimit ? "a manual release check explains a shared GitHub limit until the next permitted check"
     : launcherRollout ? "a clean v0.1.2 installation starts its verified updated launcher without losing Automatic Off"
+    : legacyHandoff ? "externally staging a verified release gives no authority over a legacy active slot"
     : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
     const origin = path.join(temp, "origin"), store = path.join(temp, "store");
@@ -103,12 +107,12 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
     }
     // Only committed source is an eligible integration input. No ignored assets,
     // working directories, Git credentials, node_modules, or private data.
-    const targetCommit = (adapterBridge || launcherRollout) && await git(project, "rev-parse", "HEAD^{commit}");
-    if (adapterBridge || launcherRollout) {
+    const targetCommit = legacyHandoff ? publishedTarget : (adapterBridge || launcherRollout) && await git(project, "rev-parse", "HEAD^{commit}");
+    if (adapterBridge || launcherRollout || legacyHandoff) {
         // Transfer only the candidate ancestry into the private origin. No live remote or branch is changed.
         await git(origin, "init", "-qb", "main");
         await git(origin, "fetch", "--quiet", "--no-tags", project, targetCommit);
-        const from = launcherRollout ? rolloutBase : adapterBase;
+        const from = legacyHandoff ? legacyBase : launcherRollout ? rolloutBase : adapterBase;
         await git(origin, "merge-base", "--is-ancestor", from, targetCommit);
         await git(origin, "merge", "--ff-only", from);
     } else {
@@ -128,7 +132,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
     await exec(process.execPath, [npm, "run", "build"], { cwd: root, env });
 
     const context = { dataDir: store };
-    if (launcherRollout) {
+    if (launcherRollout || legacyHandoff) {
         Object.assign(env, { HOME: temp, USERPROFILE: temp, LOCALAPPDATA: temp, APPDATA: temp, GIT_ALLOW_PROTOCOL: "file" });
         await sessionStorage(context).write({ ...initialSessionState(), wire: "signed-in" });
     }
@@ -153,7 +157,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         const feed = path.join(temp,"release.json");
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
         import {readFile,appendFile,writeFile} from 'node:fs/promises';
-        export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout?"release":"main")},
+        export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout||legacyHandoff?"release":"main")},
         fetcher:async(url, init)=>{const api=new URL(url).hostname==="api.github.com";
         ${discoveryOnly || launcherRollout || feedLimit ? `if(!api || ${launcherRollout}) await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(launcherRollout ? installation + "\n" : "read\n")});` : ""}
         try{const record=JSON.parse(await readFile(${JSON.stringify(feed)},'utf8'));
@@ -208,6 +212,71 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         for (const [file, digest] of reportHashes) assert.equal(hash(await readFile(file)), digest);
         assert.deepEqual(await readFile(cfgPath), configBytes);
         assert.equal(await git(root, "rev-parse", "HEAD"), base);
+    }
+    if (legacyHandoff) {
+        const {DatabaseSync} = await import("node:sqlite");
+        const {assertSameCanvasAdapter} = await import("../../lib/update-source.mjs");
+        const {storeIdentity} = await import("../../lib/update-launch-state.mjs");
+        const identity = await storeIdentity(store), port = new URL(url).port;
+        const feed = path.join(temp,"release.json"), journal = path.join(root,".git","wire-updates");
+        const publish = async (version, commit) => {
+            const tag = "v"+version; await git(origin,"merge","--ff-only",commit); await git(origin,"tag",tag,commit);
+            await writeFile(feed, JSON.stringify({tag_name:tag,html_url:`https://github.com/likamrat/wire/releases/tag/${tag}`,
+                draft:false, prerelease:false, published_at:new Date().toISOString(),body:`Fixture notes for ${tag}.`}));
+        };
+        const read = (file, key) => {
+            const db = new DatabaseSync(path.join(journal,file+".sqlite"),{readOnly:true});
+            try { return JSON.parse(db.prepare("SELECT value FROM kv WHERE key=?").get(key).value); } finally { db.close(); }
+        };
+        await update("preferences",{enabled:false}); await publish("0.1.2",rolloutBase); await applyTip();
+        const live = await health(); assert.equal(live.build,rolloutBase);
+        await publish("0.1.3",publishedTarget);
+        assert.equal((await update("check")).candidate,publishedTarget);
+        const record = JSON.parse(await readFile(feed,"utf8"));
+        await writeFile(feed,JSON.stringify({...record,apiBlocked:true}));
+        assert.equal((await update("apply",{candidate:publishedTarget})).phase,"preparing");
+        await until(async () => { const s = await update("status"); return s.phase === "error" && /HTTP 403/.test(s.message); });
+        const leaseFiles = ["collector.lock",path.join("microsoft-session","collector.lock")].map(f => path.join(store,f));
+        const leases = () => Promise.all(leaseFiles.map(async f => JSON.parse(await readFile(f,"utf8"))));
+        const owners = await leases(); assert.equal(owners[0].pid,owners[1].pid); assert.notEqual(owners[0].token,owners[1].token);
+        const review = path.join(temp,"review"), prepared = path.join(temp,"prepared");
+        await git(temp,"clone","--quiet",origin,review); await mkdir(prepared);
+        await exec(process.execPath,[npm,"ci","--include=dev"],{cwd:review,env});
+        // Use the fixture Git config and HOME in both the review clone and the independent build.
+        const seam = path.join(temp,"prepare-review.mjs");
+        await writeFile(seam, `import {createUpdateSource} from ${JSON.stringify(pathToFileURL(path.join(project,"lib","update-source.mjs")).href)};
+            const {checkMain,stageMain}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:"release",fetcher:async url=>{
+                if(url==="https://github.com/likamrat/wire/releases/latest")return Response.redirect(${JSON.stringify(record.html_url)},302);
+                if(url!=="https://api.github.com/repos/likamrat/wire/releases/tags/v0.1.3")throw Error("Unexpected request");
+                return new Response(null,{status:403,headers:{"x-ratelimit-remaining":"0"}});
+            }});
+            const info=await checkMain(${JSON.stringify(review)},${JSON.stringify(live.build)});
+            if(info.candidate!==${JSON.stringify(publishedTarget)}||info.release.tag!=="v0.1.3")throw Error("Wrong fixture release");
+            console.log((await stageMain(${JSON.stringify(review)},info,${JSON.stringify(prepared)})).commit);`);
+        assert.equal((await exec(process.execPath,[seam],{cwd:review,env})).stdout.trim(),publishedTarget);
+        await assertSameCanvasAdapter(root,prepared);
+        assert.deepEqual(await readFile(path.join(root,"lib","update-compatibility.json")),await readFile(path.join(prepared,"lib","update-compatibility.json")));
+        assert.deepEqual(await health(),live); assert.deepEqual(await leases(),owners); await verifyPreserved();
+        await post("api/app-update/release-panel",{}); app.disconnect(); assert.equal(await ended,0,stderr);
+        const activation = read("installation","activation"), preferences = read("installation","preferences"), close = read("child","child");
+        assert.equal(activation.base,legacyBase); assert.equal(activation.active.commit,rolloutBase); assert.equal(activation.transition,null);
+        assert.deepEqual(Object.keys(close).sort(),["id","state"]); assert.equal(close.state,"closed"); assert.notEqual(close.id,live.runtimeId);
+        assert.equal(preferences.automatic,false);
+        const selector = await originHook(project,"trusted-selector.mjs");
+        launch(port,project,["--start-installed",root],"--import="+selector); assert.equal(await ended,1);
+        assert.match(stderr,/installed release does not support starting its own launcher/);
+        assert.deepEqual(read("installation","activation"),activation); assert.deepEqual(read("installation","preferences"),preferences);
+        assert.deepEqual(read("child","child"),close);
+        launch(port); await until(() => stdout.includes("ready at "+url)); cap = await getPage();
+        assert.equal((await health()).build,rolloutBase); assert.equal((await update("status")).automatic,false);
+        assert.ok(await post("api/report/open",{bundleId:bundle.bundleId})); await verifyPreserved();
+        assert.equal(await storeIdentity(store),identity); assert.equal((await sessionStorage(context).read()).wire,"signed-in");
+        const restored = await leases(); assert.equal(restored[0].pid,restored[1].pid); assert.notEqual(restored[0].token,owners[0].token);
+        t.diagnostic(JSON.stringify({fixtureOnly:true,base:legacyBase,active:rolloutBase,externallyBuilt:publishedTarget,
+            adapterAndContractMatch:true,preparationKeptWriter:true,legacyCloseFields:Object.keys(close).sort(),selectorRefused:true,
+            originallySelectedSlot:activation.active.slot,activeAfterRefusal:(await health()).build,port,automatic:false,signedIn:true,
+            sameStore:true,reportReopened:true,reportHashes:Object.fromEntries(reportHashes.map(([file,digest])=>[path.basename(file),digest]))}));
+        return;
     }
     if (launcherRollout) {
         await git(origin, "merge", "--ff-only", targetCommit);
