@@ -71,8 +71,11 @@ With automatic checks on, the first open tab checks after launch. While a tab
 is awake, the launcher schedules one stable-release check per installation
 every five minutes. Tabs share the result. Unchanged release metadata does
 not trigger a Git fetch; WIRE still verifies Git daily, on a manual check and
-before installation. After a failed check it keeps the last successful time
-and waits a day before retrying automatically, or longer if GitHub asks it to.
+before installation. After a failed check it keeps the last successful time.
+If GitHub gives a retry time, both manual and automatic checks respect it.
+Automatic checks also keep their normal five-minute spacing; failures without
+a retry time back off for a day. A manual check can try again sooner when
+GitHub hasn't set a limit.
 
 - By default it reads the latest published stable GitHub Release, verifies its
   tag against official `main`, and installs that exact commit. A newer merge,
@@ -322,6 +325,7 @@ address and verifies its bytes. It doesn't update your installation.
 | `WIRE_UPDATE_BROWSER` | What it exercises |
 | --- | --- |
 | `release-discovery` | Two untouched tabs first show the installed release as current. A new fixture release then appears in both tabs at the normal five-minute deadline. No update is installed. |
+| `release-limit` | A manual check encounters an exhausted GitHub quota. Two tabs show the reason and share the wait; after the reset, a manual check discovers the new release. No live GitHub requests. |
 | `launcher-rollout` | A managed v0.1.2 installation with automatic checks off installs the committed candidate, closes normally and starts its installed launcher on the same port. Verifies the saved preference, five-minute deadline, browser build and saved report. |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |

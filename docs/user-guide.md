@@ -865,6 +865,8 @@ and looks for a new stable release every five minutes while a tab is awake.
 The notice names the new version. It can take longer if GitHub is unavailable.
 WIRE never installs an update on its own. With the switch off, choose **Check for
 updates** in General instead. The button shows **Checking** while it looks.
+If GitHub limits release checks, General shows the earliest retry time when
+GitHub provides one. Checking from another tab won't shorten the wait.
 
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
