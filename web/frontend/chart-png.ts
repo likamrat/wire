@@ -52,6 +52,8 @@ export function createChartDownload({ icon, current, save, report }: {
         } else {
             result = doc.createElement("div");
             copyStyle(css, result.style, layout);
+            // Keep the live viewport's clip and offset, not its native controls.
+            result.style.scrollbarWidth = "none";
             if (node.matches("[data-edit-period]")) {
                 result.style.background = "none"; result.style.border = "0"; result.style.boxShadow = "none";
             }
