@@ -347,7 +347,10 @@ putting the raw opaque ID in new retained model metadata or in reports.
 
 - A message the producer delivers as `steering` carries the same run ID into
   the running interaction. Its model calls count with that root prompt; it isn't
-  a rival prompt.
+  a rival prompt. A Work IQ call made after it also belongs to the root's
+  request, which shows the steering message as a following message. Requests
+  saved earlier under a steering message keep that prompt, and later calls in
+  the same exchange stay with them.
 - When both the prompt and a reply record a run ID, the run decides ownership.
   Copilot can repeat the first prompt's `originatingMessageId` on replies to
   later prompts.
