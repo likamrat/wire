@@ -18,7 +18,7 @@ import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
-async function setup(t, { activity = true, records = [], storageBlocked = false, frontend, activityEvents, profile = false } = {}) {
+async function setup(t, { activity = true, records = [], storageBlocked = false, frontend, activityEvents, profile = false, legacySource = false } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
     const home = path.join(root, "invented-copilot"), sessionRoot = path.join(home, "session-state");
     const id = randomUUID(), at = new Date().toISOString();
@@ -52,6 +52,12 @@ async function setup(t, { activity = true, records = [], storageBlocked = false,
         assert.deepEqual(external, []);
         assert.deepEqual(blocked, []);
     });
+    if (legacySource) {
+        const directory = path.join(context.dataDir, "collector");
+        await mkdir(directory, { recursive: true });
+        await writeFile(path.join(directory, "config.json"), JSON.stringify({ schemaVersion: 1, approved: true,
+            enabled: true, appDbPath: path.join(home, "data.db"), sessionRoot, windowDays: 30, pollSeconds: 5 }));
+    }
     access = await createCopilotRuntimeAccess(context);
     runtime = await startServer(context, createExportController(context), {
         port: 0, access, frontend, collector: { timers: false },
@@ -531,7 +537,7 @@ test("Copilot's token records start on for a new source but stay unread until ap
     }
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
-    assert.equal(Object.hasOwn(configures()[0].body, "usageRecords"), false, "First approval leaves token records out");
+    assert.equal(configures()[0].body.usageRecords, false, "First approval records the explicit opt-out");
     const unread = await tokens("Unavailable");
     assert.doesNotMatch(unread, /11,400|Counted from/);
 
@@ -551,7 +557,7 @@ test("Copilot's token records start on for a new source but stay unread until ap
     await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(path.join(home, "other", "session-store.db"));
     await database.fill(approvedPath); await swtch.check();
     for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme); await page.locator("#sourceSessions").focus(); await page.keyboard.press("Tab");
+        await chooseTheme(page, theme); await page.locator("#sourceSessionsBrowse").focus(); await page.keyboard.press("Tab");
         await expect(swtch).toBeFocused();
         assert.equal(await page.locator("#sourceUsageRecordsRow .switch-track").evaluate(n => getComputedStyle(n).outlineStyle), "solid", "Keyboard focus paints the switch ring");
         await capture(page, `token-records-on-focus-${theme}`);
@@ -580,6 +586,14 @@ test("Copilot's token records start on for a new source but stay unread until ap
     await expect(page.locator("#settingsMessage")).toHaveText("Token records turned off.");
     assert.equal(configures().at(-1).body.usageRecords, false);
     await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
+    await page.locator("#collectionCadence-control").click();
+    await page.getByRole("option", { name: "Every 15 seconds" }).click();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Preferences saved.");
+    assert.equal((await runtime.collector.status()).config.usageRecords, false, "Saving another preference preserves the opt-out");
+    await page.reload(); await ready(page); await openSourceEditor(page);
+    await expect(swtch).not.toBeChecked();
+    await expect(page.getByRole("button", { name: "Review token records" })).toBeHidden();
     indexed(index => usage(index, 0, 7000, 50, 6000, 0, reply(activityEvents, "b")));
     await later(30000);
     const kept = await tokens(/11,400/);
@@ -604,6 +618,77 @@ test("leaving token records on at first connection binds the grant to the identi
     await navigateMain(page, "settings"); await openSourceEditor(page);
     await expect(swtch).toBeChecked();
     await expect(page.locator("#sourceUsageRecordsState")).toHaveText("On");
+});
+
+test("connected Sources offers both path pickers and reviews a missing token preference without treating it as permission", async t => {
+    const { page, runtime, mutations, home } = await setup(t, { frontend: "react", profile: true, legacySource: true });
+    await page.goto(runtime.url); await ready(page);
+    await navigateMain(page, "settings"); await openSourceEditor(page);
+    const records = page.getByRole("switch", { name: "Token records" });
+    assert.deepEqual({
+        browse: await page.getByRole("button", { name: /^Browse for / }).count(), proposed: await records.isChecked(),
+        effective: (await runtime.collector.status()).usageRecords,
+    }, { browse: 2, proposed: true, effective: "off" });
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Suggested on · Not approved");
+    await page.locator("#collectionCadence-control").click();
+    await page.getByRole("option", { name: "Every 15 seconds" }).click();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Preferences saved.");
+    assert.equal((await runtime.collector.status()).usageRecords, "off");
+    assert.equal(Object.hasOwn(mutations.at(-1).body, "usageRecords"), false);
+    await page.getByRole("button", { name: "Review token records" }).click();
+    await expect(page.locator("#approvalScope")).toContainText("Read token records · Reads more");
+    assert.equal(mutations.length, 1, "Opening review never configures collection");
+    await page.evaluate(() => scrollTo(0, 0));
+    await capture(page, "connected-source-review", true);
+    await page.getByRole("button", { name: "Approve token records" }).click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Token records approved.");
+    assert.equal((await runtime.collector.status()).config.usageRecordsGrant.file, path.join(home, "session-store.db"));
+    await page.reload(); await ready(page); await openSourceEditor(page);
+    await expect(records).toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("On");
+    await expect(page.getByRole("button", { name: "Review token records" })).toBeHidden();
+});
+
+test("Browse selects exact source paths, Cancel leaves the draft alone and only source review saves them", { timeout: 120000 }, async t => {
+    const { page, runtime, mutations, home } = await setup(t, { frontend: "react", profile: true, legacySource: true });
+    const other = path.join(path.dirname(home), "Invented Caf\u00e9 source");
+    await mkdir(other);
+    const alternate = await createProfileSource(other);
+    alternate.db.close();
+    const selected = [null, alternate.appDbPath, alternate.sessionRoot];
+    const native = process.env.WIRE_NATIVE_SOURCE_PICKER === "1";
+    let picks = 0;
+    if (!native) await page.route("**/api/collection/pick-path", async route => {
+        const response = await route.fetch({ url: new URL("/api/collection/status", runtime.url).href, postData: {} });
+        await route.fulfill({ response, json: { path: selected[picks++] } });
+    });
+    await page.goto(runtime.url); await ready(page); await navigateMain(page, "settings"); await openSourceEditor(page);
+    const choose = async (field, name, result) => {
+        const button = page.getByRole("button", { name: `Browse for ${name}` });
+        const reply = page.waitForResponse(r => new URL(r.url()).pathname === "/api/collection/pick-path", { timeout: 35000 });
+        // For an attended native run, use only these disposable targets in the system chooser.
+        if (native) console.log("Native source picker:", JSON.stringify(result));
+        await button.focus(); await page.keyboard.press("Enter");
+        assert.equal((await reply).status(), 200);
+        await expect(button).toBeFocused();
+        if (result) await expect(page.locator(field)).toHaveValue(result);
+    };
+    await choose("#sourceDatabase", "metadata database", null);
+    await expect(page.locator("#sourceDatabase")).toHaveValue(path.join(home, "data.db"));
+    await expect(page.locator("#sourceCommit")).toBeHidden();
+    await choose("#sourceDatabase", "metadata database", selected[1]);
+    await choose("#sourceSessions", "chat history folder", selected[2]);
+    await expect(page.locator("#approvalScope")).toContainText(selected[2]);
+    assert.equal(mutations.length, 0);
+    assert.equal((await runtime.collector.status()).config.appDbPath, path.join(home, "data.db"));
+    await page.getByRole("button", { name: "Approve and switch source" }).click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
+    const { config } = await runtime.collector.status();
+    assert.deepEqual([config.appDbPath, config.sessionRoot], selected.slice(1));
+    assert.equal(Object.hasOwn(config, "usageRecords"), false, "Browsing and approving new paths never chooses a token preference");
+    assert.equal((await runtime.collector.status()).usageRecords, "off");
+    assert.equal(mutations.length, 1);
 });
 
 test("Count tokens in chats already read checks first, counts only after a separate confirmation and checks a lost result without counting again", { timeout: 120000 }, async t => {

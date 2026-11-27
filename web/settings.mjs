@@ -10,6 +10,12 @@ function pageSettings(id, title, purpose, fields) {
       ${fields.map(key => defaultField(key, uxIcons)).join("")}</section>`;
 }
 
+function sourcePathField(id, label) {
+    return `<div class="settings-field"><label for="${id}">${label}</label><div class="source-path-choice">
+      <input id="${id}" type="text" autocomplete="off" spellcheck="false" aria-describedby="sourcePathsHelp approvalScope settingsMessage">
+      <button type="button" id="${id}Browse" aria-label="Browse for ${label.toLowerCase()}" disabled>Browse</button></div></div>`;
+}
+
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
   <p id="settingsRouteNotice" class="notice" role="status" hidden></p>
@@ -129,15 +135,16 @@ export const settingsMarkup = `
         <div id="sourceEditor" class="source-editor">
           <p id="sourceSuggestion" class="settings-help" hidden></p>
           <div id="sourcePathFields" class="settings-preferences source-path-fields">
-          <div class="settings-field"><label for="sourceDatabase">Metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="sourcePathsHelp approvalScope settingsMessage"></div>
-          <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="sourcePathsHelp approvalScope settingsMessage"></div>
+          ${sourcePathField("sourceDatabase", "Metadata database")}
+          ${sourcePathField("sourceSessions", "Chat history folder")}
           </div>
           <p id="sourcePathsHelp" class="settings-help">Prompts are saved on this device. Replies stay off unless you turn them on in Privacy &amp; saved data.</p>
           <div id="sourceUsageRecordsRow" class="source-records">
             <div class="source-records-heading"><div class="source-records-title"><h4><label for="sourceUsageRecords">Token records</label></h4><span id="sourceUsageRecordsState" class="source-records-state"></span></div>
-              <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsFacts approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label></div>
+              <label class="settings-switch"><input id="sourceUsageRecords" type="checkbox" role="switch" aria-describedby="sourceUsageRecordsHelp sourceUsageRecordsState sourceUsageRecordsFacts approvalScope"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label></div>
             <p id="sourceUsageRecordsHelp" class="source-cost-note">${uxIcons.info}<span><strong>Reading token records uses no tokens and costs nothing.</strong> WIRE reads counts Copilot already recorded to fill gaps in older chats.</span></p>
             <dl id="sourceUsageRecordsFacts" class="source-records-facts"><dt>Reads</dt><dd>Each call's model, token count, time and whether it came from a sub-agent</dd><dt>Prompts</dt><dd>WIRE uses prompts from this file to match calls but doesn't save them.</dd><dt>File</dt><dd><span id="sourceUsageRecordsFile"></span><span id="sourceUsageRecordsAccount"></span></dd></dl>
+            <button id="reviewUsageRecords" type="button" hidden>Review token records</button>
             <div id="usageCountRow" class="source-records-count" hidden><div class="settings-row-copy"><h4>Count tokens in chats already read</h4>
               <p id="usageCountHelp" class="settings-help">Nothing is saved until you confirm.</p>
               <p id="usageCountNotice" class="settings-help" role="status" hidden></p></div>
@@ -159,7 +166,7 @@ export const settingsMarkup = `
       <p id="settingsDraftStatus" class="settings-help" role="status"></p>
       </section>
       <section id="sourceCommit" class="source-commit" aria-labelledby="sourceCommitTitle" hidden>
-        <h3 id="sourceCommitTitle">What changes</h3>
+        <h3 id="sourceCommitTitle" tabindex="-1">What changes</h3>
         <ul id="approvalScope" class="source-impact"></ul>
         <p id="sourceChangeImpact" class="settings-help" role="status"></p>
         <div id="sourceDraftStatusSlot"></div>
@@ -318,6 +325,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     const grantedRecords = status => status?.config?.usageRecords === true && status.usageRecords !== "approval-changed";
     const usageRecordsFile = database => database.replace(/[^\\/]*$/, "session-store.db");
     const fields = ["sourceDatabase", "sourceSessions", "sourceUsageRecords", "collectionWindow", "collectionCadence"];
+    const pathFields = [["sourceDatabase", "appDbPath"], ["sourceSessions", "sessionRoot"]];
     const nativeConfiguration = typeof createNativeConfigurationState === "function" ? createNativeConfigurationState() : null;
     const nativeView = () => nativeConfiguration?.view(api.accessState?.().state);
     const sourceView = () => sourceCollection?.controlsActive ? sourceCollection.view(api.accessState()) : null;
@@ -327,6 +335,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     let latest, baseline, initialized = false, busy = false, stale = false, uncertain = false, readError = "", pendingAction = "", checking = false, visibleSection, visibleSetting;
     let sharedRecovery = false, recoveryHidden = true;
     let guidedReview = false, reviewReturn = null, firstApprovalConfirmed = false, sourceExpanded = true;
+    let reviewingRecords = false, picker = null;
+    function closePicker() { picker?.abort(); picker = null; }
     const publicationCurrent = token => token !== null && token !== undefined
         && typeof token.then !== "function" && api.isCurrent(token) === true;
     let withdrawn = !publicationCurrent(api.publicationToken()), epoch = 0, safeDraft = null, pendingOperation = null, revokedWrite = false;
@@ -352,12 +362,11 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function sourceValues(status) {
         const source = status?.config || status?.suggestedSource;
         return { appDbPath: source?.appDbPath || "", sessionRoot: source?.sessionRoot || "",
-            // A new source starts with token records on; an existing approval keeps exactly what was granted.
-            usageRecords: status?.config?.approved === true ? grantedRecords(status) : true,
+            usageRecords: status?.config?.approved !== true || status.usageRecordsReview === true || grantedRecords(status),
             windowDays: source?.windowDays ?? 30, pollSeconds: source?.pollSeconds ?? 5 };
     }
     function dirty() { return initialized && (native() ? Boolean(nativeView()?.dirty)
-        : JSON.stringify(values()) !== JSON.stringify(sourceValues(baseline))); }
+        : reviewingRecords || JSON.stringify(values()) !== JSON.stringify(sourceValues(baseline))); }
     function windowOptions(isNative) {
         if (nativeWindows === isNative) return;
         nativeWindows = isNative;
@@ -406,6 +415,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     const inConfiguration = () => visibleSection === "connection";
     function reset() {
         baseline = latest;
+        reviewingRecords = false;
         guidedReview = false;
         if (native()) {
             nativeConfiguration?.cancel(); syncNativeValues();
@@ -543,13 +553,14 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("preferencesHelp", "");
         $("preferencesHelp").hidden = !$("preferencesHelp").textContent;
         setText("saveCollection", "Save preferences");
-        const approved = latest?.config?.approved === true, changed = dirty(), working = busy || checking;
+        const approved = latest?.config?.approved === true, changed = dirty(), working = busy || checking || picker !== null;
         setText("connectionSourceTitle", "GitHub Copilot app");
         setText("connectionSourceHelp", "");
         $("connectionSourceHelp").hidden = true;
         const next = values();
         const pathsChanged = approved && (next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot);
-        const recordsChanged = next.usageRecords !== sourceValues(baseline).usageRecords;
+        const offered = baseline?.usageRecordsReview === true;
+        const recordsChanged = offered ? reviewingRecords : next.usageRecords !== sourceValues(baseline).usageRecords;
         const sourceChanged = pathsChanged || recordsChanged;
         const recordsOnly = approved && recordsChanged && !pathsChanged;
         $("approvedConnection").hidden = !approved;
@@ -578,7 +589,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("settingsConnectionError", readError ? "Collection settings could not be read." : "");
         $("settingsConnectionError").hidden = !readError || !inConfiguration();
         const recordsStopped = approved && latest.usageRecords === "approval-changed" && !next.usageRecords;
-        const recordsState = recordsChanged && initialized && approved ? "Changed" : recordsStopped ? "Stopped: the Copilot account or path changed"
+        const recordsState = offered && !pathsChanged && next.usageRecords ? "Suggested on · Not approved"
+            : recordsChanged && initialized && approved ? "Changed" : recordsStopped ? "Stopped: the Copilot account or path changed"
             : approved ? grantedRecords(latest) ? "On" : "Off" : "";
         setText("sourceUsageRecordsState", latest ? recordsState : "");
         $("sourceUsageRecordsState").dataset.state = recordsState === "On" ? "on" : recordsState === "Changed" ? "changed" : recordsStopped ? "attention" : "off";
@@ -600,7 +612,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         paintImpact(items);
         const widens = items.some(item => item.risk === "widen");
         $("sourceCommit").dataset.risk = widens ? "widen" : "";
-        setText("connectCollection", approved ? sourceChanged ? recordsOnly ? next.usageRecords ? "Approve token records" : "Stop reading token records"
+        setText("connectCollection", approved ? sourceChanged ? recordsOnly ? next.usageRecords ? "Approve token records" : offered ? "Keep token records off" : "Stop reading token records"
             : "Approve and switch source" : "Save preferences" : "Approve source and start collection");
         $("connectCollection").dataset.intent = approved && !sourceChanged ? "save-preferences" : "approve-source";
         $("connectCollection").dataset.risk = widens ? "widen" : "";
@@ -615,6 +627,11 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             $("pauseCollection").disabled ||= !sources.actions.github.includes("set-interval");
             $("collectNow").disabled ||= !sources.actions.github.includes("collect-now");
         }
+        const canSelect = initialized && !working && !uncertain && !readError && !stale
+            && (!sources || sources.actions.github.includes("configure"));
+        for (const [id] of pathFields) $(id + "Browse").disabled = !canSelect;
+        $("reviewUsageRecords").hidden = !offered || reviewingRecords || pathsChanged;
+        $("reviewUsageRecords").disabled = !canSelect;
         $("preferenceActions").hidden = true;
         $("cancelPreferences").disabled = true;
         $("cancelSource").disabled = working || approved && !changed && !stale;
@@ -667,7 +684,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
                 next.sessionRoot !== saved.sessionRoot && ["Chat history", saved.sessionRoot, next.sessionRoot]].filter(Boolean),
             text: "Saved activity stays." + (grantedRecords(baseline) && !next.usageRecords ? " Token records stop until you approve them again." : "") });
         if (next.usageRecords && (pathsChanged || recordsChanged)) items.push(records());
-        else if (recordsChanged && !pathsChanged) items.push({ risk: "narrow", title: "Stop reading token records", tag: "Reads less", text: "Counted totals stay." });
+        else if (recordsChanged && !pathsChanged) items.push(baseline?.usageRecordsReview
+            ? { risk: "info", title: "Keep token records off", text: "WIRE won't read this file." }
+            : { risk: "narrow", title: "Stop reading token records", tag: "Reads less", text: "Counted totals stay." });
         if (next.windowDays !== saved.windowDays) items.push({ risk: "schedule", title: next.windowDays > saved.windowDays ? "Read more history" : "Read less history",
             changes: [["History", `${saved.windowDays} days`, `${next.windowDays} days`]], text: next.windowDays < saved.windowDays ? "Saved activity stays." : "" });
         if (next.pollSeconds !== saved.pollSeconds) items.push({ risk: "schedule", title: next.pollSeconds < saved.pollSeconds ? "Check more often" : "Check less often",
@@ -734,11 +753,12 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function cancel() {
         const stamp = capture();
         if (!current(stamp) || busy) return;
+        closePicker();
         const returnToOrigin = reviewReturn;
         reviewReturn = null;
         const next = values(), saved = sourceValues(baseline);
         const changedControl = next.appDbPath !== saved.appDbPath ? "sourceDatabase" : next.sessionRoot !== saved.sessionRoot ? "sourceSessions"
-            : next.usageRecords !== saved.usageRecords ? "sourceUsageRecords" : next.pollSeconds !== saved.pollSeconds ? "collectionCadence-control" : "collectionWindow-control";
+            : reviewingRecords || next.usageRecords !== saved.usageRecords ? "sourceUsageRecords" : next.pollSeconds !== saved.pollSeconds ? "collectionCadence-control" : "collectionWindow-control";
         reset();
         message(uncertain ? "Earlier change unconfirmed. Read current connection." : "");
         paint();
@@ -828,17 +848,19 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             return;
         }
         const next = values();
-        const sourceDiffers = next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot
-            || next.usageRecords !== grantedRecords(baseline);
+        const pathsDiffer = next.appDbPath !== baseline?.config?.appDbPath || next.sessionRoot !== baseline?.config?.sessionRoot;
+        const recordsDiffer = baseline?.usageRecordsReview === true ? reviewingRecords : next.usageRecords !== grantedRecords(baseline);
+        const sourceDiffers = pathsDiffer || recordsDiffer;
         const sourceApproval = reviewingSource && (baseline?.config?.approved !== true || sourceDiffers);
         if (!sourceApproval && sourceDiffers) {
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
         }
         const firstApproval = baseline.config?.approved !== true;
         const recordsOnly = !firstApproval && next.appDbPath === baseline.config.appDbPath && next.sessionRoot === baseline.config.sessionRoot;
-        // Token records are sent only when someone changes the switch: an ordinary save leaves their approval to the collector.
+        // Persist a reviewed Off too. Never send a suggested On with an unrelated preference save.
         const { usageRecords, ...paths } = next;
-        const records = usageRecords !== grantedRecords(baseline) ? { usageRecords } : {};
+        const confirmRecords = firstApproval || recordsDiffer || (pathsDiffer && usageRecords && !baseline?.usageRecordsReview);
+        const records = confirmRecords ? { usageRecords } : {};
         act("/api/collection/configure", { ...paths, ...records, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, saved => {
             firstApprovalConfirmed = firstApproval;
             reviewReturn = null;
@@ -849,19 +871,54 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         });
     }
     $("collectionForm").addEventListener("submit", event => event.preventDefault());
+    $("reviewUsageRecords").addEventListener("click", () => {
+        if (!current(capture()) || !baseline?.usageRecordsReview || $("reviewUsageRecords").disabled) return;
+        reviewingRecords = true;
+        message("");
+        paint();
+        $("sourceCommitTitle").focus();
+    });
     for (const id of [...fields, "nativeCollectionSurfaces"]) $(id).addEventListener("input", () => {
         if (!current(capture())) return;
+        if (id === "sourceUsageRecords" && baseline?.usageRecordsReview) reviewingRecords = true;
         if (native() && nativeView()?.present && ["nativeCollectionSurfaces", "collectionWindow"].includes(id)) {
             nativeConfiguration.edit({ surfaces: $("nativeCollectionSurfaces").value.split(",").filter(Boolean),
                 windowDays: Number($("collectionWindow").value) });
         }
         // Token records are approved for one database location; a changed path asks again.
-        if (["sourceDatabase", "sourceSessions"].includes(id) && $("sourceUsageRecords").checked && baseline?.config?.approved === true
-            && (values().appDbPath !== baseline?.config?.appDbPath || values().sessionRoot !== baseline?.config?.sessionRoot)) $("sourceUsageRecords").checked = false;
+        if (pathFields.some(([input]) => id === input) && baseline?.config?.approved === true) {
+            if (values().appDbPath !== baseline.config.appDbPath || values().sessionRoot !== baseline.config.sessionRoot) $("sourceUsageRecords").checked = false;
+            else if (baseline.usageRecordsReview && !reviewingRecords) $("sourceUsageRecords").checked = true;
+        }
         message(""); paint();
     });
     const canReviewSource = () => current(capture()) && Boolean(latest) && initialized && !native() && !busy && !checking && !uncertain && !readError
         && (!sourceView() || sourceView().actions.github.includes("configure"));
+    for (const [id, field] of pathFields) $(id + "Browse").addEventListener("click", async () => {
+        const button = $(id + "Browse"), stamp = capture();
+        if (button.disabled || !inConfiguration() || !sourceExpanded || !canReviewSource() || stale || picker) return;
+        const before = $(id).value, revision = version(baseline);
+        const dialog = picker = new AbortController();
+        const stillEditing = () => picker === dialog && current(stamp) && canReviewSource() && !stale
+            && version(latest) === revision && inConfiguration() && sourceExpanded && $(id).value === before;
+        paint();
+        try {
+            const result = await api("/api/collection/pick-path", { field }, { signal: dialog.signal });
+            if (!stillEditing()) return;
+            if (!result || result.path !== null && typeof result.path !== "string") throw new Error("The picker returned no usable path. Enter the path directly.");
+            if (result.path !== null && result.path !== before) {
+                $(id).value = result.path;
+                $(id).dispatchEvent(new Event("input", { bubbles: true }));
+            }
+        } catch (error) {
+            if (stillEditing()) message(error.message, true);
+        } finally {
+            if (picker === dialog) {
+                picker = null;
+                if (current(stamp)) { paint(); if (inConfiguration() && sourceExpanded && !button.disabled) button.focus({ preventScroll: true }); }
+            }
+        }
+    });
     // First connection opens the same draft; Cancel then returns to where the person started.
     function openSourceReview({ onCancel } = {}) {
         const stamp = capture();
@@ -876,6 +933,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     }
     function setSourceExpanded(value, focusId) {
         if (!current(capture()) || sourceExpanded === value) return;
+        if (!value) closePicker();
         sourceExpanded = value; paint();
         const target = $(focusId);
         ux.restoreFocus(target && !target.disabled ? target : $("connectionSourceToggle"));
@@ -1168,6 +1226,9 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             epoch++;
         }
         withdrawn = true;
+        reviewingRecords = false; closePicker();
+        for (const [id] of pathFields) $(id + "Browse").disabled = true;
+        $("reviewUsageRecords").hidden = true;
         reviewReturn = null;
         guidedReview = firstApprovalConfirmed = false;
         sharedRecovery = false; recoveryHidden = true;
@@ -1244,7 +1305,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setSection(section, setting) {
             if (visibleSection === section && visibleSetting === setting) return;
             const sectionChanged = visibleSection !== section;
-            if (section !== "connection") firstApprovalConfirmed = false;
+            if (section !== "connection") { firstApprovalConfirmed = false; closePicker(); }
             visibleSection = section;
             visibleSetting = setting;
             if (sectionChanged && !busy && !uncertain && !$("settingsMessage").classList.contains("error")) message("");
