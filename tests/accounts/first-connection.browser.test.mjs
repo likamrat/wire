@@ -593,7 +593,7 @@ test("Copilot's token records start on for a new source but stay unread until ap
     assert.equal((await runtime.collector.status()).config.usageRecords, false, "Saving another preference preserves the opt-out");
     await page.reload(); await ready(page); await openSourceEditor(page);
     await expect(swtch).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "Review token records" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Approve token records", exact: true })).toBeHidden();
     indexed(index => usage(index, 0, 7000, 50, 6000, 0, reply(activityEvents, "b")));
     await later(30000);
     const kept = await tokens(/11,400/);
@@ -625,29 +625,51 @@ test("connected Sources offers both path pickers and reviews a missing token pre
     await page.goto(runtime.url); await ready(page);
     await navigateMain(page, "settings"); await openSourceEditor(page);
     const records = page.getByRole("switch", { name: "Token records" });
+    const approve = page.getByRole("button", { name: "Approve token records", exact: true });
     assert.deepEqual({
-        browse: await page.getByRole("button", { name: /^Browse for / }).count(), proposed: await records.isChecked(),
+        browse: await page.getByRole("button", { name: /^Browse for / }).count(), approve: await approve.isVisible(), switch: await records.isVisible(),
         effective: (await runtime.collector.status()).usageRecords,
-    }, { browse: 2, proposed: true, effective: "off" });
-    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Suggested on · Not approved");
+    }, { browse: 2, approve: true, switch: false, effective: "off" });
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off until you approve");
+    await expect(page.locator("#sourceUsageRecordsFile")).toHaveText(path.join(home, "session-store.db"));
+    assert.equal(mutations.length, 0);
     await page.locator("#collectionCadence-control").click();
     await page.getByRole("option", { name: "Every 15 seconds" }).click();
+    await expect(approve).toBeDisabled();
     await page.getByRole("button", { name: "Save preferences", exact: true }).click();
     await expect(page.locator("#settingsMessage")).toHaveText("Preferences saved.");
     assert.equal((await runtime.collector.status()).usageRecords, "off");
     assert.equal(Object.hasOwn(mutations.at(-1).body, "usageRecords"), false);
-    await page.getByRole("button", { name: "Review token records" }).click();
-    await expect(page.locator("#approvalScope")).toContainText("Read token records · Reads more");
-    assert.equal(mutations.length, 1, "Opening review never configures collection");
     await page.evaluate(() => scrollTo(0, 0));
-    await capture(page, "connected-source-review", true);
-    await page.getByRole("button", { name: "Approve token records" }).click();
+    await capture(page, "connected-token-permission", true);
+    await approve.click();
     await expect(page.locator("#settingsMessage")).toHaveText("Token records approved.");
-    assert.equal((await runtime.collector.status()).config.usageRecordsGrant.file, path.join(home, "session-store.db"));
+    assert.equal(mutations.length, 2, "One click must create exactly one approval after the earlier schedule save");
+    const grant = (await runtime.collector.status()).config.usageRecordsGrant;
+    assert.equal(grant.file, path.join(home, "session-store.db"));
+    assert.match(grant.account, /^[0-9a-f]{16,}$/);
     await page.reload(); await ready(page); await openSourceEditor(page);
     await expect(records).toBeChecked();
     await expect(page.locator("#sourceUsageRecordsState")).toHaveText("On");
-    await expect(page.getByRole("button", { name: "Review token records" })).toBeHidden();
+    await expect(approve).toBeHidden();
+    await capture(page, "connected-token-approved", true);
+});
+
+test("a connected user can keep token records off after a refused one-time approval", async t => {
+    const { page, runtime } = await setup(t, { frontend: "react", legacySource: true });
+    await page.goto(runtime.url); await ready(page); await navigateMain(page, "settings"); await openSourceEditor(page);
+    await page.getByRole("button", { name: "Approve token records" }).click();
+    await expect(page.locator("#settingsMessage")).toContainText("can't identify the Copilot account");
+    assert.equal((await runtime.collector.status()).usageRecords, "off");
+    await page.getByRole("button", { name: "Keep off" }).click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Token records will stay off.");
+    await page.reload(); await ready(page); await openSourceEditor(page);
+    await expect(page.getByRole("switch", { name: "Token records" })).not.toBeChecked();
+    await expect(page.locator("#sourceUsageRecordsState")).toHaveText("Off");
+    await expect(page.getByRole("button", { name: "Keep off" })).toBeHidden();
+    const { config } = await runtime.collector.status();
+    assert.equal(config.usageRecords, false);
+    assert.equal(Object.hasOwn(config, "usageRecordsGrant"), false);
 });
 
 test("Browse selects exact source paths, Cancel leaves the draft alone and only source review saves them", { timeout: 120000 }, async t => {
