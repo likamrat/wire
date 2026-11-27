@@ -12238,6 +12238,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     let connectedSettingsReady = false, firstConnectionReadPending = false;
     api.subscribeAccess(value => {
+        appUpdate?.observeAccess(value, api.publicationToken());
         const ready = sourceCollection.active && value.readable && value.state?.microsoft?.state === "connected"
             && value.state.microsoft.actions.includes("microsoft-connect");
         const firstConnectionReady = ready && !connectedSettingsReady;
@@ -12332,7 +12333,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     api.startAccess();
     const formatChecked = (value, exact = false) => (exact ? time.formatTime : time.formatMoment)(new Date(value).toISOString(), viewerTime);
-    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked, openNotes: tag => navigate({view:"settings", section:"release-notes", release:tag}), blocked() {
+    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked,
+        readDiscovery: input => api("/api/app-update/discovery", input),
+        openNotes: tag => navigate({view:"settings", section:"release-notes", release:tag}), blocked() {
         const report = reportJourney?.snapshot();
         if (collectionSettings?.hasDraft() || sourceSettings?.hasDraft() || assessmentUI?.hasUnfinishedChange()) {
             return { kind: "settings", message: "Save or cancel your Settings changes and resolve any unconfirmed changes before updating." };

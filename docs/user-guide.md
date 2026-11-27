@@ -891,6 +891,11 @@ When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
 the notice hides it across those tabs; the update remains available in General.
 
+If an operator restarts the same WIRE build while your tab stays open, the tab
+can show new releases once it reconnects. Finish any work in that tab and reopen
+WIRE to install or change update settings. Dismissing a notice in this read-only
+tab hides it only there.
+
 To install an update:
 
 1. Choose **Update and restart** in the notice, in the update's notes or in

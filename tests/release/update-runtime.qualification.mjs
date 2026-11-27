@@ -24,11 +24,12 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
 const discoveryOnly = process.env.WIRE_UPDATE_BROWSER === "release-discovery";
+const serviceRestart = process.env.WIRE_UPDATE_BROWSER === "release-service-restart";
 const feedLimit = process.env.WIRE_UPDATE_BROWSER === "release-limit";
 const resilience = process.env.WIRE_UPDATE_BROWSER === "release-resilience";
 const launcherRollout = process.env.WIRE_UPDATE_BROWSER === "launcher-rollout";
 const legacyHandoff = process.env.WIRE_UPDATE_BROWSER === "legacy-handoff";
-const releaseJourney = sleepingGuide || discoveryOnly || feedLimit || resilience || process.env.WIRE_UPDATE_BROWSER === "release";
+const releaseJourney = sleepingGuide || discoveryOnly || serviceRestart || feedLimit || resilience || process.env.WIRE_UPDATE_BROWSER === "release";
 const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
 const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
 const rolloutBase = "4d700dbf0d5efd16f4f1a78de0d4bc6c47d893da"; // v0.1.2
@@ -69,11 +70,12 @@ async function seedAdapterJournal({ appDbPath, sessionRoot }) {
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test(discoveryOnly ? "open WIRE tabs discover a stable release published after their first automatic check"
+    : serviceRestart ? "an awake original WIRE document discovers a release after an operator restarts the same instance"
     : resilience ? "a failed recheck preserves verified notes; only a newly verified Latest release can be installed"
     : feedLimit ? "a manual release check explains a shared GitHub limit until the next permitted check"
     : launcherRollout ? "a clean v0.1.2 installation starts its verified updated launcher without losing Automatic Off"
     : legacyHandoff ? "a supervised ordinary v0.1.2 start installs reviewed v0.1.3 without adopting an external stage"
-    : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
+    : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly || serviceRestart ? 8 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
     const origin = path.join(temp, "origin"), store = path.join(temp, "store");
     // A nested Windows install puts Git's pack-<hash>.keep beyond MAX_PATH in the stage.
@@ -159,7 +161,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         import {readFile,appendFile,writeFile} from 'node:fs/promises';
         export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout||legacyHandoff?"release":"main")},
         fetcher:async(url, init)=>{const api=new URL(url).hostname==="api.github.com";
-        ${discoveryOnly || launcherRollout || feedLimit ? `if(!api || ${launcherRollout}) await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(launcherRollout ? installation + "\n" : "read\n")});` : ""}
+        ${discoveryOnly || serviceRestart || launcherRollout || feedLimit ? `if(!api || ${launcherRollout}) await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(launcherRollout ? installation + "\n" : "read\n")});` : ""}
         try{const record=JSON.parse(await readFile(${JSON.stringify(feed)},'utf8'));
         ${resilience ? `await appendFile(${JSON.stringify(path.join(temp, "discovery-log"))},(api?(record.apiBlocked?"notes:403":"notes:200"):(record.reset?"latest:403":"latest:302"))+"\\n");` : ""}
         if(record.reset || api && record.apiBlocked) return new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(record.reset || Math.floor(Date.now()/1000)+3600)}});
@@ -429,6 +431,74 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await writeFile(path.join(temp,"release.json"),JSON.stringify({tag_name:tag,html_url:`https://github.com/likamrat/wire/releases/tag/${tag}`,
                 body,published_at:new Date().toISOString(),prerelease:false,draft:false}));
         };
+        if (serviceRestart) {
+            await publish("v1.0.0",base,"Installed at startup.");
+            const browser = await chromium.launch({channel:process.platform==="win32"?"msedge":undefined});
+            try {
+                const page = await browser.newPage(), requests = [], rejected = [], documents = [], discovery = [];
+                let originalGrant, renewedGrant;
+                const endpoint = url+"api/app-update";
+                page.on("request", r => {
+                    if (r.url()===endpoint) {
+                        requests.push(r.postDataJSON().action); originalGrant ??= r.headers()["x-board-capability"];
+                    }
+                    if (r.isNavigationRequest() && r.frame()===page.mainFrame()) documents.push(r.url());
+                });
+                page.on("response", r => {
+                    if (r.url().startsWith(endpoint) && r.status() >= 400) rejected.push([new URL(r.url()).pathname,r.status()]);
+                    if (r.url()===endpoint+"/discovery")
+                        discovery.push({runtime:r.request().postDataJSON().runtimeId,status:r.status(),grant:r.request().headers()["x-board-capability"]});
+                });
+                await page.goto(url+"settings"); await expect(page.locator("#appUpdateStatus")).toContainText("Up to date. Last checked");
+                await expect(page.locator("#appUpdateNotice")).toBeHidden();
+                await page.evaluate(() => {
+                    window.originalNoticeCount = 0;
+                    new MutationObserver(changes => {
+                        for (const change of changes) if (change.oldValue !== null && !change.target.inert) window.originalNoticeCount++;
+                    }).observe(document.querySelector("#appUpdateNotice"),{attributes:true,attributeFilter:["inert"],attributeOldValue:true});
+                });
+                const renewed = page.waitForResponse(r=>r.url()===url+"api/session" && r.ok(),{timeout:30000});
+                app.disconnect(); assert.equal(await ended,0,stderr);
+                launch(new URL(url).port); await until(()=>stdout.includes("ready at "+url));
+                const after = await health(); assert.notEqual(after.runtimeId,original.runtimeId); assert.equal(after.build,base);
+                const newSession = await (await renewed).json();
+                renewedGrant = newSession.capability;
+                assert.equal(newSession.runtimeId,after.runtimeId); assert.notEqual(renewedGrant,originalGrant);
+                assert.equal(await page.evaluate(()=>document.visibilityState),"visible");
+                await expect.poll(()=>discovery.length,{timeout:20000}).toBeGreaterThan(0);
+                assert.equal(discovery[0].status,200,await page.locator("#appUpdateStatus").innerText());
+                await expect(page.locator("#appUpdateStatus")).toContainText("Up to date. Last checked");
+                await writeFile(path.join(origin,"docs","README.md"), guideText("Next release after the operator restart."));
+                await git(origin,"commit","-qam","Guide after restart");
+                await publish("v1.0.1",await git(origin,"rev-parse","HEAD"),"Published after restarting.");
+                const published = performance.now();
+                try {
+                    await expect(page.locator("#appUpdateNotice")).toBeVisible({timeout:310000});
+                } finally {
+                    t.diagnostic(JSON.stringify({requests,rejected,documents,observations:discovery.map(({runtime,status})=>({runtime,status})),
+                        upstreamReads:(await readFile(path.join(temp,"feed-reads"),"utf8")).trim().split("\n").length}));
+                }
+                await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE v1.0.1 is available");
+                await expect(page.locator("#appUpdateStatus")).toContainText("WIRE v1.0.1 is available.");
+                await expect(page.locator("#appUpdateAuto")).toBeDisabled();
+                await expect(page.locator("#appUpdateApply")).toBeHidden(); await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+                assert.ok(discovery.every(d=>d.runtime===after.runtimeId && d.grant===renewedGrant));
+                assert.equal(await readFile(path.join(temp,"feed-reads"),"utf8"),"read\nread\nread\n");
+                assert.deepEqual(documents,[url+"settings"]); assert.ok(requests.every(action=>["status","auto-check"].includes(action)));
+                assert.equal(await page.evaluate(()=>window.originalNoticeCount),1);
+                t.diagnostic(`Original visible document, one unsolicited notice after ${Math.round(performance.now()-published)} ms.`);
+                // Only after witnessing the notice: an independent grant cannot operate the updater.
+                const denied = await fetch(endpoint,{method:"POST",headers:{Origin:new URL(url).origin,"Content-Type":"application/json","X-Board-Capability":renewedGrant},
+                    body:JSON.stringify({action:"status"})});
+                assert.equal(denied.status,403);
+                cap = await getPage(); await update("status");
+                const views = () => post("api/app-update/check-views",{hold:""});
+                assert.match((await views()).message,/Finish its work and reopen or close/);
+                await Promise.all([page.waitForRequest(endpoint+"/release-panel"), page.goto("about:blank")]);
+                await expect.poll(async ()=>(await views()).registered).toBe(1);
+            } finally { await browser.close(); }
+            return;
+        }
         if (resilience) {
             await update("preferences", {enabled:false});
             await publish("v1.0.0",base,"Installed release.");
