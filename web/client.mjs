@@ -1785,6 +1785,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || id === "collect-now" && !historyStatus.persistence(collection));
     }
     function settingsTarget(entry) {
+        if (entry.id === "token-records" && !$("tokenPermissionActions").hidden) return "approveUsageRecords";
         if (["app-update", "automatic-updates"].includes(entry.id) && !$("appUpdateGuide").hidden) return "appUpdateGuide";
         if (entry.id === "app-update" && !$("settingsAppUpdate").hidden) return "settingsAppUpdate";
         if (entry.id === "palette") {
