@@ -3231,6 +3231,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
             savedEntry: next.savedEntry, savedAuthority: next.savedAuthority } };
         delete navigationState.wirePrivateNavigation;
+        if (!replace || url !== acceptedAddress) delete navigationState.reportSettingsKey;
         acceptedAddress = url;
         if (replace) history.replaceState(navigationState, "", url + (legacyHash() ? "" : location.hash));
         else history.pushState(navigationState, "", url);
@@ -11551,7 +11552,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     function traverse() {
         if (appUpdate?.locked()) { rememberRoute(workspaceState.route, true); return; }
-        if (reportExperience?.traverseSettings()) return;
+        if (workspaceState.route.view === "reports" && !sidebarIdentity && currentAddress() === acceptedAddress && reportExperience?.traverseSettings()) {
+            historyPosition = history.state.evidenceView.position;
+            return;
+        }
         pendingFreshBrowse = false;
         initialRoute = null;
         initialHistory = null;
@@ -11744,6 +11748,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (await moved && api.isCurrent(publication) && navigation === workspaceState.navigationGeneration && workspaceState.route.view === "reports") revealAddedDraft(ref);
     }
     reportExperience = assessmentFactories.createReportExperience({
+        pushSettingsEntry(key) {
+            const origin = historyPosition;
+            rememberRoute(workspaceState.route);
+            history.replaceState({ ...history.state, reportSettingsKey: key }, "");
+            return { origin, panel: historyPosition };
+        },
         viewUsageTrend: () => {
             if (!api.publicationToken() || reportSelectionBlock() || reportBaseExplicit || namedReport) return;
             const {question,threshold=30000,author,tool} = draft.options().usageOptions ?? {};

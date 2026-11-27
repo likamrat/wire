@@ -109,11 +109,13 @@ test("Token usage preset leads with frozen contributors and authors through JSON
     assert.deepEqual(await navigation.locator("a>svg:first-child").evaluateAll(icons=>icons.map(svg=>svg.dataset.lucideIcon)),
         ["layout-grid","users-round","message-square","layers","settings"]);
     const settings=navigation.getByRole("link",{name:"Settings",exact:true});
+    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-preset.png"),animations:"disabled"});
     await navigation.getByRole("link",{name:"Prompt authors",exact:true}).click();
     const reader=page.locator('iframe[title="Prepared report"]');
     const position=await reader.evaluate(node=>node.contentWindow.scrollY);
     await settings.press("Enter");
     await expect(page.getByRole("dialog",{name:"Report settings",exact:true})).toBeVisible();
+    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-settings.png"),animations:"disabled"});
     await page.goBack();
     await expect(settings).toBeFocused();
     assert.equal(await reader.evaluate(node=>node.contentWindow.scrollY),position);
@@ -133,7 +135,6 @@ test("Token usage preset leads with frozen contributors and authors through JSON
     await expect(usage.locator("xpath=..")).toHaveJSProperty("open",true);
     assert.equal(requests.filter(p=>p==="/api/preview").length,1);
     assert.equal(requests.filter(p=>p==="/api/export").length,0);
-    if(process.env.WIRE_USAGE_PROOFS) await page.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,"token-report-preset.png"),animations:"disabled"});
     await usage.getByRole("link",{name:"View ranked interactions",exact:true}).click();
     const ranked=usage.locator("#usage-selected-interactions tbody tr");
     for(const row of [ranked.first(),ranked.last()]) {

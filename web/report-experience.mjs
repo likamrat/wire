@@ -12,7 +12,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, changeUsage, questionControls, viewUsageTrend, openDeskActivity, closePreview, current, createCalendar, selectNamed, deleteNamed }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, changeUsage, questionControls, viewUsageTrend, openDeskActivity, closePreview, pushSettingsEntry, current, createCalendar, selectNamed, deleteNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity"], ["errors", "Errors & failures"], ["tokens", "Token usage"],
@@ -347,8 +347,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         if (!drawer.open || !current() || read().locked || read().saved || previewStage.inert) return;
         if (!settings.open) {
             const key = crypto.randomUUID();
-            settingsHistory = { key, url: location.href, position: history.state?.evidenceView?.position };
-            history.pushState({ ...history.state, reportSettingsKey: key }, "");
+            settingsHistory = { key, url: location.href, ...pushSettingsEntry(key) };
         }
         presentSettings();
     }
@@ -364,10 +363,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         else hideSettings();
     }
     function traverseSettings() {
-        if (!settingsHistory || !drawer.open || settingsHistory.url !== location.href
-            || history.state?.evidenceView?.position !== settingsHistory.position || !current()) return false;
-        if (history.state?.reportSettingsKey === settingsHistory.key) { presentSettings(); return true; }
-        if (!settings.open) return false;
+        if (!settingsHistory || !drawer.open || settingsHistory.url !== location.href || !current()) return false;
+        const position = history.state?.evidenceView?.position;
+        if (position === settingsHistory.panel && history.state?.reportSettingsKey === settingsHistory.key) { presentSettings(); return true; }
+        if (!settings.open || position !== settingsHistory.origin) return false;
         hideSettings(); return true;
     }
     settings.addEventListener("cancel", event => { event.preventDefault(); event.stopPropagation(); dismissSettings(); });
