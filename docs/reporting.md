@@ -504,6 +504,11 @@ These views keep the same accepted pair.
 - **View numbers** shows the values for the current chart.
 - Selecting a mark narrows both the exact rows and their interaction and service
   captions.
+- **Download chart as PNG**, to the right of the view switch, saves the
+  **Outcomes**, **Timeline** or **By tool** chart with both periods' dates and
+  the comparison's activity scope. **Timing** and **Token usage** have no
+  download. See [Download a chart](user-guide.md#download-a-chart) for what the
+  image includes.
 
 Outcomes and By tool use a shared **Call count** scale, not percentage-scaled
 bars. Percentage-first values use each period's own denominator. Check the

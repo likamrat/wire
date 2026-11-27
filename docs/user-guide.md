@@ -113,12 +113,8 @@ Prompt author. **More filters** holds the additional choices.
 When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
 
-Choose **Download chart as PNG** in a populated Analyze, Trends or Compare chart to save
-its current view as a high-resolution image. The image includes the chart title
-and scope, without the surrounding controls. WIRE creates it in your browser.
-
 Read the number above a daily column for that day's calls. In the example,
-November 22 had three, and November 19 had none. The ring and strip under
+November 23 had three, and November 20 had none. The ring and strip under
 **Tool call results** cover all 11 days.
 
 Hover over **Tool failed**, or focus the label with the keyboard. Its reading
@@ -152,6 +148,28 @@ shares can overlap. When you read the numbers:
   tool and model cards, read each pair from left to right, then down.
 - Model percentages use all matching interactions, including those without
   model names. An interaction with several recorded models counts under each.
+
+### Download a chart
+
+To put a chart in a slide, document or message, choose the download button
+(**Download chart as PNG**) in the chart's header, next to **View trend** or
+**View by day** and the collapse arrow. Your browser saves a high-resolution
+PNG named after the chart, such as `WIRE-Tool call results.png`.
+
+The image matches what you see: the chart title, the dates and filters in use,
+and any switch or day reading you've selected. Buttons, menus, hover tips and
+scrollbars are left out. If the chart scrolls sideways, the image shows the
+part in view. Check the tool, model and author names it shows before sharing it.
+
+The button appears on charts with data. Collapse a chart and it hides until you
+expand it again. Trends and Compare charts have the same button; see
+[Trends](#download-a-trends-chart) and [Compare](reporting.md#read-the-changes).
+
+The download saves one chart, not the whole page, a table of values or the
+interaction list. To share findings with their supporting calls,
+[make a report](reporting.md). If WIRE can't create the image, a message says
+why. For a chart too large for a sharp image, narrow the dates or filters and
+try again.
 
 ### Prompt authors
 
@@ -523,11 +541,11 @@ Choose **Trends** in the sidebar. **Overview** opens first and shows how many
 interactions had a recorded error or failure each day.
 
 Hover or focus a day on the line. A dashed guide lines it up with the date.
-In the example, November 21 shows **0 of 2 interactions**: there was activity,
+In the example, November 22 shows **0 of 2 interactions**: there was activity,
 but no recorded error. A cross at zero on today's date means there were no
 matching dated calls.
 
-![Trends reading for November 21: two interactions, no failed tool calls and no calls with API errors.](images/trends-overview.png)
+![Trends reading for November 22: two interactions, no failed tool calls and no calls with API errors.](images/trends-overview.png)
 
 **Charts** lists eight measures. **Chart guide** explains their units.
 
@@ -728,6 +746,23 @@ actions.
 
 ![Collapsed Trends rows with their applied date range and sizing controls.](images/trends-collapsed.png)
 
+### Download a Trends chart
+
+**Download chart as PNG** saves the chart as it's set up: the measure, dates,
+filters, **Count** or **Percentage**, the series you've left visible and the
+selected point's reading. It works like [the Analyze button](#download-a-chart).
+
+- On **Overview**, the button is to the right of **View chart**. **View chart**
+  opens the full **Errors & failures** chart in Charts; the button downloads
+  the Overview chart where it is.
+- In **Charts**, each open chart has the button in its header. It hides while
+  the chart is collapsed, has no data or has every series hidden.
+- In **Compare measures**, the button beside **Collapse chart** (or **Collapse
+  both charts**) saves the plotted measures and the selected day's reading.
+
+When the header runs out of room, the button and the control beside it wrap
+below the title together.
+
 Trends shows retained Work IQ patterns. It isn't a census of Copilot prompts,
 an answer-quality judgment, a productivity score or evidence of causation. For
 a two-period comparison or a saved copy, use [Compare](#compare) or
@@ -822,9 +857,11 @@ private path values.
 
 ### Update WIRE
 
-On [supported installations](development.md#updating-wire), automatic checks
-are on by default. You can turn them off and still choose **Check for updates**
-in **General**. The button shows **Checking** while it looks for an update.
+On [supported installations](development.md#updating-wire), **Automatically
+check for updates** in **General** is on by default. WIRE checks when it opens
+and daily while it stays open, then shows a notice naming the new version. It
+never installs an update on its own. With the switch off, choose **Check for
+updates** in General instead. The button shows **Checking** while it looks.
 
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
@@ -832,7 +869,8 @@ the notice hides it across those tabs; the update remains available in General.
 
 To install an update:
 
-1. Choose **Update and restart** in General or in the update notification.
+1. Choose **Update and restart** in the notice, in the update's notes or in
+   General.
 2. Leave your tabs open. Each participating window shows **WIRE is updating**,
    then reloads its own page. Once the page verifies the restart, **WIRE updated**
    shows the running version when available.
@@ -841,8 +879,9 @@ If a window has an unfinished edit, save or cancel it there before updating. If
 a window doesn't confirm it's ready, WIRE stops before restarting. That message
 alone doesn't mean you left an edit unfinished.
 
-**What's new** opens the offered version's notes in WIRE. **View on GitHub**
-opens that exact GitHub Release. After a confirmed restart, **Installed release
+To read what changed first, choose **What's new** in the notice or **What's new
+in this update** in General. The notes open in WIRE. **View on GitHub** opens
+that exact GitHub Release. After a confirmed restart, **Installed release
 notes** in General opens the installed version's notes. A single click updates
 the local instance across its browsers; a WIRE instance on a different port
 with its own installation and data is unchanged.
