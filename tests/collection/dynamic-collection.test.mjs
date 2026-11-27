@@ -822,13 +822,17 @@ test("history compatibility: a pasted image inside an exchange does not hide its
     }
 });
 test("history compatibility: a verified oversized Work IQ result keeps its exchange measured; a sub-agent's oversized completion still blocks it", async t => {
-    for (const [subagent, total] of [[false, 4400], [true, null]]) {
+    for (const [kind, total] of [["main", 4400], ["metered", 4400], ["sub-agent", null]]) {
+        const subagent = kind === "sub-agent";
         const app = await installation(t), id = app.session(), start = call("large-fetch");
         const messageId = "large-prompt", interactionId = "large-run", model = "gpt-4.1";
         start.data.turnId = "turn-one";
         const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId, inputTokens: 2000, outputTokens: 200 } });
         const done = event("tool.execution_complete", { toolCallId: "large-fetch", success: true, result: { content: "x".repeat(1100 * 1024) } });
         if (subagent) Object.assign(done, { agentId: "invented-agent" });
+        // A tool that meters its own operation (for example image generation) writes toolUsage beside its large result.
+        if (kind === "metered") done.data.toolUsage = { requestId: "tool-request", model: "invented-tool-model", provider: { id: "copilot" },
+            inputTokens: 30, outputTokens: 12, totalTokens: 42, copilotUsage: { tokenDetails: [{ tokenCount: 30, tokenType: "input" }] } };
         const batch = [event("user.message", { messageId, interactionId, content: "Read the invented attachment.", delivery: "idle" }),
             event("assistant.message", { apiCallId: "big-one", turnId: "turn-one", model, originatingMessageId: messageId, toolRequests: [{ toolCallId: "large-fetch" }] }), start,
             done, receipt("big-one"), event("assistant.turn_start", { turnId: "turn-two" }),
@@ -842,7 +846,7 @@ test("history compatibility: a verified oversized Work IQ result keeps its excha
         await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
         await collector.collectNow();
         const record = (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
-        assert.equal(record.usage?.total ?? null, total, subagent ? "sub-agent" : "main agent");
+        assert.equal(record.usage?.total ?? null, total, kind);
         if (total === null) assert.equal(record.usageGap, "history-gap");
     }
 });

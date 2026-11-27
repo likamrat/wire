@@ -22,6 +22,19 @@ test("projects a fully validated completion without packing or retaining its lar
     assert.equal(JSON.stringify(result).includes("PRIVATE_RESPONSE_"), false);
 });
 
+test("keeps a completed operation's own meter exactly and refuses an unreadable one instead of dropping it", () => {
+    const meter = { requestId: "tool-request", model: "recorded-tool-model", inputTokens: 30, outputTokens: 12, totalTokens: 42,
+        accounting: { usageId: "usage-1", sequence: 3 } };
+    const result = projectOversizedCompletion(entry({ toolCallId: "recorded-call", success: true,
+        toolUsage: { ...meter, provider: { id: "copilot" }, copilotUsage: { tokenDetails: [{ tokenCount: 30 }] }, quotaSnapshots: {} },
+        result: { content: "PRIVATE_IMAGE_" + "x".repeat(2 * 1024 ** 2) } }), limits);
+    assert.equal(result.kind, "projected");
+    assert.deepEqual(result.event.data.toolUsage, meter);
+    for (const toolUsage of [[meter], "meter", { ...meter, requestId: "r".repeat(600) }]) {
+        assert.equal(projectOversizedCompletion(entry({ toolCallId: "recorded-call", success: true, toolUsage }), limits).reason, "unsupported-fields");
+    }
+});
+
 test("never publishes a valid-looking prefix before full UTF-8, JSON and EOF validation", () => {
     const source = entry({ toolCallId: "recorded-call", success: true, result: { content: "PRIVATE_DATA" } });
     const malformedUtf8 = Buffer.from(source);
