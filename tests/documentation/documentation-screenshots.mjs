@@ -6,7 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, selectActivityOption, privateFixture } from "../support/helpers.mjs";
-import { viewAllSavedReports } from "../reports/report-journey-helpers.mjs";
+import { viewAllSavedReports, clickReportOption, closeReportSettings } from "../reports/report-journey-helpers.mjs";
 import { searchFixture } from "../search/live-search-fixture.mjs";
 import { createProfileSource, profilePNG } from "../collection/source-profile-fixture.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
@@ -349,12 +349,13 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(report.locator("body")).toContainText("4 of 12 interactions had recorded errors.");
     await capture("report-preview", drawerFrame());
     await expect(report.locator("body")).toContainText("Avery Chen");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     await page.locator("#additionalMasking summary").click();
     prepared = await preparedChange(() => page.locator("#manualTerms").fill("Avery Chen"));
     await expect(report.locator("body")).not.toContainText("Avery Chen");
     await capture("report-privacy", drawerFrame());
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await closeReportSettings(page);
     await selectActivityOption(page, "preparedReportView", "text");
     await expect(page.locator("#reportTextInspection .prompt-report")).toBeVisible();
     await capture("report-text", drawerFrame());
@@ -372,11 +373,12 @@ test("capture documentation through the normal renderer with isolated light-them
     await capture("report-example", { region: [report.locator(".wire-example-editor").first()], pad: 16 });
     await page.getByRole("button", { name: "Expand sections", exact: true }).click();
     await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) {
         prepared = await preparedChange(() => page.locator(`#formatOptions input[value="${format}"]`).check());
     }
     await page.keyboard.press("Escape");
+    await closeReportSettings(page);
     for (const format of ["html", "pdf", "json", "md"]) {
         await selectActivityOption(page, "preparedReportView", "product-report." + format);
         const file = page.locator("#reportFileInspection .saved-file-preview:visible");
@@ -399,7 +401,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.locator("#reportFileInspection").getByRole("button", { name: "Tree", exact: true }).click();
     await capture("report-manifest", { privateOnly: true, ...drawerFrame() });
     await selectActivityOption(page, "preparedReportView", "report");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     prepared = await preparedChange(() => page.locator('[name=promptMode][value=original]').check());
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Save report", exact: true }).click();

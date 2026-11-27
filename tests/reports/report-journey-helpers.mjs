@@ -19,8 +19,30 @@ export async function prepareLandingReport(page, preset) {
 }
 
 export async function chooseLandingReportDates(page, label) {
+    if (await page.locator("#reportPreviewDrawer").isVisible()) await openReportSettings(page);
     await page.locator("#reportDeskDates").click();
     await page.locator("#reportPeriodChoices").getByRole("button", { name: label, exact: true }).click();
+}
+
+export async function openReportSettings(page) {
+    if (await page.locator("#reportSettingsDrawer[open]").count()) return;
+    const mode = page.locator("#preparedReportView");
+    if (await mode.count() && await mode.inputValue() === "report")
+        await page.frameLocator("iframe[title='Prepared report']").getByRole("link", { name: "Settings", exact: true }).click();
+    else await page.locator(".report-settings-fallback").getByRole("button", { name: "Settings", exact: true }).click();
+    await page.locator("#reportSettingsDrawer[open]").waitFor();
+}
+
+export async function closeReportSettings(page) {
+    const panel = page.locator("#reportSettingsDrawer[open]");
+    if (!await panel.count()) return;
+    await panel.getByRole("button", { name: "Close report settings" }).click();
+    await panel.waitFor({ state: "detached" });
+}
+
+export async function clickReportOption(page, name) {
+    if (await page.locator("#reportPreviewDrawer[open]").count()) await openReportSettings(page);
+    await page.getByRole("button", { name, exact: true }).click();
 }
 
 export async function viewAllSavedReports(page) {

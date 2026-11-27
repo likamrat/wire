@@ -1,3 +1,4 @@
+import { clickReportOption } from "../reports/report-journey-helpers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
@@ -581,7 +582,7 @@ test("Create report hands the accepted filtered cohorts to the read-only preview
         assert.deepEqual(facts(frozen.periods[key].rows), facts(value.periods[key].analytics.rows));
     }
     await expect(page.locator("#reportStage3")).toBeVisible();
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     const pdf = page.waitForResponse(r => r.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=pdf]").check();
     const file = (await (await pdf).json()).files["product-report.pdf"];

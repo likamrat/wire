@@ -737,9 +737,9 @@ after Source share one named-draft picker.
 
 ### Reader size
 
-Reader width and maximize controls belong only to interaction reading. They
+The draggable reader width belongs only to interaction reading. Its size controls
 preserve the current visible text anchor and mounted disclosure and focus
-owners; report creation and saved inspection don't inherit them. Narrow modal
+owners. Prepared Reports has its own Maximize/Restore; saved inspection doesn't inherit it. Narrow modal
 focus stays independent of the navigation drawer.
 
 On desktop, leave a small gap below the app toolbar. The title and controls
@@ -826,7 +826,7 @@ in the same anchored panel. File, text and inclusion choices stay anchored to
 their controls. A fresh report ignores old Analyze restrictions.
 Report text is visible before the choices and defaults to Mask detected details.
 Changing it updates the draft without preparing or saving. The same control moves
-into the report toolbar; its choice reaches the initial preparation unchanged.
+into the preview's Settings panel; its choice reaches the initial preparation unchanged.
 Selected and Current are available before preparation through Activity, after
 preparation through inclusion controls, and through their contextual entries.
 Keep the list and drafts content-sized. Wrapped values may grow their controls;
@@ -874,8 +874,12 @@ An unresolved Save remains visible and uses its original recovery owner.
 ### Preparation and reading
 
 Prepare preview freezes the report and shows pending feedback until it is ready.
-A compact toolbar owns its name, period, personal-detail choice and formats,
-with Save beside the name.
+A compact header keeps the name, Maximize/Restore and Save together. The
+preview shows the period, scope, text treatment and formats without opening Settings.
+The sticky section links pair horizontal labels with WIRE icons. Settings comes
+last, after Coverage when present. It opens a right-hand panel beside wide
+previews and a modal drawer in narrow previews. Close, Escape and browser Back
+return to the opener. Opening Settings or maximizing does not re-prepare the report.
 The name updates the document heading without remounting its input. Optional
 changes regenerate files; Save stays unavailable while the preview is stale.
 Name and Save share a row; secondary preparation choices stay compact while the

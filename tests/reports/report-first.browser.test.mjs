@@ -5,7 +5,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain } from "../support/helpers.mjs";
-import { selectReportFocus, prepareReportPreview, prepareLandingReport, chooseLandingReportDates, viewAllSavedReports } from "./report-journey-helpers.mjs";
+import { selectReportFocus, prepareReportPreview, prepareLandingReport, chooseLandingReportDates, viewAllSavedReports, openReportSettings, clickReportOption } from "./report-journey-helpers.mjs";
 import { openDatePicker } from "../analyze/analytics-date-picker.mjs";
 import { reviewRecords } from "../support/frontend-fixture.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
@@ -241,7 +241,7 @@ async function openReviewPicker(t) {
     await navigateMain(app.page, "reports");
     await chooseLandingReportDates(app.page, "Last 14 days");
     app.prepared = await prepare(app.page, "all");
-    await app.page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(app.page, "Change what's included");
     await app.page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     await expect(app.page.locator("#reportActivityOptions")).toBeVisible();
     return app;
@@ -299,7 +299,7 @@ test("linked context changes preserve ordinary edited and omitted report copies"
     await captureReport(page, "copy-omitted-before-context");
     let updated;
     for (const enabled of [true, false, true]) {
-        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await clickReportOption(page, "Change what's included");
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator("#reportRecordedContext").setChecked(enabled);
         const response = await pending;
@@ -311,7 +311,7 @@ test("linked context changes preserve ordinary edited and omitted report copies"
         await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
     }
     await captureReport(page, "copy-omitted-after-context");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     for (const mode of ["original", "none", "masked"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`[name=promptMode][value=${mode}]`).check();
@@ -322,7 +322,7 @@ test("linked context changes preserve ordinary edited and omitted report copies"
     const copies = updated.records.flatMap(record => record.prompts);
     assert.ok(copies.some(copy => copy.representation === "edited-copy" && copy.text === "Deliberately revised release wording."));
     assert.ok(copies.some(copy => copy.kind === "tool" && copy.omitted && copy.text === null));
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
@@ -349,7 +349,7 @@ test("Reports author pointer drafts stay inside their popover until Apply or Can
         now: "2026-11-18T16:00:00Z", hasTouch: true });
     await chooseLandingReportDates(page, "Last 14 days");
     await prepare(page, "all");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const trigger = page.getByRole("combobox", { name: "Authors in report", exact: true });
     const reads = requests.filter(request => request.path === "/api/preview").length;
     await trigger.click();
@@ -410,7 +410,7 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
     await omitting;
     let updated;
     for (const enabled of [true, false, true]) {
-        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await clickReportOption(page, "Change what's included");
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator("#reportRecordedContext").setChecked(enabled);
         const response = await pending;
@@ -422,7 +422,7 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
         assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
         await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
     }
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     for (const mode of ["original", "none", "masked"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`[name=promptMode][value=${mode}]`).check();
@@ -430,7 +430,7 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
         assert.equal(response.status(), 200, updated.error);
     }
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const including = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#reportRecordedContext").check();
     updated = await (await including).json();
@@ -446,7 +446,7 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
     await replyCopy.getByRole("button", { name: "Update report copy", exact: true }).click();
     updated = await (await editingReply).json();
     await captureReport(page, "shared-context-before-save");
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
@@ -514,13 +514,15 @@ test("a later user focus choice supersedes pending inline reading restoration", 
 test("inline copy updates retain the outer screen anchor, not just iframe coordinates", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await prepare(page);
+    await page.setViewportSize({ width: 800, height: 480 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     const frame = page.frameLocator(".report-frame");
     await frame.locator(".wire-reading-interaction>summary").first().click();
     await frame.locator(".wire-example-editor summary").first().click();
     const button = frame.getByRole("button", { name: "Update prompt copy", exact: true }).first();
     await frame.getByLabel("Prompt in this report", { exact: true }).first().fill("Outer reading stays here.");
     await button.scrollIntoViewIfNeeded();
-    const drawer = page.locator("#reportPreviewDrawer");
+    const drawer = page.locator("#reportStage3");
     await drawer.evaluate(node => node.scrollTo(0, 197));
     await button.focus();
     const position = async () => ({ outer: await drawer.evaluate(node => node.scrollTop), button: await button.boundingBox() });
@@ -576,7 +578,7 @@ test("the normal Reports picker has one reading scroller and retains paging, sel
     await picker.getByRole("button", { name: "Close", exact: true }).click();
     await expect(picker).toBeHidden();
     await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     await expect(picker.locator("#report-select-search-0")).toBeChecked();
     const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -647,7 +649,7 @@ test("the normal Reports picker keeps long plural evidence readable in both them
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height });
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
-        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await clickReportOption(page, "Change what's included");
         await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
         await picker.locator("#reportRequestSearch").fill("");
         await body.evaluate(node => { node.scrollTop = 0; });
@@ -674,7 +676,7 @@ test("the normal Reports picker keeps long plural evidence readable in both them
         await page.keyboard.press("Escape");
         await expect(picker).toBeHidden();
         await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeFocused();
-        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await clickReportOption(page, "Change what's included");
         await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     }
     assert.deepEqual(await loadBoardState(context), before);
@@ -697,6 +699,7 @@ test("creation text choice applies before a preset preview without writing a rep
     assert.equal(initial.snapshot.reportPopulation.reference.length, 8);
     assert.equal(initial.records.length, 2);
     await expect(choice).toHaveAttribute("data-prompt-mode", "none");
+    await openReportSettings(page);
     await choice.click();
     await expect(page.locator("#additionalMasking")).toBeVisible();
     await expect(page.locator("#additionalMasking summary")).toHaveText("Hide specific words");
@@ -759,10 +762,10 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.keyboard.press("Escape");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await prepare(page, "all");
-    await page.getByRole("button", { name: /^Formats:/ }).click();
+    await clickReportOption(page, /^Formats:/);
     await inspectRows("#reportFileOptions .format-choices label");
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const inclusion = await inspectRows("#reportIncludeOptions .prompt-choice");
     const count = requests.filter(request => request.path === "/api/preview").length;
     const changed = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -770,11 +773,11 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await changed; await expect(inclusion.first().locator("input")).toBeChecked();
     assert.equal(requests.filter(request => request.path === "/api/preview").length, count + 1);
     await page.keyboard.press("Escape");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     const omitted = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator('#reportPrivacyOptions [value=none]').check(); await omitted;
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const linked = page.locator("label:has(>#reportRecordedContext)");
     await expect(linked.locator("input")).toBeDisabled();
     await linked.hover(); await expect(linked).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -844,7 +847,7 @@ test("changing privacy on the landing resumes frozen facts and keeps edited copi
     const omitted = await prepare(page);
     assert.deepEqual(omitted.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     assert.equal(omitted.promptMode, "none");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     const unmaskedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator('[name=promptMode][value=original]').check();
     const unmasked = await (await unmaskedResponse).json();
@@ -889,7 +892,7 @@ test("custom focus selection leaves Reports unprepared; preview and Save preserv
     const updated = await (await rebuilt).json();
     assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.getByLabel("Report name", { exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     let preparedFiles = updated.files;
     for (const format of ["pdf", "json", "markdown"]) {
         const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -938,7 +941,7 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     const { page, errors, requests } = await setup(t, { source, route });
     const fresh = await prepare(page, "all");
     assert.equal(fresh.records.length, 7, "Fresh scope includes Calendar despite the old Mail filter");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     await page.locator('[name=reportScope][value=current]').check();
     const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -1009,6 +1012,7 @@ test("Reports starts with the configured period and files; changing defaults doe
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await page.getByRole("button", { name: "Resume preview", exact: true }).click();
     await expect(range).toHaveText("Last 14 days");
+    await openReportSettings(page);
     await expect(page.getByRole("button", { name: /^Formats: .*Markdown/ })).toBeVisible();
     assert.deepEqual(effects().map(request => request.path), ["/api/preview"]);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
@@ -1063,7 +1067,7 @@ test("Formats changes only the draft on landing and resumes the frozen populatio
     assert.deepEqual(resumed.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await selectActivityOption(page, "preparedReportView", "product-report.md");
     await expect(page.locator("#reportFileInspection .saved-markdown")).toBeVisible();
-    await page.getByRole("button", { name: "Formats: Markdown, JSON", exact: true }).click();
+    await clickReportOption(page, "Formats: Markdown, JSON");
     await expect(html).not.toBeChecked();
     await expect(chooser.getByRole("checkbox", { name: "JSON", exact: true })).toBeChecked();
     assert.equal(effects().length, 2, "Viewing a prepared file must neither change the output inventory nor prepare or save it.");
@@ -1083,7 +1087,7 @@ test("JSON-only saved reports open as readable reports independently of their fi
     const downloads = [];
     page.on("download", download => downloads.push(download));
     await prepare(page);
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const [format, selected] of [["json", true], ["html", false]]) {
         const ready = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).setChecked(selected); await ready;
@@ -1223,7 +1227,13 @@ test("prepared Reports leaves useful first-screen reading space at narrow and en
         if (process.env.WIRE_REPORT_FIRST_PROOFS) await writeFile(path.join(process.env.WIRE_REPORT_FIRST_PROOFS,
             `prepared-${theme}-${width}-${size}.json`), JSON.stringify({ theme, width, height, size, documentTop: top }, null, 2));
         assert.ok(top <= height * .7, `Report begins at ${top}px of ${height}px`);
+        const opener = page.frameLocator('iframe[title="Prepared report"]').getByRole("link", { name: "Settings", exact: true });
+        await expect(opener).toBeInViewport();
+        await expect(page.locator("#reportExperienceScope")).toContainText("Mask detected details");
+        await openReportSettings(page);
         await expect(page.locator("#reportPrivacyChoice")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(opener).toBeFocused();
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     }
@@ -1361,7 +1371,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.deepEqual(prepared.snapshot.periodComparison.comparison, acceptedComparison);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     let preparedFiles = prepared.files;
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -1457,7 +1467,7 @@ test("changing report scope retires prior ordinary copies and their detached edi
         window.retiredScopeField = copy.querySelector("textarea");
         window.retiredScopeApply = copy.querySelector(".report-copy-controls button");
     });
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await selectActivityOption(page, "reportPromptAuthorFilter", "user");
     assert.equal((await (await prepared).json()).records.length, 3);
@@ -1481,7 +1491,7 @@ test("keep-details warning can cancel or regenerate masked notes and copies befo
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await frame.getByRole("button", { name: "Update note", exact: true }).first().click();
     assert.equal((await response).status(), 200);
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator('[name=promptMode][value=original]').check();
     assert.equal((await response).status(), 200);

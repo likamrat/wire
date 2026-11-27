@@ -48,7 +48,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
     }
     function navigate(event) {
         const link = event.target.closest?.("a[href]");
-        if (!link || !current()) return;
+        if (event.defaultPrevented || !link || !current()) return;
         event.preventDefault();
         const id = link.getAttribute("href").split("#")[1];
         navigateTo(id);

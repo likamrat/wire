@@ -13,7 +13,7 @@ import { buildAssessmentModel } from "../../lib/assessment-read-model.mjs";
 import { metadata174Schema } from "../collection/copilot-metadata-fixture.mjs";
 import { createProfileSource, profilePNG } from "../collection/source-profile-fixture.mjs";
 import { privateFixture, navigateMain, navigateSettings, chooseTheme, openSourceEditor } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "../reports/report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -193,7 +193,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await page.keyboard.press("Escape");
     await navigateMain(page, "reports");
     await prepareLandingReport(page, "all");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const picker = page.locator("#reportActivityOptions .read-in-place").filter({ hasText: "Keep both original dates" });
     await expect(picker.locator(".card-identities")).toContainText("Mail");
@@ -203,7 +203,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await capture(page, "bound-picker");
     await picker.locator(".request-card-open").click(); await expect(reading.locator("p")).toHaveText(paragraphs, { useInnerText: true });
     await page.getByRole("button", { name: /Back to (activity|report setup)/ }).click();
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     assert.equal(await picker.locator("input[type=checkbox]").isChecked(), selected);
     await page.evaluate(() => {

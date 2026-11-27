@@ -7,6 +7,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, selectActivityOption } from "../support/helpers.mjs";
+import { clickReportOption } from "./report-journey-helpers.mjs";
 
 const text = label => ({ name: label, exact: true });
 const collected = (id, prompt) => {
@@ -79,7 +80,7 @@ async function pick(page, ids) {
     await picker.getByRole("button",text("Use activity")).click();
 }
 async function addFormat(page, format) {
-    await page.getByRole("button",{name:/^Formats:/}).click();
+    await clickReportOption(page, /^Formats:/);
     const p = await regenerated(page,() => page.locator(`#formatOptions input[value="${format}"]`).check());
     await page.keyboard.press("Escape"); return p;
 }
@@ -269,7 +270,7 @@ test("at 375px and 200% type, keyboard preparation and the original-text warning
 
 test("failed PDF preparation writes nothing; a new HTML preview can safely remove detected credentials from edited text", async t => {
     const {page,context,reports,sent} = await setup(t,[collected("render-fail")],async()=>{throw Error("Synthetic PDF unavailable");});
-    await prepare(page); await page.getByRole("button",{name:/^Formats:/}).click();
+    await prepare(page); await clickReportOption(page, /^Formats:/);
     const failed = page.waitForResponse(r=>r.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=pdf]").check();
     assert.equal((await failed).ok(),false); await phase(page,"blocked");

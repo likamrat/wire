@@ -1,3 +1,4 @@
+import { clickReportOption } from "./report-journey-helpers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
@@ -76,7 +77,7 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         let preview = await prepare(() => page.locator("#prepareReportPreview").click());
         preview = await prepare(() => page.locator("#reportTitle").fill("Stable collected GitHub report"));
         if (recordedContext) {
-            await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+            await clickReportOption(page, "Change what's included");
             preview = await prepare(() => page.locator("#reportRecordedContext").check());
             await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done" }).click();
         }

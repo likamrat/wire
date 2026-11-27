@@ -6,7 +6,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../../lib/store.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
-import { selectReportFocus } from "./report-journey-helpers.mjs";
+import { selectReportFocus, clickReportOption } from "./report-journey-helpers.mjs";
 
 for (const action of ["recover", "revoke", "late-preview"]) test(`selected report with linked reply: ${action}`, async t => {
     const cleanup = [], { context, records } = await reportContextFixture({ after: fn => cleanup.push(fn) });
@@ -29,7 +29,7 @@ for (const action of ["recover", "revoke", "late-preview"]) test(`selected repor
     await picker.locator(`[data-report-request="${records[1].scenarioId}"]`).check();
     await picker.getByRole("button", { name: "Use activity", exact: true }).click();
     await page.locator("#prepareReportPreview").click();
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const produced = Promise.withResolvers(), delivered = page.waitForResponse("**/api/preview");
     if (action === "late-preview") await page.route("**/api/preview", async route => {
         const response = await route.fetch(); produced.resolve(await response.json());

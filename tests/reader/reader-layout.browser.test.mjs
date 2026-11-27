@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { fixture, privateFixture, chooseTheme, revealAnalyzeRecords, navigateMain } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { contract, retainedResponse, samples } from "../evaluation/assessment-ui-fixtures.mjs";
 import { graphMatrixRecord } from "../reports/report-evidence-matrix-fixtures.mjs";
 import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
@@ -622,7 +622,7 @@ test("reader folding, exact Copy and report peek leave every frozen format byte-
     await page.locator("#closeContextSidebar").click();
     await navigateMain(page, "reports");
     await prepareLandingReport(page, "all");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const peek = page.locator("#reportActivityOptions .request-card-open").first();
     await peek.click();

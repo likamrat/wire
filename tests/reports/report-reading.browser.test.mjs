@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "../support/helpers.mjs";
-import { prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
+import { prepareLandingReport, viewAllSavedReports, clickReportOption } from "./report-journey-helpers.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { startServer } from "../../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../../lib/store.mjs";
@@ -218,7 +218,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
     await expect(file.frameLocator("iframe").locator("h1")).toBeInViewport();
     assert.equal(geometry.inspectionOpen, false, "File reading must not open unrelated text editing.");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
-    await page.locator("#reportDeskDates").click();
+    await clickReportOption(page, /^Dates:/);
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#reportPeriodChoices [data-report-range='14']").click();
     const redated = await (await response).json();
@@ -382,7 +382,7 @@ test("late regeneration retains the selected file mode and never publishes super
     assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
     assert.doesNotMatch(prepared.files["product-report.html"], /Superseded name/);
     assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=json]").check();
     prepared = await (await response).json();
@@ -394,7 +394,7 @@ test("late regeneration retains the selected file mode and never publishes super
     await page.keyboard.press("Escape");
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await selectActivityOption(page, "preparedReportView", "product-report.json");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("[name=promptMode][value=none]").check();
     prepared = await (await response).json();
@@ -424,7 +424,7 @@ test("report period closes when reading an embedded document and when leaving Re
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await prepareLandingReport(page, "all");
     await expect(page.frameLocator(".report-contained-frame").locator("h1")).toHaveText("All activity");
-    await page.locator("#reportDeskDates").click();
+    await clickReportOption(page, /^Dates:/);
     await expect(page.locator("#reportPeriodChoices")).toBeVisible();
     await page.frameLocator(".report-contained-frame").locator("h1").click();
     await expect(page.locator("#reportPeriodChoices")).toBeHidden({ timeout: 1000 });
@@ -480,7 +480,7 @@ test("report period closes when reading an embedded document and when leaving Re
     await expect(page.locator("#reportGallery")).toBeVisible();
     await prepareLandingReport(page, "all");
     await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
-    await page.locator("#reportDeskDates").click();
+    await clickReportOption(page, /^Dates:/);
     await page.locator('nav [data-nav="analyze"]').click();
     await expect(period).toBeHidden();
     await expect(page.locator("#reportsView")).toBeHidden();
@@ -667,7 +667,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.setViewportSize({ width: 1800, height: 1100 });
 
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) {
         response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();

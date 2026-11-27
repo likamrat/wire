@@ -15,7 +15,7 @@ import { compareAnalyzePeriods } from "../analyze/analytics-date-picker.mjs";
 import { privateFixture, chooseTheme, restoreLegacySearch } from "../support/helpers.mjs";
 import { qualityDisplayFixture } from "../evaluation/quality-display-fixtures.mjs";
 import { assessmentSource } from "../../lib/assessment-read-model.mjs";
-import { reportActivityActionGeometry } from "./report-journey-helpers.mjs";
+import { reportActivityActionGeometry, clickReportOption } from "./report-journey-helpers.mjs";
 
 for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     ? "paired report recovers its lost Save reply without replay and reopens exact HTML/JSON"
@@ -101,7 +101,7 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     await expect(page.locator("#reportDeskDates")).toBeHidden();
     const activity = page.locator("#reportActivityOptions");
     const openActivity = async () => {
-        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await clickReportOption(page, "Change what's included");
         await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
         await expect(activity).toBeVisible();
     };
@@ -168,10 +168,10 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     await expect(activity).toBeVisible();
     await expect(interaction).toBeFocused();
     await activity.getByRole("button", { name: "Close", exact: true }).click();
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     let preview = await prepareWith(() => page.locator(`[name=promptMode][value=${promptMode}]`).check());
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of formats.slice(1)) preview = await prepareWith(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.keyboard.press("Escape");
     assert.equal(preview.promptMode, promptMode);

@@ -9,7 +9,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../../lib/store.mjs";
 import { privateFixture, fixture, navigateMain, selectActivityOption } from "../support/helpers.mjs";
-import { prepareLandingReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "./report-journey-helpers.mjs";
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const hashes = async entries => Promise.all(entries.map(async entry => [
     entry.bundleId, await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, digest(await readFile(file))])),
@@ -380,7 +380,7 @@ test("UX-001 changing contents blocks stale Save; keeping chat details requires 
     await page.locator("[name=reportScope][value=all]").check();
     await button(page.locator("#reportActivityOptions"), "Use activity").click();
     const first = await prepare(page);
-    await drawer(page).getByRole("button", { name: /^Report text:/ }).click();
+    await clickReportOption(page, /^Report text:/);
     const held = await holdResponse(page, "/api/preview", releases);
     await page.locator("[name=promptMode][value=original]").check();
     await held.wait();
@@ -390,7 +390,7 @@ test("UX-001 changing contents blocks stale Save; keeping chat details requires 
     await held.release();
     await expect(saveButton(page)).toBeEnabled();
     await page.keyboard.press("Escape");
-    await drawer(page).getByRole("button", { name: /^Formats:/ }).click();
+    await clickReportOption(page, /^Formats:/);
     const updated = await previewAfter(page, () => page.locator("#formatOptions input[value=json]").check());
     assert.notEqual(updated.previewId, first.previewId);
     await page.keyboard.press("Escape");
