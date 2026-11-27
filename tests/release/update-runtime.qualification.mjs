@@ -150,7 +150,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
         import {readFile,appendFile} from 'node:fs/promises';
         export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout?"release":"main")},
-        fetcher:async()=>{${discoveryOnly ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},"read\\n");` : ""}
+        fetcher:async()=>{${discoveryOnly || launcherRollout ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(discoveryOnly ? "read\n" : installation + "\n")});` : ""}
         try{return Response.json(JSON.parse(await readFile(${JSON.stringify(feed)},'utf8')))}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
         const hook = path.join(temp, name);
         await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
@@ -239,13 +239,17 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             const checked = await (await response).json();
             assert.equal(checked.phase, "current", checked.message); assert.equal(checked.automatic, false);
             assert.ok(checked.nextAutoCheckAt >= start + 300000 && checked.nextAutoCheckAt <= Date.now() + 300000);
+            assert.equal((await readFile(path.join(temp, "feed-reads"), "utf8")).trimEnd().split("\n").at(-1), stage,
+                "release verification executed in the original installation's active slot, not the selector or base");
             await page.goto(url + "reports?bundle=" + bundle.bundleId);
             await expect(page.locator("#savedReportReader h1")).toBeVisible();
             assert.ok(!actions.includes("auto-check"));
             await verifyPreserved();
             assert.equal((await sessionStorage(context).read()).wire, "signed-in");
-            t.diagnostic(JSON.stringify({ base, launcherAndChild: after.build, client: after.clientEntry, port, automatic: checked.automatic,
-                checkIntervalMs: 300000, storeAndConfigPreserved: true, reportReopened: true, reportHashes: reportHashes.map(([, digest]) => digest) }));
+            t.diagnostic(JSON.stringify({ fixtureOnly: true, base, launcher: targetCommit, child: after.build, client: after.clientEntry,
+                port, automatic: checked.automatic, manualCheckAdvertisedIntervalMs: 300000, automaticRequests: 0,
+                competingLauncherRefused: true, wrongPortRefused: true, storeAndConfigPreserved: true, signedIn: true, reportReopened: true,
+                reportHashes: Object.fromEntries(reportHashes.map(([file, digest]) => [path.basename(file), digest])) }));
         } finally { await browser.close(); }
         return;
     }

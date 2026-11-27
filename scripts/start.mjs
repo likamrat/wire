@@ -153,7 +153,8 @@ try {
     if (stopping) await stop();
     else {
         if (managed) {
-            runningBinding = { build: process.env.WIRE_UPDATE_BUILD, store: await getStoreIdentity(), port: Number(new URL(runtime.url).port) };
+            runningBinding = { installation: process.env.WIRE_UPDATE_DIRECTORY, build: process.env.WIRE_UPDATE_BUILD,
+                store: await getStoreIdentity(), port: Number(new URL(runtime.url).port || 80) };
             process.send({ type: "wire-update-ready", url: runtime.url, runtimeId: runtime.runtimeId,
                 build: runningBinding.build, clientEntry: runtime.clientEntry, store: runningBinding.store }, error => { if (error) void stop(); });
         }
