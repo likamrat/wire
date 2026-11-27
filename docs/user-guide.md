@@ -874,10 +874,11 @@ and keeps the launcher. To move it to the new schedule, follow the one-time
 `--start-installed` steps in [When WIRE offers an update](development.md#when-wire-offers-an-update).
 
 If GitHub's rate limit for release checks runs out, General says so and shows
-**Earliest retry:** in your local time, with the **Last successful check**.
-Choosing **Check for updates** again before then, in any tab, doesn't ask
-GitHub again. Other refusals from GitHub show their HTTP status without naming
-a rate limit.
+**Earliest retry:** in your local time, with the **Last successful check**. If
+GitHub asks WIRE to wait for another reason, General shows the same retry time
+without mentioning a rate limit. Until then, choosing **Check for updates** in
+any tab doesn't ask GitHub again. Other failures show their HTTP status and no
+retry time; you can check again whenever you like.
 
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
