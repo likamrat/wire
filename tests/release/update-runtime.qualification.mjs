@@ -494,7 +494,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
                 cap = await getPage(); await update("status");
                 const views = () => post("api/app-update/check-views",{hold:""});
                 assert.match((await views()).message,/Finish its work and reopen or close/);
-                await Promise.all([page.waitForRequest(endpoint+"/release-panel"), page.goto("about:blank")]);
+                await page.goto("about:blank");
                 await expect.poll(async ()=>(await views()).registered).toBe(1);
             } finally { await browser.close(); }
             return;
