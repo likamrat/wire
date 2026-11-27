@@ -37,7 +37,7 @@ sources you can enable in a normal installation.
 | Pause collection | Stops automatic acquisition; retained activity stays readable. |
 | Refresh | One bounded read of already-approved local history, including the deliberate GitHub manual exception under Pause. |
 | Read stored activity | Reads WIRE's saved view/status, without checking original history. |
-| Token records | Separately approves the displayed usage file for the identified Copilot account. On by default for a source that isn't approved yet; turn it off to read only the approved history. |
+| Token records | Separately approves the displayed usage file for the identified Copilot account. On by default for a source that isn't approved yet; turn it off to read only the approved history. A connected source without a saved choice shows **Off until you approve** and reads nothing until someone chooses **Approve token records** or **Keep off**. |
 | [Count tokens in chats already read](#count-tokens-in-chats-already-read) | Checks eligible chats for missing totals. Only a separate confirmation saves the counts shown. |
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
@@ -383,7 +383,12 @@ cover it. **Token records** under the GitHub Copilot app in **Settings > Sources
 resolved file and records a separate approval (`usageRecords`). The switch starts on
 for a source that isn't approved yet, so first approval lists it under **What
 approving allows**; nothing is read until that confirmation. Existing approvals
-keep their saved setting, including an explicit Off. The approval names
+keep their saved setting, including an explicit Off. A source approved before
+this choice existed has none (`usageRecordsReview`): Settings shows **Off until
+you approve** without the switch, reads nothing, and offers **Approve token
+records** or **Keep off** below the named file. Either is a single
+confirmation that records the choice. Saving the schedule or switching paths
+doesn't answer it. The approval names
 that file and the Copilot account the
 app reports. If WIRE can't identify that account at first approval, it connects
 the source with token records off and says so. A later request to turn them on

@@ -1271,6 +1271,7 @@ The expanded desktop rail resizes from its right edge.
 | Schedule only | Save preferences |
 | Changed source paths | Approve and switch source |
 | Token records, same paths | Approve token records (on) or Stop reading token records (off) |
+| Token records with no saved choice | Approve token records or Keep off, below the named file; no switch and no What changes step |
 | Count tokens in chats already read | Check chats, then a separate Count confirmation |
 | Cancel in Sources | Discard the draft |
 | Display preference | Apply immediately, separately from permission |

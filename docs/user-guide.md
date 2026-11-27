@@ -965,6 +965,16 @@ the choice:
    or **Reads less**.
 3. Choose **Approve token records** or **Stop reading token records**.
 
+A source connected before WIRE asked about token records has no saved choice.
+**Token records** shows **Off until you approve**, and WIRE doesn't read the
+file. Below the file it names, choose **Approve token records** to start
+reading it; Settings says **Token records approved.** and the switch shows
+**On** from then on. Choose **Keep off** to save Off instead. Both buttons wait
+until other Sources edits are saved or cancelled, and saving the schedule
+doesn't answer the question. If WIRE can't identify the Copilot account, it
+won't approve token records and says so; you can choose **Keep off** and carry
+on.
+
 Reading token records uses no tokens and costs nothing. Turning them off keeps
 the totals WIRE already counted. Approving them doesn't recount chats WIRE has
 already read; use [Count tokens in chats already read](collection.md#count-tokens-in-chats-already-read)
