@@ -867,11 +867,14 @@ unavailable. WIRE never installs an update on its own. With the switch off,
 choose **Check for updates** in General instead. The button shows **Checking**
 while it looks.
 
-The five-minute check needs the updated launcher, not only an updated tab.
-An installation started by a v0.1.1 or v0.1.2 launcher still checks once a
-day, even after **Update and restart**, because that restart replaces the app
-and keeps the launcher. To move it to the new schedule, follow the one-time
-`--start-installed` steps in [When WIRE offers an update](development.md#when-wire-offers-an-update).
+New update checks need the updated launcher, not only an updated tab.
+**Update and restart** replaces the app and keeps the launcher that started
+WIRE. A v0.1.1 or v0.1.2 launcher still checks once a day, and a launcher
+through v0.1.3 still finds releases through GitHub's shared API quota. To use
+the installed version's launcher, switch once to the `--start-installed` start
+command in [When WIRE offers an update](development.md#when-wire-offers-an-update)
+and keep using it. Each later start then runs the launcher from the version
+WIRE installed last.
 
 If GitHub's rate limit for release checks runs out, General says so and shows
 **Earliest retry:** in your local time, with the **Last successful check**. If
@@ -901,9 +904,9 @@ a window doesn't confirm it's ready, WIRE stops before restarting. That message
 alone doesn't mean you left an edit unfinished.
 
 To read what changed first, choose **What's new** in the notice or **What's new
-in this update** in General. The notes open in WIRE. If GitHub limits access
-to the notes, **View on GitHub** opens that exact release. WIRE can still
-verify the version and install it. After a confirmed restart, **Installed release
+in this update** in General. The notes open in WIRE. If WIRE couldn't get the
+notes from GitHub, the reader says so; **View on GitHub** opens that exact
+release, and WIRE can still verify the version and install it. After a confirmed restart, **Installed release
 notes** in General opens the installed version's notes. A single click updates
 the local instance across its browsers; a WIRE instance on a different port
 with its own installation and data is unchanged.
