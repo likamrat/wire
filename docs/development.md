@@ -147,13 +147,54 @@ port nor a post-stop journal read ties that close to the observed writer,
 store and port. Keep the existing installation available if the original
 launcher cannot reverify the release.
 
-A separate operator handoff would need the original service owner to witness
-the generation, or supervise a fresh ordinary start of the **unchanged**
-legacy slot using its independently verified startup configuration. That
-owner must keep custody across readiness, target-specific approval, fresh
-verification and clean close, without another launcher taking ownership in
-between. A later receipt assembled from paths and process IDs is not that
-witness. `--start-installed` and crash recovery do not perform this enrollment.
+#### One-time supervised start for the v0.1.1 launcher serving v0.1.2
+
+Only the **original service operator** can use this route. They must already
+know the original startup command, OS account, canonical installation and data
+directory, release channel and port, and control that specific launcher. They
+must establish which writer owns the endpoint and both original store leases,
+match the running v0.1.2 build to its verified slot, and review the exact
+published v0.1.3 target. An independently prepared build can check compatibility
+while WIRE is running; the supervisor will **not** adopt it.
+
+1. Finish work in all original views. Stop the original service through its
+   own normal control. **Its owner must witness the successful exit**, including
+   completion of the managed child's clean close, both processes exiting and
+   both exact leases being released. Keep control of restarts. A free port,
+   vanished process or `closed` row found later cannot substitute for this
+   witness.
+2. Record the observed configuration in a private JSON file. Use `version: 1`,
+   `channel: "release"`, canonical `installation`, the original numeric `port`,
+   store fingerprint `store`, `launcherPid`, `writerPid`, `baseBuild` (v0.1.1
+   commit), `slot` (original active slot ID), `activeBuild` (v0.1.2 commit),
+   `targetTag: "v0.1.3"` and `targetBuild` (the reviewed full release commit).
+   Include `closedChildId` from the exact clean-close receipt the owner just
+   witnessed. It prevents reuse after another start; it is **not** proof of
+   the original stop or permission to install.
+3. Keep the original account, data-directory configuration and working
+   directory (the original installation). From there, start the independently
+   reviewed supervisor using its absolute script path:
+
+   ```text
+   node "<reviewed verifier>/scripts/launch.mjs" --supervise-legacy-update "<absolute private record>" --port <original port>
+   ```
+
+   This is an ordinary cold start of the **unchanged v0.1.2 slot**, not crash
+   recovery. The supervisor uses the original installation journal and lock,
+   issues its own new fork, and checks its ready response, store, port, build
+   and running client. An interrupted or different activation is refused.
+4. Open General at the original address. Check the reviewed release and choose
+   **Update and restart** to confirm that offer. Starting the service is not
+   this confirmation. WIRE builds a fresh slot, verifies Latest and Git again,
+   checks readiness across views, cleanly stops its own writer and records the
+   ordinary activation. There is no separate install replay command. If the
+   result is uncertain, inspect the original operation and journal instead of
+   repeating Apply.
+
+After the updated child closes normally, use the regular `--start-installed`
+command for future starts. The old maintenance record is no longer valid.
+This only bootstraps the published v0.1.3 target; it does not retroactively
+give v0.1.3's own older launcher the independent discovery implementation.
 
 #### Prepare a release without Actions
 
@@ -366,7 +407,7 @@ address and verifies its bytes. It doesn't update your installation.
 | `release-limit` | A manual check encounters an exhausted GitHub quota. Two tabs show the reason and share the wait; after the reset, a manual check discovers the new release. No live GitHub requests. |
 | `release-resilience` | A failed recheck preserves the prior version and notes without offering installation. A withdrawal during staging keeps the old writer. A later verified release installs even when GitHub's REST API can't supply its notes. |
 | `launcher-rollout` | A managed v0.1.2 installation with automatic checks off installs the committed candidate, closes normally and starts its installed launcher on the same port. Verifies the saved preference, five-minute deadline, browser build and saved report. |
-| `legacy-handoff` | A genuine v0.1.1 launcher serving v0.1.2 cannot reverify v0.1.3. Independently builds the exact target in a disposable clone, checks the adapter, refuses unbound activation and reopens the unchanged report on the original instance. |
+| `legacy-handoff` | A genuine v0.1.1 launcher serving v0.1.2 cannot reverify v0.1.3. Checks that an external stage cannot activate, then starts the unchanged slot under a reviewed owner and installs v0.1.3 through the user's explicit Update action. |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |
 | `1` | **Update and restart** in Settings, then verifies that the reloaded browser runs the new build. Needs Microsoft Edge Stable on Windows, or Playwright Chromium on WSL. |

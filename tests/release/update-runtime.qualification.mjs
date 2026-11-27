@@ -72,7 +72,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
     : resilience ? "a failed recheck preserves verified notes; only a newly verified Latest release can be installed"
     : feedLimit ? "a manual release check explains a shared GitHub limit until the next permitted check"
     : launcherRollout ? "a clean v0.1.2 installation starts its verified updated launcher without losing Automatic Off"
-    : legacyHandoff ? "externally staging a verified release gives no authority over a legacy active slot"
+    : legacyHandoff ? "a supervised ordinary v0.1.2 start installs reviewed v0.1.3 without adopting an external stage"
     : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
     const origin = path.join(temp, "origin"), store = path.join(temp, "store");
@@ -272,10 +272,59 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         assert.ok(await post("api/report/open",{bundleId:bundle.bundleId})); await verifyPreserved();
         assert.equal(await storeIdentity(store),identity); assert.equal((await sessionStorage(context).read()).wire,"signed-in");
         const restored = await leases(); assert.equal(restored[0].pid,restored[1].pid); assert.notEqual(restored[0].token,owners[0].token);
-        t.diagnostic(JSON.stringify({fixtureOnly:true,base:legacyBase,active:rolloutBase,externallyBuilt:publishedTarget,
-            adapterAndContractMatch:true,preparationKeptWriter:true,legacyCloseFields:Object.keys(close).sort(),selectorRefused:true,
-            originallySelectedSlot:activation.active.slot,activeAfterRefusal:(await health()).build,port,automatic:false,signedIn:true,
-            sameStore:true,reportReopened:true,reportHashes:Object.fromEntries(reportHashes.map(([file,digest])=>[path.basename(file),digest]))}));
+        const restoredHealth = await health();
+        const reviewFile = path.join(temp,"maintenance-start.json");
+        const startup = {version:1,installation:root,channel:"release",baseBuild:base,slot:activation.active.slot,
+            activeBuild:restoredHealth.build,targetTag:"v0.1.3",targetBuild:publishedTarget,port:Number(port),store:identity,
+            launcherPid:app.pid,writerPid:restored[0].pid};
+        const mode = ["--supervise-legacy-update",reviewFile];
+        // The original operator owns this exact launcher from birth, its config, endpoint and both leases.
+        // It waits for the real parent's successful disconnect/child-close protocol, not an observed free port.
+        await post("api/app-update/release-panel",{}); app.disconnect(); assert.equal(await ended,0,stderr);
+        for (const f of leaseFiles) await assert.rejects(readFile(f),e=>e.code==="ENOENT");
+        const oldClose = read("child","child");
+        startup.closedChildId = oldClose.id; // CAS against this observed close; never a substitute for the owner's stop witness.
+        await writeFile(reviewFile,JSON.stringify({...startup,slot:"00000000-0000-4000-8000-000000000001"}));
+        launch(port,project,mode,"--import="+selector); assert.equal(await ended,1);
+        assert.deepEqual(read("child","child"),oldClose); assert.deepEqual(read("installation","activation"),activation);
+        await writeFile(reviewFile,JSON.stringify(startup));
+        launch(port,project,mode,"--import="+selector); await until(()=>stdout.includes("ready at "+url));
+        const supervised = await health(); assert.equal(supervised.build,rolloutBase); assert.notEqual(supervised.runtimeId,restoredHealth.runtimeId);
+        const managedOwners = await leases(); assert.equal(managedOwners[0].pid,managedOwners[1].pid);
+        await assert.rejects(exec(process.execPath,[path.join(root,"scripts","launch.mjs"),"--port",port],
+            {cwd:root,env:{...env,NODE_OPTIONS:"--import="+hook},timeout:10000}),e=>/already has a launcher/.test(e.stderr));
+        const {chromium,expect} = await import("@playwright/test");
+        const browser = await chromium.launch({channel:process.platform==="win32"?"msedge":undefined});
+        try {
+            const page = await browser.newPage();
+            await page.goto(url+"settings"); await expect(page.locator("#appUpdateCheck")).toBeEnabled();
+            await expect(page.locator("#appUpdateAuto")).not.toBeChecked();
+            await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+            await page.locator("#appUpdateCheck").click(); await expect(page.locator("#appUpdateStatus")).toHaveText("WIRE v0.1.3 is available.");
+            await page.locator("#settingsAppUpdate").click();
+            await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated to v0.1.3",{timeout:90000});
+            const fresh = await health(); assert.equal(fresh.build,publishedTarget); assert.notEqual(fresh.runtimeId,supervised.runtimeId);
+            await expect(page.locator("#appUpdateAuto")).not.toBeChecked();
+            await page.goto(url+"reports?bundle="+bundle.bundleId); await expect(page.locator("#savedReportReader h1")).toBeVisible();
+            await verifyPreserved(); assert.equal(await storeIdentity(store),identity);
+            assert.equal((await sessionStorage(context).read()).wire,"signed-in");
+            const currentOwners = await leases(); assert.equal(currentOwners[0].pid,currentOwners[1].pid);
+            assert.notEqual(currentOwners[0].token,managedOwners[0].token);
+            await page.goto("about:blank"); app.disconnect(); assert.equal(await ended,0,stderr);
+            const applied = read("installation","activation"), finalClose = read("child","child");
+            assert.equal(applied.active.commit,publishedTarget); assert.notEqual(applied.active.slot,activation.active.slot);
+            assert.equal(applied.transition,null); assert.equal(read("installation","preferences").automatic,false);
+            assert.equal(finalClose.state,"closed"); assert.equal(finalClose.build,publishedTarget);
+            assert.equal(finalClose.store,identity); assert.equal(finalClose.port,Number(port));
+            launch(port,project,mode,"--import="+selector); assert.equal(await ended,1,"review cannot replay after the slot changed");
+            assert.deepEqual(read("installation","activation"),applied); assert.deepEqual(read("child","child"),finalClose);
+            t.diagnostic(JSON.stringify({fixtureOnly:true,base:legacyBase,originalSlot:rolloutBase,externallyBuilt:publishedTarget,
+                adapterAndContractMatch:true,preparationKeptWriter:true,legacyCloseFields:Object.keys(close).sort(),selectorRefused:true,
+                activeAfterRefusal:restoredHealth.build,restoredSameStore:true,supervisedOrdinaryStart:supervised.build,
+                explicitBrowserUpdateInstalled:fresh.build,freshSlot:applied.active.slot,preparedOutsideJournal:true,staleReviewRefused:true,
+                clientEntry:fresh.clientEntry,port,automatic:false,signedIn:true,oneWriter:true,sameStore:true,reportReopened:true,
+                reportHashes:Object.fromEntries(reportHashes.map(([file,digest])=>[path.basename(file),digest]))}));
+        } finally { await browser.close(); }
         return;
     }
     if (launcherRollout) {
