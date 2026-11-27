@@ -861,10 +861,17 @@ private path values.
 
 On [supported installations](development.md#updating-wire), **Automatically
 check for updates** in **General** is on by default. WIRE checks when it opens
-and looks for a new stable release every five minutes while a tab is awake.
-The notice names the new version. It can take longer if GitHub is unavailable.
-WIRE never installs an update on its own. With the switch off, choose **Check for
-updates** in General instead. The button shows **Checking** while it looks.
+and, while a tab is awake, looks for a new stable release about every five
+minutes. The notice names the new version. It can take longer if GitHub is
+unavailable. WIRE never installs an update on its own. With the switch off,
+choose **Check for updates** in General instead. The button shows **Checking**
+while it looks.
+
+The five-minute check needs the updated launcher, not only an updated tab.
+An installation started by a v0.1.1 or v0.1.2 launcher still checks once a
+day, even after **Update and restart**, because that restart replaces the app
+and keeps the launcher. To move it to the new schedule, follow the one-time
+`--start-installed` steps in [When WIRE offers an update](development.md#when-wire-offers-an-update).
 
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing

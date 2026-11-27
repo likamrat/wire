@@ -81,8 +81,8 @@ Reports**. You can change either in the draft.
 
 A fresh report is independent of Analyze and Trends filters. After
 [inspecting a dated Trends point](user-guide.md#inspect-a-change), choose the
-report's period and activity explicitly. To narrow an open report, use
-**Change what's included > Change activity selection**:
+report's period and activity explicitly. To narrow an open report, choose
+**Settings > Change what's included > Change activity selection**:
 
 | Scope | Includes |
 | --- | --- |
@@ -265,7 +265,7 @@ outcomes or metrics.
 
 <img src="images/report-example.png" alt="An interaction's optional note and editable prompt copy, with separate update controls." width="782">
 
-**Change what's included** holds author, service and outcome choices and
+In **Settings**, **Change what's included** holds author, service and outcome choices and
 optional linked context. **Authors in report** keeps your choices as a draft
 until **Apply**; **Cancel** leaves the accepted authors unchanged.
 
