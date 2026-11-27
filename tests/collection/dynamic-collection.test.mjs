@@ -134,14 +134,15 @@ test("history compatibility: an explicit closed run meters without a prompt mess
     assert.equal(disputed.toolCalls[0].usageContextLinked,undefined);
 });
 
-test("history compatibility: a steering message keeps a new Work IQ request with its running root, measured once through restart", async t => {
+for (const namesSteering of [false, true]) test(`history compatibility: a steering message keeps a new Work IQ request with its running root, measured once through restart${namesSteering ? " (replies name the steering message)" : ""}`, async t => {
     const app = await installation(t), id = app.session(), interactionId = randomUUID();
     const root = event("user.message", { interactionId, messageId: "root", delivery: "idle", content: "Summarize the invented launch notes." });
     const first = event("assistant.message", { interactionId, turnId: "turn-1", apiCallId: "api-1" });
     const steer = event("user.message", { interactionId, messageId: "steer", delivery: "steering", content: "Only the invented risks, please." });
     const tool = call("steered-lookup");
     tool.data.turnId = "turn-2";
-    const second = event("assistant.message", { interactionId, turnId: "turn-2", apiCallId: "api-2", toolRequests: [{ toolCallId: "steered-lookup" }] });
+    const second = event("assistant.message", { interactionId, turnId: "turn-2", apiCallId: "api-2", toolRequests: [{ toolCallId: "steered-lookup" }],
+        ...(namesSteering ? { originatingMessageId: "steer" } : {}) });
     const receipt = (apiCallId, outputTokens) => event("session.usage_record", { usage: { interactionId, apiCallId, model: "gpt-4.1",
         inputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens } });
     const end = event("assistant.turn_end", { turnId: "turn-2" });
