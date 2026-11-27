@@ -206,6 +206,40 @@ test("history compatibility: a retained steering-anchored request keeps its iden
         [[legacyId, steer.id, ["saved-lookup", "later-lookup"]]], "no second record and no reassignment to the root");
 });
 
+test("history compatibility: a call in a queued run whose replies repeat the first prompt's message ID belongs to the queued prompt", async t => {
+    const app = await installation(t), id = app.session(), runA = randomUUID(), runB = randomUUID();
+    const first = event("user.message", { interactionId: runA, messageId: "first", delivery: "idle", content: "First invented request." });
+    const second = event("user.message", { interactionId: runB, messageId: "second", delivery: "queued", content: "Queued invented request." });
+    const reply = (run, turnId, apiCallId, extra = {}) => event("assistant.message", { interactionId: run, originatingMessageId: "first", turnId, apiCallId, model: "gpt-4.1", ...extra });
+    const receipt = (run, apiCallId, outputTokens) => event("session.usage_record", { usage: { interactionId: run, apiCallId, model: "gpt-4.1", inputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens } });
+    const tool = call("queued-lookup");
+    tool.data.turnId = "b-1";
+    const end = event("assistant.turn_end", { turnId: "b-2" });
+    const batch = [first, reply(runA, "a-1", "a-api"), receipt(runA, "a-api", 1), event("assistant.turn_end", { turnId: "a-1" }),
+        second, reply(runB, "b-1", "b-api-1", { toolRequests: [{ toolCallId: "queued-lookup" }] }), tool,
+        event("tool.execution_complete", { toolCallId: "queued-lookup", success: true }), receipt(runB, "b-api-1", 1), event("assistant.turn_end", { turnId: "b-1" }),
+        reply(runB, "b-2", "b-api-2"), receipt(runB, "b-api-2", 2), end];
+    batch.push(event("session.completion_receipt", { schemaVersion: 1, attempt: 1, stopReason: "natural",
+        eventRange: { startEventId: second.id, endEventId: end.id }, sourceEventId: end.id, successfulToolCount: 1, failedToolCount: 0 }));
+    batch.forEach((e, i) => { e.timestamp = new Date(Date.now() - 20000 + i * 100).toISOString(); });
+    await logFor(app, id, batch);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.filter(s => s.sourceSessionId === id);
+    await collector.collectNow();
+    assert.deepEqual((await read()).map(s => [s.userPrompt.sourceEventId, s.usage?.total ?? null]), [[second.id, 203]], "the reply's run names the queued prompt");
+    // A record saved earlier under the first prompt keeps its identity and its call.
+    const legacyId = `history-${id}-${first.id}`;
+    await replaceEvidence(app.context, current => ({ records: current.map(record => record.sourceSessionId !== id ? record : {
+        ...record, scenarioId: legacyId, userPrompt: { ...record.userPrompt, sourceEventId: first.id, sourceTimestamp: first.timestamp, text: first.data.content } }) }));
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await collector.collectNow();
+    assert.deepEqual(mergeEvidenceWithState(await loadBoardState(app.context)).filter(r => r.sourceSessionId === id)
+        .map(r => [r.scenarioId, r.toolCalls.map(c => c.toolCallId)]), [[legacyId, ["queued-lookup"]]], "no second record and no reassignment");
+});
+
 test("history compatibility: a request-only meter for a retained run survives a restart before its closure", async t => {
     const app = await installation(t), id = app.session(), interactionId = randomUUID(), turnId = "tool-turn";
     const prompt = event("user.message", { interactionId, content: "Read the invented review notes." });
