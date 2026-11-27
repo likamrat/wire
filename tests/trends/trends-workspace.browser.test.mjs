@@ -321,6 +321,42 @@ async function screenshot(page, name) {
     await page.screenshot({ path: path.join(proof, `${name}.png`) });
 }
 
+test("Overview keeps View chart beside its independent download action", async t => {
+    const { page, index } = await setup(t);
+    const overview = page.getByRole("navigation", { name: "Trends sections" }).getByRole("button", { name: "Overview" });
+    await overview.click();
+    await chooseTheme(page, "dark");
+    const header = page.locator(".trends-landing > .trends-landing-head");
+    const view = header.getByRole("button", { name: "View chart" });
+    const download = header.getByRole("button", { name: "Download chart as PNG" });
+    async function bounds(head, first, last) {
+        const [row, a, b] = await Promise.all([head.boundingBox(), first.boundingBox(), last.boundingBox()]);
+        assert.ok(row && a && b);
+        return { gap: b.x - (a.x + a.width), edge: row.x + row.width - (b.x + b.width), dy: Math.abs(a.y - b.y) };
+    }
+    const sizes = [];
+    for (const width of [1440, 360]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(download).toBeVisible();
+        await screenshot(page, `overview-chart-actions-${width}`);
+        sizes.push({ width, ...await bounds(header, view, download) });
+    }
+    for (const box of sizes) {
+        assert.ok(box.gap >= 0 && box.gap <= 8 && Math.abs(box.edge) <= 1 && box.dy <= 1, JSON.stringify(box));
+    }
+    await view.focus(); await page.keyboard.press("Tab"); await expect(download).toBeFocused();
+    const [file] = await Promise.all([page.waitForEvent("download"), download.press("Enter")]);
+    assert.equal(file.suggestedFilename(), "WIRE-Errors & failures.png");
+    if (proof) await file.saveAs(path.join(proof, "overview-chart-download.png"));
+    await expect(view).toBeVisible(); await view.click();
+    await expect(index.getByRole("button", { name: "Errors & failures", exact: true })).toHaveAttribute("aria-current", "page");
+    await overview.click();
+    await page.getByRole("button", { name: "Call volume and duration", exact: true }).click();
+    const pair = page.locator(".trends-panel-pair > .trends-landing-head");
+    const box = await bounds(pair, pair.getByRole("button", { name: "Collapse both charts" }), pair.getByRole("button", { name: "Download chart as PNG" }));
+    assert.ok(box.gap >= 0 && box.gap <= 8 && Math.abs(box.edge) <= 1 && box.dy <= 1, JSON.stringify(box));
+});
+
 test("choosing charts keeps only the requested families on screen", async t => {
     const { page, index, reads } = await setup(t, true);
     await page.goto(new URL("/",page.url()).href); await navigateMain(page, "trends");

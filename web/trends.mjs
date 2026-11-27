@@ -295,7 +295,8 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
     const exportChart = read => chartDownload(() => current() && !failedRead && root.getAttribute("aria-busy") !== "true" ? read() : null);
     const landingDownload = exportChart(() => ({ title: landingTitle.textContent, context: [...chartContext(), landingScope.textContent],
         parts: [landingPlot, landingWindow] }));
-    const landingHead = el("div", "trends-landing-head"); landingHead.append(landingTitle, landingOpen, landingDownload);
+    const landingHead = el("div", "trends-landing-head"), landingActions = el("div", "trends-head-actions");
+    landingActions.append(landingOpen, landingDownload); landingHead.append(landingTitle, landingActions);
     landing.append(landingHead, landingScope, landingEmpty, landingPlot, landingWindow); landing.hidden = true;
     let landingSource;
     const landingChart = mountChart({ root: landingPlot, tooltip, color, authorIcon, canInspect: () => current() && section === "overview",
@@ -1376,6 +1377,9 @@ export const trendsStyles = `
 .trends-guide nav{display:grid;align-content:start}.trends-guide nav button{justify-content:start;text-align:start}.trends-guide nav [aria-current=page]{background:var(--accent-soft);color:var(--ink)}.trends-guide article{max-width:64ch}
 @container(max-width:48rem){.trends-landing-grid,.trend-pair-grid{grid-template-columns:minmax(0,1fr)}#trendsView .trends-guide{grid-template-columns:minmax(0,1fr)}.trends-guide nav{display:flex;flex-wrap:wrap}.trend-pair-picks label{width:100%}}
 .trends-landing-head{display:flex;align-items:center;justify-content:space-between;gap:1em;min-height:44px}.trends-landing-head h2,.trends-guide h2{margin:0;font-size:var(--type-section)}
+.trends-landing-head:has(>.trends-head-actions){flex-wrap:wrap;row-gap:var(--space-xs)}
+.trends-landing-head>h2{min-width:0;overflow-wrap:anywhere}
+.trends-head-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-xs);max-width:100%;margin-inline-start:auto}
 .trends-landing>.trends-plot{margin-block-end:calc(-1 * var(--space-md))}
 .trends-landing .trends-index-scope{margin-block:.5em 1em}.trends-guide{max-width:65ch;padding:1rem 1.25rem;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .trends-guide details{border-bottom:1px solid var(--surface-divider)}.trends-guide details:last-child{border:0}.trends-guide summary{padding-block:.75em;cursor:pointer}.trends-guide p{margin:0 0 1em}

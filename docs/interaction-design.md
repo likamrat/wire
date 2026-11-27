@@ -353,6 +353,8 @@ second measure, hiding a chart and changing the population.
   unavailable rows. Unknown and incomplete evidence stays explicit.
 - Use the full workspace in both orientations without scaling text.
 - Narrow layouts wrap the legend; the plot scrolls horizontally.
+- Keep **View chart** or **Collapse chart** beside the download button at the
+  right of the heading. When space is tight, wrap the actions together below the title.
 - **Dates > Custom dates** expands the existing calendar at the same trigger.
   Filters likewise opens at its own toolbar control.
 - With a chart already on screen, read feedback sits with that chart rather than
