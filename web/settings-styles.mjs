@@ -279,6 +279,9 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .source-editor input[type=text] {box-sizing:border-box;width:100%;min-height:44px;padding:8px 14px;border:1px solid var(--control);border-radius:var(--settings-field-radius,var(--radius-small));font-family:var(--font);font-size:var(--type-control);line-height:var(--leading-control)}
 .source-editor input[type=text]:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
 .settings-field input {width:100%}
+.source-path-choice {display:flex;align-items:center;gap:var(--space-sm)}
+.source-path-choice input {flex:1;min-width:0}
+.source-path-choice button {flex:none;min-height:44px}
 .settings-view .select-control {max-width:100%}
 .settings-preferences {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:20px}
 .settings-preferences .select-control {width:100%}

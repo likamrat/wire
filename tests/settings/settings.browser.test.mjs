@@ -423,6 +423,8 @@ test("source read/edit targets retain drafts across search, categories, time zon
     assert.equal(await page.locator("#pauseCollection").isDisabled(), false);
     assert.equal(await page.locator("#sourceChangeImpact").isVisible(), false);
     await page.keyboard.press("Tab");
+    assert.equal(await page.locator("#sourceDatabaseBrowse").evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press("Tab");
     assert.equal(await page.getByRole("textbox", { name: "Chat history folder", exact: true }).evaluate(node => node === document.activeElement), true);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);

@@ -186,6 +186,8 @@ test("readonly source roles, exact long paths and control geometry remain cohere
         }
         await page.locator("#sourceDatabase").focus();
         await page.keyboard.press("Tab");
+        await expect(page.getByRole("button", { name: "Browse for metadata database" })).toBeFocused();
+        await page.keyboard.press("Tab");
         await expect(page.locator("#sourceSessions")).toBeFocused();
         const fields = await page.locator("#sourcePathFields input").evaluateAll(nodes => nodes.map(node => {
             const css = getComputedStyle(node), box = node.getBoundingClientRect();
