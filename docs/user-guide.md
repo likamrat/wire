@@ -113,6 +113,10 @@ Prompt author. **More filters** holds the additional choices.
 When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
 
+Choose **Download chart as PNG** in a populated Analyze, Trends or Compare chart to save
+its current view as a high-resolution image. The image includes the chart title
+and scope, without the surrounding controls. WIRE creates it in your browser.
+
 Read the number above a daily column for that day's calls. In the example,
 November 22 had three, and November 19 had none. The ring and strip under
 **Tool call results** cover all 11 days.

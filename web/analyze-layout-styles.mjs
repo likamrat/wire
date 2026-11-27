@@ -180,7 +180,14 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
 .analyze-trend-decision{max-width:min(32rem,calc(100vw - 2rem))}
 .analyze-trend-decision ul{padding-inline-start:1.3em;margin:0 0 1rem}
 .analyze-trend-decision li+li{margin-block-start:.5em}
-.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:0 8px;align-items:center}
+.chart-download {width:44px;min-height:44px;padding:0;flex:none;color:var(--muted)}
+.chart-download>.wire-icon {width:17px;height:17px}
+.chart-download:focus-visible {outline:2px solid var(--focus);outline-offset:1px}
+.analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {display:grid;grid-template-columns:minmax(0,1fr) auto var(--chart-actions-width,44px);gap:0 8px;align-items:center}
+.analyze-widget-heading:has(>.chart-download:not([hidden])) {--chart-actions-width:88px}
+.analyze-widget-heading>.chart-download {grid-row:1;grid-column:-2/-1;align-self:start;justify-self:start}
+.analyze-widget-heading>.analyze-widget-toggle {justify-self:end}
+.analyze-widget:not(:has(.percentage-legend-row,.flat-time-column,.flat-comparison-row,[data-measured-day],.percentage-ring,.usage-model)) .chart-download {display:none}
 .analyze-widget-heading>.analyze-widget-toggle {grid-area:1/3;align-self:start;position:relative;isolation:isolate;display:inline-grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;box-shadow:none;color:var(--accent);text-decoration:none}
 .analyze-widget-toggle::before {content:"";position:absolute;inset:6px;border-radius:var(--radius-control);z-index:-1;pointer-events:none}
 .analyze-widget-toggle:hover::before {background:var(--hover)}
@@ -195,7 +202,7 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
 #activityView>#activityListContext:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) auto 44px}
 #activityListContext.analyze-widget-heading>.usage-sort {grid-column:2;grid-row:1}
 @container (max-width:30rem) {
- .analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
+ .analyze-widget-heading:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) var(--chart-actions-width,44px)}
  .analyze-widget-heading>.analyze-widget-toggle {grid-area:1/2}
  .analyze-widget-heading>.analyze-trend-link:not([hidden]) {grid-area:2/1;justify-self:start}
  #activityView>#activityListContext:has(>.analyze-widget-toggle:not([hidden])) {grid-template-columns:minmax(0,1fr) 44px}
@@ -217,7 +224,7 @@ ${navigationAction}:focus-visible::before {outline:2px solid var(--focus);outlin
 :is(#percentageCharts,.analyze-ordered-widgets) [data-breakdown=models]:not([data-collapsed=true]) .percentage-card-heading {margin-block-end:var(--space-lg)}
 @container breakdown-card (min-width:36rem) {
  .analyze-widget-heading:has(>.usage-switch) {padding-block-start:var(--space-sm)}
- [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch) {grid-template-columns:minmax(0,1fr) auto auto auto}
+ [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch) {grid-template-columns:minmax(0,1fr) auto auto var(--chart-actions-width,44px)}
  .analyze-widget-heading>.usage-switch {grid-area:1/2;margin-inline-end:var(--space-md)}
  [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch)>.analyze-trend-link {grid-area:1/3}
  [data-collapsed=false]>.analyze-widget-heading:has(>.usage-switch)>.analyze-widget-toggle {grid-area:1/4}

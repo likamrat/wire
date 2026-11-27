@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "../search/live-search-fixture.mjs";
 import { frontendRecords } from "../support/frontend-fixture.mjs";
-import { chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "../support/helpers.mjs";
+import { chooseTheme, fulfillFixtureUpdateStatus, navigateMain, selectActivityOption } from "../support/helpers.mjs";
 import { palettes } from "../../web/theme.mjs";
 
 const proof = process.env.WIRE_ANALYZE_HOMEPAGE_PROOFS;
@@ -48,6 +48,60 @@ async function sampleEntry(page, total) {
         requestAnimationFrame(sample);
     }, total);
 }
+for (const frontend of ["react", "bundled"]) test(`download a populated chart as a local high-resolution PNG (${frontend})`, async t => {
+    const { page, url } = await setup(t, frontend, { reducedMotion: "reduce" });
+    await page.clock.setFixedTime(new Date("2026-11-18T12:00:00Z"));
+    await page.goto(url);
+    const folder = process.env.WIRE_CHART_PNG_PROOFS;
+    async function download(card, content, name) {
+        const action = card.getByRole("button", { name: "Download chart as PNG" });
+        await expect(action).toBeVisible();
+        await page.evaluate(() => document.fonts.ready);
+        const { width } = await content.boundingBox();
+        const [file] = await Promise.all([page.waitForEvent("download", { timeout: 8000 }),
+            name === "tool-usage" ? action.press("Enter") : action.click()]);
+        assert.match(file.suggestedFilename(), /^WIRE-.+\.png$/);
+        const bytes = await readFile(await file.path());
+        const pixels = await page.evaluate(async data => {
+            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(data), c => c.charCodeAt(0))], {type: "image/png"}));
+            const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
+            const ctx = canvas.getContext("2d"); ctx.drawImage(image, 0, 0);
+            const rgba = ctx.getImageData(0, 0, image.width, image.height).data;
+            let ink = 0, colored = 0;
+            for (let i = 0; i < rgba.length; i += 4 * 13) {
+                if (rgba[i + 3] !== 255) throw Error("Transparent chart paper");
+                const [r,g,b] = rgba.subarray(i, i + 3);
+                if (Math.abs(r-rgba[0]) + Math.abs(g-rgba[1]) + Math.abs(b-rgba[2]) > 120) ink++;
+                if (Math.max(r,g,b) - Math.min(r,g,b) > 45) colored++;
+            }
+            return { width: image.width, height: image.height, ink, colored };
+        }, bytes.toString("base64"));
+        assert.ok(pixels.width >= width*2 && pixels.width <= (width+41)*3 && pixels.ink > 200 && pixels.colored > 100,
+            JSON.stringify({width,pixels}));
+        if (folder) {
+            await mkdir(folder, {recursive: true});
+            await file.saveAs(path.join(folder, `${frontend}-${name}.png`));
+            await page.screenshot({path: path.join(folder, `${frontend}-${name}-screen.png`)});
+            await writeFile(path.join(folder, `${frontend}-${name}.json`), JSON.stringify({width,pixels}));
+        }
+    }
+    const outcome = page.locator("#outcomeChart");
+    await download(outcome, outcome.locator(".percentage-content"), "outcomes");
+    await expect(page.locator('#activityView .chart-download,[data-breakdown=models] .chart-download:visible')).toHaveCount(0);
+    if (frontend !== "react") return;
+    await download(page.locator(".analyze-chart-main"), page.locator("#chart"), "time");
+    await navigateMain(page, "compare");
+    await download(page.locator("#periodComparison"), page.locator("#periodComparison .compare-period-key"), "comparison");
+    await chooseTheme(page, "dark");
+    await navigateMain(page, "trends");
+    await page.getByRole("navigation", {name: "Trends sections"}).getByRole("button", {name: "Charts", exact: true}).click();
+    const tools = page.locator('.trends-panel[data-family=tools]');
+    await page.getByRole("navigation", {name: "Trend measures"}).getByRole("button", {name: "Tool usage", exact: true}).click();
+    await tools.getByRole("button", {name: "Lines", exact: true}).click();
+    await tools.locator('[data-trend-mark][data-series="workiq-fetch"]').nth(3).press("Enter");
+    await expect(tools.locator(".trends-point")).toBeVisible();
+    await download(tools, tools.locator(".trends-chart-body"), "tool-usage");
+});
 for (const frontend of ["bundled", "react"]) test(`ordinary Analyze entry paints intermediate counts and an accessible responsive donut (${frontend})`, async t => {
     const {page,url,snapshots,total} = await setup(t, frontend, {reducedMotion:"no-preference", viewport:{width:638,height:1200}});
     await sampleEntry(page,total); await page.goto(url);

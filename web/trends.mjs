@@ -1,4 +1,4 @@
-export function mountTrends({ root, api, time, ux, authorship, modelName, questionControls, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, onUsageReport, hiddenInteraction = () => false }) {
+export function mountTrends({ root, api, time, ux, authorship, modelName, questionControls, createCalendar, mountChart, createTrendPairModel, mountTrendPair, chartDownload, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, onUsageReport, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models", "usage"];
     const modelDetails = [
@@ -291,7 +291,11 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
     landingEmpty.append(el("h3", "", "No matching calls in this period"), landingDetail, landingRecover);
     const landingOpen = directionButton("View chart", () => openErrorsChart());
     landingOpen.id = "trends-open-errors";
-    const landingHead = el("div", "trends-landing-head"); landingHead.append(landingTitle, landingOpen);
+    const chartContext = () => [time.formatCivilRange(range.from, range.to, data.timeContext), restrictionText.textContent];
+    const exportChart = read => chartDownload(() => current() && !failedRead && root.getAttribute("aria-busy") !== "true" ? read() : null);
+    const landingDownload = exportChart(() => ({ title: landingTitle.textContent, context: [...chartContext(), landingScope.textContent],
+        parts: [landingPlot, landingWindow] }));
+    const landingHead = el("div", "trends-landing-head"); landingHead.append(landingTitle, landingOpen, landingDownload);
     landing.append(landingHead, landingScope, landingEmpty, landingPlot, landingWindow); landing.hidden = true;
     let landingSource;
     const landingChart = mountChart({ root: landingPlot, tooltip, color, authorIcon, canInspect: () => current() && section === "overview",
@@ -313,7 +317,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
     const pairHost=el("section","trends-panel-pair"), landingExtra=el("div","trends-discover");
     let pairActive=false, pairOrigin=null;
     pairHost.hidden=landingExtra.hidden=true;
-    const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,missingTokens,timingScope,
+    const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,exportChart,chartContext,tooltip,current,color,number,axisDate,fullDate,weekContext,missingTokens,timingScope,
         evidence:(choice,day,ids,origin,gap)=>openMembers(day,choice.label,ids,origin,choice.key,choice.family === "usage",gap),
         close:()=>{pairActive=false;paint();(pairOrigin?.checkVisibility() ? pairOrigin : index.querySelector(`[data-measure="${activeMeasure}"]`)).focus();}});
     const examples=el("section","trends-start"), explore=el("section","trends-start trends-explore");
@@ -373,7 +377,12 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         const identity = el("div", "trends-identity"), titleGroup = el("div", "trends-title-group"), periodLabel = el("span", "trends-period-label");
         periodLabel.id = `trendsPeriod-${id}`; panel.setAttribute("aria-describedby", periodLabel.id);
         titleGroup.append(title, periodLabel); identity.append(titleGroup);
-        sizing.append(expand, collapse); heading.append(identity, sizing);
+        const download = exportChart(() => ({ title: title.textContent,
+            context: [...chartContext(), spec.modes.find(([value]) => value === card.mode)?.[1],
+                ...[...card.questions?.host.querySelectorAll(".report-form-field:not([hidden]) select") ?? []].map(field => field.selectedOptions[0]?.textContent),
+                card.indexScope.hidden ? [...card.totals.querySelectorAll(".trends-stat>span")].map(span => span.textContent).join(" ") : card.indexScope.textContent],
+            parts: [body, point, limits] }));
+        sizing.append(download, expand, collapse); heading.append(identity, sizing);
         const content = el("div", "trends-content"), modes = el("div", "trends-modes");
         content.id = `trendsContent-${id}`; collapse.setAttribute("aria-controls", content.id);
         modes.setAttribute("role", "group"); modes.setAttribute("aria-label", `${spec.label} measure`);
@@ -474,7 +483,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
             const controls = el("div", "trends-usage-controls");
             controls.append(questions.host,indexModes); content.prepend(controls);
         }
-        const card = { id, panel, title, periodLabel, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
+        const card = { id, panel, title, periodLabel, expand, collapse, download, content, modes, body, summary, totals, legend, plot, limits,
             point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "", empty, emptyTitle, emptyDetail, showWeek, visibleDays,
             types, indexModes, indexScope, basis, actions, numbers, remove, fold, gapCalls, indexCollapsed:false, type: id === "usage" ? "lines" : "columns", percentMode: "share",
             mode: id === "usage" ? "tokens" : id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
@@ -767,6 +776,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         const usage = totals.usagePopulation;
         const missingUsage = id === "usage" && source.definitions.usage.length > 0 && usage?.eligible > 0 && usage.metered === 0;
         const unavailable = noCalls || Boolean(noMeasure) || missingUsage || id === "usage" && !source.definitions.usage.length;
+        card.download.hidden = unavailable || collapsed || source.definitions[id].every(series => card.hidden.has(series.id));
         card.indexModes.hidden = allCharts || unavailable || collapsed;
         card.plot.hidden = unavailable;
         card.empty.hidden = !unavailable;
@@ -1208,6 +1218,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
                 restrictionText.textContent, unknownOutcomes(data.totals),
                 data.coverage.undatedCalls ? `${number(data.coverage.undatedCalls)} undated calls excluded` : ""].filter(Boolean).join(" · ");
             landingEmpty.hidden = Boolean(data.totals.calls); landingPlot.hidden = !landingEmpty.hidden;
+            landingDownload.hidden = landingPlot.hidden;
             landingDetail.textContent = card.emptyDetail.textContent;
             landingRecover.hidden = card.showWeek.hidden; landingRecover.textContent = card.showWeek.textContent;
             if (landingSource !== data) {
@@ -1238,6 +1249,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = catalogKey = ""; lastRevision = null;
         workspace.before(feedback);
         landingChart.withdrawAccess(); landingSource = null; landing.hidden = true; guide.hidden = true;
+        landingDownload.hidden = true;
         pairActive=false;pairOrigin=null;pair.clear();landingExtra.hidden=true;chartsButton.hidden=selectedCharts.hidden=true;
         for (const node of [landingScope, landingDetail, landingRecover, landingWindow]) scrub(node);
         range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); collapseAll.hidden = true; inspecting = null;
@@ -1249,6 +1261,7 @@ export function mountTrends({ root, api, time, ux, authorship, modelName, questi
         filtersButton.disabled = true; periodButton.disabled = true;
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = card.indexCollapsed = false;
+            card.download.hidden = true;
             card.mode = card.id === "usage" ? "tokens" : card.id === "timing" ? "both" : "count"; card.type = card.id === "usage" ? "lines" : "columns"; card.percentMode = "share";
             if (card.gapCalls) {card.gapCalls.hidden=true;scrub(card.gapCalls.firstChild);}
             card.pointKey = "";
@@ -1512,7 +1525,7 @@ export const trendsStyles = `
 #trendsView[data-layout=index] .trends-panel{--trends-plot-height:clamp(13rem,29vh,19rem);border-radius:var(--radius);padding:var(--space-2xl) 20px 16px}
 #trendsView[data-layout=index] .trends-title-group h2{text-box:trim-start cap alphabetic}
 #trendsView[data-layout=index] .trends-heading{display:flex;justify-content:space-between;align-items:start;gap:8px 12px;flex-wrap:wrap;cursor:default}
-#trendsView[data-layout=index] .trends-identity{display:block;min-width:0}#trendsView[data-layout=index] .trends-sizing{display:none}
+#trendsView[data-layout=index] .trends-identity{display:block;min-width:0}#trendsView[data-layout=index] .trends-sizing{order:1}#trendsView[data-layout=index] .trends-sizing>button:not(.chart-download){display:none}
 #trendsView[data-layout=index] .trends-chart-body{display:flex;flex-direction:column;gap:4px;margin-top:8px}
 #trendsView[data-layout=index] .trends-summary{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;max-height:none;overflow:visible}
 #trendsView[data-layout=index] .trends-legend{display:flex;flex:1;align-items:center;flex-wrap:wrap;gap:0 6px;max-height:none;overflow:visible}

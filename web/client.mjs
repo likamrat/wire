@@ -177,8 +177,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const pageDefaults = assessmentFactories.createPageDefaults();
     const hiddenCards = assessmentFactories.createCardVisibility(window, refreshCardVisibility);
     let undoCard = null, hiddenDialog = null;
+    const chartDownload = assessmentFactories.createChartDownload({
+        icon: () => ux.icon("download"), report: reason => announce(reason, "error"),
+        current: () => {
+            const token = api.publicationToken(), snapshot = workspaceState.evidence, route = workspaceState.acceptedRoute;
+            return () => token && api.isCurrent(token) && snapshot === workspaceState.evidence && route === workspaceState.acceptedRoute
+                && !workspaceState.stale && !workspaceState.loading;
+        },
+        save: (blob, name) => {
+            const link = el("a"); link.href = privateObjectUrl(blob); link.download = name;
+            document.body.append(link); try { link.click(); } finally { link.remove(); }
+        },
+    });
     const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token),
-        icon: name => ux.icon(name), dismissHover: () => ux.hideTooltip() });
+        icon: name => ux.icon(name), chartDownload, chartScope: () => acceptedAnalyzeScope()?.text,
+        dismissHover: () => ux.hideTooltip() });
     const authorship = createPromptAuthorship({ screen: true });
     const requestTiming = createRequestTiming(time, authorship);
     let appUpdate;
@@ -723,7 +736,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let collection, collectionSettings, sourceSettings, firstConnection, recorderUI, accountUI, accountProfile, microsoftProfile, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     const privateObjectUrls = new Set();
     function privateObjectUrl(bytes) {
-        const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+        const url = URL.createObjectURL(bytes instanceof Blob ? bytes : new Blob([bytes], { type: "application/octet-stream" }));
         privateObjectUrls.add(url);
         setTimeout(() => { URL.revokeObjectURL(url); privateObjectUrls.delete(url); }, 1000);
         return url;
@@ -2646,6 +2659,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     periodBackToTrends.prepend(ux.icon("back")); periodBackToTrends.hidden = true;
     $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
+        chartDownload,
         questionControls: assessmentFactories.questionControls,
         root: $("trendsView"), api, time, ux, authorship, modelName: screenModelName,
         hiddenInteraction: id => hiddenCards.has(id),
@@ -2711,6 +2725,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
+        chartDownload,
         modelNameNode,
         hiddenInteraction: id => hiddenCards.has(id),
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, ux, search: localSearch, categories, results,

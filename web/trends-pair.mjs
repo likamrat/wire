@@ -47,7 +47,7 @@ export function createTrendPairModel() {
     return { choices, point, compatible, correlation };
 }
 
-export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close, missingTokens, timingScope }) {
+export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, exportChart, chartContext, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close, missingTokens, timingScope }) {
     let data, choices = [], a = "", b = "", date = null, preferAligned = false, collapsed = false;
     let visible = false, sourceKey = "", drawnKey = "", scopeNotice = "", folded = [false, false];
     const title = el("h2", "", "Compare measures"), fold = button("Collapse chart", () => {
@@ -146,6 +146,9 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
         }, {passive:true});
         return {host, head, name, toggle, plot, chart, empty};
     });
+    const download = exportChart(() => ({ title: [choiceAt(0)?.label, choiceAt(1)?.label].filter(Boolean).join(" / "),
+        context: [...chartContext(), hint.hidden ? "" : hint.textContent], parts: [plots, inspector] }));
+    header.append(download);
     function paintReading() {
         const day = dayAt(); inspector.hidden = !day || !a;
         if (!day) return;
@@ -219,6 +222,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
                     + ` ${data.window.count < data.window.totalDays ? "This date page only. " : ""}Each date has equal weight. Missing values are excluded; measured zeros stay. Movement together does not establish cause.`; }
         }
         association.hidden = !second || closed; exact.hidden = !first; paintReading(); if (closed) inspector.hidden=true;
+        download.hidden = !scenes.some(scene => !scene.host.hidden && !scene.plot.hidden);
     }
     function update(source, show) {
         visible=show; root.hidden=!show;

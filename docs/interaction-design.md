@@ -122,6 +122,10 @@ beneath each outcome label.
 
 ### Chart action feedback
 
+**Download chart as PNG** saves the visible plot, labels, scope and selected
+reading. Keep the icon in the chart header and leave controls, hover tips and
+underlying interaction records out of the image.
+
 - Hover tints the control, press deepens the tint, and keyboard focus outlines
   it.
 - Keep this feedback on the outcome, tool, model or author label, not its whole
