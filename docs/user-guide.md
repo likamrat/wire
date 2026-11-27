@@ -873,6 +873,12 @@ day, even after **Update and restart**, because that restart replaces the app
 and keeps the launcher. To move it to the new schedule, follow the one-time
 `--start-installed` steps in [When WIRE offers an update](development.md#when-wire-offers-an-update).
 
+If GitHub's rate limit for release checks runs out, General says so and shows
+**Earliest retry:** in your local time, with the **Last successful check**.
+Choosing **Check for updates** again before then, in any tab, doesn't ask
+GitHub again. Other refusals from GitHub show their HTTP status without naming
+a rate limit.
+
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
 the notice hides it across those tabs; the update remains available in General.

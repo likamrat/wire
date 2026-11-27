@@ -17,6 +17,7 @@ function decode(value) {
         || ![value.installed, value.candidate, value.dismissed].every(id => id === null || sha(id))
         || value.lastChecked !== null && (!Number.isFinite(value.lastChecked) || !Number.isFinite(new Date(value.lastChecked).getTime()))
         || value.nextAutoCheckAt !== undefined && (!Number.isSafeInteger(value.nextAutoCheckAt) || value.nextAutoCheckAt < 0)
+        || value.retryAt !== undefined && (!Number.isSafeInteger(value.retryAt) || !Number.isFinite(new Date(value.retryAt).getTime()))
         || value.packageVersion !== undefined && typeof value.packageVersion !== "string"
         || value.statusRevision !== undefined && (!Number.isSafeInteger(value.statusRevision) || value.statusRevision < 0)
         || !validRelease(value.availableRelease,value.candidate) || !validRelease(value.installedRelease,value.installed)
@@ -107,7 +108,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const status = feedback || (result ? `Update not installed. ${result}` : checking ? checkingMessage
             : offered ? `WIRE ${offered.tag} is available.` : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
         const lastCheck = available || checking || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
-        const summary = [status, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
+        const retry = !feedback && state?.phase === "error" && state.retryAt ? `Earliest retry: ${formatChecked(state.retryAt, true)}.` : "";
+        const summary = [status, retry, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
         if (line.textContent !== summary) line.textContent = summary;
         line.hidden = !summary;
         $("appUpdateVersion").textContent = installed ? `WIRE ${installed.tag}` : state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";
