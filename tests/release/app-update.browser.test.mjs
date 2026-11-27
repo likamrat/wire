@@ -716,12 +716,12 @@ test("single activation stays fenced through transport loss until the authentica
     assert.equal(await modal.locator("h2").evaluate(title => getComputedStyle(title, "::before").content), "none",
         "the focused update dialog must not paint a heading marker across its spinner");
     await expect(modal).toBeFocused();
-    await expect(page.locator("#appUpdateHint")).toHaveText("This tab reloads automatically.");
+    await expect(page.locator("#appUpdateHint")).toBeHidden();
     const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);
     const start = await rotation();
     await expect.poll(rotation).not.toBe(start);
     await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
-    await expect(modal.getByRole("status")).toContainText("WIRE is updating");
+    await expect(modal.getByRole("status")).toHaveText("Updating WIRE… back shortly.");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
         document.querySelector('[data-category="themes"]').click();
@@ -758,7 +758,7 @@ test("single activation stays fenced through transport loss until the authentica
     delete state.packageVersion;
     await page.locator("#appUpdateRecover").click();
     const notice = page.locator("#appUpdateNotice");
-    await expect(notice.getByRole("status")).toHaveText("WIRE updated");
+    await expect(notice.getByRole("status")).toHaveText("WIRE updated", { useInnerText: true });
     await expect(modal).not.toBeVisible();
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }, { action: "apply", candidate: next }]);
     assert.equal(actions.filter(a => a.action === "preferences").length, 0);

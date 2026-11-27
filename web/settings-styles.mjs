@@ -19,9 +19,11 @@ export const settingsStyles = `
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
 #appUpdateNotice>.wire-icon,#appUpdateDismiss>.wire-icon {display:none}
 #appUpdateNotice[data-updated] {display:flex;align-items:center;gap:var(--space-xs);padding:var(--space-xs);padding-inline-start:var(--space-md);
- background:var(--success);border-color:var(--success);color:var(--on-accent)}
+ color:var(--ink);box-shadow:none}
 #appUpdateNotice[data-updated]>.wire-icon,#appUpdateNotice[data-updated] #appUpdateDismiss>.wire-icon {display:block;flex:none}
+#appUpdateNotice[data-updated]>.wire-icon {width:var(--icon-size-small);height:var(--icon-size-small);color:var(--success)}
 #appUpdateNotice[data-updated] .app-update-copy {flex:1;min-width:0;overflow-wrap:anywhere}
+#appUpdateNotice[data-updated] strong {font-weight:var(--weight-medium)}
 #appUpdateNotice[data-updated] .app-update-actions {flex:none;margin:0}
 #appUpdateNotice[data-updated] #appUpdateDismiss {display:grid;place-items:center;width:44px;min-height:44px;padding:0;color:inherit;
  --pill-hover:color-mix(in srgb,currentColor 10%,transparent);--pill-pressed:color-mix(in srgb,currentColor 16%,transparent)}
@@ -65,6 +67,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 @keyframes wire-update-spin {to {transform:rotate(1turn)}}
 @media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]),#appUpdateCheck[aria-busy=true] .update-spinner {animation:none}}
 #appUpdateHint {margin:.25em 0 0 calc(1.125em + var(--space-sm));color:var(--muted)}
+#appUpdateHint:empty {display:none}
 #appUpdateFence:has(#appUpdateActivity[hidden]) #appUpdateHint {margin-inline-start:0}
 #appUpdateFence[open] ~ #loading {visibility:hidden}
 #appUpdateRecover {margin-top:var(--space-md)}

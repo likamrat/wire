@@ -6,7 +6,7 @@ const phases = ["current", "available", "unknown", "checking", "preparing", "res
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const manualOnly = state => state && (!state.supported || state.phase === "manual");
 const checkingMessage = "Checking for updates";
-const updatingMessage = "WIRE is updating";
+const updatingMessage = "Updating WIRE… back shortly.";
 const minManualCheckMs = 3000;
 const validRelease = (release, commit) => release == null || release.commit === commit && sha(commit)
     && /^v\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(release.tag) && release.url === `https://github.com/likamrat/wire/releases/tag/${release.tag}`
@@ -210,7 +210,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function fence(message, retry = false) {
         const heading = retry ? "Restart not confirmed" : message;
-        const hint = retry ? message : "This tab reloads automatically.";
+        const hint = retry ? message : "";
         if ($("appUpdateFenceTitle").textContent !== heading) $("appUpdateFenceTitle").textContent = heading;
         if ($("appUpdateHint").textContent !== hint) $("appUpdateHint").textContent = hint;
         $("appUpdateRecover").hidden = !retry;

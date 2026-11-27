@@ -453,7 +453,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         }
         const applied = settings.waitForResponse(r=>r.url()===url+"api/app-update" && r.request().postDataJSON()?.action==="apply");
         await settings.locator("#settingsAppUpdate").click();
-        await Promise.all(awake.map(p=>expect(p.getByRole("dialog",{name:"WIRE is updating"})).toBeVisible()));
+        await Promise.all(awake.map(p=>expect(p.getByRole("dialog",{name:"Updating WIRE… back shortly."})).toBeVisible()));
         await expect(separate.locator("#appUpdateFence")).toBeHidden();
         try {
             const decision=await applied;
@@ -514,7 +514,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         await update("status");
         await post("api/app-update/release-panel", {});
         const windows = process.platform === "win32";
-        const browser = await chromium.launch({ channel: windows ? "msedge" : undefined, headless: false });
+        const browser = await chromium.launch({ channel: windows ? "msedge" : undefined });
         try {
             const context = await browser.newContext();
             await context.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin ? route.continue() : route.abort());
@@ -550,6 +550,10 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await expect(analyze.locator("#workspace")).toHaveAttribute("aria-busy", "false");
             const check = settings.getByRole("button", { name: "Check for updates" });
             await expect(check).toBeEnabled();
+            await settings.getByRole("link", { name: "Change theme" }).click();
+            await settings.locator("label:has(#palette-midnight)").click();
+            await chooseTheme(settings, "dark");
+            await settings.getByRole("button", { name: "Back to General" }).click();
             // The server registered this document, but it leaves before its first update status arrives.
             const joining = await context.newPage(), registered = Promise.withResolvers(), resume = Promise.withResolvers();
             await joining.route("**/api/app-update", async route => {
@@ -578,15 +582,15 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await expect(analyze.locator("#workspace")).toBeVisible();
             await expect(analyze).toHaveTitle("Analyze | WIRE");
             assert.equal((await health()).runtimeId, starter.runtimeId);
-            await expect(analyze.getByRole("dialog", { name: "WIRE is updating" })).toHaveCount(0);
+            await expect(analyze.getByRole("dialog", { name: "Updating WIRE… back shortly." })).toHaveCount(0);
             const applyResponse = () => settings.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "apply");
             // The peer received the offer, but the server did not receive its acknowledgment.
             await analyze.route("**/api/app-update/readiness", route => route.abort(), { times: 1 });
             const refused = applyResponse();
             await install.click();
             for (const page of [settings, analyze]) {
-                await expect(page.getByRole("dialog", { name: "WIRE is updating" })).toBeVisible();
-                await expect(page.locator("#appUpdateHint")).toHaveText("This tab reloads automatically.");
+                await expect(page.getByRole("dialog", { name: "Updating WIRE… back shortly." })).toBeVisible();
+                await expect(page.locator("#appUpdateHint")).toBeHidden();
             }
             const refusal = await refused;
             assert.equal(refusal.status(), 409);
@@ -597,13 +601,28 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await expect(analyze.locator("#appUpdateDetail")).toHaveText(error);
             assert.equal((await health()).runtimeId, starter.runtimeId);
             const applied = applyResponse();
+            const proof = process.env.WIRE_APP_UPDATE_PROOFS;
+            if (proof) await mkdir(proof, { recursive: true });
+            await analyze.setViewportSize({ width: 390, height: 844 });
             await install.click();
+            for (const [page, layout] of [[settings, "desktop"], [analyze, "narrow"]]) {
+                const progress = page.locator("#appUpdateFence");
+                await expect(progress.getByRole("status")).toHaveText("Updating WIRE… back shortly.", {useInnerText:true});
+                assert.ok(await progress.locator("h2").evaluate(title => {
+                    const range = document.createRange(); range.selectNodeContents(title);
+                    const lines = range.getClientRects(), bounds = title.getBoundingClientRect();
+                    return lines.length === 1 && lines[0].left >= bounds.left - 1 && lines[0].right <= bounds.right + 1
+                        && bounds.left >= 0 && bounds.right <= innerWidth;
+                }), `${layout}: the complete progress message fits on one line`);
+                await expect(page.locator("#appUpdateNotice[data-updated]")).toHaveCount(0);
+                if (proof) await page.screenshot({path: path.join(proof, `updating-${layout}.png`)});
+            }
             const response = await applied;
             assert.equal(response.status(), 200, (await response.json()).error);
             const updated = `WIRE updated to v${pkg.version}`;
             for (const page of [settings, analyze]) {
                 const notice = page.getByRole("complementary", { name: updated });
-                await expect(notice.getByRole("status")).toHaveText(updated, { timeout: 120000 });
+                await expect(notice.getByRole("status")).toHaveText(updated, { useInnerText: true, timeout: 120000 });
                 await expect(notice.locator('[data-icon-role="result-success"]')).toBeVisible();
                 await expect(notice.getByRole("button")).toHaveCount(1);
             }
@@ -619,7 +638,6 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             assert.equal(stdout.match(/WIRE ready at /g).length, 2, "starter and exactly one activation");
             await settings.getByRole("link", { name: "Change theme" }).click();
             const notice = settings.locator("#appUpdateNotice"), dismiss = notice.getByRole("button", { name: "Dismiss" });
-            const proof = process.env.WIRE_APP_UPDATE_PROOFS;
             for (const palette of Object.keys(palettes)) {
                 await settings.locator(`label:has(#palette-${palette})`).click();
                 for (const theme of ["light", "dark"]) {
@@ -628,9 +646,11 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
                     const rail = await settings.locator("#sidebar").evaluate(n => getComputedStyle(n).backgroundColor);
                     const text = await notice.getByRole("status").evaluate(n => getComputedStyle(n).color);
                     const button = await dismiss.evaluate(measureControlSurface);
-                    const label = contrast(text, surface), close = contrast(button.ink, button.face), boundary = contrast(surface, rail);
-                    assert.ok(label >= 4.5 && close >= 4.5 && boundary >= 3, `${palette} ${theme}: text ${label}, dismiss ${close}, rail ${boundary}`);
-                    if (proof) t.diagnostic(`${palette} ${theme}: text ${label.toFixed(2)}, dismiss ${close.toFixed(2)}, rail ${boundary.toFixed(2)}.`);
+                    const cue = await notice.locator(':scope > [data-icon-role="result-success"]').evaluate(n => getComputedStyle(n).color);
+                    const label = contrast(text, surface), close = contrast(button.ink, button.face), check = contrast(cue, surface);
+                    assert.ok(label >= 4.5 && close >= 4.5 && check >= 3 && contrast(surface, rail) < 3,
+                        `${palette} ${theme}: readable text ${label}, dismiss ${close}, check ${check} on a subdued surface`);
+                    if (proof) t.diagnostic(`${palette} ${theme}: text ${label.toFixed(2)}, dismiss ${close.toFixed(2)}, check ${check.toFixed(2)}.`);
                 }
             }
             await settings.getByRole("button", { name: "Back to General" }).click();

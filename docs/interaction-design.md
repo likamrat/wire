@@ -1107,9 +1107,11 @@ update result and the time of the last successful check when known.
 - **Installed release notes** and **What's new** are navigation actions. Use
   the same arrows, hover tint and keyboard focus as other directional links.
   In the reader, **General** points back and **View on GitHub** opens a new tab.
-- After the restarted page verifies the build, show one success-colored notice
-  with a circled check, the confirmed version when available, and a dismiss
-  button.
+- Keep restart progress to one line. If the restart can't be confirmed, show
+  the reason and recovery action in full.
+- After the restarted page verifies the build, show the confirmed version on
+  the usual notice surface. Only the small circled check uses the success
+  color. Keep Dismiss accessible.
 
 Below updates, show the current theme with a miniature WIRE screen, its name and
 mode, and swatches drawn from the active screen palette.
