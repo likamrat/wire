@@ -46,8 +46,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function render() {
         const available = state?.supported && state.phase === "available" && sha(state.candidate) && state.candidate !== state.installed;
-        const shown = available && state.candidate !== state.dismissed;
-        const offered = available ? state.availableRelease : null, installed = state?.installedRelease;
+        const unconfirmed = state?.supported && state.phase === "error" && state.offerUnconfirmed === true && state.availableRelease
+            && sha(state.candidate) && state.candidate !== state.installed;
+        const offered = available || unconfirmed ? state.availableRelease : null, installed = state?.installedRelease;
+        const shown = (available || unconfirmed) && state.candidate !== state.dismissed;
         for (const [id, release] of [["noticeReleaseNotes", shown && !success && !result && offered],["availableReleaseNotes",offered],["installedReleaseNotes",installed]]) {
             const link = $(id);
             link.hidden = !release;
@@ -57,13 +59,14 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (notesTag !== null) {
             const record = [offered,installed].find(r=>r && r.tag===notesTag);
             $("releaseReaderVersion").textContent = record?.tag ?? "";
-            $("releaseReaderStatus").textContent = record ? record === installed ? "Installed version" : "Available update"
+            $("releaseReaderStatus").textContent = record ? record === installed ? "Installed version" : unconfirmed ? "Previously verified release" : "Available update"
                 : !state || state.phase === "checking" ? "Reading release information…" : "These notes are not available for this installation.";
             const github = $("releaseReaderGitHub"); github.hidden = !record;
             if (record) github.href = record.url; else github.removeAttribute("href");
             const body = $("releaseNotesBody");
             if (notesText !== record?.notes) {
                 body.replaceChildren(); notesText = record?.notes;
+                if (record && !notesText) body.textContent = "Release notes aren't available in WIRE. View the official release on GitHub.";
                 let list;
                 for (const line of (notesText ?? "").split(/\r?\n/)) {
                     if (!line.trim() || /^## What's new in v[\d.]+\s*$/i.test(line)) continue;
@@ -75,20 +78,21 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                     (list ?? body).append(node);
                 }
             }
-            $("releaseReaderApply").hidden = !record || record !== offered;
+            $("releaseReaderApply").hidden = !available || !record || record !== offered;
             $("releaseReaderApply").disabled = busy || Boolean(expected) || !panelVerified;
         }
         notice.toggleAttribute("data-install-result", Boolean(result));
         notice.inert = Boolean(expected) || !shown && !success && !result;
         if (!notice.inert) {
             notice.toggleAttribute("data-updated", Boolean(success));
-            const heading = $("appUpdateHeading"), title = success || (result ? "Update not installed" : offered ? `WIRE ${offered.tag} is available` : "WIRE update available");
+            const heading = $("appUpdateHeading"), title = success || (result ? "Update not installed" : unconfirmed
+                ? `Previously verified: WIRE ${offered.tag}` : offered ? `WIRE ${offered.tag} is available` : "WIRE update available");
             if (heading.textContent !== title) heading.textContent = title;
             const detail = $("appUpdateDetail");
-            const description = success ? "" : result || feedback || "Update and restart WIRE. Your saved data won’t change.";
+            const description = success ? "" : result || feedback || (unconfirmed ? "Check again in General before installing." : "Update and restart WIRE. Your saved data won’t change.");
             detail.hidden = !description;
             if (detail.textContent !== description) detail.textContent = description;
-            $("appUpdateApply").hidden = !shown || Boolean(success);
+            $("appUpdateApply").hidden = !available || !shown || Boolean(success);
         }
         $("settingsAppUpdate").hidden = !available;
         for (const id of ["appUpdateApply", "settingsAppUpdate"]) $(id).disabled = busy || Boolean(expected) || !panelVerified;
@@ -105,10 +109,11 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         manual.setAttribute("aria-busy", String(manualChecking));
         manual.querySelector(".check-action-pending").hidden = !manualChecking;
         const status = feedback || (result ? `Update not installed. ${result}` : checking ? checkingMessage
-            : offered ? `WIRE ${offered.tag} is available.` : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
+            : offered && available ? `WIRE ${offered.tag} is available.` : available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
         const lastCheck = available || checking || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
         const retry = !feedback && state?.phase === "error" && state.retryAt ? `Earliest retry: ${formatChecked(state.retryAt, true)}.` : "";
-        const summary = [status, retry, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
+        const prior = unconfirmed && !checking ? `Previously verified: WIRE ${offered.tag}. Check again before installing.` : "";
+        const summary = [status, prior, retry, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
         if (line.textContent !== summary) line.textContent = summary;
         line.hidden = !summary;
         $("appUpdateVersion").textContent = installed ? `WIRE ${installed.tag}` : state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";

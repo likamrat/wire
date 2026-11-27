@@ -77,9 +77,19 @@ Automatic checks also keep their normal five-minute spacing; failures without
 a retry time back off for a day. A manual check can try again sooner when
 GitHub hasn't set a limit.
 
-- By default it reads the latest published stable GitHub Release, verifies its
-  tag against official `main`, and installs that exact commit. A newer merge,
-  an unpublished tag, and a draft do not trigger public updates.
+- It checks [GitHub's public Latest release link](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases#linking-to-the-latest-release)
+  without following the redirect. Only an exact `likamrat/wire` stable release
+  URL qualifies. The launcher verifies the tag's pinned commit against official
+  `main` before offering it, before building and again before switching. A
+  merge, an unpublished tag, a draft or a prerelease is not a Latest release.
+- The public release link does not require the REST API. WIRE uses the API
+  separately for notes when it has none saved for that exact tag and commit.
+  If the shared quota is exhausted, WIRE links to that release on GitHub and
+  waits at least an hour (or longer if GitHub requires it) before requesting
+  notes again. No credentials, distribution assets or webhooks are required.
+- If Latest itself is temporarily unavailable, General identifies a previously
+  verified release and keeps its notes, but won't install it from the saved
+  result. A fresh check must identify and verify the release again.
 - For an isolated development installation tracking **every** official main
   push, set `WIRE_UPDATE_CHANNEL=main` in the launcher's environment before
   starting it. This channel still checks daily. A docs-only push qualifies.
@@ -116,6 +126,12 @@ transition: it has its own update preferences.
 If the selected store, port or clean-close receipt does not match, WIRE
 refuses to start. Do not pull the base under an active slot, move journals,
 or use crash recovery for a clean stop.
+
+A launcher through v0.1.3 still uses the REST API to discover releases.
+`--start-installed` can select the new discovery code only after a release
+containing it is installed in that clone's active slot. If the old launcher
+cannot verify the update, do not start a different installation against its
+store or change the base under an active slot.
 
 #### Prepare a release without Actions
 
@@ -326,6 +342,7 @@ address and verifies its bytes. It doesn't update your installation.
 | --- | --- |
 | `release-discovery` | Two untouched tabs first show the installed release as current. A new fixture release then appears in both tabs at the normal five-minute deadline. No update is installed. |
 | `release-limit` | A manual check encounters an exhausted GitHub quota. Two tabs show the reason and share the wait; after the reset, a manual check discovers the new release. No live GitHub requests. |
+| `release-resilience` | A failed recheck preserves the prior version and notes without offering installation. A withdrawal during staging keeps the old writer. A later verified release installs even when GitHub's REST API can't supply its notes. |
 | `launcher-rollout` | A managed v0.1.2 installation with automatic checks off installs the committed candidate, closes normally and starts its installed launcher on the same port. Verifies the saved preference, five-minute deadline, browser build and saved report. |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |

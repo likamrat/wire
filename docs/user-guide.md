@@ -880,6 +880,10 @@ without mentioning a rate limit. Until then, choosing **Check for updates** in
 any tab doesn't ask GitHub again. Other failures show their HTTP status and no
 retry time; you can check again whenever you like.
 
+If a later check can't reach GitHub, General keeps the version and notes from
+the last verified offer. **Previously verified** means WIRE needs to check
+again before it can install that version.
+
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
 the notice hides it across those tabs; the update remains available in General.
@@ -897,8 +901,9 @@ a window doesn't confirm it's ready, WIRE stops before restarting. That message
 alone doesn't mean you left an edit unfinished.
 
 To read what changed first, choose **What's new** in the notice or **What's new
-in this update** in General. The notes open in WIRE. **View on GitHub** opens
-that exact GitHub Release. After a confirmed restart, **Installed release
+in this update** in General. The notes open in WIRE. If GitHub limits access
+to the notes, **View on GitHub** opens that exact release. WIRE can still
+verify the version and install it. After a confirmed restart, **Installed release
 notes** in General opens the installed version's notes. A single click updates
 the local instance across its browsers; a WIRE instance on a different port
 with its own installation and data is unchanged.

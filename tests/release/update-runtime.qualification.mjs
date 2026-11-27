@@ -25,8 +25,9 @@ const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
 const discoveryOnly = process.env.WIRE_UPDATE_BROWSER === "release-discovery";
 const feedLimit = process.env.WIRE_UPDATE_BROWSER === "release-limit";
+const resilience = process.env.WIRE_UPDATE_BROWSER === "release-resilience";
 const launcherRollout = process.env.WIRE_UPDATE_BROWSER === "launcher-rollout";
-const releaseJourney = sleepingGuide || discoveryOnly || feedLimit || process.env.WIRE_UPDATE_BROWSER === "release";
+const releaseJourney = sleepingGuide || discoveryOnly || feedLimit || resilience || process.env.WIRE_UPDATE_BROWSER === "release";
 const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
 const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
 const rolloutBase = "4d700dbf0d5efd16f4f1a78de0d4bc6c47d893da"; // v0.1.2
@@ -65,6 +66,7 @@ async function seedAdapterJournal({ appDbPath, sessionRoot }) {
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test(discoveryOnly ? "open WIRE tabs discover a stable release published after their first automatic check"
+    : resilience ? "a failed recheck preserves verified notes; only a newly verified Latest release can be installed"
     : feedLimit ? "a manual release check explains a shared GitHub limit until the next permitted check"
     : launcherRollout ? "a clean v0.1.2 installation starts its verified updated launcher without losing Automatic Off"
     : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
@@ -150,11 +152,18 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         const sourceURL = pathToFileURL(path.join(installation, "lib", "update-source.mjs")).href;
         const feed = path.join(temp,"release.json");
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
-        import {readFile,appendFile} from 'node:fs/promises';
+        import {readFile,appendFile,writeFile} from 'node:fs/promises';
         export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout?"release":"main")},
-        fetcher:async()=>{${discoveryOnly || launcherRollout || feedLimit ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(launcherRollout ? installation + "\n" : "read\n")});` : ""}
+        fetcher:async(url, init)=>{const api=new URL(url).hostname==="api.github.com";
+        ${discoveryOnly || launcherRollout || feedLimit ? `if(!api || ${launcherRollout}) await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},${JSON.stringify(launcherRollout ? installation + "\n" : "read\n")});` : ""}
         try{const record=JSON.parse(await readFile(${JSON.stringify(feed)},'utf8'));
-        ${feedLimit ? "if(record.reset) return new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(record.reset)}});" : ""}
+        ${resilience ? `await appendFile(${JSON.stringify(path.join(temp, "discovery-log"))},(api?(record.apiBlocked?"notes:403":"notes:200"):(record.reset?"latest:403":"latest:302"))+"\\n");` : ""}
+        if(record.reset || api && record.apiBlocked) return new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(record.reset || Math.floor(Date.now()/1000)+3600)}});
+        if(!api) {
+            if(url!=="https://github.com/likamrat/wire/releases/latest" || init.method!=="HEAD" || init.redirect!=="manual") throw Error("Unexpected release selector");
+            ${resilience ? `if(record.withdrawAfterRead) await writeFile(${JSON.stringify(feed)},JSON.stringify({...record,html_url:record.withdrawAfterRead,withdrawAfterRead:null}));` : ""}
+            return Response.redirect(record.html_url,302);
+        }
         return Response.json(record)}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
         const hook = path.join(temp, name);
         await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
@@ -302,6 +311,63 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await writeFile(path.join(temp,"release.json"),JSON.stringify({tag_name:tag,html_url:`https://github.com/likamrat/wire/releases/tag/${tag}`,
                 body,published_at:new Date().toISOString(),prerelease:false,draft:false}));
         };
+        if (resilience) {
+            await update("preferences", {enabled:false});
+            await publish("v1.0.0",base,"Installed release.");
+            await writeFile(path.join(origin,"docs","README.md"), guideText("Next stable guide."));
+            await git(origin,"commit","-qam","Fixture release");
+            const tip = await git(origin,"rev-parse","HEAD");
+            await publish("v1.0.1",tip,"### Fixed\n- Reviewed guide correction.");
+            const feed = path.join(temp,"release.json"), release = JSON.parse(await readFile(feed,"utf8"));
+            const browser = await chromium.launch({channel: process.platform === "win32" ? "msedge" : undefined});
+            try {
+                const page = await browser.newPage(), check = page.locator("#appUpdateCheck"), apply = page.locator("#settingsAppUpdate");
+                await page.goto(url + "settings"); await check.click();
+                await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE v1.0.1 is available");
+                const last = (await update("status")).lastChecked;
+                await writeFile(feed, JSON.stringify({...release, reset:Math.floor(Date.now()/1000)+6, apiBlocked:true}));
+                // A second check in the same installation fails; the real incident's initiator is unknown.
+                await update("check"); await post("api/app-update/release-panel",{});
+                await expect(page.locator("#appUpdateStatus")).toContainText(/previously verified.*v1\.0\.1/i);
+                await page.locator("#availableReleaseNotes").click();
+                await expect(page.locator("#releaseNotesBody")).toContainText("Reviewed guide correction.");
+                await expect(page.locator("#releaseReaderApply")).toBeHidden();
+                await page.goBack(); await expect(check).toBeVisible();
+                await delay(6100);
+                const reset = Math.floor(Date.now()/1000)+2;
+                await writeFile(feed, JSON.stringify({...release,reset,apiBlocked:true}));
+                const secondFailure = page.waitForResponse(r => r.url() === url+"api/app-update" && r.request().postDataJSON().action === "check");
+                await check.click();
+                const second = await (await secondFailure).json();
+                assert.equal(second.retryAt, reset*1000); assert.equal(second.lastChecked,last);
+                await expect(page.locator("#appUpdateStatus")).toContainText(/previously verified.*v1\.0\.1/i);
+                cap = await getPage();
+                assert.equal((await update("status")).lastChecked,last); await post("api/app-update/release-panel",{});
+                await writeFile(feed, JSON.stringify({...release,apiBlocked:true}));
+                await delay(Math.max(0, reset*1000-Date.now())); await check.click();
+                await expect(apply).toBeEnabled(); await expect(page.locator("#appUpdateStatus")).toHaveText("WIRE v1.0.1 is available.");
+                // Staging confirms the offer initially, but publication changes during the build.
+                await writeFile(feed, JSON.stringify({...release,withdrawAfterRead:"https://github.com/likamrat/wire/releases/tag/v1.0.0",apiBlocked:true}));
+                await apply.click(); await expect(page.locator("#appUpdateStatus")).toContainText(/changed|not installed/i,{timeout:90000});
+                assert.equal((await health()).build,base);
+                await writeFile(path.join(origin,"docs","README.md"), guideText("Replacement stable guide."));
+                await git(origin,"commit","-qam","Replacement fixture release");
+                const replacement = await git(origin,"rev-parse","HEAD");
+                await publish("v1.0.2", replacement, "Not retrievable during the API limit.");
+                await writeFile(feed, JSON.stringify({...JSON.parse(await readFile(feed,"utf8")),apiBlocked:true}));
+                await check.click(); await expect(page.locator("#appUpdateStatus")).toHaveText("WIRE v1.0.2 is available.");
+                await page.locator("#availableReleaseNotes").click();
+                await expect(page.locator("#releaseNotesBody")).toContainText("Release notes aren't available in WIRE.");
+                await expect(page.locator("#releaseReaderGitHub")).toHaveAttribute("href","https://github.com/likamrat/wire/releases/tag/v1.0.2");
+                await page.locator("#releaseReaderApply").click();
+                await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated to v1.0.2",{timeout:90000});
+                assert.equal((await health()).build,replacement); await verifyPreserved();
+                const reads = (await readFile(path.join(temp,"discovery-log"),"utf8")).trim().split("\n");
+                assert.deepEqual(reads, ["latest:302","notes:200","latest:403","latest:403","latest:302","latest:302","latest:302","latest:302","notes:403","latest:302","latest:302"]);
+                t.diagnostic(`Verified offer -> failed check -> retained notes; withdrawn offer refused at staging; verified release installed. Upstream fixture requests: ${reads.join(", ")}.`);
+            } finally { await browser.close(); }
+            return;
+        }
         if (discoveryOnly || feedLimit) {
             await publish("v1.0.0", base, "Installed fixture release.");
             const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
