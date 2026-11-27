@@ -64,6 +64,15 @@ random capabilities, TTL and the 128-panel limit still apply.
   update operation before one launcher restarts the installation. The
   notification carries no private data and can't authorize an update or renew
   data access.
+- A normal operator restart ends the original document's updater authority. A
+  still-open tab can **observe** release availability only after the access
+  transport independently qualifies the replacement runtime. The launcher
+  verifies an expiring, page-specific receipt bound to this installation,
+  store, port, channel, build and executed client entry. This read uses the
+  saved automatic-check preference and shared deadline. It cannot change a
+  preference, install, acknowledge readiness or replay any earlier operation.
+  An observing tab blocks installation until its own clean departure; it is
+  never counted as a ready replacement for an old view.
 - On a clean departure, a verified browser page releases only its original
   panel. A verified clean page receiving a native browser freeze can park its
   participation in this instance. It cannot use its capability to resume work

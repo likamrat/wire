@@ -218,7 +218,8 @@ test("a manual check cannot publish an old offer after the page was suspended", 
 
 test("unsupported bundled runtime reads status only, even if a saved automatic preference is on", async t => {
     const { page, actions } = await workspace(t, { renderer: "bundled", automatic: true, supported: false });
-    await expect(page.locator(".app-version-card .settings-row-copy")).toHaveText(/^\s*WIRE v1\.0\.0\s*$/);
+    await expect(page.locator(".app-version-card .settings-row-copy")).toHaveText(/^\s*WIRE v1\.0\.0\s*$/, { useInnerText:true });
+    await expect(page.locator("#availableReleaseNotes")).toBeHidden(); await expect(page.locator("#installedReleaseNotes")).toBeHidden();
     await expect(page.getByRole("link", { name: "Update instructions" })).toBeVisible();
     await expect(page.locator("#appUpdateCheck")).toBeHidden();
     await expect(page.locator("#appUpdateAuto")).toBeHidden();

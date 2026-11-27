@@ -404,6 +404,7 @@ address and verifies its bytes. It doesn't update your installation.
 | `WIRE_UPDATE_BROWSER` | What it exercises |
 | --- | --- |
 | `release-discovery` | Two untouched tabs first show the installed release as current. A new fixture release then appears in both tabs at the normal five-minute deadline. No update is installed. |
+| `release-service-restart` | Keeps the original visible document open through an operator stop/start on the same address, then publishes a fixture release. The original tab shows one unsolicited notice without recovering its old updater controls. |
 | `release-limit` | A manual check encounters an exhausted GitHub quota. Two tabs show the reason and share the wait; after the reset, a manual check discovers the new release. No live GitHub requests. |
 | `release-resilience` | A failed recheck preserves the prior version and notes without offering installation. A withdrawal during staging keeps the old writer. A later verified release installs even when GitHub's REST API can't supply its notes. |
 | `launcher-rollout` | A managed v0.1.2 installation with automatic checks off installs the committed candidate, closes normally and starts its installed launcher on the same port. Verifies the saved preference, five-minute deadline, browser build and saved report. |
