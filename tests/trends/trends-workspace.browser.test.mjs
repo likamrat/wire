@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../../lib/server.mjs";
@@ -320,6 +320,68 @@ async function screenshot(page, name) {
     await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
     await page.screenshot({ path: path.join(proof, `${name}.png`) });
 }
+
+test("Overview keeps View chart beside its independent download action", async t => {
+    const { page, index } = await setup(t);
+    const overview = page.getByRole("navigation", { name: "Trends sections" }).getByRole("button", { name: "Overview" });
+    await overview.click();
+    await chooseTheme(page, "dark");
+    const header = page.locator(".trends-landing > .trends-landing-head");
+    const view = header.getByRole("button", { name: "View chart" });
+    const download = header.getByRole("button", { name: "Download chart as PNG" });
+    async function bounds(head, first, last) {
+        const [row, a, b] = await Promise.all([head.boundingBox(), first.boundingBox(), last.boundingBox()]);
+        assert.ok(row && a && b);
+        return { gap: b.x - (a.x + a.width), edge: row.x + row.width - (b.x + b.width), dy: Math.abs(a.y - b.y) };
+    }
+    const sizes = [];
+    for (const width of [1440, 360]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(download).toBeVisible();
+        await screenshot(page, `overview-chart-actions-${width}`);
+        sizes.push({ width, ...await bounds(header, view, download) });
+    }
+    for (const box of sizes) {
+        assert.ok(box.gap >= 0 && box.gap <= 8 && Math.abs(box.edge) <= 1 && box.dy <= 1, JSON.stringify(box));
+    }
+    await view.focus(); await page.keyboard.press("Tab"); await expect(download).toBeFocused();
+    const plot = page.locator("#trendsOverviewPlot");
+    const reading = () => plot.evaluate(node => [node.scrollLeft, node.clientWidth, node.scrollWidth, getComputedStyle(node).overflowX]);
+    const before = await reading();
+    assert.ok(before[0] > 0 && before[1] < before[2] && before[3] === "auto", "the narrow live chart is scrolled");
+    const [file] = await Promise.all([page.waitForEvent("download"), download.press("Enter")]);
+    assert.equal(file.suggestedFilename(), "WIRE-Errors & failures.png");
+    if (proof) await file.saveAs(path.join(proof, "overview-chart-download.png"));
+    const bytes = await readFile(await file.path());
+    const band = await page.evaluate(async png => {
+        const img = await createImageBitmap(new Blob([Uint8Array.from(atob(png), c => c.charCodeAt(0))]));
+        const canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, img.width, img.height);
+        // The native track is a thick, full-width band below the marks. A
+        // gridline is thin; date labels and their caption don't fill a row.
+        let consecutive = 0, tallest = 0;
+        for (let y = Math.floor(img.height * .7); y < img.height; y++) {
+            let filled = 0;
+            for (let n = 1; n < 20; n++) {
+                const x = Math.floor(img.width * (.1 + .8 * n / 20)), i = (y * img.width + x) * 4;
+                if (Math.abs(data[i]-data[0]) + Math.abs(data[i+1]-data[1]) + Math.abs(data[i+2]-data[2]) > 90) filled++;
+            }
+            consecutive = filled >= 18 ? consecutive + 1 : 0;
+            tallest = Math.max(tallest, consecutive);
+        }
+        return tallest;
+    }, bytes.toString("base64"));
+    assert.ok(band < 8, `download contains a ${band}px scrollbar band`);
+    assert.deepEqual(await reading(), before, "export must not restyle or move the live viewport");
+    await expect(view).toBeVisible(); await view.click();
+    await expect(index.getByRole("button", { name: "Errors & failures", exact: true })).toHaveAttribute("aria-current", "page");
+    await overview.click();
+    await page.getByRole("button", { name: "Call volume and duration", exact: true }).click();
+    const pair = page.locator(".trends-panel-pair > .trends-landing-head");
+    const box = await bounds(pair, pair.getByRole("button", { name: "Collapse both charts" }), pair.getByRole("button", { name: "Download chart as PNG" }));
+    assert.ok(box.gap >= 0 && box.gap <= 8 && Math.abs(box.edge) <= 1 && box.dy <= 1, JSON.stringify(box));
+});
 
 test("choosing charts keeps only the requested families on screen", async t => {
     const { page, index, reads } = await setup(t, true);

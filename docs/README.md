@@ -9,6 +9,7 @@ Start with [installation](../README.md), then choose the task you need.
 | Connect local Copilot history for the first time | [Connect local history](user-guide.md#connect-local-history) |
 | Understand recorded activity, token usage or a single call | [Use WIRE](user-guide.md) |
 | Follow daily tool use, services, errors or timing back to recorded calls | [Trends](user-guide.md#trends) |
+| Save a chart as an image for a slide or message | [Download a chart](user-guide.md#download-a-chart) |
 | Find saved prompts, results or report text | [Find saved text](user-guide.md#find-saved-text) |
 | Update WIRE, or change its theme, time zone and defaults | [Settings](user-guide.md#settings) |
 | Keep selected interactions for a report | [Named report drafts](reporting.md#keep-interactions-in-a-draft) |

@@ -57,9 +57,11 @@ or **Settings > Sources**.
 
 <img src="images/first-connection.png" alt="Connect your Copilot history, with Review and connect and Not now." width="561">
 
-1. Under **GitHub Copilot app**, check that **Metadata database** and **Chat
-   history folder** point to the Copilot app you want to read. Edit a path if
-   the suggestion is wrong.
+1. Under **GitHub Copilot app**, check that **Metadata database** (`data.db`)
+   and **Chat history folder** (`session-state`) point to the Copilot app you
+   want to read. If a suggestion is wrong, choose **Browse** beside it to pick
+   the file or folder, or type its full path. Picking a path doesn't connect
+   anything.
 2. Leave **Token records** on if you want token counts for older chats. WIRE
    reads the counts Copilot already recorded in the file shown there. Reading
    them uses no tokens and costs nothing. Turn it off if you'd rather WIRE
@@ -70,7 +72,7 @@ or **Settings > Sources**.
 4. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
    read can take a few minutes.
 
-<img src="images/sources-new-connection.png" alt="Sources for a new connection: the suggested Copilot paths, Token records on with its no-cost notice, the schedule and What approving allows." width="744">
+<img src="images/sources-new-connection.png" alt="Sources for a new connection: the suggested Copilot paths with Browse beside each, Token records on with its no-cost notice, the schedule and What approving allows." width="744">
 
 Approval covers this instance and these local files. WIRE doesn't rerun prompts,
 make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
@@ -114,7 +116,7 @@ When Analyze opens, the charts build to the recorded counts. This isn't
 collection progress. With reduced motion, the final values appear immediately.
 
 Read the number above a daily column for that day's calls. In the example,
-November 22 had three, and November 19 had none. The ring and strip under
+November 23 had three, and November 20 had none. The ring and strip under
 **Tool call results** cover all 11 days.
 
 Hover over **Tool failed**, or focus the label with the keyboard. Its reading
@@ -148,6 +150,28 @@ shares can overlap. When you read the numbers:
   tool and model cards, read each pair from left to right, then down.
 - Model percentages use all matching interactions, including those without
   model names. An interaction with several recorded models counts under each.
+
+### Download a chart
+
+To put a chart in a slide, document or message, choose the download button
+(**Download chart as PNG**) in the chart's header, next to **View trend** or
+**View by day** and the collapse arrow. Your browser saves a high-resolution
+PNG named after the chart, such as `WIRE-Tool call results.png`.
+
+The image matches what you see: the chart title, the dates and filters in use,
+and any switch or day reading you've selected. Buttons, menus, hover tips and
+scrollbars are left out. If the chart scrolls sideways, the image shows the
+part in view. Check the tool, model and author names it shows before sharing it.
+
+The button appears on charts with data. Collapse a chart and it hides until you
+expand it again. Trends and Compare charts have the same button; see
+[Trends](#download-a-trends-chart) and [Compare](reporting.md#read-the-changes).
+
+The download saves one chart, not the whole page, a table of values or the
+interaction list. To share findings with their supporting calls,
+[make a report](reporting.md). If WIRE can't create the image, a message says
+why. For a chart too large for a sharp image, narrow the dates or filters and
+try again.
 
 ### Prompt authors
 
@@ -519,11 +543,11 @@ Choose **Trends** in the sidebar. **Overview** opens first and shows how many
 interactions had a recorded error or failure each day.
 
 Hover or focus a day on the line. A dashed guide lines it up with the date.
-In the example, November 21 shows **0 of 2 interactions**: there was activity,
+In the example, November 22 shows **0 of 2 interactions**: there was activity,
 but no recorded error. A cross at zero on today's date means there were no
 matching dated calls.
 
-![Trends reading for November 21: two interactions, no failed tool calls and no calls with API errors.](images/trends-overview.png)
+![Trends reading for November 22: two interactions, no failed tool calls and no calls with API errors.](images/trends-overview.png)
 
 **Charts** lists eight measures. **Chart guide** explains their units.
 
@@ -724,6 +748,23 @@ actions.
 
 ![Collapsed Trends rows with their applied date range and sizing controls.](images/trends-collapsed.png)
 
+### Download a Trends chart
+
+**Download chart as PNG** saves the chart as it's set up: the measure, dates,
+filters, **Count** or **Percentage**, the series you've left visible and the
+selected point's reading. It works like [the Analyze button](#download-a-chart).
+
+- On **Overview**, the button is to the right of **View chart**. **View chart**
+  opens the full **Errors & failures** chart in Charts; the button downloads
+  the Overview chart where it is.
+- In **Charts**, each open chart has the button in its header. It hides while
+  the chart is collapsed, has no data or has every series hidden.
+- In **Compare measures**, the button beside **Collapse chart** (or **Collapse
+  both charts**) saves the plotted measures and the selected day's reading.
+
+When the header runs out of room, the button and the control beside it wrap
+below the title together.
+
 Trends shows retained Work IQ patterns. It isn't a census of Copilot prompts,
 an answer-quality judgment, a productivity score or evidence of causation. For
 a two-period comparison or a saved copy, use [Compare](#compare) or
@@ -818,9 +859,11 @@ private path values.
 
 ### Update WIRE
 
-On [supported installations](development.md#updating-wire), automatic checks
-are on by default. You can turn them off and still choose **Check for updates**
-in **General**. The button shows **Checking** while it looks for an update.
+On [supported installations](development.md#updating-wire), **Automatically
+check for updates** in **General** is on by default. WIRE checks when it opens
+and daily while it stays open, then shows a notice naming the new version. It
+never installs an update on its own. With the switch off, choose **Check for
+updates** in General instead. The button shows **Checking** while it looks.
 
 When one tab finds an update, other connected tabs on the same WIRE instance
 show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
@@ -828,7 +871,8 @@ the notice hides it across those tabs; the update remains available in General.
 
 To install an update:
 
-1. Choose **Update and restart** in General or in the update notification.
+1. Choose **Update and restart** in the notice, in the update's notes or in
+   General.
 2. Leave your tabs open. Each participating window shows **WIRE is updating**,
    then reloads its own page. Once the page verifies the restart, **WIRE updated**
    shows the running version when available.
@@ -837,8 +881,9 @@ If a window has an unfinished edit, save or cancel it there before updating. If
 a window doesn't confirm it's ready, WIRE stops before restarting. That message
 alone doesn't mean you left an edit unfinished.
 
-**What's new** opens the offered version's notes in WIRE. **View on GitHub**
-opens that exact GitHub Release. After a confirmed restart, **Installed release
+To read what changed first, choose **What's new** in the notice or **What's new
+in this update** in General. The notes open in WIRE. **View on GitHub** opens
+that exact GitHub Release. After a confirmed restart, **Installed release
 notes** in General opens the installed version's notes. A single click updates
 the local instance across its browsers; a WIRE instance on a different port
 with its own installation and data is unchanged.
@@ -900,10 +945,19 @@ Edit anything and **What changes** lists the effect. Its button names what
 saving does, such as **Approve token records** or **Save preferences**, and
 **Cancel** puts everything back.
 
+To read a different Copilot app, choose **Browse** beside **Metadata
+database** or **Chat history folder**, or type the full path. **Browse** opens
+the file or folder chooser on the computer running WIRE; cancelling it keeps
+the current path. If WIRE can't open a chooser there, a message says so and you
+can type the path instead. A new path is only a draft until you choose
+**Approve and switch source** in **What changes**.
+
 <a id="token-records-for-a-connected-source"></a>
 
-An existing connection keeps its saved **Token records** choice; the switch
-starts on only for a new source. To change it:
+A connection keeps its saved **Token records** choice; the switch starts on
+only for a new source. The **File** row shows which file WIRE reads. It follows
+the metadata database's folder, so you can't edit it separately. To change
+the choice:
 
 1. Open **Settings > Sources**. Under **GitHub Copilot app**, **Token records**
    shows **On** or **Off**.
@@ -911,9 +965,21 @@ starts on only for a new source. To change it:
    or **Reads less**.
 3. Choose **Approve token records** or **Stop reading token records**.
 
+A source connected before WIRE asked about token records has no saved choice.
+**Token records** shows **Off until you approve**, and WIRE doesn't read the
+file. Below the file it names, choose **Approve token records** to start
+reading it; Settings says **Token records approved.** and the switch shows
+**On** from then on. Choose **Keep off** to save Off instead. Both buttons wait
+until other Sources edits are saved or cancelled, and saving the schedule
+doesn't answer the question. If WIRE can't identify the Copilot account, it
+won't approve token records and says so; you can choose **Keep off** and carry
+on.
+
 Reading token records uses no tokens and costs nothing. Turning them off keeps
-the totals WIRE already counted. Changing the source's paths turns the switch
-off until you approve it again.
+the totals WIRE already counted. Approving them doesn't recount chats WIRE has
+already read; use [Count tokens in chats already read](collection.md#count-tokens-in-chats-already-read)
+for those. Changing the source's paths turns the switch off until you approve
+it again.
 
 - **Refresh** checks approved local history.
 - **Read stored activity** only rereads WIRE's retained view.

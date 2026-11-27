@@ -47,7 +47,7 @@ export function createTrendPairModel() {
     return { choices, point, compatible, correlation };
 }
 
-export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close, missingTokens, timingScope }) {
+export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, exportChart, chartContext, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close, missingTokens, timingScope }) {
     let data, choices = [], a = "", b = "", date = null, preferAligned = false, collapsed = false;
     let visible = false, sourceKey = "", drawnKey = "", scopeNotice = "", folded = [false, false];
     const title = el("h2", "", "Compare measures"), fold = button("Collapse chart", () => {
@@ -57,7 +57,8 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     });
     title.tabIndex = -1;
     const header = el("div", "trends-landing-head"), body = el("div", "trend-pair-body"), controls = el("div", "trend-pair-picks");
-    header.append(title, fold);
+    const actions = el("div", "trends-head-actions");
+    actions.append(fold); header.append(title, actions);
     const remove = button("Remove comparison", () => {
         if (!current()) return;
         b = ""; scopeNotice = ""; folded = [false, false]; paint(); focusPicker(1);
@@ -146,6 +147,9 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
         }, {passive:true});
         return {host, head, name, toggle, plot, chart, empty};
     });
+    const download = exportChart(() => ({ title: [choiceAt(0)?.label, choiceAt(1)?.label].filter(Boolean).join(" / "),
+        context: [...chartContext(), hint.hidden ? "" : hint.textContent], parts: [plots, inspector] }));
+    actions.append(download);
     function paintReading() {
         const day = dayAt(); inspector.hidden = !day || !a;
         if (!day) return;
@@ -219,6 +223,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
                     + ` ${data.window.count < data.window.totalDays ? "This date page only. " : ""}Each date has equal weight. Missing values are excluded; measured zeros stay. Movement together does not establish cause.`; }
         }
         association.hidden = !second || closed; exact.hidden = !first; paintReading(); if (closed) inspector.hidden=true;
+        download.hidden = !scenes.some(scene => !scene.host.hidden && !scene.plot.hidden);
     }
     function update(source, show) {
         visible=show; root.hidden=!show;

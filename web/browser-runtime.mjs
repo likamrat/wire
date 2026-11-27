@@ -89,6 +89,7 @@ import { mountAppUpdate } from "./app-update.mjs";
 import { createPageDefaults, bindPageDefaults, pageDefaultSpecs } from "./page-defaults.mjs";
 import { createCardVisibility } from "./card-visibility.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
+import { createChartDownload } from "./frontend/chart-png.ts";
 import { createReportDraftPicker } from "./report-draft-picker.mjs";
 import { normalizeSearchText } from "../lib/search-normalize.mjs";
 import { createUsageReading } from "./usage-reading.mjs";
@@ -104,7 +105,7 @@ function factories() {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         mountDocumentation, createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
-        createCardVisibility, renderDailyTokenChart, modelName: modelDisplayName, ...createUsageReading({ ...usage, modelName: modelDisplayName }),
+        createCardVisibility, createChartDownload, renderDailyTokenChart, modelName: modelDisplayName, ...createUsageReading({ ...usage, modelName: modelDisplayName }),
         mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows, pack: mountDashboardLayout }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync, homepageRows),
         mountAccountSettings: options => mountAccountSettingsPresentation({

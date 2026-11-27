@@ -280,7 +280,7 @@ export function createPeriodComparisonPresentation(time) {
     return { choices, preset, names, rates, completeDays };
 }
 
-export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState, modelNameNode = id => id,
+export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState, chartDownload, modelNameNode = id => id,
     assessmentFactories, getContext, navigate, open, useAnalyze, ux, onSearch, recordLink, syncFilters, createReport, openSearch, onAccepted, onPairChange, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument;
     const presentation = assessmentFactories.periodComparison.createPresentation(time);
@@ -477,6 +477,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     function clearResults() {
         acceptedPublication = null;
+        resultHeading.querySelector(".chart-download")?.remove();
         syncReport(); resultHeading.hidden = true; resultTitle.textContent = "Comparison results";
         output.replaceChildren(); output.removeAttribute("aria-busy"); inspectBody.replaceChildren(); closeInspection();
         onPairChange?.(null);
@@ -1184,6 +1185,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (chartView() === "outcomes" && (a.rowIds.length || b.rowIds.length) && !value.nativePeriods)
             pair.append(el("span", "Change", "compare-change-heading"));
         const content = doc.createDocumentFragment(); content.append(pair);
+        resultHeading.querySelector(".chart-download")?.remove();
         if (value.nativePeriods) {
             const section = el("section", undefined, "compare-native");
             section.append(el("h3", "Microsoft activity"));
@@ -1247,6 +1249,15 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 } else chart.append(outcomes);
             } else if (chartView() === "timing") chart.append(matchingTimingPanel(value, names), wholeTimingPanel(value, sides, names));
             else chart.append(plottedPanel(value, sides, names));
+            const plot = chart.querySelector(".compare-outcomes,.comparison-timeline,.comparison-breakdown");
+            if (plot) {
+                const download = chartDownload(() => readCurrent(started, publication) && output.contains(plot) ? {
+                    title: heading, context: [doc.getElementById("comparisonAcceptedScope")?.textContent || "",
+                        value.nativePeriods ? "GitHub Copilot only" : ""],
+                    parts: [pair, plot],
+                } : null);
+                resultHeading.append(download);
+            }
             content.append(chart);
         }
         if (a.usage && b.usage && (a.usage.eligible || b.usage.eligible)) {
@@ -1512,6 +1523,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     function withdrawAccess() {
         usageChoice = {question:"all",threshold:30000};
         if (accessWithdrawn) return;
+        resultHeading.querySelector(".chart-download")?.remove();
         accessWithdrawn = true; generation++;
         inspectionReturn = null;
         machine?.leave(); machine = null;

@@ -11,7 +11,7 @@ export function homepageRows(order) {
 
 // The layout moves the existing hosts. Rendering, navigation and access withdrawal
 // continue to operate on the same chart, card list and pager.
-export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon, dismissHover, pack }) {
+export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon, chartDownload, chartScope, dismissHover, pack }) {
     const dashboard = document.querySelector(".analyze-dashboard"), home = document.getElementById("homeView");
     const packedBreakdowns = dashboard.querySelector(":scope > #percentageCharts");
     const grid = document.createElement("div");
@@ -65,6 +65,24 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
             const bodies = [...shell.children].filter(node => node !== header && node.id !== "activityTitle");
             bodies.push(...header.querySelectorAll(":scope > .percentage-denominator,:scope > .usage-sort,:scope > .usage-switch,:scope > .activity-list-scope"));
             const closed = active && collapsed.has(key);
+            if (key !== "interactions") {
+                let download = header.querySelector(".chart-download");
+                if (!download) {
+                    download = chartDownload(() => {
+                        if (!ordinary || !isCurrent(publication)) return null;
+                        finish();
+                        const context = [chartScope(),
+                            header.querySelector(".usage-switch [aria-pressed=true]")?.textContent,
+                            header.querySelector(".percentage-denominator:not([hidden],.visually-hidden)")?.textContent,
+                            shell.querySelector(".token-history[data-inspecting] .usage-date-slider")?.getAttribute("aria-valuetext")];
+                        const parts = key === "time" ? [shell.querySelector("#chart"), ...shell.querySelectorAll("#chartFooter>span,#timelineWindow>p")]
+                            : [shell.querySelector(key === "usage" ? "#analyzeUsageContent" : ".percentage-content")];
+                        return { title: header.querySelector("h2,h3").textContent, context, parts };
+                    });
+                    toggle.before(download);
+                }
+                download.hidden = !active || closed;
+            }
             card.classList.add("analyze-widget"); header.classList.add("analyze-widget-heading");
             card.dataset.collapsed = String(closed);
             toggle.hidden = !active; toggle.setAttribute("aria-expanded", String(!closed));
@@ -219,6 +237,8 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor, icon
             toggleAll.hidden = true;
             for (const { card, toggle, bodies } of widgets.values()) {
                 card.dataset.collapsed = "false"; toggle.hidden = true;
+                const download = toggle.parentElement?.querySelector(".chart-download");
+                if (download) download.hidden = true;
                 for (const body of bodies) body.inert = false;
             }
             widgets.clear(); scrollSize.disconnect(); scrolls.clear();

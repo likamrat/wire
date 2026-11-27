@@ -122,6 +122,10 @@ beneath each outcome label.
 
 ### Chart action feedback
 
+**Download chart as PNG** saves the visible plot, labels, scope and selected
+reading. Keep the icon in the chart header and leave controls, scrollbars, hover tips and
+underlying interaction records out of the image.
+
 - Hover tints the control, press deepens the tint, and keyboard focus outlines
   it.
 - Keep this feedback on the outcome, tool, model or author label, not its whole
@@ -349,6 +353,8 @@ second measure, hiding a chart and changing the population.
   unavailable rows. Unknown and incomplete evidence stays explicit.
 - Use the full workspace in both orientations without scaling text.
 - Narrow layouts wrap the legend; the plot scrolls horizontally.
+- Keep **View chart** or **Collapse chart** beside the download button at the
+  right of the heading. When space is tight, wrap the actions together below the title.
 - **Dates > Custom dates** expands the existing calendar at the same trigger.
   Filters likewise opens at its own toolbar control.
 - With a chart already on screen, read feedback sits with that chart rather than
@@ -1136,6 +1142,10 @@ Source access links open it.
 - Each source has its own block: provider mark, approval summary, file paths,
   then optional reads such as token records with what they read. The schedule
   follows the sources because it applies to all of them.
+- Each editable path has **Browse** after its field, named for the field it
+  fills. The host's chooser fills only the draft; Cancel keeps the typed value
+  and focus returns to Browse. The token-records **File** is disclosure, not an
+  editable path.
 - Put the cost of reading token records next to the switch, before the file
   details. Lead with “Reading token records uses no tokens and costs nothing.”
   Use an informational tint, not a warning or an indication that access is on.
@@ -1261,6 +1271,7 @@ The expanded desktop rail resizes from its right edge.
 | Schedule only | Save preferences |
 | Changed source paths | Approve and switch source |
 | Token records, same paths | Approve token records (on) or Stop reading token records (off) |
+| Token records with no saved choice | Approve token records or Keep off, below the named file; no switch and no What changes step |
 | Count tokens in chats already read | Check chats, then a separate Count confirmation |
 | Cancel in Sources | Discard the draft |
 | Display preference | Apply immediately, separately from permission |
