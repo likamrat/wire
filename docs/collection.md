@@ -356,19 +356,29 @@ putting the raw opaque ID in new retained model metadata or in reports.
 
 - A message the producer delivers as `steering` carries the same run ID into
   the running interaction. Its model calls count with that root prompt; it isn't
-  a rival prompt.
+  a rival prompt. A Work IQ call made after it also belongs to the root's
+  request, even when the reply names the steering message, and the request
+  shows the steering message as a following message. Requests
+  saved earlier under a steering message keep that prompt, and later calls in
+  the same exchange stay with them.
 - When both the prompt and a reply record a run ID, the run decides ownership.
   Copilot can repeat the first prompt's `originatingMessageId` on replies to
-  later prompts.
+  later prompts. A Work IQ call follows the same rule: it belongs to the prompt
+  that owns its reply's run, and an unclear run owner leaves it unlinked.
 - An exchange that stopped before a final answer still spent every model call
   it recorded. Once the next independent prompt begins or Copilot ends the
   session, those calls are its total and the reader says it stopped early.
   A reply to it after that point conflicts.
 - The assistant message Copilot writes after a background notification has no
-  turn, model request, run or originating message. It isn't a rival reply.
+  turn, model request, run or originating message. It isn't a rival reply when
+  it sits in a metered round, or between rounds with only its own tool
+  completion before a round this exchange meters.
 - Only a skipped, oversized or withheld entry between the prompt and the next
   prompt blocks a total. An unread prefix, pasted image or withheld entry
-  elsewhere in the chat doesn't. Withheld prompt text keeps its run and message
+  elsewhere in the chat doesn't. Neither does an oversized line the reader
+  verifies as a successful tool completion or tool hook from the main agent,
+  such as a large Work IQ result or a generated image with its own tool meter;
+  its gap keeps its place and is marked. Withheld prompt text keeps its run and message
   identity, so it can still contest ownership.
 - A gap is missing evidence. It never clears a total that was already verified.
 

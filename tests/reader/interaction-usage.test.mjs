@@ -352,6 +352,16 @@ test("an assistant message the producer writes after a background notification i
     unmetered.events.splice(before,0,{ id:"start-x", type:"assistant.turn_start", timestamp:unmetered.events[before].timestamp, data:{ turnId:"t-x" } },
         unmetered.notice,unmetered.note,{ id:"end-x", type:"assistant.turn_end", timestamp:unmetered.events[before].timestamp, data:{ turnId:"t-x" } });
     assert.equal(retainedUsage(unmetered.events,unmetered.record,false),null,"A notification does not make an otherwise unmetered round free");
+    // As recorded by the producer: the note lands between rounds, its own tool completes, then the round that answers it starts.
+    const between = (mutate = () => {}) => { const r = run(), next = r.events.findIndex(e => e.id === "start-3");
+        const done = { id:"note-done", type:"tool.execution_complete", timestamp:r.events[next].timestamp, data:{ toolCallId:"note-tool", success:true } };
+        const inserted = [r.notice,r.note,done]; mutate(r,inserted); r.events.splice(next,0,...inserted); return r; };
+    const gap = between();
+    assert.equal(recordedUsage(retainedUsage(gap.events,gap.record,false)).total,66,"A note between rounds, before a metered round, is no rival");
+    const strayReply = between((r,inserted) => inserted.push({ id:"stray", type:"assistant.message", timestamp:r.notice.timestamp, data:{ content:"Unlinked." } }));
+    assert.equal(retainedUsage(strayReply.events,strayReply.record,false),null,"Anything else before the next round keeps the note unaccounted");
+    const bare = between((r) => { const third = r.events.findIndex(e => e.id === "reply-3"); r.events[third] = { ...r.events[third], data:{ ...r.events[third].data, wireOriginalModel:undefined } }; });
+    assert.equal(retainedUsage(bare.events,bare.record,false),null,"The following round must be metered by this exchange's own reply");
 });
 test("replies to a later prompt that repeat the first prompt's message id belong to their own run", () => {
     const {events,record} = steeredRun(), at = Date.parse(events.at(-1).timestamp);

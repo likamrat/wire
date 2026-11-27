@@ -134,6 +134,113 @@ test("history compatibility: an explicit closed run meters without a prompt mess
     assert.equal(disputed.toolCalls[0].usageContextLinked,undefined);
 });
 
+for (const namesSteering of [false, true]) test(`history compatibility: a steering message keeps a new Work IQ request with its running root, measured once through restart${namesSteering ? " (replies name the steering message)" : ""}`, async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID();
+    const root = event("user.message", { interactionId, messageId: "root", delivery: "idle", content: "Summarize the invented launch notes." });
+    const first = event("assistant.message", { interactionId, turnId: "turn-1", apiCallId: "api-1" });
+    const steer = event("user.message", { interactionId, messageId: "steer", delivery: "steering", content: "Only the invented risks, please." });
+    const tool = call("steered-lookup");
+    tool.data.turnId = "turn-2";
+    const second = event("assistant.message", { interactionId, turnId: "turn-2", apiCallId: "api-2", toolRequests: [{ toolCallId: "steered-lookup" }],
+        ...(namesSteering ? { originatingMessageId: "steer" } : {}) });
+    const receipt = (apiCallId, outputTokens) => event("session.usage_record", { usage: { interactionId, apiCallId, model: "gpt-4.1",
+        inputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens } });
+    const end = event("assistant.turn_end", { turnId: "turn-2" });
+    const close = event("session.completion_receipt", { schemaVersion: 1, attempt: 1, stopReason: "natural",
+        eventRange: { startEventId: root.id, endEventId: end.id }, sourceEventId: end.id, successfulToolCount: 1, failedToolCount: 0 });
+    const batch = [root, first, steer, second, tool, event("tool.execution_complete", { interactionId, toolCallId: "steered-lookup", success: true }),
+        receipt("api-1", 5), receipt("api-2", 10), end, close];
+    batch.forEach((e, i) => { e.timestamp = new Date(Date.now() - 20000 + i * 100).toISOString(); });
+    const file = await logFor(app, id, batch);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.filter(s => s.sourceSessionId === id);
+    await collector.collectNow();
+    const [record, ...others] = await read();
+    assert.equal(others.length, 0);
+    assert.equal(record.scenarioId, `history-${id}-${root.id}`, "the run's root prompt anchors the request");
+    assert.equal(record.userPrompt.text, root.data.content);
+    assert.deepEqual(record.followUpPrompts.map(p => [p.sourceEventId, p.text, p.association]),
+        [[steer.id, steer.data.content, "Sent while this request was still running, so it belongs to the same request."]]);
+    assert.equal(record.usage?.total, 215, "both model calls of the steered run are counted once");
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await collector.collectNow();
+    const after = await read();
+    assert.deepEqual(after.map(s => [s.scenarioId, s.usage?.total, s.toolCalls.length]), [[record.scenarioId, 215, 1]], "restart adds no duplicate or orphan");
+    const idle = event("user.message", { interactionId, messageId: "next", delivery: "idle", content: "A separate invented request." });
+    const later = call("later-lookup");
+    idle.timestamp = new Date(Date.now() - 5000).toISOString(); later.timestamp = new Date(Date.now() - 4000).toISOString();
+    await appendFile(file, [idle, later].map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const separated = await read();
+    assert.deepEqual(separated.map(s => s.userPrompt.sourceEventId).sort(), [root.id, idle.id].sort(), "an idle prompt in the same run stays separate");
+    assert.equal(separated.find(s => s.userPrompt.sourceEventId === root.id).toolCalls.length, 1);
+});
+
+test("history compatibility: a retained steering-anchored request keeps its identity and later calls in its exchange", async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID();
+    const root = event("user.message", { interactionId, messageId: "root", delivery: "idle", content: "Review the invented plan." });
+    const steer = event("user.message", { interactionId, messageId: "steer", delivery: "steering", content: "Focus on the invented budget." });
+    const tool = call("saved-lookup");
+    const batch = [root, steer, tool, event("tool.execution_complete", { interactionId, toolCallId: "saved-lookup", success: true })];
+    batch.forEach((e, i) => { e.timestamp = new Date(Date.now() - 20000 + i * 100).toISOString(); });
+    const file = await logFor(app, id, batch);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    // Records saved before this change were anchored on the steering message itself.
+    const legacyId = `history-${id}-${steer.id}`;
+    await replaceEvidence(app.context, current => ({ records: current.map(record => record.sourceSessionId !== id ? record : {
+        ...record, scenarioId: legacyId, userPrompt: (({ association, ...prompt }) => prompt)(record.followUpPrompts[0]), followUpPrompts: [] }) }));
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    const later = call("later-lookup");
+    later.timestamp = new Date(Date.now() - 5000).toISOString();
+    await appendFile(file, JSON.stringify(later) + "\n");
+    await collector.collectNow();
+    const state = await loadBoardState(app.context);
+    const records = mergeEvidenceWithState(state).filter(record => record.sourceSessionId === id);
+    assert.deepEqual(records.map(record => [record.scenarioId, record.userPrompt.sourceEventId, record.toolCalls.map(c => c.toolCallId)]),
+        [[legacyId, steer.id, ["saved-lookup", "later-lookup"]]], "no second record and no reassignment to the root");
+});
+
+test("history compatibility: a call in a queued run whose replies repeat the first prompt's message ID belongs to the queued prompt", async t => {
+    const app = await installation(t), id = app.session(), runA = randomUUID(), runB = randomUUID();
+    const first = event("user.message", { interactionId: runA, messageId: "first", delivery: "idle", content: "First invented request." });
+    const second = event("user.message", { interactionId: runB, messageId: "second", delivery: "queued", content: "Queued invented request." });
+    const reply = (run, turnId, apiCallId, extra = {}) => event("assistant.message", { interactionId: run, originatingMessageId: "first", turnId, apiCallId, model: "gpt-4.1", ...extra });
+    const receipt = (run, apiCallId, outputTokens) => event("session.usage_record", { usage: { interactionId: run, apiCallId, model: "gpt-4.1", inputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens } });
+    const tool = call("queued-lookup");
+    tool.data.turnId = "b-1";
+    const end = event("assistant.turn_end", { turnId: "b-2" });
+    const batch = [first, reply(runA, "a-1", "a-api"), receipt(runA, "a-api", 1), event("assistant.turn_end", { turnId: "a-1" }),
+        second, reply(runB, "b-1", "b-api-1", { toolRequests: [{ toolCallId: "queued-lookup" }] }), tool,
+        event("tool.execution_complete", { toolCallId: "queued-lookup", success: true }), receipt(runB, "b-api-1", 1), event("assistant.turn_end", { turnId: "b-1" }),
+        reply(runB, "b-2", "b-api-2"), receipt(runB, "b-api-2", 2), end];
+    batch.push(event("session.completion_receipt", { schemaVersion: 1, attempt: 1, stopReason: "natural",
+        eventRange: { startEventId: second.id, endEventId: end.id }, sourceEventId: end.id, successfulToolCount: 1, failedToolCount: 0 }));
+    batch.forEach((e, i) => { e.timestamp = new Date(Date.now() - 20000 + i * 100).toISOString(); });
+    await logFor(app, id, batch);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios.filter(s => s.sourceSessionId === id);
+    await collector.collectNow();
+    assert.deepEqual((await read()).map(s => [s.userPrompt.sourceEventId, s.usage?.total ?? null]), [[second.id, 203]], "the reply's run names the queued prompt");
+    // A record saved earlier under the first prompt keeps its identity and its call.
+    const legacyId = `history-${id}-${first.id}`;
+    await replaceEvidence(app.context, current => ({ records: current.map(record => record.sourceSessionId !== id ? record : {
+        ...record, scenarioId: legacyId, userPrompt: { ...record.userPrompt, sourceEventId: first.id, sourceTimestamp: first.timestamp, text: first.data.content } }) }));
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await collector.collectNow();
+    assert.deepEqual(mergeEvidenceWithState(await loadBoardState(app.context)).filter(r => r.sourceSessionId === id)
+        .map(r => [r.scenarioId, r.toolCalls.map(c => c.toolCallId)]), [[legacyId, ["queued-lookup"]]], "no second record and no reassignment");
+});
+
 test("history compatibility: a request-only meter for a retained run survives a restart before its closure", async t => {
     const app = await installation(t), id = app.session(), interactionId = randomUUID(), turnId = "tool-turn";
     const prompt = event("user.message", { interactionId, content: "Read the invented review notes." });
@@ -702,6 +809,35 @@ test("history compatibility: a pasted image inside an exchange does not hide its
             event("assistant.turn_start", { turnId: "turn-two" }),
             event("assistant.message", { apiCallId: "img-two", turnId: "turn-two", model, originatingMessageId: messageId, phase: "final_answer", content: "Invented answer", toolRequests: [] }),
             receipt("img-two"), event("assistant.turn_end", { turnId: "turn-two" })];
+        const base = Date.now() - 20000;
+        batch.forEach((e, n) => { e.timestamp = new Date(base + n * 100).toISOString(); });
+        await logFor(app, id, batch);
+        const collector = await createCollector(app.context, { timers: false });
+        app.cleanup.push(() => collector.close());
+        await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+        await collector.collectNow();
+        const record = (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+        assert.equal(record.usage?.total ?? null, total, kind);
+        if (total === null) assert.equal(record.usageGap, "history-gap");
+    }
+});
+test("history compatibility: a verified oversized Work IQ result keeps its exchange measured; a sub-agent's oversized completion still blocks it", async t => {
+    for (const [kind, total] of [["main", 4400], ["metered", 4400], ["sub-agent", null]]) {
+        const subagent = kind === "sub-agent";
+        const app = await installation(t), id = app.session(), start = call("large-fetch");
+        const messageId = "large-prompt", interactionId = "large-run", model = "gpt-4.1";
+        start.data.turnId = "turn-one";
+        const receipt = apiCallId => event("session.usage_record", { usage: { apiCallId, model, interactionId, inputTokens: 2000, outputTokens: 200 } });
+        const done = event("tool.execution_complete", { toolCallId: "large-fetch", success: true, result: { content: "x".repeat(1100 * 1024) } });
+        if (subagent) Object.assign(done, { agentId: "invented-agent" });
+        // A tool that meters its own operation (for example image generation) writes toolUsage beside its large result.
+        if (kind === "metered") done.data.toolUsage = { requestId: "tool-request", model: "invented-tool-model", provider: { id: "copilot" },
+            inputTokens: 30, outputTokens: 12, totalTokens: 42, copilotUsage: { tokenDetails: [{ tokenCount: 30, tokenType: "input" }] } };
+        const batch = [event("user.message", { messageId, interactionId, content: "Read the invented attachment.", delivery: "idle" }),
+            event("assistant.message", { apiCallId: "big-one", turnId: "turn-one", model, originatingMessageId: messageId, toolRequests: [{ toolCallId: "large-fetch" }] }), start,
+            done, receipt("big-one"), event("assistant.turn_start", { turnId: "turn-two" }),
+            event("assistant.message", { apiCallId: "big-two", turnId: "turn-two", model, originatingMessageId: messageId, phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+            receipt("big-two"), event("assistant.turn_end", { turnId: "turn-two" })];
         const base = Date.now() - 20000;
         batch.forEach((e, n) => { e.timestamp = new Date(base + n * 100).toISOString(); });
         await logFor(app, id, batch);
