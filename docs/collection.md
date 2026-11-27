@@ -377,7 +377,8 @@ putting the raw opaque ID in new retained model metadata or in reports.
   prompt blocks a total. An unread prefix, pasted image or withheld entry
   elsewhere in the chat doesn't. Neither does an oversized line the reader
   verifies as a successful tool completion or tool hook from the main agent,
-  such as a large Work IQ result; its gap keeps its place and is marked. Withheld prompt text keeps its run and message
+  such as a large Work IQ result or a generated image with its own tool meter;
+  its gap keeps its place and is marked. Withheld prompt text keeps its run and message
   identity, so it can still contest ownership.
 - A gap is missing evidence. It never clears a total that was already verified.
 
