@@ -15,6 +15,7 @@ import { palettes } from "../../web/theme.mjs";
 import { replaceEvidence, loadBoardState } from "../../lib/store.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { createRuntimeClient } from "../../lib/runtime-client.mjs";
+import { initialSessionState, sessionStorage } from "../../lib/microsoft-session-state.mjs";
 import pkg from "../../package.json" with { type: "json" };
 
 const exec = promisify(execFile);
@@ -23,9 +24,11 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
 const discoveryOnly = process.env.WIRE_UPDATE_BROWSER === "release-discovery";
+const launcherRollout = process.env.WIRE_UPDATE_BROWSER === "launcher-rollout";
 const releaseJourney = sleepingGuide || discoveryOnly || process.env.WIRE_UPDATE_BROWSER === "release";
 const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
 const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
+const rolloutBase = "4d700dbf0d5efd16f4f1a78de0d4bc6c47d893da"; // v0.1.2
 
 // An oversized binary attachment is not a missing model round. The new journal
 // collector counts the two receipts; the old collector withheld the whole total.
@@ -61,6 +64,7 @@ async function seedAdapterJournal({ appDbPath, sessionRoot }) {
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test(discoveryOnly ? "open WIRE tabs discover a stable release published after their first automatic check"
+    : launcherRollout ? "a clean v0.1.2 installation starts its verified updated launcher without losing Automatic Off"
     : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
     const origin = path.join(temp, "origin"), store = path.join(temp, "store");
@@ -95,13 +99,14 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
     }
     // Only committed source is an eligible integration input. No ignored assets,
     // working directories, Git credentials, node_modules, or private data.
-    const targetCommit = adapterBridge && await git(project, "rev-parse", "HEAD^{commit}");
-    if (adapterBridge) {
+    const targetCommit = (adapterBridge || launcherRollout) && await git(project, "rev-parse", "HEAD^{commit}");
+    if (adapterBridge || launcherRollout) {
         // Transfer only the candidate ancestry into the private origin. No live remote or branch is changed.
         await git(origin, "init", "-qb", "main");
         await git(origin, "fetch", "--quiet", "--no-tags", project, targetCommit);
-        await git(origin, "merge-base", "--is-ancestor", adapterBase, targetCommit);
-        await git(origin, "merge", "--ff-only", adapterBase);
+        const from = launcherRollout ? rolloutBase : adapterBase;
+        await git(origin, "merge-base", "--is-ancestor", from, targetCommit);
+        await git(origin, "merge", "--ff-only", from);
     } else {
         const tracked = (await git(project, "ls-files", "-z", "--cached")).split("\0").filter(Boolean);
         for (const name of tracked.filter(name => /^(?:lib|scripts|assets|web|copilot-bridge)\//.test(name)
@@ -119,6 +124,10 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
     await exec(process.execPath, [npm, "run", "build"], { cwd: root, env });
 
     const context = { dataDir: store };
+    if (launcherRollout) {
+        Object.assign(env, { HOME: temp, USERPROFILE: temp, LOCALAPPDATA: temp, APPDATA: temp, GIT_ALLOW_PROTOCOL: "file" });
+        await sessionStorage(context).write({ ...initialSessionState(), wire: "signed-in" });
+    }
     await replaceEvidence(context, () => ({ records: [fixture("invented-update-report")], importCoverage: null }));
     const cfg = { schemaVersion: 1, approved: true, enabled: false, windowDays: 30, pollSeconds: 60,
         appDbPath: path.join(temp, "empty-source", "data.db"), sessionRoot: path.join(temp, "empty-source", "session-state") };
@@ -140,7 +149,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         const feed = path.join(temp,"release.json");
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
         import {readFile,appendFile} from 'node:fs/promises';
-        export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney?"release":"main")},
+        export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney||launcherRollout?"release":"main")},
         fetcher:async()=>{${discoveryOnly ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},"read\\n");` : ""}
         try{return Response.json(JSON.parse(await readFile(${JSON.stringify(feed)},'utf8')))}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
         const hook = path.join(temp, name);
@@ -150,10 +159,10 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         return pathToFileURL(hook).href;
     }
     const hook = await originHook(root, "fixture-origin.mjs");
-    function launch(port) {
+    function launch(port, entry = root, args = [], imports = "--import=" + hook) {
         stdout = ""; stderr = "";
-        app = fork(path.join(root, "scripts/launch.mjs"), ["--port", port], {
-            cwd: root, env: { ...env, NODE_OPTIONS: "--import=" + hook }, execArgv: [], stdio: ["ignore","pipe","pipe","ipc"] });
+        app = fork(path.join(entry, "scripts/launch.mjs"), [...args, "--port", port], {
+            cwd: root, env: { ...env, NODE_OPTIONS: imports }, execArgv: [], stdio: ["ignore","pipe","pipe","ipc"] });
         app.stdout.on("data", data => { stdout += data; }); app.stderr.on("data", data => { stderr += data; });
         ended = new Promise(resolve => app.once("exit", resolve));
     }
@@ -186,6 +195,59 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         for (const [file, digest] of reportHashes) assert.equal(hash(await readFile(file)), digest);
         assert.deepEqual(await readFile(cfgPath), configBytes);
         assert.equal(await git(root, "rev-parse", "HEAD"), base);
+    }
+    if (launcherRollout) {
+        await git(origin, "merge", "--ff-only", targetCommit);
+        const tag = "v1.1.0", port = new URL(url).port;
+        await git(origin, "tag", tag);
+        await writeFile(path.join(temp, "release.json"), JSON.stringify({ tag_name: tag, draft: false, prerelease: false,
+            published_at: new Date().toISOString(), body: "Fixture launcher update.", html_url: `https://github.com/likamrat/wire/releases/tag/${tag}` }));
+        await update("preferences", { enabled: false });
+        const old = await applyTip();
+        assert.equal(old.automatic, false); assert.equal(old.nextAutoCheckAt, undefined);
+        const installed = await health();
+        assert.equal(installed.build, targetCommit);
+        app.disconnect(); assert.equal(await ended, 0, stderr);
+        const slots = path.join(root, ".git", "wire-updates");
+        const dirs = (await readdir(slots, { withFileTypes: true })).filter(e => e.isDirectory());
+        assert.equal(dirs.length, 1);
+        const stage = path.join(slots, dirs[0].name);
+        assert.equal(await git(stage, "rev-parse", "HEAD"), targetCommit);
+        const selector = await originHook(project, "selector.mjs"), selected = await originHook(stage, "selected.mjs");
+        const imports = `--import=${selector} --import=${selected}`, args = ["--start-installed", root];
+        launch(port === "4001" ? "4002" : "4001", project, args, imports);
+        assert.equal(await ended, 1); assert.match(stderr, /clean stop on this store and port/);
+        launch(port, project, args, imports);
+        await until(() => stdout.includes("ready at " + url));
+        const after = await health(); cap = await getPage();
+        assert.equal(after.build, targetCommit); assert.equal(after.clientEntry, installed.clientEntry);
+        const preserved = await update("status");
+        assert.equal(preserved.automatic, false); assert.equal(preserved.lastChecked, old.lastChecked);
+        assert.equal(preserved.nextAutoCheckAt, 0);
+        await assert.rejects(exec(process.execPath, [path.join(root, "scripts/launch.mjs"), "--port", port],
+            { cwd: root, env: { ...env, NODE_OPTIONS: "--import=" + hook }, timeout: 10000 }), e => /already has a launcher/.test(e.stderr));
+        const { chromium, expect } = await import("@playwright/test");
+        const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
+        try {
+            const page = await browser.newPage(), actions = [];
+            page.on("request", r => { if (r.url() === url + "api/app-update") actions.push(r.postDataJSON().action); });
+            await page.goto(url + "settings"); await expect(page.locator("#appUpdateCheck")).toBeEnabled();
+            await expect(page.locator("#appUpdateAuto")).not.toBeChecked();
+            assert.ok(await page.evaluate(entry => performance.getEntriesByName(location.origin + entry).length > 0, after.clientEntry));
+            const start = Date.now(), response = page.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON().action === "check");
+            await page.locator("#appUpdateCheck").click();
+            const checked = await (await response).json();
+            assert.equal(checked.phase, "current", checked.message); assert.equal(checked.automatic, false);
+            assert.ok(checked.nextAutoCheckAt >= start + 300000 && checked.nextAutoCheckAt <= Date.now() + 300000);
+            await page.goto(url + "reports?bundle=" + bundle.bundleId);
+            await expect(page.locator("#savedReportReader h1")).toBeVisible();
+            assert.ok(!actions.includes("auto-check"));
+            await verifyPreserved();
+            assert.equal((await sessionStorage(context).read()).wire, "signed-in");
+            t.diagnostic(JSON.stringify({ base, launcherAndChild: after.build, client: after.clientEntry, port, automatic: checked.automatic,
+                checkIntervalMs: 300000, storeAndConfigPreserved: true, reportReopened: true, reportHashes: reportHashes.map(([, digest]) => digest) }));
+        } finally { await browser.close(); }
+        return;
     }
     if (adapterBridge) {
         assert.equal(base, adapterBase);

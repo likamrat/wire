@@ -8,10 +8,10 @@ import path from "node:path";
 
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
 const managed = process.env.WIRE_UPDATE_LAUNCHER === "1";
-let finishChild, getStoreIdentity, startupMayOwnStorage = false;
+let finishChild, getStoreIdentity, runningBinding, startupMayOwnStorage = false;
 function releaseChild(state) {
     if (!finishChild) return;
-    finishChild(state);
+    finishChild(state, state === "closed" ? runningBinding : undefined);
     finishChild = undefined;
 }
 function startupOptions(args) {
@@ -152,8 +152,11 @@ try {
     });
     if (stopping) await stop();
     else {
-        if (managed) process.send({ type: "wire-update-ready", url: runtime.url, runtimeId: runtime.runtimeId,
-            build: process.env.WIRE_UPDATE_BUILD, clientEntry: runtime.clientEntry, store: await getStoreIdentity() }, error => { if (error) void stop(); });
+        if (managed) {
+            runningBinding = { build: process.env.WIRE_UPDATE_BUILD, store: await getStoreIdentity(), port: Number(new URL(runtime.url).port) };
+            process.send({ type: "wire-update-ready", url: runtime.url, runtimeId: runtime.runtimeId,
+                build: runningBinding.build, clientEntry: runtime.clientEntry, store: runningBinding.store }, error => { if (error) void stop(); });
+        }
         else console.log(`${PRODUCT_NAME} ready at ${runtime.url}`);
         if (options.contributor) console.log(`Contributor checkout (${options.frontend}); private store: ${context.dataDir}`);
         if (options.developmentMicrosoft) console.log("Development-only Microsoft incubation. Automatic collection is off; saved configuration is not adopted.");

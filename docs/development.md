@@ -86,12 +86,33 @@ and waits a day before retrying automatically, or longer if GitHub asks it to.
 - A failed check isn't "up to date."
 
 An in-app restart replaces the app, not its launcher. A v0.1.1 or v0.1.2
-launcher still checks daily, even with a newer tab. The five-minute schedule
-starts when `npm start` runs a launcher containing the change and a tab opens
-the matching client. Do not pull a changed base checkout under an active
-update slot, clear its journal, or restore old data. If the old launcher cannot transition, leave
-the current installation intact pending a supported operator upgrade. A clean
-release-aware installation is not evidence of a successful legacy migration.
+launcher still checks daily, even with a newer tab. For an existing managed
+installation, use the following clean transition once a stable release
+containing the new launcher is available:
+
+1. Use **Check for updates** and **Update and restart** in the original
+   installation. Keep your automatic-check preference as it is. Confirm the
+   installed version in General, finish open work and stop that launcher
+   normally. The updated child must record a clean close.
+2. Change the command used to start this installation to the following.
+   Run it with the original OS user, `WORKIQ_EVIDENCE_DATA_DIR` (or its
+   original default), update channel and port. The script must come from a
+   reviewed release supporting `--start-installed`.
+
+   ```text
+   node "<reviewed release>/scripts/launch.mjs" --start-installed "<absolute original installation>" --port <original port>
+   ```
+
+The script selects the verified active release *inside the original clone*.
+That release runs both launcher and app under the original installation lock;
+the account, reports, adapter and update preferences stay in place. Keep this
+start command for later launches. Plain `npm start` in the old checkout still
+uses the old launcher. Starting a new clone on the same store is not this
+transition: it has its own update preferences.
+
+If the selected store, port or clean-close receipt does not match, WIRE
+refuses to start. Do not pull the base under an active slot, move journals,
+or use crash recovery for a clean stop.
 
 #### Prepare a release without Actions
 
@@ -301,6 +322,7 @@ address and verifies its bytes. It doesn't update your installation.
 | `WIRE_UPDATE_BROWSER` | What it exercises |
 | --- | --- |
 | `release-discovery` | Two untouched tabs first show the installed release as current. A new fixture release then appears in both tabs at the normal five-minute deadline. No update is installed. |
+| `launcher-rollout` | A managed v0.1.2 installation with automatic checks off installs the committed candidate, closes normally and starts its installed launcher on the same port. Verifies the saved preference, five-minute deadline, browser build and saved report. |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |
 | `1` | **Update and restart** in Settings, then verifies that the reloaded browser runs the new build. Needs Microsoft Edge Stable on Windows, or Playwright Chromium on WSL. |
