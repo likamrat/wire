@@ -8,12 +8,12 @@ export const settingsStyles = `
 .release-reader>header,.release-meta{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
 .release-reader>header{margin:16px 0 8px}
 .release-meta{color:var(--muted);font-size:var(--type-small);border-bottom:1px solid var(--surface-divider);padding-bottom:16px}
-.release-reader .wire-icon{width:1em;height:1em;vertical-align:-.12em}
 #releaseNotesBody{max-width:68ch;margin:20px 0;overflow-wrap:anywhere}
 #releaseNotesBody h3{margin:20px 0 6px}
 #releaseNotesBody ul{padding-inline-start:1.4em}
-#noticeReleaseNotes,#availableReleaseNotes,#installedReleaseNotes,.release-meta a,.release-back{text-decoration:underline;text-underline-offset:3px}
-#availableReleaseNotes,#installedReleaseNotes{margin-inline-end:.75em}
+:is(.release-reader,.app-version-card,.app-update-copy) .navigation-action{display:inline-flex;align-items:center;gap:var(--pill-gap);min-height:44px;max-width:100%;color:var(--ink);font:var(--weight-medium) var(--type-control)/var(--leading-control) var(--font);overflow-wrap:anywhere}
+:is(.release-reader,.app-version-card,.app-update-copy) .navigation-action .wire-icon{flex:none;width:var(--icon-size-small);height:var(--icon-size-small)}
+@media(forced-colors:active){:is(.release-reader,.app-version-card,.app-update-copy) .navigation-action:focus-visible::before{outline-color:Highlight}}
 #appUpdateNotice {position:relative;box-sizing:border-box;max-width:100%;padding:var(--space-lg);margin-bottom:var(--space-lg);
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
