@@ -22,7 +22,8 @@ const project = fileURLToPath(new URL("../../", import.meta.url));
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 const sleepingGuide = process.env.WIRE_UPDATE_BROWSER === "release-sleep";
-const releaseJourney = sleepingGuide || process.env.WIRE_UPDATE_BROWSER === "release";
+const discoveryOnly = process.env.WIRE_UPDATE_BROWSER === "release-discovery";
+const releaseJourney = sleepingGuide || discoveryOnly || process.env.WIRE_UPDATE_BROWSER === "release";
 const adapterBridge = process.env.WIRE_UPDATE_BROWSER === "adapter-bridge";
 const adapterBase = "83a6040065072acdf5e8984d8450bd3b4b8cf42e";
 
@@ -59,7 +60,8 @@ async function seedAdapterJournal({ appDbPath, sessionRoot }) {
 }
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
-test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
+test(discoveryOnly ? "open WIRE tabs discover a stable release published after their first automatic check"
+    : "full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : discoveryOnly ? 8 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
     const origin = path.join(temp, "origin"), store = path.join(temp, "store");
     // A nested Windows install puts Git's pack-<hash>.keep beyond MAX_PATH in the stage.
@@ -137,9 +139,10 @@ test("full WIRE clone updates on the original address and reopens the same saved
         const sourceURL = pathToFileURL(path.join(installation, "lib", "update-source.mjs")).href;
         const feed = path.join(temp,"release.json");
         const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
-        import {readFile} from 'node:fs/promises';
+        import {readFile,appendFile} from 'node:fs/promises';
         export const {inspectInstallation,checkMain,stageMain,channel}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)},channel:${JSON.stringify(releaseJourney?"release":"main")},
-        fetcher:async()=>{try{return Response.json(JSON.parse(await readFile(${JSON.stringify(feed)},'utf8')))}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
+        fetcher:async()=>{${discoveryOnly ? `await appendFile(${JSON.stringify(path.join(temp, "feed-reads"))},"read\\n");` : ""}
+        try{return Response.json(JSON.parse(await readFile(${JSON.stringify(feed)},'utf8')))}catch(e){if(e.code!=='ENOENT') throw e;return new Response(null,{status:404})}}});`;
         const hook = path.join(temp, name);
         await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
         if(c.parentURL===${JSON.stringify(pathToFileURL(path.join(installation, "lib", "update-launch.mjs")).href)}&&s==="./update-source.mjs")
@@ -229,6 +232,41 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await writeFile(path.join(temp,"release.json"),JSON.stringify({tag_name:tag,html_url:`https://github.com/likamrat/wire/releases/tag/${tag}`,
                 body,published_at:new Date().toISOString(),prerelease:false,draft:false}));
         };
+        if (discoveryOnly) {
+            await publish("v1.0.0", base, "Installed fixture release.");
+            const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
+            try {
+                const settings = await browser.newPage(), peer = await browser.newPage();
+                const actions = [], navigations = [];
+                for (const page of [settings, peer]) page.on("request", r => {
+                    if (r.url() === url + "api/app-update") actions.push(r.postDataJSON().action);
+                    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navigations.push(r.url());
+                });
+                await Promise.all([settings.goto(url + "settings"), peer.goto(url + "settings")]);
+                for (const page of [settings, peer]) {
+                    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v1.0.0");
+                    await expect(page.locator("#appUpdateStatus")).toContainText("Up to date. Last checked");
+                    await expect(page.locator("#appUpdateNotice")).toBeHidden();
+                }
+                assert.ok(actions.includes("auto-check"));
+                await writeFile(path.join(origin, "docs", "README.md"), guideText("Next stable guide."));
+                await git(origin, "commit", "-qam", "Fixture guide change");
+                await publish("v1.0.1", await git(origin, "rev-parse", "HEAD"), "Revised release guidance.");
+                const published = performance.now();
+                await expect(settings.locator("#appUpdateNotice")).toBeVisible({ timeout: 310000 });
+                for (const page of [settings, peer]) {
+                    await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE v1.0.1 is available");
+                    await expect(page.locator("#appUpdateStatus")).toHaveText("WIRE v1.0.1 is available.");
+                    await expect(page.locator("#settingsAppUpdate")).toBeEnabled();
+                }
+                assert.ok(actions.every(action => action === "status" || action === "auto-check"));
+                assert.equal(navigations.length, 2);
+                assert.equal(await readFile(path.join(temp, "feed-reads"), "utf8"), "read\nread\n", "tabs share one feed read per check");
+                assert.equal((await health()).runtimeId, original.runtimeId);
+                t.diagnostic(`Published after both tabs showed current; both showed the new release without input or navigation after ${Math.round(performance.now() - published)} ms.`);
+            } finally { await browser.close(); }
+            return;
+        }
         await writeFile(path.join(origin,"lib","fixture-release.mjs"),"export const version = 1;\n");
         await git(origin,"add","."); await git(origin,"commit","-qm","Fixture starter update");
         const starter = await git(origin,"rev-parse","HEAD");

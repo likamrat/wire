@@ -130,7 +130,10 @@ test("React Settings checks, opts in and out, dismisses only this build, and sch
     await page.reload(); await expect.poll(() => actions.at(-1).action).toBe("auto-check");
     await expect(auto).toBeEnabled();
     state.candidate = "3".repeat(40);
-    await page.clock.fastForward("24:00:00");
+    // A pre-deadline launcher still owns its daily schedule.
+    await page.clock.fastForward("00:05:00");
+    await expect(page.locator("#appUpdateNotice")).toBeHidden();
+    await page.clock.fastForward("23:55:00");
     await expect(page.locator("#appUpdateApply")).toBeVisible();
     await auto.uncheck(); await expect(auto).toBeEnabled();
     await page.clock.fastForward("24:00:00");

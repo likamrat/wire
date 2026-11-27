@@ -67,22 +67,29 @@ to rebase or discard someone's edits.
 
 #### When WIRE offers an update
 
-WIRE checks when first opened after launch and daily while in use.
+With automatic checks on, the first open tab checks after launch. While a tab
+is awake, the launcher schedules one stable-release check per installation
+every five minutes. Tabs share the result. Unchanged release metadata does
+not trigger a Git fetch; WIRE still verifies Git daily, on a manual check and
+before installation. After a failed check it keeps the last successful time
+and waits a day before retrying automatically, or longer if GitHub asks it to.
 
 - By default it reads the latest published stable GitHub Release, verifies its
   tag against official `main`, and installs that exact commit. A newer merge,
   an unpublished tag, and a draft do not trigger public updates.
 - For an isolated development installation tracking **every** official main
   push, set `WIRE_UPDATE_CHANNEL=main` in the launcher's environment before
-  starting it. A docs-only push qualifies. This does not run GitHub Actions
-  or change any other installation's channel.
+  starting it. This channel still checks daily. A docs-only push qualifies.
+  This does not run GitHub Actions or change any other installation's channel.
 - Git uses the current user's repository access. No source approval or Copilot
   sign-in is requested.
 - A failed check isn't "up to date."
 
-An older launcher keeps its own update rules even after it has started newer
-app code. Do not pull a changed base checkout under an active update slot, clear
-its journal, or restore old data. If the old launcher cannot transition, leave
+An in-app restart replaces the app, not its launcher. A v0.1.1 or v0.1.2
+launcher still checks daily, even with a newer tab. The five-minute schedule
+starts when `npm start` runs a launcher containing the change and a tab opens
+the matching client. Do not pull a changed base checkout under an active
+update slot, clear its journal, or restore old data. If the old launcher cannot transition, leave
 the current installation intact pending a supported operator upgrade. A clean
 release-aware installation is not evidence of a successful legacy migration.
 
@@ -293,6 +300,7 @@ address and verifies its bytes. It doesn't update your installation.
 
 | `WIRE_UPDATE_BROWSER` | What it exercises |
 | --- | --- |
+| `release-discovery` | Two untouched tabs first show the installed release as current. A new fixture release then appears in both tabs at the normal five-minute deadline. No update is installed. |
 | `release` | On Windows with Edge Stable and Playwright Chromium, installs a simulated public docs-only release on an already-updated clone, across three pages in two browsers. Checks the unchanged second instance, release notes, guide image, saved report and settings. No GitHub writes. |
 | `release-sleep` | Freezes a real background Chromium tab before the update. An unfinished Settings edit blocks restart; after it is resolved, a clean frozen Guide does not block the other windows. Waking it must load the new runtime at its original guide and section. |
 | `1` | **Update and restart** in Settings, then verifies that the reloaded browser runs the new build. Needs Microsoft Edge Stable on Windows, or Playwright Chromium on WSL. |

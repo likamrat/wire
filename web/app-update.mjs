@@ -16,6 +16,7 @@ function decode(value) {
         || !phases.includes(value.phase) || typeof value.message !== "string"
         || ![value.installed, value.candidate, value.dismissed].every(id => id === null || sha(id))
         || value.lastChecked !== null && (!Number.isFinite(value.lastChecked) || !Number.isFinite(new Date(value.lastChecked).getTime()))
+        || value.nextAutoCheckAt !== undefined && (!Number.isSafeInteger(value.nextAutoCheckAt) || value.nextAutoCheckAt < 0)
         || value.packageVersion !== undefined && typeof value.packageVersion !== "string"
         || value.statusRevision !== undefined && (!Number.isSafeInteger(value.statusRevision) || value.statusRevision < 0)
         || !validRelease(value.availableRelease,value.candidate) || !validRelease(value.installedRelease,value.installed)
@@ -130,7 +131,11 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if (parked || !state?.supported || expected || manualOnly(state)) return;
         if (coordination) watchPeers();
         if (["checking", "preparing", "restarting"].includes(state.phase)) scheduleTimer = setTimeout(() => void run("status"), 2500);
-        else if (state.automatic) scheduleTimer = setTimeout(() => void run("auto-check"), day);
+        else if (state.automatic) {
+            // Older launchers do not advertise a deadline and still check daily.
+            const delay = state.nextAutoCheckAt === undefined ? day : Math.max(1000, Math.min(day, state.nextAutoCheckAt - Date.now()));
+            scheduleTimer = setTimeout(() => void run("auto-check"), delay);
+        }
     }
     async function readOpeningStatus(attempt = 0) {
         const generation = lifetime;

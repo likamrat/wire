@@ -861,8 +861,9 @@ private path values.
 
 On [supported installations](development.md#updating-wire), **Automatically
 check for updates** in **General** is on by default. WIRE checks when it opens
-and daily while it stays open, then shows a notice naming the new version. It
-never installs an update on its own. With the switch off, choose **Check for
+and looks for a new stable release every five minutes while a tab is awake.
+The notice names the new version. It can take longer if GitHub is unavailable.
+WIRE never installs an update on its own. With the switch off, choose **Check for
 updates** in General instead. The button shows **Checking** while it looks.
 
 When one tab finds an update, other connected tabs on the same WIRE instance
