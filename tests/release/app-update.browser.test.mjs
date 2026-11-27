@@ -85,8 +85,37 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
 
 test("What's new opens the offered version's notes in WIRE without installing or following preview branches", async t => {
     const {page,state,actions} = await workspace(t,{offer:null});
-    Object.assign(state,{phase:"available",candidate:next,availableRelease:{tag:"v1.2.0",commit:next,notes:"## What's new in v1.2.0\n\n### Fixed\n- Saved reports reopen.",url:"https://github.com/likamrat/wire/releases/tag/v1.2.0"}});
+    Object.assign(state,{phase:"available",candidate:next,
+        installedRelease:{tag:"v1.0.0",commit:old,notes:"### Added\n- Installed release notes.",url:"https://github.com/likamrat/wire/releases/tag/v1.0.0"},
+        availableRelease:{tag:"v1.2.0",commit:next,notes:"## What's new in v1.2.0\n\n### Fixed\n- Saved reports reopen.",url:"https://github.com/likamrat/wire/releases/tag/v1.2.0"}});
     await page.getByRole("button",{name:"Check for updates",exact:true}).click();
+    const proof = process.env.WIRE_SETTINGS_GENERAL_PROOFS;
+    if (proof) await mkdir(proof, { recursive: true });
+    const capture = async name => { if (proof) await page.screenshot({path:path.join(proof, `release-links-${name}.png`)}); };
+    const installed = page.getByRole("link", {name:"Installed release notes"});
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const link of [installed, page.locator("#availableReleaseNotes"), page.locator("#noticeReleaseNotes")]) {
+            await expect(link).toBeVisible();
+            await expect(link).toHaveCSS("text-decoration-line", "none");
+            await expect(link.locator('[data-icon-role="forward"]')).toBeVisible();
+            assert.ok((await link.boundingBox()).height >= 44);
+        }
+        await installed.hover(); await capture(`${theme}-general`);
+        const face = () => installed.evaluate(n => getComputedStyle(n, "::before").backgroundColor);
+        const hover = await face(); assert.notEqual(hover, "rgba(0, 0, 0, 0)");
+        await page.mouse.down(); assert.notEqual(await face(), hover); await page.mouse.up();
+        await expect(page.locator("#releaseReaderVersion")).toHaveText("v1.0.0");
+        const back = page.locator(".release-reader a[href='/settings']"), github = page.locator("#releaseReaderGitHub");
+        for (const link of [back, github]) await expect(link).toHaveCSS("text-decoration-line", "none");
+        await expect(github).toHaveAttribute("href", state.installedRelease.url);
+        await expect(github).toHaveAttribute("target", "_blank");
+        await back.focus(); await page.keyboard.press("Tab");
+        await expect(github).toBeFocused();
+        assert.equal(await github.evaluate(n => getComputedStyle(n, "::before").outlineStyle), "solid");
+        await capture(`${theme}-reader`);
+        await back.click(); await expect(installed).toBeVisible();
+    }
     await page.locator("#availableReleaseNotes").click();
     await expect(page).toHaveURL(/section=release-notes&release=v1\.2\.0/);
     await expect(page.locator("#releaseNotesBody li")).toHaveText("Saved reports reopen.");

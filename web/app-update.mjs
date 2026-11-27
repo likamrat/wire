@@ -51,7 +51,6 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         for (const [id, release] of [["noticeReleaseNotes", shown && !success && !result && offered],["availableReleaseNotes",offered],["installedReleaseNotes",installed]]) {
             const link = $(id);
             link.hidden = !release;
-            link.textContent = release ? id === "noticeReleaseNotes" ? "What's new" : id === "availableReleaseNotes" ? "What's new in this update" : "Installed release notes" : "";
             if (release) link.href = `/settings?section=release-notes&release=${release.tag}`;
             else link.removeAttribute("href");
         }
