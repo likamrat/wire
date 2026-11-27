@@ -113,7 +113,7 @@ export const analyzeLayoutStyles = `
 #analyzePopulation .fresh-help-body {max-width:none;padding:12px 16px;background:var(--canvas);border:1px solid transparent;border-radius:var(--radius-small)}
 #analyzePopulation .fresh-help-body>p {max-width:80ch}
 #analyzePopulation #collectionNotice {margin:0;padding:0;gap:4px 12px;background:none;border:0}
-#analyzePopulation #collectionNotice p {font-size:var(--type-small)}
+#analyzePopulation #collectionNotice:not([data-severity=error]) p {font-size:var(--type-small)}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
 .analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px;--day-label-gap:var(--space-md)}

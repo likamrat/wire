@@ -14,14 +14,15 @@ import { loadBoardState } from "../../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain } from "../support/helpers.mjs";
 import { prepareLandingReport, selectAnalyzeRequest } from "../reports/report-journey-helpers.mjs";
 
-async function statusFixture(t) {
+async function statusSource(cleanup) {
     const sourceSessionId = randomUUID(), retained = fixture(), timestamp = new Date(Date.now() - 1000).toISOString();
-    const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
+    const { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         [{ ...retained, sourceSessionId, capturedAt: timestamp, userPrompt: { ...retained.userPrompt, sourceTimestamp: timestamp },
             toolCalls: retained.toolCalls.map(call => ({ ...call, startedAt: timestamp })) }]);
     const appDbPath = path.join(root, "data.db"), sessionRoot = path.join(root, "session-state");
     await mkdir(sessionRoot);
     const db = new DatabaseSync(appDbPath);
+    cleanup.unshift(() => db.close());
     db.exec(`PRAGMA user_version=156; PRAGMA journal_mode=WAL;
         CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
         CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
@@ -31,14 +32,11 @@ async function statusFixture(t) {
     await writeFile(path.join(sessionRoot, sourceSessionId, "events.jsonl"), JSON.stringify({
         id: "invented-start", type: "session.start", timestamp: new Date().toISOString(), data: { sessionId: sourceSessionId, version: 1 },
     }) + "\n");
-    const collector = await createCollector(context, { timers: false });
-    let runtime, access, browser;
-    t.after(async () => {
-        await browser?.close(); await runtime?.close(); await access?.close(); await collector.close(); db.close();
-        for (const work of cleanup) await work();
-    });
-    await collector.configure({ appDbPath, sessionRoot, approved: true, enabled: true, pollSeconds: 5, windowDays: 30 });
-    const before = await loadBoardState(context), diagnostics = [];
+    return { context, db, config: { appDbPath, sessionRoot, approved: true, enabled: true, pollSeconds: 5, windowDays: 30 } };
+}
+
+async function refuseMetadataRead(t, collector, db) {
+    const diagnostics = [];
     const log = t.mock.method(console, "error", (...args) => diagnostics.push(args));
     const prepare = DatabaseSync.prototype.prepare;
     const metadataChange = t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
@@ -55,6 +53,20 @@ async function statusFixture(t) {
     });
     try { await assert.rejects(collector.collectNow(), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" }); }
     finally { metadataChange.mock.restore(); log.mock.restore(); }
+    return diagnostics;
+}
+
+async function statusFixture(t) {
+    const cleanup = [];
+    let runtime, access, browser, collector;
+    t.after(async () => {
+        await browser?.close(); await runtime?.close(); await access?.close(); await collector?.close();
+        for (const work of cleanup) await work();
+    });
+    const { context, db, config } = await statusSource(cleanup);
+    collector = await createCollector(context, { timers: false });
+    await collector.configure(config);
+    const before = await loadBoardState(context), diagnostics = await refuseMetadataRead(t, collector, db);
     const failed = collectionSummary(await collector.status());
     assert.equal(failed.state, "error");
     assert.deepEqual(diagnostics[0][1], { code: "COLLECTION_SOURCE_CHANGED", stage: "source-read", sourceChange: "metadata-read" });
@@ -103,6 +115,62 @@ async function statusFixture(t) {
     });
     return { page, runtime, context, failed, recovered, diagnostics, errors, writes, prepares };
 }
+
+test("Analyze explains one refused metadata check and clears it after a successful check", async t => {
+    for (const frontend of ["react", "bundled"]) {
+        const cleanup = [];
+        let runtime, browser;
+        try {
+            const { context, db, config } = await statusSource(cleanup);
+            runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false } });
+            await runtime.collector.configure(config);
+            const retained = await loadBoardState(context);
+            const log = await refuseMetadataRead(t, runtime.collector, db);
+            browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: frontend === "react" ? 1280 : 780, height: 900 } });
+            await page.goto(runtime.url);
+            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+            const notice = page.locator("#collectionNotice"), action = page.getByRole("link", { name: "View collection status", exact: true });
+            await expect(notice).toBeVisible();
+            await expect(page.locator("#periodResult")).toContainText(/Work IQ tool calls?/i);
+            await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+            const retainedNotice = notice.locator("[role=status]");
+            await expect(page.getByText(await retainedNotice.innerText(), { exact: true }).filter({ visible: true })).toHaveCount(1);
+            await expect(retainedNotice).toContainText(/Copilot.*changed/i);
+            await expect(action).toBeVisible();
+            if (process.env.WIRE_COLLECTION_WARNING_PROOFS) {
+                await mkdir(process.env.WIRE_COLLECTION_WARNING_PROOFS, { recursive: true });
+                await page.screenshot({ path: path.join(process.env.WIRE_COLLECTION_WARNING_PROOFS, `${frontend}-warning.png`) });
+            }
+            await action.press("Enter");
+            await expect(page).toHaveURL(new URL("/collection-status", runtime.url).href);
+            await expect(page.locator("#collectionStatusGuidance")).toContainText(/automatically/);
+            await page.locator("#collectionSetup > summary").click();
+            await expect(page.locator("#collectionDiagnostics")).toContainText("COLLECTION_SOURCE_CHANGED");
+            await expect(page.locator("#collectionDiagnostics")).toContainText("metadata-read");
+            await expect(page.locator("#collectionDiagnostics")).toContainText("source-read");
+            await page.goBack();
+            await expect(notice).toBeVisible();
+            const filters = page.locator("#openAnalyzeFilters");
+            await filters.focus();
+            await runtime.collector.collectNow();
+            await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+            await expect(notice).toBeHidden();
+            await expect(page.locator("#analyzeScopeError")).toBeHidden();
+            await expect(filters).toBeFocused();
+            if (process.env.WIRE_COLLECTION_WARNING_PROOFS) await page.screenshot({
+                path: path.join(process.env.WIRE_COLLECTION_WARNING_PROOFS, `${frontend}-recovered.png`),
+            });
+            assert.deepEqual((await loadBoardState(context)).evidence, retained.evidence);
+            const { lastFailure, lastCheck } = await runtime.collector.status();
+            assert.deepEqual(lastFailure, { ...log[0][1], failedAt: log[0][2], nextCompletedAt: lastCheck.completedAt });
+            assert.ok(Date.parse(lastFailure.failedAt) <= Date.parse(lastFailure.nextCompletedAt));
+        } finally {
+            await browser?.close(); await runtime?.close();
+            for (const work of cleanup) await work();
+        }
+    }
+});
 
 for (const late of ["failure", "success", "transport-error", "composite-failure"]) test(`a late pre-return collection ${late} cannot replace newer status`, { timeout: 20000 }, async t => {
     const { page, runtime, failed, recovered, diagnostics, errors, writes, prepares } = await statusFixture(t);

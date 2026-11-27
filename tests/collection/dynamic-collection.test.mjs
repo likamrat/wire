@@ -1748,22 +1748,29 @@ test("a metadata-read refusal recovers on the next ordinary interval without cha
     await collector.configure({ ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 });
     const before = await loadBoardState(app.context), statusBefore = await collector.status();
     const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
-    const failed = Promise.withResolvers(), prepare = DatabaseSync.prototype.prepare;
-    const log = t.mock.method(console, "error", (...args) => failed.resolve(args));
+    const interval = Promise.withResolvers(), prepare = DatabaseSync.prototype.prepare;
+    const log = t.mock.method(console, "error", () => {});
     const metadataChange = t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
         const statement = prepare.call(this, sql);
         if (sql === "PRAGMA user_version") {
             const get = statement.get.bind(statement);
             statement.get = () => {
                 const result = get();
-                app.db.exec("INSERT INTO projects VALUES('unrelated-project','Invented concurrent metadata')");
+                app.db.exec("INSERT OR REPLACE INTO projects VALUES('unrelated-project','Invented concurrent metadata')");
                 return result;
             };
         }
         return statement;
     });
     let diagnostic;
-    try { t.mock.timers.tick(31000); diagnostic = (await failed.promise)[1]; }
+    try {
+        await assert.rejects(collector.collectNow(), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
+        // The last good roster is less than 30 seconds old. It must not clear the failed read.
+        committed = check => interval.resolve(check);
+        log.mock.mockImplementation((_label, failure) => interval.resolve(failure));
+        t.mock.timers.tick(5000);
+        diagnostic = await interval.promise;
+    }
     finally { metadataChange.mock.restore(); log.mock.restore(); }
     await setImmediate();
     assert.deepEqual(diagnostic, { code: "COLLECTION_SOURCE_CHANGED", stage: "source-read", sourceChange: "metadata-read" });

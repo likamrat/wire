@@ -460,7 +460,9 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 #unapprovedConnection>.ux-disabled-help {margin-top:16px}
 .collection-status-details {margin-block:16px}
 .collection-notice {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin-bottom:20px;color:var(--muted)}
-.collection-notice p {font-size:var(--type-body)}
+.collection-notice p {display:flex;align-items:flex-start;gap:8px;font-size:var(--type-body);line-height:1.5}
+.collection-notice p>.wire-icon {width:20px;height:20px;flex:none}
+.collection-notice:not([data-severity=error]) p>.wire-icon {display:none}
 .collection-notice a {min-height:44px;align-content:center}
 .collection-notice[data-severity=error] {color:var(--danger)}
 .settings-draft-notice {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-bottom:16px}

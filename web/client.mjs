@@ -5328,15 +5328,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!description) { analyzeControls.caption(null); return; }
         const update = activityUpdatePresentation();
         const updateState = fresh.snapshot();
-        const notice = historyStatus.entry(collection, { hasEvidence: Boolean(workspaceState.evidence.scenarios.length),
-            unavailable: Boolean(collectionReadError), reason: collectionReadReason });
         const updateError = updateState.readFailed || updateState.sourceFailure || collectionReadError
             || workspaceState.stale && !workspaceState.loading || collection?.state === "error";
         const updateExplained = workspaceState.route.view === "analyze" && (update.entry.pending && $("analyzeRefresh").checkVisibility()
             || !$("freshAwayNotice").hidden);
         const errors = [
             workspaceState.stale && !workspaceState.loading ? "Previous results. The view could not update." : "",
-            notice?.severity === "error" ? notice.text : "",
             updateState.readFailed || updateState.sourceFailure ? updateState.message : "",
         ].filter(Boolean);
         const empty = workspaceState.analytics.totals.count === 0 && !slice?.scenarios.length && !sharedNativeView()?.aggregates.conversations && !workspaceState.loading && !workspaceState.stale;
@@ -10229,6 +10226,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderCollectionNotice();
         const m = detail.metrics, inventory = detail.discovery?.counts, diagnostics = $("collectionDiagnostics");
         diagnostics.replaceChildren();
+        const failure = status.lastFailure;
+        if (failure) diagnostics.append(el("h3", "", "Last failed collection check"), facts([
+            ["Failed at", timestamp(failure.failedAt)], ["Collector stage", failure.stage], ["Error code", failure.code],
+            ...(failure.sourceChange ? [["Source change", failure.sourceChange]] : []),
+            ...(failure.causeCodes?.length ? [["Underlying error codes", failure.causeCodes.join(", ")]] : []),
+            ...(failure.nextCompletedAt ? [["Next completed check", timestamp(failure.nextCompletedAt)]] : []),
+        ], { inlineHelp: false }));
         const savedCounts = workspaceState.evidence?.nativeRead?.aggregates;
         if (sourceCollection.active && savedCounts) {
             diagnostics.append(el("h3", "", "Saved Microsoft observations"),
