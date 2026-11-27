@@ -9,7 +9,7 @@ import { createFixtureRuntimeAccess } from "../../lib/runtime-access.mjs";
 import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { fixture, privateFixture, restoreLegacySearch, revealStoredRefresh, selectActivityOption } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { openDatePicker } from "../analyze/analytics-date-picker.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 
@@ -713,10 +713,10 @@ test("sign-out clears the report name and masking terms while keeping the chosen
     await page.goto(app.url + "#reports?task=create&scope=all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await prepareNamedReport(page);
-    await page.getByRole("button", { name: /^Formats:/ }).click();
+    await clickReportOption(page, /^Formats:/);
     await regenerate(page, () => page.locator("#formatOptions input[value=json]").check());
     await page.keyboard.press("Escape");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     await page.locator("#additionalMasking > summary").click();
     await page.locator("#manualTerms").fill("PRIVATE_MASKING_TERM");
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");

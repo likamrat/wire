@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { promptInstallation } from "../analyze/prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
 import { navigateMain, selectActivityOption, closeAnalyzeFilters } from "../support/helpers.mjs";
-import { prepareReportPreview } from "../reports/report-journey-helpers.mjs";
+import { prepareReportPreview, clickReportOption } from "../reports/report-journey-helpers.mjs";
 
 async function setup(t, { reports = false } = {}) {
     const browser = await chromium.launch();
@@ -116,10 +116,10 @@ test("Analyze, the reader and a saved report preserve the recorded author and ex
         return r.json();
     }
     await prepare(() => prepareReportPreview(page));
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["json", "markdown"]) await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.keyboard.press("Escape");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     const omitted = await prepare(() => page.locator('#reportPrivacyOptions input[value=none]').check());
     const omittedOrigins = omitted.records.map(r => r.prompts.find(p => p.kind === "origin"));
     assert.equal(omittedOrigins.length, selected.length);

@@ -1,3 +1,4 @@
+import { clickReportOption } from "./report-journey-helpers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -207,11 +208,11 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
         return preview;
     };
     await prepare(() => page.locator("#createPeriodReport").click());
-    await page.getByRole("button",{name:"Formats: HTML",exact:true}).click();
+    await clickReportOption(page, "Formats: HTML");
     let preview;
     for (const format of ["json", "markdown", "pdf"]) preview = await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.keyboard.press("Escape");
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     preview = await prepare(() => page.locator("#reportPrivacyOptions input[value=original]").check());
     await page.locator("#reportPrivacyOptions").getByRole("button",{name:"Done",exact:true}).click();
     await page.getByRole("button", { name: "Save report", exact: true }).click();

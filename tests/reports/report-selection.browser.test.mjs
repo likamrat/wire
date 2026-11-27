@@ -1,3 +1,4 @@
+import { clickReportOption } from "./report-journey-helpers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -79,7 +80,7 @@ test("reader cannot replace paired report cohorts with individual selection", { 
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.locator("#createPeriodReport").click(); await ready(page);
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const scope = await page.locator("#periodReportScope").textContent();
     await page.locator("#reportList .request-card-open").first().click(); await ready(page);

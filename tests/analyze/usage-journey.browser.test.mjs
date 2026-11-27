@@ -9,7 +9,7 @@ import { readSavedArtifactFile, readSavedReportView } from "../../lib/report-art
 import { pdfDocumentText } from "../../lib/search-corpus-pdf.mjs";
 import { usagePreview } from "./usage-preview-fixture.mjs";
 import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters, navigateMain, navigateSettings } from "../support/helpers.mjs";
-import { prepareLandingReport, chooseLandingReportDates } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, chooseLandingReportDates, clickReportOption } from "../reports/report-journey-helpers.mjs";
 
 for (const frontend of ["react","bundled"]) test(`${frontend}: model readings follow the selected app catalog without changing evidence`, async t => {
     const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
@@ -104,6 +104,24 @@ test("Token usage preset leads with frozen contributors and authors through JSON
         [["Agent",3,3,236500],["Human",3,4,75000],["Sender unclear",1,1,30500]]);
     const frame=page.frameLocator(".report-frame"), usage=frame.locator("#usage-selected");
     await expect(usage).toBeVisible();
+    const navigation=frame.getByRole("navigation",{name:"Report sections"});
+    await expect(navigation.getByRole("link")).toHaveText(["Overview","Prompt authors","Ranked interactions","Coverage","Settings"]);
+    assert.deepEqual(await navigation.locator("a>svg:first-child").evaluateAll(icons=>icons.map(svg=>svg.dataset.lucideIcon)),
+        ["layout-grid","users-round","message-square","layers","settings"]);
+    const settings=navigation.getByRole("link",{name:"Settings",exact:true});
+    await navigation.getByRole("link",{name:"Prompt authors",exact:true}).click();
+    const reader=page.locator('iframe[title="Prepared report"]');
+    const position=await reader.evaluate(node=>node.contentWindow.scrollY);
+    await settings.press("Enter");
+    await expect(page.getByRole("dialog",{name:"Report settings",exact:true})).toBeVisible();
+    await page.goBack();
+    await expect(settings).toBeFocused();
+    assert.equal(await reader.evaluate(node=>node.contentWindow.scrollY),position);
+    const width=await reader.evaluate(node=>node.clientWidth);
+    await page.getByRole("button",{name:"Maximize preview",exact:true}).click();
+    await expect.poll(()=>reader.evaluate(node=>node.clientWidth)).toBeGreaterThan(width);
+    await page.getByRole("button",{name:"Restore preview",exact:true}).click();
+    await expect.poll(()=>reader.evaluate(node=>node.clientWidth)).toBe(width);
     const finding="3 interactions account for 69.2% of recorded tokens";
     await expect(usage.locator(":scope>h3")).toHaveText(finding);
     await expect(usage).toContainText("236,500 of 342,000 recorded tokens");
@@ -122,6 +140,7 @@ test("Token usage preset leads with frozen contributors and authors through JSON
         const link=row.getByRole("link"), ref=(await link.getAttribute("href")).split("#").at(-1);
         await link.click();await expect(frame.locator(`[id="${ref}"]`)).toBeVisible();
     }
+    await settings.click();
     await page.getByRole("button",{name:"Formats: HTML",exact:true}).click();
     for(const format of ["json","markdown","pdf"]) {
         const changed=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
@@ -758,7 +777,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(page.getByRole("button",{name:"Save report",exact:true})).toBeEnabled();
     await capture("report",page.getByRole("button",{name:"Save report",exact:true}));
     const updated = page.waitForResponse(r=>r.url().endsWith("/api/preview"));
-    await page.getByRole("button",{name:"Change what's included",exact:true}).click();
+    await clickReportOption(page, "Change what's included");
     await page.locator("#usageRows").check();
     const tokenOnly = await (await updated).json();
     assert.deepEqual(tokenOnly.snapshot.records.map(r=>r.scenarioId), result.snapshot.records.map(r=>r.scenarioId));
@@ -865,7 +884,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     };
     const initial=await prepare(()=>prepareLandingReport(page,"all"));
     assert.equal(initial.snapshot.usageFacts.cohorts.selected.total,342000);
-    await page.getByRole("button",{name:"Change what's included",exact:true}).click();
+    await clickReportOption(page, "Change what's included");
     await expect(page.locator("#usageRows")).not.toBeChecked();
     const withoutTokens=await prepare(()=>page.locator("#usageTokens").uncheck());
     assert.equal(withoutTokens.snapshot.usageFacts,undefined);

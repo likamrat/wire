@@ -7,7 +7,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 import { pdfDocumentText } from "../../lib/search-corpus-pdf.mjs";
 
@@ -127,7 +127,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
         await capture("interpreted-report-" + theme);
     }
     await page.setViewportSize({ width: 1380, height: 1080 });
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["json", "markdown", "pdf"]) {
         const wait = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();

@@ -5059,11 +5059,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         syncSavedLibraryTask(view);
         if (drawer) $("savedReportsPanel").classList.add("saved-shelf");
         reportExperience?.sync();
+        const covered = drawer && !current?.saveUnconfirmed && !current?.completed && Boolean(hiddenReportBlock());
+        const editablePreview = !covered && !current?.saveUnconfirmed && !["saved", "unavailable"].includes(current?.phase);
         reportExperience?.syncDrawer(drawer, current?.saveUnconfirmed ? "Check save status" : current?.phase === "saved"
-            ? "Report saved" : current?.phase === "unavailable" ? "Report unavailable" : "Report preview");
+            ? "Report saved" : current?.phase === "unavailable" ? "Report unavailable" : "Report preview",
+            editablePreview);
         const stage = $("reportStage3");
         if (stage) {
-            const covered = drawer && !current?.saveUnconfirmed && !current?.completed && Boolean(hiddenReportBlock());
             let notice = $("hiddenPreviewNotice");
             if (covered && !notice) {
                 notice = empty("Preview kept closed", "This preview could show a hidden card. Restore it in Analyze to read the preview. The report has not changed.");
@@ -10865,9 +10867,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     },
                     onReady: (source, refresh) => {
                         if (localSave) assessmentFactories.enhanceReportReading(source, { icon: ux.icon });
-                        return assessmentFactories.decoratePreparedReport(source, {
+                        const current = () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId;
+                        const releaseNavigation = localSave && current() ? reportExperience?.mountSectionNavigation(source, current) : null;
+                        const releaseDecoration = assessmentFactories.decoratePreparedReport(source, {
                             preview: value, notes: draft.options().reportNotes ?? [],
-                            current: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId,
+                            current,
                             refresh,
                             onNote: (scenarioId, text) => {
                                 const reportNotes = (draft.options().reportNotes ?? []).filter(note => note.scenarioId !== scenarioId);
@@ -10880,6 +10884,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                                 draft.change({ overrides }); updateReportContent();
                             },
                         });
+                        return () => { releaseNavigation?.(); releaseDecoration(); };
                     },
                     onError: message => {
                         if (!api.isCurrent(publication) || !draft.current(operation) || exportWriting) return;
@@ -11546,6 +11551,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     function traverse() {
         if (appUpdate?.locked()) { rememberRoute(workspaceState.route, true); return; }
+        if (reportExperience?.traverseSettings()) return;
         pendingFreshBrowse = false;
         initialRoute = null;
         initialHistory = null;

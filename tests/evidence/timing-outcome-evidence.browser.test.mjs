@@ -10,7 +10,7 @@ import { loadBoardState, replaceEvidence } from "../../lib/store.mjs";
 import { readSavedArtifactFile, loadSavedReportSource, readSavedComparison } from "../../lib/report-artifacts.mjs";
 import { pdfDocumentText } from "../../lib/search-corpus-pdf.mjs";
 import { privateFixture, chooseTheme, navigateMain, selectActivityOption } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 
 test("retained timeout cause stays with its tool across reader, new files, saved reading and Compare", { timeout: 90000 }, async t => {
@@ -96,7 +96,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
         }
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) {
         const rebuilt = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();

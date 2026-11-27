@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "../search/live-search-fixture.mjs";
 import { reviewRecords } from "../support/frontend-fixture.mjs";
 import { chooseTheme, navigateMain, navigateSettings, openAnalyzeFilters, closeAnalyzeFilters } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, openReportSettings } from "../reports/report-journey-helpers.mjs";
 import { contrast, rgb, measureChartPaint, measureControlSurface, visibleInk } from "../support/color-measurements.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 
@@ -115,6 +115,7 @@ test("tool, returned issue and disclosure inks follow the evidence through each 
         await paint(page.locator(".compare-record-failure:visible").first(),"--tool-negative");
         await navigateMain(page,"reports");
         await prepareLandingReport(page,"all");
+        await openReportSettings(page);
         const choice=page.locator("#reportPrivacyChoice"); await choice.click();
         const option=page.locator('#reportPrivacyOptions .prompt-choice:has(input[value=original])');
         await option.click(); await paint(option.locator("strong"),"--disclosure-risk");

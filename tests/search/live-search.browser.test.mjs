@@ -1,3 +1,4 @@
+import { clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { historicalComparison } from "../comparison/historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -582,7 +583,7 @@ test("joint: literal matching and legacy scope span both periods through Review 
     assert.doesNotMatch(JSON.stringify(preview.snapshot.periodComparison), /cedar cohort|PHYS|panelId|requestId|indexId/);
     assert.equal(admissions, pairAdmissions + 1);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     const formatted = page.waitForResponse(r => r.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=json]").check();
     assert.equal((await formatted).status(), 200);

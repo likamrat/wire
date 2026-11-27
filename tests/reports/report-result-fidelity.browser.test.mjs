@@ -6,7 +6,7 @@ import { startServer } from "../../lib/server.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 import { fixture, privateFixture, selectActivityOption } from "../support/helpers.mjs";
-import { selectReportFocus } from "./report-journey-helpers.mjs";
+import { selectReportFocus, clickReportOption } from "./report-journey-helpers.mjs";
 import { openDatePicker } from "../analyze/analytics-date-picker.mjs";
 
 function record(flag) {
@@ -42,7 +42,7 @@ test("recorded error text is an independent masked report copy, not chat disclos
     };
     const initial = await rebuild(() => page.locator("#prepareReportPreview").click());
     assert.doesNotMatch(initial.previewHtml, /Required scope \[Tasks\.ReadWrite\] is missing/);
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const withText = await rebuild(() => page.locator("#reportResultText").check());
     assert.equal(withText.snapshot.resultFacts.calls[0].observations[0].applicationError, true);
     await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done" }).click();
@@ -101,10 +101,10 @@ test("normal live-period selection carries the independent result change into re
     await page.keyboard.press("Escape");
     await page.locator("#createPeriodReport").click();
     await expect(page.locator("#reportDeskDates")).toBeHidden();
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     await page.locator('[name=promptMode][value=none]').check();
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     const responseWithErrors = page.waitForResponse(value => value.url().endsWith("/api/preview") && value.request().postDataJSON().options.resultText);
     await page.locator("#reportResultText").check();
     const prepared = await (await responseWithErrors).json();

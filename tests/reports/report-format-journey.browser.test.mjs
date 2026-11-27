@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "../support/helpers.mjs";
-import { chooseLandingReportDates, prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
+import { chooseLandingReportDates, prepareLandingReport, viewAllSavedReports, clickReportOption, closeReportSettings } from "./report-journey-helpers.mjs";
 import { createExportController } from "../../lib/export.mjs";
 import { startServer } from "../../lib/server.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
@@ -66,7 +66,7 @@ test("the React review fixture prepares, edits and saves real formats through th
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await clickReportOption(page, "Change what's included");
         await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
         await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeInViewport();
         await expect(page.locator("#reportContinue")).toBeInViewport();
@@ -79,14 +79,14 @@ test("the React review fixture prepares, edits and saves real formats through th
         assert.equal(await page.locator('input[name="reportScope"]:checked').inputValue(), chosen);
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) prepared = await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.keyboard.press("Escape");
     await selectActivityOption(page, "preparedReportView", "text");
     await page.getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".report-copy-controls textarea").fill("Cedar edited synthetic review copy.");
     prepared = await prepare(() => page.getByRole("button", { name: "Update report copy", exact: true }).click());
-    await page.locator("#reportPrivacyChoice").click();
+    await clickReportOption(page, /^Report text:/);
     prepared = await prepare(() => page.locator('#reportPrivacyOptions input[value=original]').check());
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Save report", exact: true }).click();
@@ -203,9 +203,10 @@ test("all file viewers preserve the edited report through regeneration, reading 
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     let prepared = await regenerate(() => prepareLandingReport(page, "all"));
     prepared = await regenerate(() => page.getByLabel("Report name", { exact: true }).fill("Cedar format review"));
-    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await clickReportOption(page, "Formats: HTML");
     for (const format of ["pdf", "json", "markdown"]) prepared = await regenerate(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.keyboard.press("Escape");
+    await closeReportSettings(page);
     await selectActivityOption(page, "preparedReportView", "text");
     await page.getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".report-copy-controls textarea").fill("Cedar revised copy for jordan@example.invalid.");
@@ -265,9 +266,10 @@ test("all file viewers preserve the edited report through regeneration, reading 
         }
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.locator("#reportDeskDates").click();
+        await clickReportOption(page, /^Dates:/);
         await page.keyboard.press("Escape");
         await expect(page.locator("#reportPeriodChoices")).toBeHidden();
+        await closeReportSettings(page);
         receipts.push({ format, prepared: true, regeneration: true, keyboard: true, themesAndNarrow: true });
     }
     const loading = getDocument({ data: new Uint8Array(bytesOf(prepared.files["product-report.pdf"])), useSystemFonts: false, isEvalSupported: false });
@@ -289,12 +291,12 @@ test("all file viewers preserve the edited report through regeneration, reading 
     if (output) await writeFile(path.join(output, "edited-pdf-extracted.txt"), pages.join("\n\n"));
     // Changing population still regenerates the selected real file, never a substitute Report view.
     await inspection.getByRole("button", { name: "Source", exact: true }).click();
-    await page.locator("#reportDeskDates").click();
+    await clickReportOption(page, /^Dates:/);
     prepared = await regenerate(() => page.locator("#reportPeriodChoices [data-report-range='14']").click());
     await expect(page.locator("#preparedReportView")).toHaveValue(filenames[4]);
     assert.equal(await inspection.locator("pre:visible").textContent(), prepared.files[filenames[4]]);
     await capture("date-change-keeps-source");
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     prepared = await regenerate(() => selectActivityOption(page, "reportOutcome", "errors"));
     if (await page.locator("#reportIncludeOptions").isVisible()) await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
     await expect(page.locator("#preparedReportView")).toHaveValue(filenames[4]);

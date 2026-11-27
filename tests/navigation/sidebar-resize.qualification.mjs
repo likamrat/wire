@@ -4,7 +4,7 @@ import { chromium, expect } from "@playwright/test";
 import { reviewRecords } from "../support/frontend-fixture.mjs";
 import { searchFixture } from "../search/live-search-fixture.mjs";
 import { navigateMain, openAnalyzeFilters, privateFixture, selectActivityOption } from "../support/helpers.mjs";
-import { prepareLandingReport } from "../reports/report-journey-helpers.mjs";
+import { prepareLandingReport, clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { loadBoardState } from "../../lib/store.mjs";
 import { createCopilotRuntimeAccess } from "../../lib/runtime-access.mjs";
 import { createExportController } from "../../lib/export.mjs";
@@ -142,7 +142,7 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
             await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/preview")), name.fill("Cedar draft stays here")]);
             await expect(page.frameLocator(".report-frame").locator("h1")).toHaveText("Cedar draft stays here");
             await drag("prepared report", ".report-frame"); await expect(name).toHaveValue("Cedar draft stays here");
-            await page.getByRole("button",{name:"Change what's included",exact:true}).click();
+            await clickReportOption(page, "Change what's included");
             await page.getByRole("button",{name:"Change activity selection",exact:true}).click();
             const picker = page.locator("#reportActivityOptions");
             await expect(picker).toBeVisible();

@@ -211,7 +211,10 @@ supply the frozen reference count, not more disclosed text.
 - Open a section or interaction to read its full evidence.
 - **Expand sections** opens everything. Collapsing changes only the view, not
   the report's contents.
-- The reader keeps its navigation visible while you scroll.
+- The reader keeps its navigation visible while you scroll. **Settings**, the last
+  link, opens dates, activity, privacy and file choices on the right. **Close**,
+  **Esc** or browser Back returns to reading. **Maximize** gives the report more
+  room; **Restore** returns to the previous size.
 - **Coverage** holds the preparation and time-zone metadata.
 
 ![An expanded report interaction with its prompt and recorded calls below the section navigation.](images/report-expanded.png)
@@ -245,7 +248,7 @@ tool calls. Its **Preview this report** action carries that selection into
 Reports and leaves an unrelated unfinished report alone.
 
 Token and cache counts start on. To see each interaction beside the total,
-choose **Change what's included > Include per-interaction table**. The saved
+choose **Settings > Change what's included > Include per-interaction table**. The saved
 report keeps the same counts as the preview.
 
 ### Notes and copies
@@ -280,7 +283,8 @@ until **Apply**; **Cancel** leaves the accepted authors unchanged.
 
 ### Report text and privacy
 
-The toolbar changes the report name, **Report text** and files to save.
+Change the name in the preview header. Open **Settings** to change **Report
+text** or the files to save. The current choices are visible beneath the name.
 
 The text control shows its state with a label and icon, plus color:
 
@@ -290,7 +294,7 @@ The text control shows its state with a label and icon, plus color:
 
 Masking can miss names or sensitive wording. To hide a name WIRE missed:
 
-1. Open the **Report text** control in the toolbar.
+1. In the preview, open **Settings**, then **Report text**.
 2. Expand **Hide specific words**.
 3. Enter one name or phrase per line.
 

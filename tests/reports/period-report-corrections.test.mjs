@@ -1,3 +1,4 @@
+import { clickReportOption } from "./report-journey-helpers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
@@ -67,11 +68,11 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
     assert.deepEqual([original.periods.baseline.rows.length, original.periods.later.rows.length], [3,4]);
     for (const [mode, contextEnabled] of [["masked", true], ["none", false], ["original", true], ["masked", false]]) {
         if (preview.privacy.promptMode !== mode) {
-            await page.locator("#reportPrivacyChoice").click();
+            await clickReportOption(page, /^Report text:/);
             preview = await prepare(() => page.locator(`#reportPrivacyOptions input[value=${mode}]`).check());
             await page.locator("#reportPrivacyOptions").getByRole("button",{name:"Done",exact:true}).click();
         }
-        await page.getByRole("button",{name:"Change what's included",exact:true}).click();
+        await clickReportOption(page, "Change what's included");
         const contextControl = page.locator("#reportRecordedContext");
         if (mode === "none") await expect(contextControl).toBeDisabled();
         else if (await contextControl.isChecked() !== contextEnabled) preview = await prepare(() => contextControl.setChecked(contextEnabled));

@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { navigateMain, openActivitySessions, openAnalyzeFilters, selectActivityOption, chooseTheme } from "../support/helpers.mjs";
-import { selectReportFocus } from "../reports/report-journey-helpers.mjs";
+import { selectReportFocus, clickReportOption } from "../reports/report-journey-helpers.mjs";
 import { contrast } from "../support/color-measurements.mjs";
 
 const proofDir = process.env.WIRE_AUTHOR_FILTER_PROOFS;
@@ -113,7 +113,7 @@ test("report author filtering preserves selected base membership and complete el
     const read = () => page.waitForResponse(response => response.url().endsWith("/api/preview") && response.ok());
     let response = read(); await page.locator("#prepareReportPreview").click();
     assert.equal((await (await response).json()).records.length, wanted.size);
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await clickReportOption(page, "Change what's included");
     response = read(); await setAuthors(page, ["user"], "reportPromptAuthorFilter");
     const preview = await (await response).json();
     assert.deepEqual(preview.snapshot.selectionScope.promptAuthors, ["user"]);

@@ -275,7 +275,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const refineButton = opener("Change what's included", refine);
     const formatGroup = el("div", "report-toolbar-group");
     formatGroup.append(formatButton);
-    choices.append(dateButton, formatGroup, refineButton, privacyGroup);
+    choices.append(dateButton, refineButton, privacyGroup, formatGroup);
     const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Formats", formatGroup);
     draftChoices.append(compactLabel, datesRow);
     const usageChoices = questionControls(doc, "report", changeUsage, { filters:true });
@@ -288,7 +288,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
-    toolbar.append(nameRow, choices, scopeCaption);
+    toolbar.append(nameRow, scopeCaption);
     byId("reportStage3").prepend(toolbar);
     // Keep the prepared reader mounted: moving its iframe between hosts would reload its document.
     const drawer = el("dialog", "report-preview-drawer"); drawer.id = "reportPreviewDrawer";
@@ -296,7 +296,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     drawerTitle.id = "reportDrawerTitle"; drawerTitle.tabIndex = -1;
     drawer.setAttribute("aria-labelledby", drawerTitle.id);
     const backSlot = el("div", "report-drawer-back");
-    drawerHeader.append(drawerTitle, backSlot);
+    const maximize = button("", () => sizePreview(!maximized), "quiet icon-action");
+    drawerHeader.append(backSlot, drawerTitle, maximize);
     const previewStage = byId("reportStage3"), errors = byId("reportJourneyError"), retry = errors.nextElementSibling;
     const messageAnchor = doc.createComment("report messages"); errors.before(messageAnchor);
     const background = el("section", "report-draft-background");
@@ -306,10 +307,146 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     previewStage.before(background);
     const activityNotice = el("p", "muted", "Recorded activity has changed. This preview still shows the activity it was prepared with.");
     activityNotice.id = "reportPreviewActivityNotice"; activityNotice.hidden = true; activityNotice.setAttribute("role", "status");
-    previewStage.before(drawer); drawer.append(drawerHeader, activityNotice, previewStage);
+    const layout = el("div", "report-preview-layout");
+    const settings = el("dialog", "report-settings-drawer"), settingsHeader = el("header", "report-settings-heading");
+    settings.id = "reportSettingsDrawer";
+    const settingsTitle = el("h2", "", "Report settings"); settingsTitle.id = "reportSettingsTitle"; settingsTitle.tabIndex = -1;
+    settings.setAttribute("aria-labelledby", settingsTitle.id);
+    const settingsClose = button("Close", () => dismissSettings(), "quiet icon-action");
+    settingsClose.prepend(ux.icon("close")); settingsClose.setAttribute("aria-label", "Close report settings");
+    settingsHeader.append(settingsTitle, settingsClose); settings.append(settingsHeader, choices);
+    const fallbackNav = el("nav", "wire-section-nav report-settings-fallback");
+    fallbackNav.setAttribute("aria-label", "Preview controls");
+    const fallback = button("Settings", enterSettings);
+    fallback.prepend(ux.icon("settings")); fallback.append(ux.icon("forward")); fallbackNav.append(fallback);
+    fallback.setAttribute("aria-controls", settings.id); fallback.setAttribute("aria-expanded", "false");
+    toolbar.append(fallbackNav);
+    previewStage.before(drawer); layout.append(previewStage, settings); drawer.append(drawerHeader, activityNotice, layout);
+    let maximized = false, frameOpener = null, settingsHistory = null;
+    function fitSettings() {
+        return drawer.clientWidth < 52 * parseFloat(doc.defaultView.getComputedStyle(doc.documentElement).fontSize);
+    }
+    const optionPanels = [privacy, formats, refine, periodPanel, selection];
+    function mountOptions(host) {
+        for (const panel of optionPanels) if (panel.parentElement !== host) host.append(panel);
+    }
+    function paintOpeners() {
+        for (const control of [fallback, frameOpener]) control?.setAttribute("aria-expanded", String(settings.open));
+    }
+    function presentSettings(focus = true) {
+        if (!drawer.open || !current() || !read().prepared || previewStage.inert || read().locked || read().saved) return;
+        if (!settings.open) {
+            mountOptions(settings);
+            if (fitSettings()) settings.showModal(); else settings.show();
+            drawer.toggleAttribute("data-settings-beside", !settings.matches(":modal"));
+        }
+        paintOpeners();
+        if (focus) settingsTitle.focus({ preventScroll: true });
+    }
+    function enterSettings() {
+        if (!drawer.open || !current() || read().locked || read().saved || previewStage.inert) return;
+        if (!settings.open) {
+            const key = crypto.randomUUID();
+            settingsHistory = { key, url: location.href, position: history.state?.evidenceView?.position };
+            history.pushState({ ...history.state, reportSettingsKey: key }, "");
+        }
+        presentSettings();
+    }
+    function hideSettings(restore = true) {
+        if (!settings.open) return;
+        closeOptions(); settings.close(); drawer.removeAttribute("data-settings-beside");
+        mountOptions(drawer); paintOpeners();
+        if (restore) (frameOpener?.isConnected && !fallbackNav.checkVisibility() ? frameOpener : fallback).focus({ preventScroll: true });
+    }
+    function dismissSettings() {
+        if (!settings.open) return;
+        if (history.state?.reportSettingsKey === settingsHistory?.key && settingsHistory) history.back();
+        else hideSettings();
+    }
+    function traverseSettings() {
+        if (!settingsHistory || !drawer.open || settingsHistory.url !== location.href
+            || history.state?.evidenceView?.position !== settingsHistory.position || !current()) return false;
+        if (history.state?.reportSettingsKey === settingsHistory.key) { presentSettings(); return true; }
+        if (!settings.open) return false;
+        hideSettings(); return true;
+    }
+    settings.addEventListener("cancel", event => { event.preventDefault(); event.stopPropagation(); dismissSettings(); });
+    settings.addEventListener("click", event => {
+        if (event.target !== settings || !settings.matches(":modal")) return;
+        const bounds = settings.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dismissSettings();
+    });
+    function escapePreview(event) {
+        if (event.key !== "Escape" || event.defaultPrevented || !drawer.open || !current()
+            || drawer.querySelector(":popover-open") || doc.querySelector("dialog:modal:not(#reportPreviewDrawer):not(#reportSettingsDrawer)")) return;
+        if (!settings.open && !maximized) return;
+        event.preventDefault();
+        if (settings.open) dismissSettings(); else sizePreview(false);
+    }
+    drawer.addEventListener("keydown", escapePreview);
+    function sizePreview(next) {
+        const frame = previewStage.querySelector(".report-contained-frame:not([hidden])");
+        const source = frame?.contentDocument;
+        const navBottom = source?.querySelector(".report-nav")?.getBoundingClientRect().bottom ?? 0;
+        const anchor = source && [...source.querySelectorAll("h2,h3,summary,tr")].find(node => {
+            const rect = node.getBoundingClientRect(); return rect.height && rect.top >= navBottom && rect.top < frame.clientHeight;
+        });
+        const top = anchor?.getBoundingClientRect().top;
+        maximized = next; drawer.toggleAttribute("data-maximized", next);
+        const label = next ? "Restore preview" : "Maximize preview";
+        maximize.replaceChildren(ux.icon(next ? "reader-restore" : "reader-maximize"), el("span", "", next ? "Restore" : "Maximize"));
+        maximize.setAttribute("aria-label", label); maximize.setAttribute("aria-pressed", String(next)); maximize.title = label;
+        if (anchor) frame.contentWindow.scrollBy(0, anchor.getBoundingClientRect().top - top);
+    }
+    sizePreview(false);
+    function mountSectionNavigation(source, valid) {
+        const main = source.querySelector("main"), nav = main?.querySelector(".report-nav") ?? source.createElement("nav");
+        if (!main) return () => {};
+        nav.className = "report-nav"; nav.setAttribute("aria-label", "Report sections"); main.prepend(nav);
+        const usage = main.querySelector('section[data-token-overview="4"]');
+        if (usage) {
+            const authors = usage.querySelector('[aria-label="Prompt author breakdown"]');
+            if (authors) authors.id = "reading-token-authors";
+            const ranked = usage.querySelector('[aria-label="Interaction breakdown"]');
+            if (ranked && authors) authors.after(ranked);
+            for (const [table, label] of [[authors, "Prompt authors"], [ranked, "Ranked interactions"]]) if (table) {
+                const heading = source.createElement("h3"); heading.className = "reading-table-title"; heading.textContent = label;
+                table.prepend(heading);
+            }
+            const destinations = [[usage, "Overview", "section-overview"], [authors, "Prompt authors", "prompt-authors"],
+                [ranked, "Ranked interactions", "search-interaction"], [source.getElementById("coverage"), "Coverage", "report-all"]];
+            nav.replaceChildren();
+            for (const [target, label, role] of destinations) if (target?.id) {
+                const jump = source.createElement("a"); jump.href = "#" + target.id; jump.append(ux.icon(role), label); nav.append(jump);
+            }
+        } else {
+            for (const jump of nav.querySelectorAll("a")) if (!jump.querySelector("svg")) jump.prepend(ux.icon("section-guide"));
+            const coverage = nav.querySelector('a[href$="#coverage"]'); if (coverage) nav.append(coverage);
+        }
+        const jumps = [...nav.querySelectorAll("a[href]")].map(link => [link, source.getElementById(link.hash.slice(1))]).filter(([, target]) => target);
+        function markSection() {
+            const edge = nav.getBoundingClientRect().bottom + 18;
+            const visible = jumps.filter(([, target]) => target.checkVisibility() && target.getBoundingClientRect().top <= edge);
+            const active = visible.sort((a,b) => b[1].getBoundingClientRect().top - a[1].getBoundingClientRect().top)[0] ?? jumps[0];
+            for (const pair of jumps) if (pair === active) pair[0].setAttribute("aria-current", "location"); else pair[0].removeAttribute("aria-current");
+        }
+        const open = source.createElement("a"); open.href = "#report-settings"; open.className = "report-settings-link";
+        open.append(ux.icon("settings"), "Settings", ux.icon("forward")); nav.append(open);
+        const click = event => { event.preventDefault(); if (valid() && open.isConnected) enterSettings(); };
+        open.addEventListener("click", click);
+        frameOpener = open; paintOpeners(); markSection(); fallbackNav.hidden = byId("preparedReportView")?.value === "report";
+        source.addEventListener("scroll", markSection, { passive:true }); source.addEventListener("keydown", escapePreview);
+        return () => {
+            source.removeEventListener("scroll", markSection); source.removeEventListener("keydown", escapePreview);
+            open.removeEventListener("click", click);
+            if (frameOpener === open) { frameOpener = null; fallbackNav.hidden = false; }
+        };
+    }
     drawer.addEventListener("cancel", event => {
         event.preventDefault();
-        if (current() && !read().locked) closePreview();
+        if (settings.open) dismissSettings();
+        else if (maximized) sizePreview(false);
+        else if (current() && !read().locked) closePreview();
     });
     const narrow = doc.defaultView.matchMedia("(max-width: 62em)");
     const openDrawer = () => narrow.matches ? drawer.showModal() : drawer.show();
@@ -317,10 +454,18 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         if (!drawer.open || drawer.matches(":modal") === narrow.matches) return;
         const focus = drawer.contains(doc.activeElement) ? doc.activeElement : drawerTitle;
         const openPanels = [...drawer.querySelectorAll(":popover-open")];
-        drawer.close(); openDrawer();
+        const editing = settings.open;
+        if (editing) hideSettings(false);
+        drawer.close(); openDrawer(); if (editing) presentSettings(false);
         for (const panel of openPanels) panel.showPopover();
         focus.focus({ preventScroll: true });
     });
+    new ResizeObserver(() => {
+        if (!settings.open || settings.matches(":modal") === fitSettings()) return;
+        const focus = doc.activeElement;
+        closeOptions(); settings.close(); presentSettings(false);
+        (settings.contains(focus) && focus.checkVisibility() ? focus : settingsTitle).focus({ preventScroll:true });
+    }).observe(drawer);
 
     const calendar = el("div"); calendar.id = "reportCustomDates"; calendar.hidden = true;
     periodPanel.firstElementChild.classList.add("visually-hidden");
@@ -355,7 +500,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const target = new WeakRef(origin), top = selectionBody.scrollTop;
         return () => {
             const link = target.deref();
-            if (!current() || read().locked || !(read().prepared ? refineButton : scopeChoice).checkVisibility() || !link || !selection.contains(link)) return;
+            if (!current() || read().locked || !link || !selection.contains(link)) return;
+            if (read().prepared) presentSettings(false);
+            if (!(read().prepared ? refineButton : scopeChoice).checkVisibility()) return;
             selection.showPopover();
             selectionBody.scrollTop = top;
             ux.restoreFocus(link);
@@ -428,7 +575,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         legend.textContent = value.prepared ? "Report text" : "Chat details in this report";
         if (value.prepared) {
             if (dateButton.parentElement !== choices) choices.prepend(dateButton);
-            if (formatGroup.parentElement !== choices) dateButton.after(formatGroup);
+            if (formatGroup.parentElement !== choices) choices.append(formatGroup);
         } else {
             const dateHost = setupOpen ? datesRow : defaults;
             if (dateButton.parentElement !== dateHost) {
@@ -502,7 +649,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
         outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
-        scopeCaption.textContent = value.paired ? "" : value.scopeLabel;
+        scopeCaption.textContent = [!value.paired && labelDates(value.dates), value.scopeLabel, privacyButton.textContent, formatSummary].filter(Boolean).join(" · ");
+        scopeCaption.dataset.promptMode = mode;
         scope.hidden = Boolean(value.namedReport);
         scopeCaption.hidden = !scopeCaption.textContent;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
@@ -515,24 +663,34 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         for (const input of promptOptions.querySelectorAll("input")) input.checked = input.value === value.options.promptMode;
         for (const input of byId("formatOptions").querySelectorAll("input")) input.checked = value.options.formats.includes(input.value);
     }
-    function syncDrawer(open, title) {
+    function syncDrawer(open, title, available = false) {
         background.hidden = !open;
         if (open) {
             drawerTitle.textContent = title;
             if (!drawer.open) {
                 drawerHeader.after(errors, retry);
-                for (const panel of [privacy, formats, refine, periodPanel, selection]) drawer.append(panel);
+                mountOptions(drawer);
                 openDrawer();
                 drawerTitle.focus({ preventScroll: true });
             }
+            // Keep Save and the editable name out of the header when the underlying preview is withheld.
+            const titleField = byId("reportTitle").closest(".report-title-field");
+            if (available && saveSlot.parentElement !== drawerHeader) {
+                maximize.before(titleField); drawerHeader.append(saveSlot);
+            } else if (!available && saveSlot.parentElement !== nameRow) nameRow.append(titleField, saveSlot);
+            drawerHeader.toggleAttribute("data-reading", available);
+            fallbackNav.hidden = !available || Boolean(frameOpener && byId("preparedReportView")?.value === "report");
+            maximize.hidden = !available;
+            if (!available) { hideSettings(false); settingsHistory = null; }
         } else if (drawer.open) {
-            closeOptions(); drawer.close();
+            if (saveSlot.parentElement !== nameRow) nameRow.append(byId("reportTitle").closest(".report-title-field"), saveSlot);
+            hideSettings(false); settingsHistory = null; sizePreview(false); closeOptions(); drawer.close();
             messageAnchor.after(errors, retry);
-            for (const panel of [privacy, formats, refine, periodPanel, selection]) root.append(panel);
+            mountOptions(root);
         }
     }
     return {
-        sync, syncDrawer, backSlot, draftShelf, openCalendar, showSelection, selectionReturn,
+        sync, syncDrawer, backSlot, draftShelf, openCalendar, showSelection, selectionReturn, mountSectionNavigation, traverseSettings,
         hasDeskDraft: () => setupOpen || deskFocus !== "all" || periodPanel.matches(":popover-open") && !calendar.hidden,
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
@@ -568,6 +726,15 @@ html,body{background:var(--report-sheet);color:var(--ink)}main{background:transp
 .wire-example-editor button{min-height:44px;padding:8px 14px;margin:12px 8px 0 0;border:1px solid var(--rule);border-radius:8px;background:var(--report-note);color:var(--ink);font:inherit;cursor:pointer}
 .wire-example-editor :focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 .wire-example-editor .wire-omit{display:flex;align-items:center;gap:8px;min-height:44px}
+body[data-wire-reader] main>.report-nav:has(.report-settings-link){position:sticky;top:0;z-index:2;display:flex;align-items:stretch;flex-wrap:wrap;gap:0 .8rem;margin:0 0 1rem;padding:0;background:var(--report-sheet);border-bottom:1px solid var(--rule)}
+body[data-wire-reader] main>.report-nav:has(.report-settings-link)>a{display:inline-flex;align-items:center;gap:.45em;min-height:44px;padding:.25em;color:var(--ink);font:inherit;border:0;border-bottom:3px solid transparent;border-radius:0;text-decoration:none}
+body[data-wire-reader] main>.report-nav:has(.report-settings-link)>a[aria-current=location]{border-bottom-color:var(--focus);font-weight:500}
+body[data-wire-reader] .report-nav:has(.report-settings-link) .wire-icon{flex:none;width:1.125em;height:1.125em}
+body[data-wire-reader] .report-settings-link:is(:hover,:focus-visible)>[data-icon-role=forward]{background:var(--report-note)}
+body[data-wire-reader] main>.report-nav:has(.report-settings-link)>a:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+body[data-wire-reader] [data-token-overview="4"]>.table-wrap>.reading-table-title{font:500 1.15rem/1.35 var(--font);margin:1rem 0 .45rem}
+body[data-wire-reader] [data-token-overview="4"]>h3,body[data-wire-reader] [data-token-overview="4"]>h3~p{background:var(--report-note);padding:.5rem 1rem;margin:0}
+body[data-wire-reader] [data-token-overview="4"]>h3{padding-top:1rem;border-radius:8px 8px 0 0}
 `;
     source.head.append(style);
     if (preview.snapshot?.presentation?.productVersion === 1) {
