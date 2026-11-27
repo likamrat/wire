@@ -1142,6 +1142,10 @@ Source access links open it.
 - Each source has its own block: provider mark, approval summary, file paths,
   then optional reads such as token records with what they read. The schedule
   follows the sources because it applies to all of them.
+- Each editable path has **Browse** after its field, named for the field it
+  fills. The host's chooser fills only the draft; Cancel keeps the typed value
+  and focus returns to Browse. The token-records **File** is disclosure, not an
+  editable path.
 - Put the cost of reading token records next to the switch, before the file
   details. Lead with “Reading token records uses no tokens and costs nothing.”
   Use an informational tint, not a warning or an indication that access is on.

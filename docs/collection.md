@@ -99,6 +99,15 @@ home directory of the user running WIRE: `data.db` and `session-state`.
 - In WSL, these defaults don't automatically locate a Windows user's source.
   Enter the actual paths in **Settings > Sources**; WSL can qualify Windows drive paths
   or their mounted equivalents.
+- **Browse** asks the WIRE host to open its own chooser: a file for **Metadata
+  database**, filtered to `data.db` on Windows, and a folder for **Chat history
+  folder**. The browser sends only which field to fill, never a path to list.
+  WIRE uses the Windows dialogs, `osascript` on macOS and Zenity on Linux (WSL
+  included) when a graphical display is available. The macOS and Linux
+  choosers haven't been verified interactively yet. Without a usable chooser,
+  Settings says so and the typed path still works. A chosen path fills the
+  draft; it doesn't approve or read anything until **Approve and switch
+  source**.
 - WIRE checks those named paths, not arbitrary home-directory contents.
 - Approval and schema validation come before any history read.
 
@@ -374,7 +383,8 @@ cover it. **Token records** under the GitHub Copilot app in **Settings > Sources
 resolved file and records a separate approval (`usageRecords`). The switch starts on
 for a source that isn't approved yet, so first approval lists it under **What
 approving allows**; nothing is read until that confirmation. Existing approvals
-keep their saved setting. The approval names that file and the Copilot account the
+keep their saved setting, including an explicit Off. The approval names
+that file and the Copilot account the
 app reports. If WIRE can't identify that account at first approval, it connects
 the source with token records off and says so. A later request to turn them on
 is refused until the account can be identified; the refusal says to turn the

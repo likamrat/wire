@@ -57,9 +57,11 @@ or **Settings > Sources**.
 
 <img src="images/first-connection.png" alt="Connect your Copilot history, with Review and connect and Not now." width="561">
 
-1. Under **GitHub Copilot app**, check that **Metadata database** and **Chat
-   history folder** point to the Copilot app you want to read. Edit a path if
-   the suggestion is wrong.
+1. Under **GitHub Copilot app**, check that **Metadata database** (`data.db`)
+   and **Chat history folder** (`session-state`) point to the Copilot app you
+   want to read. If a suggestion is wrong, choose **Browse** beside it to pick
+   the file or folder, or type its full path. Picking a path doesn't connect
+   anything.
 2. Leave **Token records** on if you want token counts for older chats. WIRE
    reads the counts Copilot already recorded in the file shown there. Reading
    them uses no tokens and costs nothing. Turn it off if you'd rather WIRE
@@ -70,7 +72,7 @@ or **Settings > Sources**.
 4. Choose **View activity**. Analyze shows calls as WIRE saves them. The first
    read can take a few minutes.
 
-<img src="images/sources-new-connection.png" alt="Sources for a new connection: the suggested Copilot paths, Token records on with its no-cost notice, the schedule and What approving allows." width="744">
+<img src="images/sources-new-connection.png" alt="Sources for a new connection: the suggested Copilot paths with Browse beside each, Token records on with its no-cost notice, the schedule and What approving allows." width="744">
 
 Approval covers this instance and these local files. WIRE doesn't rerun prompts,
 make new Work IQ requests or connect to Microsoft 365 Chat or Cowork. Saving
@@ -943,10 +945,19 @@ Edit anything and **What changes** lists the effect. Its button names what
 saving does, such as **Approve token records** or **Save preferences**, and
 **Cancel** puts everything back.
 
+To read a different Copilot app, choose **Browse** beside **Metadata
+database** or **Chat history folder**, or type the full path. **Browse** opens
+the file or folder chooser on the computer running WIRE; cancelling it keeps
+the current path. If WIRE can't open a chooser there, a message says so and you
+can type the path instead. A new path is only a draft until you choose
+**Approve and switch source** in **What changes**.
+
 <a id="token-records-for-a-connected-source"></a>
 
-An existing connection keeps its saved **Token records** choice; the switch
-starts on only for a new source. To change it:
+A connection keeps its saved **Token records** choice; the switch starts on
+only for a new source. The **File** row shows which file WIRE reads. It follows
+the metadata database's folder, so you can't edit it separately. To change
+the choice:
 
 1. Open **Settings > Sources**. Under **GitHub Copilot app**, **Token records**
    shows **On** or **Off**.
@@ -955,8 +966,10 @@ starts on only for a new source. To change it:
 3. Choose **Approve token records** or **Stop reading token records**.
 
 Reading token records uses no tokens and costs nothing. Turning them off keeps
-the totals WIRE already counted. Changing the source's paths turns the switch
-off until you approve it again.
+the totals WIRE already counted. Approving them doesn't recount chats WIRE has
+already read; use [Count tokens in chats already read](collection.md#count-tokens-in-chats-already-read)
+for those. Changing the source's paths turns the switch off until you approve
+it again.
 
 - **Refresh** checks approved local history.
 - **Read stored activity** only rereads WIRE's retained view.
