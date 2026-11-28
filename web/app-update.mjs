@@ -52,7 +52,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const unconfirmed = state?.supported && state.phase === "error" && state.offerUnconfirmed === true && state.availableRelease
             && sha(state.candidate) && state.candidate !== state.installed;
         const offered = available || unconfirmed ? state.availableRelease : null, installed = state?.installedRelease;
-        const shown = (available || unconfirmed) && state.candidate !== state.dismissed && state.candidate !== locallyDismissed;
+        const shown = (available || unconfirmed) && state.candidate !== locallyDismissed;
         for (const [id, release] of [["noticeReleaseNotes", shown && !success && !result && offered],["availableReleaseNotes",offered],["installedReleaseNotes",installed]]) {
             const link = $(id);
             link.hidden = !release;
@@ -208,7 +208,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const returnFocus = action === "check" && document.activeElement === manual;
         const previousCandidate = state?.candidate;
         manualChecking = action === "check";
-        changingPreferences = action === "preferences" || action === "dismiss";
+        changingPreferences = action === "preferences";
         busy = true; feedback = ["check", "auto-check"].includes(action) ? checkingMessage : "";
         if (action === "preferences") { pendingPreference = fields.enabled; feedback = "Saving update preferences…"; }
         clearTimeout(scheduleTimer); render();
@@ -234,7 +234,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
             // Navigation may cancel the opening fetch before pagehide runs. A
             // refused/unreadable response, unlike transport loss, remains unverified.
             openingStatusOnly &&= error instanceof TypeError || ["AbortError", "TimeoutError"].includes(error.name);
-            // Reconcile preferences/dismissals by reading; never repeat a lost command.
+            // Read back current state; never repeat a lost command.
             state = null;
             panelVerified = false;
             if (action !== "status") try {
@@ -552,7 +552,6 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     });
     $("appUpdateRecover").addEventListener("click", () => void recover(0, "", true));
     $("appUpdateDismiss").addEventListener("click", () => {
-        if (observer) { locallyDismissed = state?.candidate; render(); return; }
         if (success || result && state?.phase !== "available") {
             const focused = success && document.activeElement === $("appUpdateDismiss");
             success = result = ""; render();
@@ -561,11 +560,12 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
                 (target.checkVisibility() ? target : $("main")).focus({ preventScroll: true });
             }
         }
-        else if (state?.candidate) void run("dismiss", { candidate: state.candidate }).then(() => {
-            if (notice.inert && document.activeElement === document.body) {
+        else if (state?.candidate) {
+            const focused = document.activeElement === $("appUpdateDismiss");
+            locallyDismissed = state.candidate; result = ""; render();
+            if (focused && notice.inert)
                 ($("settingsAppUpdate").checkVisibility() ? $("settingsAppUpdate") : $("pageTitle")).focus({ preventScroll: true });
-            }
-        });
+        }
     });
     manual.addEventListener("click", () => {
         if (!busy && !state && openingStatusOnly) void readOpeningStatus();
