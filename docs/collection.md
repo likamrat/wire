@@ -165,8 +165,11 @@ What the read exposes:
 If unrelated metadata changes during a profile read, WIRE makes one fresh
 read-only check of the selected profile. It accepts matching profile facts from
 the same database, not an old cached identity; changed or unreadable results
-stay unavailable. Ordinary roster discovery keeps its whole-metadata change
-checks.
+stay unavailable. Collection's chat-list discovery also makes one fresh
+read-only check: it accepts the fresh read only when the database and the
+complete approved chat list match. A second change during that check, a
+replaced database or a changed list refuses without advancing any history
+position.
 
 The display association neither grants access nor assigns ownership of history.
 

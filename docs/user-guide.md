@@ -1018,13 +1018,20 @@ it again.
 If **Collection cannot check history** appears, open **Collection status** for
 the failing operation and reason. Retained activity stays available.
 
-If the Copilot database changes while WIRE checks history, Analyze keeps
-showing saved activity with one notice: **WIRE couldn't finish the history
-check because the Copilot database changed.** Choose **View collection
-status**. With collection on, WIRE checks again automatically. While it's
-paused, **Refresh** in Analyze checks again without resuming collection.
-**Technical details** lists the last failed check and, once a later check
-completes, when that happened.
+Copilot keeps writing to its database while WIRE reads it. If another chat
+changes during a history check, WIRE rereads the approved chat list and, when
+it can confirm the same list, continues the check. If the database changes
+again during that recheck, Analyze keeps showing saved activity with one
+notice: **WIRE couldn't finish the history check because the Copilot database
+changed.** If the chat list changed or the database was replaced, Analyze shows
+**Collection cannot check history** instead. Either way, the next check
+resumes from the last position WIRE saved, reading any history that's still
+available. Choose **View collection status** for the reason. With collection
+on, WIRE checks again automatically. While it's paused, **Refresh** in Analyze
+checks again without resuming collection. **Technical details** lists the last
+failed check and, once a later check completes, when that happened. A later
+completed check doesn't establish that nothing was missed; Collection status
+lists the gaps WIRE knows about.
 
 In Collection status, **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches can't start a new network test, and a saved diagnostic is separate
