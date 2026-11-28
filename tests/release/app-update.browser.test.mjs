@@ -138,6 +138,7 @@ test("a first public release can follow a higher development package label witho
     Object.assign(state, { packageVersion:"0.1.0", installed:next, candidate:null, phase:"current", availableRelease:null, installedRelease:release });
     await page.reload();
     await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v0.1.0");
+    await expect(page.locator("#appUpdateNotice")).toBeHidden();
     await expect(page.locator("#settingsAppUpdate")).toBeHidden();
     await page.locator("#installedReleaseNotes").click();
     await expect(page.locator("#releaseReaderVersion")).toHaveText("v0.1.0");
@@ -158,6 +159,10 @@ test("React Settings checks, opts in and out, dismisses only this build, and sch
     await page.clock.install();
     await page.reload(); await expect.poll(() => actions.at(-1).action).toBe("auto-check");
     await expect(auto).toBeEnabled();
+    await page.locator("#appUpdateDismiss").click();
+    await page.clock.fastForward("24:00:00");
+    await expect.poll(() => actions.filter(a => a.action === "auto-check").length).toBe(2);
+    await expect(auto).toBeEnabled(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
     state.candidate = "3".repeat(40);
     // A pre-deadline launcher still owns its daily schedule.
     await page.clock.fastForward("00:05:00");
@@ -166,8 +171,8 @@ test("React Settings checks, opts in and out, dismisses only this build, and sch
     await expect(page.locator("#appUpdateApply")).toBeVisible();
     await auto.uncheck(); await expect(auto).toBeEnabled();
     await page.clock.fastForward("24:00:00");
-    assert.deepEqual(actions, ["status", "check", { action: "dismiss", candidate: next }, "status", { action: "preferences", enabled: true },
-        "status", "auto-check", "auto-check", { action: "preferences", enabled: false }].map(a => typeof a === "string" ? { action: a } : a));
+    assert.deepEqual(actions, ["status", "check", "status", { action: "preferences", enabled: true },
+        "status", "auto-check", "auto-check", "auto-check", { action: "preferences", enabled: false }].map(a => typeof a === "string" ? { action: a } : a));
 });
 
 test("General owns the update card, legacy links and searchable controls without triggering an update", async t => {
@@ -575,13 +580,13 @@ test("a clean managed tab retains its capability for bfcache and releases only i
     await expect.poll(() => releases).toEqual([capability]);
 });
 
-async function managedWorkspace(t) {
+async function managedWorkspace(t, initial = {}) {
     const cleanup = new AsyncDisposableStack();
     t.after(() => cleanup.disposeAsync());
     const { context } = await privateFixture({ after: close => cleanup.defer(close) });
     const channel = Object.assign(new EventEmitter(), { connected: true, env: { WIRE_UPDATE_LAUNCHER: "1", WIRE_UPDATE_BUILD: old } });
     const actions = [], state = { supported: true, automatic: false, installed: old, candidate: null, dismissed: null,
-        lastChecked: null, phase: "current", message: "Up to date." };
+        lastChecked: null, phase: "current", message: "Up to date.", ...initial };
     channel.send = ({ id, request }) => {
         actions.push(request.action);
         if (request.action === "check") Object.assign(state, { candidate: next, phase: "available", message: "Update available." });
@@ -595,6 +600,28 @@ async function managedWorkspace(t) {
     const browser = await chromium.launch(); cleanup.defer(() => browser.close());
     return { runtime, browser, actions };
 }
+
+test("a fresh document offers the same verified release even after a legacy dismissal", async t => {
+    const tag = "v1.0.1";
+    const {runtime, browser, actions} = await managedWorkspace(t, {automatic:true, phase:"available", candidate:next, dismissed:next,
+        availableRelease:{ tag, commit:next, notes:"Fixture notes.", url:`https://github.com/likamrat/wire/releases/tag/${tag}` }});
+    const context = await browser.newContext(), page = await context.newPage(), other = await context.newPage();
+    const address = runtime.url + "settings", notice = p => p.getByRole("complementary", {name:`WIRE ${tag} is available`});
+    await page.goto(address); await expect(notice(page)).toBeVisible();
+    await page.locator("#appUpdateDismiss").click(); await expect(notice(page)).toBeHidden();
+    await page.getByRole("link",{name:"Change theme"}).click();
+    await page.getByRole("button",{name:"Back to General"}).click();
+    await expect(page.locator("#settingsAppUpdate")).toBeEnabled(); await expect(notice(page)).toBeHidden();
+    await other.goto(address); await expect(notice(other)).toBeVisible();
+    await expect(notice(page)).toBeHidden();
+    await other.locator("#appUpdateDismiss").click();
+    await page.reload(); await expect(notice(page)).toBeVisible(); await expect(notice(other)).toBeHidden();
+    await page.locator("#appUpdateDismiss").click(); await expect(notice(page)).toBeHidden();
+    const devtools = await context.newCDPSession(page);
+    await Promise.all([page.waitForNavigation(),devtools.send("Page.reload",{ignoreCache:true})]);
+    await expect(notice(page)).toBeVisible(); await expect(notice(other)).toBeHidden();
+    assert.ok(actions.every(action => ["status","auto-check"].includes(action)), actions.join(", "));
+});
 
 test("a lost opening update reply rejoins the peer watch in the original document", async t => {
     const { runtime, browser, actions } = await managedWorkspace(t);
@@ -619,33 +646,28 @@ test("a lost opening update reply rejoins the peer watch in the original documen
     await expect(page.locator("#appUpdateCheck")).toBeEnabled();
 });
 
-test("a check publishes its offer to another open view and dismissal keeps the update available", async t => {
+test("a check publishes its offer to another open view but dismissal stays local", async t => {
     const { runtime, browser, actions } = await managedWorkspace(t);
     const [caller, peer] = await Promise.all([browser.newPage(), browser.newPage()]);
     const watch = "**/api/app-update/watch";
     await Promise.all([caller.waitForRequest(watch), peer.waitForRequest(watch),
         caller.goto(runtime.url + "settings"), peer.goto(runtime.url + "settings")]);
     await expect(peer.locator("#appUpdateNotice")).toBeHidden();
-    async function peerChange(action, click) {
-        const [own, shared] = await Promise.all([
-            caller.waitForResponse(r => r.url().endsWith("/api/app-update") && r.request().postDataJSON().action === action),
-            peer.waitForResponse(watch, { timeout: 5000 }), click(),
-        ]);
-        assert.equal(own.status(), 200); assert.equal(shared.status(), 200);
-        const status = await own.json();
-        assert.deepEqual(await shared.json(), { status });
-        assert.ok(status.statusRevision > shared.request().postDataJSON().statusRevision);
-        assert.equal(status.candidate, next);
-        return status;
-    }
-    const offer = await peerChange("check", () => caller.locator("#appUpdateCheck").click());
-    assert.equal(offer.dismissed, null);
+    const [own, shared] = await Promise.all([
+        caller.waitForResponse(r => r.url().endsWith("/api/app-update") && r.request().postDataJSON().action === "check"),
+        peer.waitForResponse(watch, { timeout: 5000 }), caller.locator("#appUpdateCheck").click(),
+    ]);
+    assert.equal(own.status(), 200); assert.equal(shared.status(), 200);
+    const offer = await own.json();
+    assert.deepEqual(await shared.json(), { status: offer });
+    assert.ok(offer.statusRevision > shared.request().postDataJSON().statusRevision);
+    assert.equal(offer.candidate, next);
     await expect(peer.locator("#appUpdateNotice")).toBeVisible();
-    const dismissed = await peerChange("dismiss", () => caller.locator("#appUpdateDismiss").click());
-    assert.equal(dismissed.dismissed, next);
-    await expect(peer.locator("#appUpdateNotice")).toBeHidden();
-    await expect(peer.locator("#settingsAppUpdate")).toBeEnabled();
-    assert.deepEqual(actions, ["status", "status", "check", "dismiss"]);
+    await caller.locator("#appUpdateDismiss").click();
+    await expect(caller.locator("#appUpdateNotice")).toBeHidden();
+    await expect(caller.locator("#settingsAppUpdate")).toBeEnabled();
+    await expect(peer.locator("#appUpdateNotice")).toBeVisible();
+    assert.deepEqual(actions, ["status", "status", "check"]);
 });
 
 test("an opening status refusal or unreadable reply does not retry or release the document", async t => {
