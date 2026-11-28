@@ -45,7 +45,7 @@ async function refuseMetadataRead(t, collector, db) {
             const get = statement.get.bind(statement);
             statement.get = () => {
                 const result = get();
-                db.exec("INSERT INTO projects VALUES('invented-unrelated-project','Unrelated app metadata')");
+                db.exec("INSERT OR REPLACE INTO projects VALUES('invented-unrelated-project','Unrelated app metadata')");
                 return result;
             };
         }

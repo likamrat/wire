@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readMetadataProjection, readMetadataSnapshot, validateMetadataProjection, metadataReadVersion,
     SOURCE_METADATA_MAX_BYTES, SOURCE_METADATA_READER_VERSION } from "../../lib/source-metadata.mjs";
-import { readSourceMetadata, sourceMetadataStamp, observeSourceMetadataSelection } from "../../lib/source-reader.mjs";
+import { readCollectionMetadata, readSourceMetadata, sourceMetadataStamp, observeSourceMetadataSelection } from "../../lib/source-reader.mjs";
 import { BoardError } from "../../lib/store.mjs";
 
 test("missing required metadata is qualified consistently by stamp, native read and helper snapshot", async t => {
@@ -199,7 +199,7 @@ test("a source-native database replacement during launch cannot adopt another id
         db.close();
         return { stdout: JSON.stringify({ ...await fixtureResponse(app.file + ".old"),
             readVersion: metadataReadVersion(app.file) }) };
-    } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
+    } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-identity" });
 });
 
 test("changes inside the actual SQL read still invalidate the source-native snapshot", async t => {
@@ -289,7 +289,7 @@ for (const change of ["selected", "revoked", "replacement", "unreadable"]) test(
     } finally { writer.close(); }
 });
 
-test("a selected read returns only the fresh Windows helper roster and its verified stamp", { skip: process.platform !== "win32" }, async t => {
+for (const collection of [false, true]) test(`the ${collection ? "ordinary collector" : "selected read"} returns only the fresh Windows helper roster and its verified stamp`, { skip: process.platform !== "win32" }, async t => {
     const app = await fixture(t), execute = promisify(execFile);
     const files = { ...app.files, windowsDatabase: app.file };
     const script = fileURLToPath(new URL("../../scripts/read-copilot-metadata.mjs", import.meta.url));
@@ -297,14 +297,18 @@ test("a selected read returns only the fresh Windows helper roster and its verif
     try {
         writer.exec("PRAGMA journal_mode=WAL");
         let reads = 0;
-        const result = await readSourceMetadata(files, { selection: { proof: selectedRow, verify() {} }, run: async (command, args, options) => {
+        const run = async (command, args, options) => {
             if (command === "wslpath") return { stdout: script };
             const response = await execute(process.execPath, args, options);
-            if (++reads === 1) writer.exec("INSERT INTO sessions VALUES('00000000-0000-4000-8000-000000000002','Other','chat',NULL,'local')");
+            if (++reads === 1) writer.exec(collection ? "UPDATE sessions SET title='New display name'"
+                : "INSERT INTO sessions VALUES('00000000-0000-4000-8000-000000000002','Other','chat',NULL,'local')");
             return response;
-        } });
+        };
+        const result = collection ? await readCollectionMetadata(files, () => {}, { run })
+            : await readSourceMetadata(files, { selection: { proof: selectedRow, verify() {} }, run });
         assert.equal(reads, 2);
-        assert.equal(result.counts.enumerated, 2, "Do not attach a current stamp to the first roster.");
+        if (collection) assert.equal(result.roster[0].name, "New display name");
+        else assert.equal(result.counts.enumerated, 2, "Do not attach a current stamp to the first roster.");
         assert.equal(result.metadataStamp, sourceMetadataStamp(files));
     } finally { writer.close(); }
 });
