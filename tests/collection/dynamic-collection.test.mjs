@@ -24,6 +24,7 @@ import { BACKFILL_DIRECTORY, validateBackfillCheckpoint } from "../../lib/collec
 import { TAIL_LIMITS } from "../../lib/collector-io.mjs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
+import { appendFileSync } from "node:fs";
 import { setImmediate } from "node:timers/promises";
 import { createRecollectionController } from "../../lib/recollection.mjs";
 import { createUsageRecordCountController } from "../../lib/usage-record-counting.mjs";
@@ -1735,6 +1736,97 @@ test("compatible version changes do not interpret unfamiliar workspace types as 
     const discovered = await discoverSources(app.config);
     assert.equal(discovered.roster[0].eligible, false);
     assert.equal(discovered.roster[0].disposition, "unmapped-workspace-type");
+});
+
+test("ordinary collection retains every eligible journal call across concurrent metadata writes and restart", async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
+    const app = await installation(t), id = app.session(), other = app.session();
+    app.db.exec("PRAGMA journal_mode=WAL; ALTER TABLE sessions ADD COLUMN updated_at TEXT");
+    const file = await logFor(app, id, [event("user.message", { content: "First invented question" }), call("initial")]);
+    const otherFile = await logFor(app, other);
+    let completed;
+    const start = () => createCollector(app.context, { onCommitted: check => completed?.resolve(check) });
+    let collector = await start();
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 });
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    const before = JSON.parse(await readFile(indexFile));
+    const checkpointFile = source => path.join(path.dirname(indexFile), before.fingerprint, `${source}.json`);
+    const appendCall = (journal, name) => appendFileSync(journal, [event("user.message", { content: `Invented ${name} question` }), call(name)]
+        .map(row => JSON.stringify(row) + "\n").join(""));
+    async function reconcile() {
+        const expected = [];
+        for (const [source, journal] of [[id, file], [other, otherFile]]) {
+            const bytes = await readFile(journal);
+            assert.equal(JSON.parse(await readFile(checkpointFile(source))).cursor.offset, bytes.length);
+            const originals = bytes.toString().trimEnd().split("\n").map(line => JSON.parse(line));
+            expected.push(...originals.filter(row => row.type === "tool.execution_start" && row.data.toolName === "workiq-fetch")
+                .map(row => `${source}:${row.id}:${row.data.toolCallId}`));
+        }
+        const retained = (await loadBoardState(app.context)).evidence.flatMap(row =>
+            row.toolCalls.map(call => `${row.sourceSessionId}:${call.startEventId}:${call.toolCallId}`));
+        assert.deepEqual(retained.sort(), expected.sort(), "The input journals must match durable calls, including multiplicity.");
+        return retained.length;
+    }
+    appendCall(file, "before-read");
+    // Let the producer commit from its own connection after SQLite has pinned the reader's snapshot.
+    const prepare = DatabaseSync.prototype.prepare;
+    let write = () => {
+        app.db.prepare("UPDATE sessions SET updated_at=? WHERE id=?").run(new Date().toISOString(), other);
+        appendCall(otherFile, "during-read");
+    };
+    t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+        const statement = prepare.call(this, sql);
+        if (sql === "PRAGMA user_version" && write) {
+            const get = statement.get.bind(statement);
+            statement.get = () => { const result = get(); const commit = write; write = null; commit(); return result; };
+        }
+        return statement;
+    });
+    const nextInterval = async ms => {
+        completed = Promise.withResolvers();
+        const failed = t.mock.method(console, "error", (label, diagnostic) => {
+            if (label === "[workiq-collector] collection failed") completed.reject(new Error(JSON.stringify(diagnostic)));
+        });
+        try { t.mock.timers.tick(ms); await completed.promise; }
+        finally { failed.mock.restore(); completed = null; }
+    };
+    await nextInterval(31000);
+    assert.equal(write, null);
+    assert.equal(await reconcile(), 3);
+    appendCall(file, "immediately-after");
+    await nextInterval(5000);
+    assert.equal(await reconcile(), 4);
+    // Both bounded observations can overlap producer commits. Keep each cursor behind its unread calls.
+    const saved = await Promise.all([id, other].map(source => readFile(checkpointFile(source))));
+    let overlaps = 0;
+    const churn = () => {
+        app.db.prepare("UPDATE sessions SET updated_at=? WHERE id=?").run(`producer-${++overlaps}`, other);
+        appendCall(overlaps === 1 ? file : otherFile, `while-refused-${overlaps}`);
+        if (overlaps === 1) write = churn;
+    };
+    write = churn;
+    await assert.rejects(collector.collectNow(), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
+    assert.equal(overlaps, 2);
+    assert.deepEqual(await Promise.all([id, other].map(source => readFile(checkpointFile(source)))), saved);
+    appendCall(file, "after-busy-read");
+    await nextInterval(5000);
+    assert.equal(await reconcile(), 7);
+    const state = await loadBoardState(app.context), checkpoint = await readFile(checkpointFile(id));
+    appendCall(file, "before-refusal");
+    write = () => app.db.prepare("UPDATE sessions SET archived_at=? WHERE id=?").run(new Date().toISOString(), id);
+    await assert.rejects(collector.collectNow(), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "membership" });
+    assert.deepEqual((await loadBoardState(app.context)).evidence, state.evidence);
+    assert.deepEqual(await readFile(checkpointFile(id)), checkpoint);
+    app.db.prepare("UPDATE sessions SET archived_at=NULL WHERE id=?").run(id);
+    appendCall(otherFile, "after-refusal");
+    await nextInterval(5000);
+    assert.equal(await reconcile(), 9);
+    await collector.close();
+    appendCall(file, "during-restart");
+    collector = await start();
+    await nextInterval(5000);
+    assert.equal(await reconcile(), 10);
 });
 
 test("a metadata-read refusal recovers on the next ordinary interval without changing approval or retained facts", async t => {
