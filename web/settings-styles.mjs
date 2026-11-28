@@ -58,12 +58,20 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 @media(forced-colors:active) {#appUpdateFence:focus-visible {outline-color:Highlight}}
 #appUpdateFence h2 {margin:0;font-size:var(--type-section);line-height:var(--leading-heading)}
 .app-update-title {display:flex;align-items:center;gap:var(--space-sm)}
+#appUpdateFence[open]:has(#appUpdateActivity:not([hidden])) {display:grid;place-items:center;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:var(--space-md);border:0;border-radius:0;background:transparent;box-shadow:none}
+#appUpdateFence:has(#appUpdateActivity:not([hidden]))::backdrop {background:color-mix(in srgb,var(--page) 93%,transparent)}
+#appUpdateFence:has(#appUpdateActivity:not([hidden])) .app-update-title {flex-direction:column;gap:var(--space-md);text-align:center}
+#appUpdateFence:has(#appUpdateActivity:not([hidden])) h2 {font:var(--weight-regular) var(--type-reading)/var(--leading-ui) var(--font)}
+#appUpdateFence:has(#appUpdateActivity:not([hidden])):focus-visible {outline:none}
+#appUpdateFence:focus-visible #appUpdateActivity {outline:2px solid var(--focus);outline-offset:4px;border-radius:var(--radius-small)}
 .update-spinner {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
 #appUpdateCheck {display:inline-grid;place-items:center}
 #appUpdateCheck>span {grid-area:1 / 1}
 #appUpdateCheck[aria-busy=true] .check-action-label {visibility:hidden}
 .check-action-pending {display:inline-flex;align-items:center;gap:var(--space-sm)}
-#appUpdateFence[open] #appUpdateActivity:not([hidden]),#appUpdateCheck[aria-busy=true] .update-spinner {animation:wire-update-spin .9s linear infinite}
+#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:wire-update-breathe 2.4s ease-in-out infinite}
+@keyframes wire-update-breathe {50% {opacity:.72}}
+#appUpdateCheck[aria-busy=true] .update-spinner {animation:wire-update-spin .9s linear infinite}
 @keyframes wire-update-spin {to {transform:rotate(1turn)}}
 @media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]),#appUpdateCheck[aria-busy=true] .update-spinner {animation:none}}
 #appUpdateHint {margin:.25em 0 0 calc(1.125em + var(--space-sm));color:var(--muted)}

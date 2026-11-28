@@ -707,7 +707,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
         }
         const applied = settings.waitForResponse(r=>r.url()===url+"api/app-update" && r.request().postDataJSON()?.action==="apply");
         await settings.locator("#settingsAppUpdate").click();
-        await Promise.all(awake.map(p=>expect(p.getByRole("dialog",{name:"Updating WIRE… back shortly."})).toBeVisible()));
+        await Promise.all(awake.map(p=>expect(p.getByRole("dialog",{name:"Updating WIRE. Back shortly."})).toBeVisible()));
         await expect(separate.locator("#appUpdateFence")).toBeHidden();
         try {
             const decision=await applied;
@@ -836,14 +836,14 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await expect(analyze.locator("#workspace")).toBeVisible();
             await expect(analyze).toHaveTitle("Analyze | WIRE");
             assert.equal((await health()).runtimeId, starter.runtimeId);
-            await expect(analyze.getByRole("dialog", { name: "Updating WIRE… back shortly." })).toHaveCount(0);
+            await expect(analyze.getByRole("dialog", { name: "Updating WIRE. Back shortly." })).toHaveCount(0);
             const applyResponse = () => settings.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "apply");
             // The peer received the offer, but the server did not receive its acknowledgment.
             await analyze.route("**/api/app-update/readiness", route => route.abort(), { times: 1 });
             const refused = applyResponse();
             await install.click();
             for (const page of [settings, analyze]) {
-                await expect(page.getByRole("dialog", { name: "Updating WIRE… back shortly." })).toBeVisible();
+                await expect(page.getByRole("dialog", { name: "Updating WIRE. Back shortly." })).toBeVisible();
                 await expect(page.locator("#appUpdateHint")).toBeHidden();
             }
             const refusal = await refused;
@@ -861,7 +861,7 @@ test(discoveryOnly ? "open WIRE tabs discover a stable release published after t
             await install.click();
             for (const [page, layout] of [[settings, "desktop"], [analyze, "narrow"]]) {
                 const progress = page.locator("#appUpdateFence");
-                await expect(progress.getByRole("status")).toHaveText("Updating WIRE… back shortly.", {useInnerText:true});
+                await expect(progress.getByRole("status")).toHaveText("Updating WIRE. Back shortly.", {useInnerText:true});
                 assert.ok(await progress.locator("h2").evaluate(title => {
                     const range = document.createRange(); range.selectNodeContents(title);
                     const lines = range.getClientRects(), bounds = title.getBoundingClientRect();

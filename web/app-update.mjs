@@ -7,7 +7,7 @@ const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4})
 const validTicket = value => uuid(value?.observer) && Number.isSafeInteger(value.expires) && /^[a-f0-9]{64}$/.test(value.seal);
 const manualOnly = state => state && (!state.supported || state.phase === "manual");
 const checkingMessage = "Checking for updates";
-const updatingMessage = "Updating WIRE… back shortly.";
+const updatingMessage = "Updating WIRE. Back shortly.";
 const minManualCheckMs = 3000;
 const validRelease = (release, commit) => release == null || release.commit === commit && sha(commit)
     && /^v\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(release.tag) && release.url === `https://github.com/likamrat/wire/releases/tag/${release.tag}`

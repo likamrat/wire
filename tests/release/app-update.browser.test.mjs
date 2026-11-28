@@ -737,14 +737,15 @@ test("single activation stays fenced through transport loss until the authentica
         await modal.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, "keyboard-update-progress.png") });
     }
     assert.equal(await modal.locator("h2").evaluate(title => getComputedStyle(title, "::before").content), "none",
-        "the focused update dialog must not paint a heading marker across its spinner");
+        "the focused update status must not paint a heading marker");
     await expect(modal).toBeFocused();
     await expect(page.locator("#appUpdateHint")).toBeHidden();
-    const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);
-    const start = await rotation();
-    await expect.poll(rotation).not.toBe(start);
+    await expect.poll(() => activity.evaluate(mark => mark.naturalWidth)).toBeGreaterThan(0);
+    const opacity = () => activity.evaluate(mark => getComputedStyle(mark).opacity);
+    const start = await opacity();
+    await expect.poll(opacity).not.toBe(start);
     await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
-    await expect(modal.getByRole("status")).toHaveText("Updating WIRE… back shortly.");
+    await expect(modal.getByRole("status")).toHaveText("Updating WIRE. Back shortly.");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
         document.querySelector('[data-category="themes"]').click();

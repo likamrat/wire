@@ -901,7 +901,7 @@ To install an update:
 
 1. Choose **Update and restart** in the notice, in the update's notes or in
    General.
-2. Leave your tabs open when **Updating WIRE… back shortly.** appears.
+2. Leave your tabs open when **Updating WIRE. Back shortly.** appears.
    Each tab reloads its own page. Once the page verifies the restart, **WIRE updated**
    shows the running version when available.
 
