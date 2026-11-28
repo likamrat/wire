@@ -888,13 +888,14 @@ the last verified offer. **Previously verified** means WIRE needs to check
 again before it can install that version.
 
 When one tab finds an update, other connected tabs on the same WIRE instance
-show the offer too. No tab reloads, and an unsaved edit stays in place. Dismissing
-the notice hides it across those tabs; the update remains available in General.
+show the offer too. No tab reloads, and an unsaved edit stays in place.
+**Dismiss** hides the notice only in that tab. Reloading the page or opening
+WIRE in a new tab shows it again while the update is still available.
+Dismissing doesn't install anything; the update remains available in General.
 
 If an operator restarts the same WIRE build while your tab stays open, the tab
 can show new releases once it reconnects. Finish any work in that tab and reopen
-WIRE to install or change update settings. Dismissing a notice in this read-only
-tab hides it only there.
+WIRE to install or change update settings.
 
 To install an update:
 
