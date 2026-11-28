@@ -63,17 +63,18 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 #appUpdateFence:has(#appUpdateActivity:not([hidden])) .app-update-title {flex-direction:column;gap:var(--space-md);text-align:center}
 #appUpdateFence:has(#appUpdateActivity:not([hidden])) h2 {font:var(--weight-regular) var(--type-reading)/var(--leading-ui) var(--font)}
 #appUpdateFence:has(#appUpdateActivity:not([hidden])):focus-visible {outline:none}
-#appUpdateFence:focus-visible #appUpdateActivity {outline:2px solid var(--focus);outline-offset:4px;border-radius:var(--radius-small)}
+#appUpdateActivity {display:grid;place-items:center;border-radius:50%}
+#appUpdateActivity>* {grid-area:1/1}
+#appUpdateActivity>.update-spinner {box-sizing:border-box;width:2.5rem;height:2.5rem}
+#appUpdateFence:focus-visible #appUpdateActivity {outline:2px solid var(--focus);outline-offset:4px}
 .update-spinner {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
 #appUpdateCheck {display:inline-grid;place-items:center}
 #appUpdateCheck>span {grid-area:1 / 1}
 #appUpdateCheck[aria-busy=true] .check-action-label {visibility:hidden}
 .check-action-pending {display:inline-flex;align-items:center;gap:var(--space-sm)}
-#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:wire-update-breathe 2.4s ease-in-out infinite}
-@keyframes wire-update-breathe {50% {opacity:.72}}
-#appUpdateCheck[aria-busy=true] .update-spinner {animation:wire-update-spin .9s linear infinite}
+#appUpdateFence[open] #appUpdateActivity:not([hidden]) .update-spinner,#appUpdateCheck[aria-busy=true] .update-spinner {animation:wire-update-spin .9s linear infinite}
 @keyframes wire-update-spin {to {transform:rotate(1turn)}}
-@media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]),#appUpdateCheck[aria-busy=true] .update-spinner {animation:none}}
+@media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]) .update-spinner,#appUpdateCheck[aria-busy=true] .update-spinner {animation:none}}
 #appUpdateHint {margin:.25em 0 0 calc(1.125em + var(--space-sm));color:var(--muted)}
 #appUpdateHint:empty {display:none}
 #appUpdateFence:has(#appUpdateActivity[hidden]) #appUpdateHint {margin-inline-start:0}

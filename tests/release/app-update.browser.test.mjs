@@ -740,11 +740,13 @@ test("single activation stays fenced through transport loss until the authentica
         "the focused update status must not paint a heading marker");
     await expect(modal).toBeFocused();
     await expect(page.locator("#appUpdateHint")).toBeHidden();
-    await expect.poll(() => activity.evaluate(mark => mark.naturalWidth)).toBeGreaterThan(0);
-    const opacity = () => activity.evaluate(mark => getComputedStyle(mark).opacity);
-    const start = await opacity();
-    await expect.poll(opacity).not.toBe(start);
-    await page.emulateMedia({ reducedMotion: "reduce" }); await expect(activity).toHaveCSS("animation-name", "none");
+    const spinner = activity.locator(".update-spinner");
+    await expect(spinner).toBeVisible();
+    const rotation = () => spinner.evaluate(ring => getComputedStyle(ring).transform);
+    const start = await rotation();
+    await expect.poll(rotation).not.toBe(start);
+    await expect.poll(() => activity.locator("img").evaluate(mark => mark.naturalWidth)).toBeGreaterThan(0);
+    await page.emulateMedia({ reducedMotion: "reduce" }); await expect(spinner).toHaveCSS("animation-name", "none");
     await expect(modal.getByRole("status")).toHaveText("Updating WIRE. Back shortly.");
     await page.evaluate(() => {
         document.getElementById("settingsAppUpdate").click();
